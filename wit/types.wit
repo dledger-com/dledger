@@ -1,0 +1,167 @@
+package dledger:plugin@0.1.0;
+
+interface types {
+    /// A monetary amount: value as a decimal string + currency code.
+    record money {
+        /// Decimal string representation (e.g. "1234.56")
+        amount: string,
+        /// ISO currency code or crypto ticker (e.g. "EUR", "BTC")
+        currency: string,
+    }
+
+    /// A single posting (line item) within a transaction.
+    record posting {
+        /// Account full-name path (e.g. "Assets:Bank:Checking")
+        account: string,
+        /// The amount: positive = debit, negative = credit
+        amount: money,
+    }
+
+    /// A complete transaction proposed by a plugin.
+    record transaction {
+        /// ISO 8601 date string (YYYY-MM-DD)
+        date: string,
+        /// Human-readable description
+        description: string,
+        /// Line items that must balance (sum to zero per currency)
+        postings: list<posting>,
+        /// Optional key-value metadata (e.g. "source_tx_hash", "exchange_order_id")
+        metadata: list<tuple<string, string>>,
+    }
+
+    /// Minimal account information exposed to plugins.
+    record account-info {
+        /// UUID v7 as string
+        id: string,
+        /// Full hierarchical name (e.g. "Assets:Crypto:BTC")
+        full-name: string,
+        /// One of: asset, liability, equity, revenue, expense
+        account-type: string,
+        /// Whether this account can receive postings
+        is-postable: bool,
+    }
+
+    /// A historical price point.
+    record price-point {
+        /// ISO 8601 date (YYYY-MM-DD)
+        date: string,
+        /// Source currency/asset
+        from-currency: string,
+        /// Target currency (typically base currency)
+        to-currency: string,
+        /// Exchange rate as decimal string
+        rate: string,
+        /// Source of this price (e.g. "kraken", "coingecko")
+        source: string,
+    }
+
+    /// A field in a plugin's configuration form.
+    record config-field {
+        /// Machine-readable key
+        key: string,
+        /// Human-readable label
+        label: string,
+        /// Field type: "string", "password", "number", "boolean", "select"
+        field-type: string,
+        /// Whether the field is required
+        required: bool,
+        /// Default value (empty string if none)
+        default-value: string,
+        /// Help text shown below the field
+        description: string,
+        /// For "select" type: comma-separated option values
+        options: string,
+    }
+
+    /// Opaque cursor state for incremental sync.
+    /// The host persists this between sync calls.
+    record sync-state {
+        /// JSON-encoded cursor/checkpoint data
+        cursor: string,
+    }
+
+    /// Plugin metadata returned by the plugin itself.
+    record plugin-metadata {
+        /// Human-readable name
+        name: string,
+        /// Semver version string
+        version: string,
+        /// Short description
+        description: string,
+        /// Plugin author
+        author: string,
+    }
+
+    /// Result of a sync or import operation.
+    record sync-result {
+        /// Transactions produced by this sync
+        transactions: list<transaction>,
+        /// Price points discovered during sync
+        prices: list<price-point>,
+        /// Updated cursor state for next sync
+        new-state: sync-state,
+        /// Human-readable summary (e.g. "Imported 42 transactions from 2024-01-01 to 2024-03-15")
+        summary: string,
+    }
+
+    /// Pagination parameters for ledger queries.
+    record query-params {
+        /// Maximum number of results
+        limit: u32,
+        /// Offset for pagination
+        offset: u32,
+        /// Optional account filter (full name or ID)
+        account-filter: string,
+        /// Optional start date (YYYY-MM-DD, inclusive)
+        from-date: string,
+        /// Optional end date (YYYY-MM-DD, inclusive)
+        to-date: string,
+    }
+
+    /// Balance for a single currency in an account.
+    record currency-balance {
+        currency: string,
+        /// Decimal string
+        amount: string,
+    }
+
+    /// HTTP request to be proxied through the host.
+    record http-request {
+        /// HTTP method (GET, POST, PUT, DELETE)
+        method: string,
+        /// Full URL
+        url: string,
+        /// Request headers as key-value pairs
+        headers: list<tuple<string, string>>,
+        /// Request body (empty for GET)
+        body: list<u8>,
+    }
+
+    /// HTTP response from the host proxy.
+    record http-response {
+        /// HTTP status code
+        status: u16,
+        /// Response headers
+        headers: list<tuple<string, string>>,
+        /// Response body
+        body: list<u8>,
+    }
+
+    /// Error returned by host functions.
+    enum host-error {
+        /// Permission denied (capability not granted)
+        permission-denied,
+        /// Resource not found
+        not-found,
+        /// Invalid input
+        invalid-input,
+        /// Network error
+        network-error,
+        /// Rate limit exceeded
+        rate-limited,
+        /// Domain not in allowlist
+        domain-not-allowed,
+        /// Internal host error
+        internal,
+    }
+}

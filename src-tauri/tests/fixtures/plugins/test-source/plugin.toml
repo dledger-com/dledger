@@ -1,0 +1,19 @@
+[plugin]
+name = "Test Source"
+version = "0.1.0"
+description = "A test source plugin for E2E verification"
+author = "dledger"
+kind = "source"
+
+[capabilities]
+ledger_read = true
+ledger_write = true
+http = false
+
+[capabilities.network]
+allowed_domains = []
+rate_limit = 30
+
+[capabilities.limits]
+max_memory_mb = 64
+max_execution_time_ms = 10000

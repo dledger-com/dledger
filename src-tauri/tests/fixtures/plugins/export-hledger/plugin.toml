@@ -1,0 +1,9 @@
+[plugin]
+name = "hledger Export"
+version = "0.1.0"
+description = "Export ledger to hledger/ledger journal format"
+author = "dledger"
+kind = "handler"
+
+[capabilities]
+ledger_read = true

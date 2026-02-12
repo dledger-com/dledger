@@ -1,0 +1,69 @@
+<script lang="ts">
+  import { page } from "$app/state";
+  import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+  import LayoutDashboard from "lucide-svelte/icons/layout-dashboard";
+  import BookOpen from "lucide-svelte/icons/book-open";
+  import FileText from "lucide-svelte/icons/file-text";
+  import BarChart3 from "lucide-svelte/icons/bar-chart-3";
+  import Puzzle from "lucide-svelte/icons/puzzle";
+  import Settings from "lucide-svelte/icons/settings";
+
+  const navItems = [
+    { title: "Dashboard", href: "/", icon: LayoutDashboard },
+    { title: "Accounts", href: "/accounts", icon: BookOpen },
+    { title: "Journal", href: "/journal", icon: FileText },
+    { title: "Reports", href: "/reports", icon: BarChart3 },
+    { title: "Extensions", href: "/extensions", icon: Puzzle },
+    { title: "Settings", href: "/settings", icon: Settings },
+  ];
+
+  function isActive(href: string): boolean {
+    const pathname = page.url?.pathname ?? "/";
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
+  }
+</script>
+
+<Sidebar.Root>
+  <Sidebar.Header>
+    <div class="flex items-center gap-2 px-2 py-1">
+      <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold text-sm">
+        dL
+      </div>
+      <span class="font-semibold text-sm">dLedger</span>
+    </div>
+  </Sidebar.Header>
+
+  <Sidebar.Content>
+    <Sidebar.Group>
+      <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          {#each navItems as item (item.title)}
+            <Sidebar.MenuItem>
+              <Sidebar.MenuButton>
+                {#snippet child({ props })}
+                  <a
+                    href={item.href}
+                    {...props}
+                    data-active={isActive(item.href) ? "" : undefined}
+                  >
+                    <item.icon class="h-4 w-4" />
+                    <span>{item.title}</span>
+                  </a>
+                {/snippet}
+              </Sidebar.MenuButton>
+            </Sidebar.MenuItem>
+          {/each}
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
+  </Sidebar.Content>
+
+  <Sidebar.Footer>
+    <div class="px-2 py-1 text-xs text-muted-foreground">
+      dLedger v0.1.0
+    </div>
+  </Sidebar.Footer>
+  <Sidebar.Rail />
+</Sidebar.Root>

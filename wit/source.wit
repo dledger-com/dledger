@@ -1,0 +1,46 @@
+package dledger:plugin@0.1.0;
+
+world source {
+    // Host-provided capabilities (imports)
+    import ledger-read;
+    import ledger-write;
+    import http-client;
+    import plugin-storage;
+    import logging;
+
+    // Plugin-exported interfaces
+    export source-ops;
+    export metadata;
+}
+
+/// Core source operations exported by the plugin.
+interface source-ops {
+    use types.{config-field, sync-state, sync-result, host-error};
+
+    /// Return the configuration schema for this source.
+    /// The host renders a dynamic form from these fields.
+    config-schema: func() -> list<config-field>;
+
+    /// Called after the user fills in config. The plugin validates
+    /// and stores its configuration. Returns error message on failure.
+    configure: func(config: list<tuple<string, string>>) -> result<_, string>;
+
+    /// Test the connection / credentials. Returns a human-readable status.
+    test-connection: func() -> result<string, string>;
+
+    /// Incremental sync: fetch new data since the last sync state.
+    /// The host provides the previous state (empty on first run).
+    sync: func(state: sync-state) -> result<sync-result, string>;
+
+    /// Full import: re-fetch all historical data. Used for initial
+    /// setup or reconciliation. May take a long time.
+    full-import: func(state: sync-state) -> result<sync-result, string>;
+}
+
+/// Plugin metadata exported by every plugin.
+interface metadata {
+    use types.{plugin-metadata};
+
+    /// Return this plugin's metadata.
+    get-metadata: func() -> plugin-metadata;
+}

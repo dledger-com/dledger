@@ -29,17 +29,20 @@
           }
       );
   in {
-    overlays.default = final: prev: {
-      rustToolchain = with inputs.fenix.packages.${prev.stdenv.hostPlatform.system};
-        combine (
-          with stable; [
-            clippy
-            rustc
-            cargo
-            rustfmt
-            rust-src
-          ]
-        );
+    overlays.default = final: prev: let
+      fenixPkgs = inputs.fenix.packages.${prev.stdenv.hostPlatform.system};
+    in {
+      rustToolchain = fenixPkgs.combine (
+        with fenixPkgs.stable; [
+          clippy
+          rustc
+          cargo
+          rustfmt
+          rust-src
+        ] ++ [
+          fenixPkgs.targets.wasm32-wasip2.stable.rust-std
+        ]
+      );
     };
 
     devShells = forEachSupportedSystem (
@@ -73,6 +76,9 @@
               cargo-edit
               cargo-watch
               rust-analyzer
+
+              # WASM plugin tooling
+              wasm-tools
 
               # Tauri frontend
               bun

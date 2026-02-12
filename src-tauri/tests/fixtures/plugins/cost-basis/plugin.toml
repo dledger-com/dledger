@@ -1,0 +1,9 @@
+[plugin]
+name = "Cost Basis Calculator"
+version = "0.1.0"
+description = "Compute FIFO cost basis and realized gains/losses for crypto assets"
+author = "dledger"
+kind = "handler"
+
+[capabilities]
+ledger_read = true

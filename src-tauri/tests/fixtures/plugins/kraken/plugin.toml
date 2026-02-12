@@ -1,0 +1,15 @@
+[plugin]
+name = "Kraken Exchange"
+version = "0.1.0"
+description = "Import trades from Kraken exchange via API"
+author = "dledger"
+kind = "source"
+
+[capabilities]
+ledger_read = true
+ledger_write = true
+http = true
+
+[capabilities.network]
+allowed_domains = ["api.kraken.com"]
+rate_limit = 15

@@ -1,0 +1,15 @@
+[plugin]
+name = "Blockstream BTC"
+version = "0.1.0"
+description = "Track Bitcoin transactions via Blockstream.info API"
+author = "dledger"
+kind = "source"
+
+[capabilities]
+ledger_read = true
+ledger_write = true
+http = true
+
+[capabilities.network]
+allowed_domains = ["blockstream.info"]
+rate_limit = 10

@@ -1,0 +1,15 @@
+[plugin]
+name = "Test HTTP Source"
+version = "0.1.0"
+description = "A test source that uses HTTP"
+author = "dledger"
+kind = "source"
+
+[capabilities]
+ledger_read = true
+ledger_write = true
+http = true
+
+[capabilities.network]
+allowed_domains = ["api.example.com"]
+rate_limit = 10

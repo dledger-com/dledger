@@ -1,0 +1,9 @@
+[plugin]
+name = "French Tax Report"
+version = "0.1.0"
+description = "Generate Formulaire 2086 and 3916-bis for French tax filing"
+author = "dledger"
+kind = "handler"
+
+[capabilities]
+ledger_read = true
