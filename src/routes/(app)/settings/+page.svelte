@@ -7,14 +7,19 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend } from "$lib/backend.js";
-  import type { ExchangeRate } from "$lib/types/index.js";
+  import type { Currency, ExchangeRate } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
-
   const settings = new SettingsStore();
 
   // Currency list from backend
-  let currencies = $state<{ code: string; name: string }[]>([]);
+  let currencies = $state<Currency[]>([]);
+
+  // Currency form
+  let currCode = $state("");
+  let currName = $state("");
+  let currDecimals = $state("2");
+  let currIsBase = $state(false);
 
   // Exchange rate form
   let rateFrom = $state("");
@@ -53,6 +58,29 @@
       exchangeRates = [];
     } finally {
       ratesLoading = false;
+    }
+  }
+
+  async function addCurrency() {
+    if (!currCode.trim() || !currName.trim()) {
+      toast.error("Code and name are required");
+      return;
+    }
+    try {
+      await getBackend().createCurrency({
+        code: currCode.trim().toUpperCase(),
+        name: currName.trim(),
+        decimal_places: parseInt(currDecimals, 10) || 2,
+        is_base: currIsBase,
+      });
+      toast.success(`Currency ${currCode.trim().toUpperCase()} created`);
+      currCode = "";
+      currName = "";
+      currDecimals = "2";
+      currIsBase = false;
+      await loadCurrencies();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -165,6 +193,66 @@
           </select>
         </div>
       </div>
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Currencies -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Currencies</Card.Title>
+      <Card.Description>Add currencies for use in accounts and transactions.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
+        <div class="space-y-1">
+          <label for="curr-code" class="text-xs text-muted-foreground">Code</label>
+          <Input id="curr-code" bind:value={currCode} placeholder="EUR" class="w-24" />
+        </div>
+        <div class="space-y-1">
+          <label for="curr-name" class="text-xs text-muted-foreground">Name</label>
+          <Input id="curr-name" bind:value={currName} placeholder="Euro" class="w-40" />
+        </div>
+        <div class="space-y-1">
+          <label for="curr-decimals" class="text-xs text-muted-foreground">Decimals</label>
+          <Input id="curr-decimals" type="number" bind:value={currDecimals} class="w-20" />
+        </div>
+        <div class="space-y-1 flex items-center gap-2 pb-1">
+          <input id="curr-base" type="checkbox" bind:checked={currIsBase} class="h-4 w-4 rounded border-input" />
+          <label for="curr-base" class="text-xs text-muted-foreground">Base</label>
+        </div>
+        <Button type="submit" size="sm">Add</Button>
+      </form>
+
+      <Separator />
+
+      {#if currencies.length === 0}
+        <p class="text-sm text-muted-foreground text-center py-4">No currencies defined.</p>
+      {:else}
+        <Table.Root>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Code</Table.Head>
+              <Table.Head>Name</Table.Head>
+              <Table.Head class="text-right">Decimals</Table.Head>
+              <Table.Head>Base</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each currencies as c}
+              <Table.Row>
+                <Table.Cell class="font-mono">{c.code}</Table.Cell>
+                <Table.Cell>{c.name}</Table.Cell>
+                <Table.Cell class="text-right">{c.decimal_places}</Table.Cell>
+                <Table.Cell>
+                  {#if c.is_base}
+                    <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Base</span>
+                  {/if}
+                </Table.Cell>
+              </Table.Row>
+            {/each}
+          </Table.Body>
+        </Table.Root>
+      {/if}
     </Card.Content>
   </Card.Root>
 

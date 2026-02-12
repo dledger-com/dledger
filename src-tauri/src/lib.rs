@@ -39,7 +39,10 @@ pub fn run() {
 
             // Set up plugin manager
             let plugins_dir = match std::env::var("DLEDGER_PLUGINS_DIR") {
-                Ok(dir) => std::path::PathBuf::from(dir),
+                Ok(dir) => {
+                    let path = std::path::PathBuf::from(&dir);
+                    std::fs::canonicalize(&path).unwrap_or(path)
+                }
                 Err(_) => data_dir.join("plugins"),
             };
             let plugin_db_path = data_dir.join("plugins.db");
