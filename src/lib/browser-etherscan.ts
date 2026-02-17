@@ -34,10 +34,133 @@ interface InternalTx {
   traceId: string;
 }
 
+interface Erc20Tx {
+  hash: string;
+  timeStamp: string;
+  from: string;
+  to: string;
+  value: string;
+  contractAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenDecimal: string;
+}
+
+interface Erc721Tx {
+  hash: string;
+  timeStamp: string;
+  from: string;
+  to: string;
+  contractAddress: string;
+  tokenID: string;
+  tokenName: string;
+  tokenSymbol: string;
+}
+
+interface Erc1155Tx {
+  hash: string;
+  timeStamp: string;
+  from: string;
+  to: string;
+  contractAddress: string;
+  tokenID: string;
+  tokenValue: string;
+  tokenName: string;
+  tokenSymbol: string;
+}
+
 interface ApiResponse {
   status: string;
   message: string;
   result: unknown;
+}
+
+// ---- Hash grouping ----
+
+interface TxHashGroup {
+  hash: string;
+  timestamp: string;
+  normal: NormalTx | null;
+  internals: InternalTx[];
+  erc20s: Erc20Tx[];
+  erc721s: Erc721Tx[];
+  erc1155s: Erc1155Tx[];
+}
+
+function newHashGroup(hash: string): TxHashGroup {
+  return {
+    hash,
+    timestamp: "",
+    normal: null,
+    internals: [],
+    erc20s: [],
+    erc721s: [],
+    erc1155s: [],
+  };
+}
+
+function updateMinTimestamp(group: TxHashGroup, newTs: string): void {
+  if (!group.timestamp) {
+    group.timestamp = newTs;
+    return;
+  }
+  const cur = parseInt(group.timestamp, 10) || Infinity;
+  const nw = parseInt(newTs, 10) || Infinity;
+  if (nw < cur) {
+    group.timestamp = newTs;
+  }
+}
+
+function groupByHash(
+  normal: NormalTx[],
+  internal: InternalTx[],
+  erc20: Erc20Tx[],
+  erc721: Erc721Tx[],
+  erc1155: Erc1155Tx[],
+): Map<string, TxHashGroup> {
+  const groups = new Map<string, TxHashGroup>();
+
+  for (const tx of normal) {
+    const key = tx.hash.toLowerCase();
+    if (!groups.has(key)) groups.set(key, newHashGroup(key));
+    const g = groups.get(key)!;
+    updateMinTimestamp(g, tx.timeStamp);
+    g.normal = tx;
+  }
+
+  for (const tx of internal) {
+    const key = tx.hash.toLowerCase();
+    if (!groups.has(key)) groups.set(key, newHashGroup(key));
+    const g = groups.get(key)!;
+    updateMinTimestamp(g, tx.timeStamp);
+    g.internals.push(tx);
+  }
+
+  for (const tx of erc20) {
+    const key = tx.hash.toLowerCase();
+    if (!groups.has(key)) groups.set(key, newHashGroup(key));
+    const g = groups.get(key)!;
+    updateMinTimestamp(g, tx.timeStamp);
+    g.erc20s.push(tx);
+  }
+
+  for (const tx of erc721) {
+    const key = tx.hash.toLowerCase();
+    if (!groups.has(key)) groups.set(key, newHashGroup(key));
+    const g = groups.get(key)!;
+    updateMinTimestamp(g, tx.timeStamp);
+    g.erc721s.push(tx);
+  }
+
+  for (const tx of erc1155) {
+    const key = tx.hash.toLowerCase();
+    if (!groups.has(key)) groups.set(key, newHashGroup(key));
+    const g = groups.get(key)!;
+    updateMinTimestamp(g, tx.timeStamp);
+    g.erc1155s.push(tx);
+  }
+
+  return groups;
 }
 
 // ---- Helpers ----
@@ -159,6 +282,86 @@ async function fetchPaginated<T>(
   return allResults;
 }
 
+// ---- Description builders ----
+
+function buildGroupDescription(
+  group: TxHashGroup,
+  ourAddress: string,
+  chain: ChainInfo,
+): string {
+  const hashShort =
+    group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
+  const tokenCount =
+    group.erc20s.length + group.erc721s.length + group.erc1155s.length;
+
+  if (group.normal) {
+    const base = formatTxDescription(group.normal, ourAddress, chain);
+    if (tokenCount > 0) {
+      return `${base} + ${tokenCount} token transfer(s)`;
+    }
+    return base;
+  } else if (group.internals.length > 0 && tokenCount === 0) {
+    // Internal-only
+    return `${chain.native_currency} internal transfer (${hashShort})`;
+  } else {
+    // Token-only or mixed internal+token (no normal)
+    return buildTokenDescription(group, ourAddress, hashShort);
+  }
+}
+
+function buildTokenDescription(
+  group: TxHashGroup,
+  ourAddress: string,
+  hashShort: string,
+): string {
+  const total =
+    group.erc20s.length + group.erc721s.length + group.erc1155s.length;
+
+  // Find the first token transfer involving our address
+  for (const tx of group.erc20s) {
+    const symbol = tx.tokenSymbol || `ERC20:${shortAddr(tx.contractAddress)}`;
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    if (from === ourAddress) {
+      const base = `${symbol} sent to ${shortAddr(to)} (${hashShort})`;
+      return total > 1 ? `${base} + ${total - 1} more` : base;
+    } else if (to === ourAddress) {
+      const base = `${symbol} received from ${shortAddr(from)} (${hashShort})`;
+      return total > 1 ? `${base} + ${total - 1} more` : base;
+    }
+  }
+
+  for (const tx of group.erc721s) {
+    const symbol =
+      tx.tokenSymbol || `NFT:${shortAddr(tx.contractAddress)}`;
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    if (from === ourAddress) {
+      const base = `${symbol} sent to ${shortAddr(to)} (${hashShort})`;
+      return total > 1 ? `${base} + ${total - 1} more` : base;
+    } else if (to === ourAddress) {
+      const base = `${symbol} received from ${shortAddr(from)} (${hashShort})`;
+      return total > 1 ? `${base} + ${total - 1} more` : base;
+    }
+  }
+
+  for (const tx of group.erc1155s) {
+    const symbol =
+      tx.tokenSymbol || `ERC1155:${shortAddr(tx.contractAddress)}`;
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    if (from === ourAddress) {
+      const base = `${symbol} sent to ${shortAddr(to)} (${hashShort})`;
+      return total > 1 ? `${base} + ${total - 1} more` : base;
+    } else if (to === ourAddress) {
+      const base = `${symbol} received from ${shortAddr(from)} (${hashShort})`;
+      return total > 1 ? `${base} + ${total - 1} more` : base;
+    }
+  }
+
+  return `token transfer (${hashShort})`;
+}
+
 // ---- Main sync function ----
 
 export async function syncEtherscan(
@@ -192,6 +395,7 @@ export async function syncEtherscan(
   // Collect existing sources for dedup
   const entries = await backend.queryJournalEntries({});
   const existingSources = new Set<string>();
+  const chainPrefix = `etherscan:${chainId}:`;
   for (const [e] of entries) {
     if (!e.source.startsWith("etherscan:")) continue;
     existingSources.add(e.source);
@@ -202,6 +406,21 @@ export async function syncEtherscan(
         existingSources.add(`etherscan:1:${rest}`);
       } else if (rest.startsWith("int:")) {
         existingSources.add(`etherscan:1:${rest}`);
+        // Also add hash-level key for old internal sources
+        const parts = rest.split(":");
+        if (parts.length >= 2) {
+          existingSources.add(`etherscan:1:${parts[1]}`);
+        }
+      }
+    }
+    // Backward compat: old internal sources "etherscan:{chainId}:int:{hash}:{traceId}"
+    if (e.source.startsWith(chainPrefix)) {
+      const afterPrefix = e.source.substring(chainPrefix.length);
+      if (afterPrefix.startsWith("int:")) {
+        const parts = afterPrefix.split(":");
+        if (parts.length >= 2) {
+          existingSources.add(`etherscan:${chainId}:${parts[1]}`);
+        }
       }
     }
   }
@@ -290,46 +509,42 @@ export async function syncEtherscan(
     };
   }
 
-  // ---- Process transactions ----
+  // ---- Item builders ----
 
-  async function processNormalTx(
+  async function buildNormalItems(
     tx: NormalTx,
-    source: string,
-  ): Promise<void> {
-    const date = timestampToDate(tx.timeStamp);
+    entryId: string,
+    date: string,
+  ): Promise<LineItem[]> {
     const value = weiToNative(tx.value, chain!.decimals);
-    const gasFee = calculateGasFee(
-      tx.gasUsed,
-      tx.gasPrice,
-      chain!.decimals,
-    );
-
+    const gasFee = calculateGasFee(tx.gasUsed, tx.gasPrice, chain!.decimals);
     const from = tx.from.toLowerCase();
     const to = tx.to.toLowerCase();
     const chainName = chain!.name;
     const ourAccount = `Assets:${chainName}:${label}`;
-    const entryId = uuidv7();
     const items: LineItem[] = [];
     const curr = chain!.native_currency;
 
     if (from === addr && to === addr) {
-      if (gasFee.isZero()) return;
-      const gasAccId = await ensureAccount(
-        `Expenses:${chainName}:Gas`,
-        date,
-      );
-      const ourAccId = await ensureAccount(ourAccount, date);
-      items.push(makeItem(entryId, gasAccId, gasFee, curr));
-      items.push(makeItem(entryId, ourAccId, gasFee.neg(), curr));
+      if (!gasFee.isZero()) {
+        const gasAccId = await ensureAccount(
+          `Expenses:${chainName}:Gas`,
+          date,
+        );
+        const ourAccId = await ensureAccount(ourAccount, date);
+        items.push(makeItem(entryId, gasAccId, gasFee, curr));
+        items.push(makeItem(entryId, ourAccId, gasFee.neg(), curr));
+      }
     } else if (!to) {
-      if (gasFee.isZero()) return;
-      const ccAccId = await ensureAccount(
-        `Expenses:${chainName}:ContractCreation`,
-        date,
-      );
-      const ourAccId = await ensureAccount(ourAccount, date);
-      items.push(makeItem(entryId, ccAccId, gasFee, curr));
-      items.push(makeItem(entryId, ourAccId, gasFee.neg(), curr));
+      if (!gasFee.isZero()) {
+        const ccAccId = await ensureAccount(
+          `Expenses:${chainName}:ContractCreation`,
+          date,
+        );
+        const ourAccId = await ensureAccount(ourAccount, date);
+        items.push(makeItem(entryId, ccAccId, gasFee, curr));
+        items.push(makeItem(entryId, ourAccId, gasFee.neg(), curr));
+      }
     } else if (from === addr) {
       const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
       const extAccId = await ensureAccount(extAccount, date);
@@ -345,60 +560,37 @@ export async function syncEtherscan(
       }
       const totalOut = value.plus(gasFee);
       if (!totalOut.isZero())
-        items.push(
-          makeItem(entryId, ourAccId, totalOut.neg(), curr),
-        );
+        items.push(makeItem(entryId, ourAccId, totalOut.neg(), curr));
     } else if (to === addr) {
-      if (value.isZero()) return;
-      const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
-      const extAccId = await ensureAccount(extAccount, date);
-      const ourAccId = await ensureAccount(ourAccount, date);
-      items.push(makeItem(entryId, ourAccId, value, curr));
-      items.push(makeItem(entryId, extAccId, value.neg(), curr));
-    } else {
-      return;
+      if (!value.isZero()) {
+        const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+        const extAccId = await ensureAccount(extAccount, date);
+        const ourAccId = await ensureAccount(ourAccount, date);
+        items.push(makeItem(entryId, ourAccId, value, curr));
+        items.push(makeItem(entryId, extAccId, value.neg(), curr));
+      }
     }
 
-    if (items.length === 0) return;
-
-    const description = formatTxDescription(tx, addr, chain!);
-    const entry: JournalEntry = {
-      id: entryId,
-      date,
-      description,
-      status: "confirmed",
-      source,
-      voided_by: null,
-      created_at: date,
-    };
-
-    try {
-      await backend.postJournalEntry(entry, items);
-      result.transactions_imported++;
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      result.warnings.push(`post tx ${tx.hash}: ${msg}`);
-    }
+    return items;
   }
 
-  async function processInternalTx(
+  async function buildInternalItems(
     tx: InternalTx,
-    source: string,
-  ): Promise<void> {
-    const date = timestampToDate(tx.timeStamp);
+    entryId: string,
+    date: string,
+  ): Promise<LineItem[]> {
     const value = weiToNative(tx.value, chain!.decimals);
-    if (value.isZero()) return;
+    if (value.isZero()) return [];
 
     const from = tx.from.toLowerCase();
     const to = tx.to.toLowerCase();
     const chainName = chain!.name;
     const ourAccount = `Assets:${chainName}:${label}`;
-    const entryId = uuidv7();
     const items: LineItem[] = [];
     const curr = chain!.native_currency;
 
     if (from === addr && to === addr) {
-      return;
+      // Self-transfer: no net effect
     } else if (from === addr) {
       const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
       const extAccId = await ensureAccount(extAccount, date);
@@ -411,13 +603,211 @@ export async function syncEtherscan(
       const ourAccId = await ensureAccount(ourAccount, date);
       items.push(makeItem(entryId, ourAccId, value, curr));
       items.push(makeItem(entryId, extAccId, value.neg(), curr));
-    } else {
+    }
+
+    return items;
+  }
+
+  async function buildErc20Items(
+    tx: Erc20Tx,
+    entryId: string,
+    date: string,
+  ): Promise<LineItem[]> {
+    const decimals = parseInt(tx.tokenDecimal, 10) || 18;
+    const value = weiToNative(tx.value, decimals);
+    if (value.isZero()) return [];
+
+    const currency = tx.tokenSymbol || `ERC20:${shortAddr(tx.contractAddress)}`;
+    await ensureCurrency(currency, decimals);
+
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    const chainName = chain!.name;
+    const ourAccount = `Assets:${chainName}:${label}`;
+    const items: LineItem[] = [];
+
+    if (from === addr && to === addr) {
+      // Self-transfer: no net effect
+    } else if (from === addr) {
+      const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+      const extAccId = await ensureAccount(extAccount, date);
+      const ourAccId = await ensureAccount(ourAccount, date);
+      items.push(makeItem(entryId, extAccId, value, currency));
+      items.push(makeItem(entryId, ourAccId, value.neg(), currency));
+    } else if (to === addr) {
+      const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+      const extAccId = await ensureAccount(extAccount, date);
+      const ourAccId = await ensureAccount(ourAccount, date);
+      items.push(makeItem(entryId, ourAccId, value, currency));
+      items.push(makeItem(entryId, extAccId, value.neg(), currency));
+    }
+
+    return items;
+  }
+
+  async function buildErc721Items(
+    tx: Erc721Tx,
+    entryId: string,
+    date: string,
+  ): Promise<LineItem[]> {
+    const value = new Decimal(1);
+    const currency = tx.tokenSymbol || `NFT:${shortAddr(tx.contractAddress)}`;
+    await ensureCurrency(currency, 0);
+
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    const chainName = chain!.name;
+    const ourAccount = `Assets:${chainName}:${label}`;
+    const items: LineItem[] = [];
+
+    if (from === addr && to === addr) {
+      // Self-transfer: no net effect
+    } else if (from === addr) {
+      const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+      const extAccId = await ensureAccount(extAccount, date);
+      const ourAccId = await ensureAccount(ourAccount, date);
+      items.push(makeItem(entryId, extAccId, value, currency));
+      items.push(makeItem(entryId, ourAccId, value.neg(), currency));
+    } else if (to === addr) {
+      const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+      const extAccId = await ensureAccount(extAccount, date);
+      const ourAccId = await ensureAccount(ourAccount, date);
+      items.push(makeItem(entryId, ourAccId, value, currency));
+      items.push(makeItem(entryId, extAccId, value.neg(), currency));
+    }
+
+    return items;
+  }
+
+  async function buildErc1155Items(
+    tx: Erc1155Tx,
+    entryId: string,
+    date: string,
+  ): Promise<LineItem[]> {
+    let value: Decimal;
+    try {
+      value = new Decimal(tx.tokenValue || "0");
+    } catch {
+      value = new Decimal(0);
+    }
+    if (value.isZero()) return [];
+
+    const currency =
+      tx.tokenSymbol || `ERC1155:${shortAddr(tx.contractAddress)}`;
+    await ensureCurrency(currency, 0);
+
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    const chainName = chain!.name;
+    const ourAccount = `Assets:${chainName}:${label}`;
+    const items: LineItem[] = [];
+
+    if (from === addr && to === addr) {
+      // Self-transfer: no net effect
+    } else if (from === addr) {
+      const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+      const extAccId = await ensureAccount(extAccount, date);
+      const ourAccId = await ensureAccount(ourAccount, date);
+      items.push(makeItem(entryId, extAccId, value, currency));
+      items.push(makeItem(entryId, ourAccId, value.neg(), currency));
+    } else if (to === addr) {
+      const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+      const extAccId = await ensureAccount(extAccount, date);
+      const ourAccId = await ensureAccount(ourAccount, date);
+      items.push(makeItem(entryId, ourAccId, value, currency));
+      items.push(makeItem(entryId, extAccId, value.neg(), currency));
+    }
+
+    return items;
+  }
+
+  // ---- Item merging ----
+
+  function mergeItems(items: LineItem[]): LineItem[] {
+    const sums = new Map<string, { entryId: string; amount: Decimal }>();
+
+    for (const item of items) {
+      const key = `${item.account_id}|${item.currency}`;
+      const existing = sums.get(key);
+      if (existing) {
+        existing.amount = existing.amount.plus(new Decimal(item.amount));
+      } else {
+        sums.set(key, {
+          entryId: item.journal_entry_id,
+          amount: new Decimal(item.amount),
+        });
+      }
+    }
+
+    const merged: LineItem[] = [];
+    for (const [key, { entryId, amount }] of sums) {
+      if (amount.isZero()) continue;
+      const [accountId, currency] = key.split("|", 2);
+      merged.push({
+        id: uuidv7(),
+        journal_entry_id: entryId,
+        account_id: accountId,
+        currency,
+        amount: amount.toString(),
+        lot_id: null,
+      });
+    }
+
+    return merged;
+  }
+
+  // ---- Hash group processing ----
+
+  async function processHashGroup(group: TxHashGroup): Promise<void> {
+    // Skip if normal tx has isError == "1"
+    if (group.normal && group.normal.isError === "1") {
       return;
     }
 
-    const hashShort =
-      tx.hash.length >= 10 ? tx.hash.substring(0, 10) : tx.hash;
-    const description = `${curr} internal transfer (${hashShort})`;
+    const date = timestampToDate(group.timestamp);
+    const entryId = uuidv7();
+    const allItems: LineItem[] = [];
+
+    // Build normal items
+    if (group.normal) {
+      const items = await buildNormalItems(group.normal, entryId, date);
+      allItems.push(...items);
+    }
+
+    // Build internal items (skip isError == "1")
+    for (const internal of group.internals) {
+      if (internal.isError === "1") continue;
+      const items = await buildInternalItems(internal, entryId, date);
+      allItems.push(...items);
+    }
+
+    // Build ERC20 items
+    for (const erc20 of group.erc20s) {
+      const items = await buildErc20Items(erc20, entryId, date);
+      allItems.push(...items);
+    }
+
+    // Build ERC721 items
+    for (const erc721 of group.erc721s) {
+      const items = await buildErc721Items(erc721, entryId, date);
+      allItems.push(...items);
+    }
+
+    // Build ERC1155 items
+    for (const erc1155 of group.erc1155s) {
+      const items = await buildErc1155Items(erc1155, entryId, date);
+      allItems.push(...items);
+    }
+
+    // Merge items sharing the same (account_id, currency)
+    const merged = mergeItems(allItems);
+    if (merged.length === 0) return;
+
+    // Build description
+    const description = buildGroupDescription(group, addr, chain!);
+
+    // Post journal entry
+    const source = `etherscan:${chainId}:${group.hash}`;
     const entry: JournalEntry = {
       id: entryId,
       date,
@@ -429,24 +819,28 @@ export async function syncEtherscan(
     };
 
     try {
-      await backend.postJournalEntry(entry, items);
+      await backend.postJournalEntry(entry, merged);
       result.transactions_imported++;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.warnings.push(`post internal tx ${tx.hash}: ${msg}`);
+      result.warnings.push(`post tx ${group.hash}: ${msg}`);
     }
   }
+
+  // ---- Main sync flow ----
 
   // 1. Ensure native currency
   await ensureCurrency(chain.native_currency, chain.decimals);
 
-  // 2. Fetch transactions
+  // 2. Fetch all 5 transfer types (with rate-limiting delays)
   const normalTxns = await fetchPaginated<NormalTx>(
     apiKey,
     addr,
     "txlist",
     chainId,
   );
+
+  await new Promise((r) => setTimeout(r, 250));
   const internalTxns = await fetchPaginated<InternalTx>(
     apiKey,
     addr,
@@ -454,26 +848,53 @@ export async function syncEtherscan(
     chainId,
   );
 
-  // 3. Process normal transactions
-  for (const tx of normalTxns) {
-    if (tx.isError === "1") continue;
-    const source = `etherscan:${chainId}:${tx.hash}`;
-    if (existingSources.has(source)) {
-      result.transactions_skipped++;
-      continue;
-    }
-    await processNormalTx(tx, source);
-  }
+  await new Promise((r) => setTimeout(r, 250));
+  const erc20Txns = await fetchPaginated<Erc20Tx>(
+    apiKey,
+    addr,
+    "tokentx",
+    chainId,
+  );
 
-  // 4. Process internal transactions
-  for (const tx of internalTxns) {
-    if (tx.isError === "1") continue;
-    const source = `etherscan:${chainId}:int:${tx.hash}:${tx.traceId}`;
+  await new Promise((r) => setTimeout(r, 250));
+  const erc721Txns = await fetchPaginated<Erc721Tx>(
+    apiKey,
+    addr,
+    "tokennfttx",
+    chainId,
+  );
+
+  await new Promise((r) => setTimeout(r, 250));
+  const erc1155Txns = await fetchPaginated<Erc1155Tx>(
+    apiKey,
+    addr,
+    "token1155tx",
+    chainId,
+  );
+
+  // 3. Group by hash
+  const groups = groupByHash(
+    normalTxns,
+    internalTxns,
+    erc20Txns,
+    erc721Txns,
+    erc1155Txns,
+  );
+
+  // 4. Sort groups by timestamp and process
+  const sortedGroups = Array.from(groups.values()).sort((a, b) => {
+    const aTs = parseInt(a.timestamp, 10) || 0;
+    const bTs = parseInt(b.timestamp, 10) || 0;
+    return aTs - bTs;
+  });
+
+  for (const group of sortedGroups) {
+    const source = `etherscan:${chainId}:${group.hash}`;
     if (existingSources.has(source)) {
       result.transactions_skipped++;
       continue;
     }
-    await processInternalTx(tx, source);
+    await processHashGroup(group);
   }
 
   return result;

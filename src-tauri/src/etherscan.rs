@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::thread;
@@ -228,7 +228,152 @@ struct InternalTx {
     #[serde(rename = "isError")]
     is_error: String,
     #[serde(rename = "traceId")]
+    #[allow(dead_code)]
     trace_id: String,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct Erc20Tx {
+    hash: String,
+    #[serde(rename = "timeStamp")]
+    timestamp: String,
+    from: String,
+    to: String,
+    value: String,
+    #[serde(rename = "contractAddress")]
+    contract_address: String,
+    #[serde(rename = "tokenName")]
+    token_name: String,
+    #[serde(rename = "tokenSymbol")]
+    token_symbol: String,
+    #[serde(rename = "tokenDecimal")]
+    token_decimal: String,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct Erc721Tx {
+    hash: String,
+    #[serde(rename = "timeStamp")]
+    timestamp: String,
+    from: String,
+    to: String,
+    #[serde(rename = "contractAddress")]
+    contract_address: String,
+    #[serde(rename = "tokenID")]
+    token_id: String,
+    #[serde(rename = "tokenName")]
+    token_name: String,
+    #[serde(rename = "tokenSymbol")]
+    token_symbol: String,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct Erc1155Tx {
+    hash: String,
+    #[serde(rename = "timeStamp")]
+    timestamp: String,
+    from: String,
+    to: String,
+    #[serde(rename = "contractAddress")]
+    contract_address: String,
+    #[serde(rename = "tokenID")]
+    token_id: String,
+    #[serde(rename = "tokenValue")]
+    token_value: String,
+    #[serde(rename = "tokenName")]
+    token_name: String,
+    #[serde(rename = "tokenSymbol")]
+    token_symbol: String,
+}
+
+// ---- Hash grouping ----
+
+#[derive(Default)]
+struct TxHashGroup {
+    hash: String,
+    timestamp: String,
+    normal: Option<NormalTx>,
+    internals: Vec<InternalTx>,
+    erc20s: Vec<Erc20Tx>,
+    erc721s: Vec<Erc721Tx>,
+    erc1155s: Vec<Erc1155Tx>,
+}
+
+fn update_min_timestamp(current: &mut String, new_ts: &str) {
+    if current.is_empty() {
+        *current = new_ts.to_string();
+        return;
+    }
+    let cur: u64 = current.parse().unwrap_or(u64::MAX);
+    let new: u64 = new_ts.parse().unwrap_or(u64::MAX);
+    if new < cur {
+        *current = new_ts.to_string();
+    }
+}
+
+fn group_by_hash(
+    normal: Vec<NormalTx>,
+    internal: Vec<InternalTx>,
+    erc20: Vec<Erc20Tx>,
+    erc721: Vec<Erc721Tx>,
+    erc1155: Vec<Erc1155Tx>,
+) -> BTreeMap<String, TxHashGroup> {
+    let mut groups: BTreeMap<String, TxHashGroup> = BTreeMap::new();
+
+    for tx in normal {
+        let key = tx.hash.to_lowercase();
+        let group = groups.entry(key.clone()).or_insert_with(|| TxHashGroup {
+            hash: key,
+            ..Default::default()
+        });
+        update_min_timestamp(&mut group.timestamp, &tx.timestamp);
+        group.normal = Some(tx);
+    }
+
+    for tx in internal {
+        let key = tx.hash.to_lowercase();
+        let group = groups.entry(key.clone()).or_insert_with(|| TxHashGroup {
+            hash: key,
+            ..Default::default()
+        });
+        update_min_timestamp(&mut group.timestamp, &tx.timestamp);
+        group.internals.push(tx);
+    }
+
+    for tx in erc20 {
+        let key = tx.hash.to_lowercase();
+        let group = groups.entry(key.clone()).or_insert_with(|| TxHashGroup {
+            hash: key,
+            ..Default::default()
+        });
+        update_min_timestamp(&mut group.timestamp, &tx.timestamp);
+        group.erc20s.push(tx);
+    }
+
+    for tx in erc721 {
+        let key = tx.hash.to_lowercase();
+        let group = groups.entry(key.clone()).or_insert_with(|| TxHashGroup {
+            hash: key,
+            ..Default::default()
+        });
+        update_min_timestamp(&mut group.timestamp, &tx.timestamp);
+        group.erc721s.push(tx);
+    }
+
+    for tx in erc1155 {
+        let key = tx.hash.to_lowercase();
+        let group = groups.entry(key.clone()).or_insert_with(|| TxHashGroup {
+            hash: key,
+            ..Default::default()
+        });
+        update_min_timestamp(&mut group.timestamp, &tx.timestamp);
+        group.erc1155s.push(tx);
+    }
+
+    groups
 }
 
 // ---- Sync function ----
@@ -256,40 +401,49 @@ pub fn sync_etherscan(
     // 2. Collect existing etherscan sources for dedup
     let existing = collect_existing_sources(engine, chain_id)?;
 
-    // 3. Fetch normal transactions (paginated)
+    // 3. Fetch all 5 transfer types (with rate-limiting delays)
     let normal_json = fetch_paginated(api_key, &address, "txlist", chain_id)?;
     let normal_txns: Vec<NormalTx> =
         serde_json::from_value(normal_json).map_err(|e| format!("parse normal txns: {e}"))?;
 
-    // 4. Fetch internal transactions (paginated)
+    thread::sleep(Duration::from_millis(250));
     let internal_json = fetch_paginated(api_key, &address, "txlistinternal", chain_id)?;
     let internal_txns: Vec<InternalTx> =
         serde_json::from_value(internal_json).map_err(|e| format!("parse internal txns: {e}"))?;
 
-    // 5. Process normal transactions
-    for tx in &normal_txns {
-        if tx.is_error == "1" {
-            continue;
-        }
-        let source = format!("etherscan:{}:{}", chain_id, tx.hash);
-        if existing.contains(&source) {
-            result.transactions_skipped += 1;
-            continue;
-        }
-        process_normal_tx(engine, tx, &address, label, &source, chain, &mut result)?;
-    }
+    thread::sleep(Duration::from_millis(250));
+    let erc20_json = fetch_paginated(api_key, &address, "tokentx", chain_id)?;
+    let erc20_txns: Vec<Erc20Tx> =
+        serde_json::from_value(erc20_json).map_err(|e| format!("parse ERC20 txns: {e}"))?;
 
-    // 6. Process internal transactions
-    for tx in &internal_txns {
-        if tx.is_error == "1" {
-            continue;
-        }
-        let source = format!("etherscan:{}:int:{}:{}", chain_id, tx.hash, tx.trace_id);
+    thread::sleep(Duration::from_millis(250));
+    let erc721_json = fetch_paginated(api_key, &address, "tokennfttx", chain_id)?;
+    let erc721_txns: Vec<Erc721Tx> =
+        serde_json::from_value(erc721_json).map_err(|e| format!("parse ERC721 txns: {e}"))?;
+
+    thread::sleep(Duration::from_millis(250));
+    let erc1155_json = fetch_paginated(api_key, &address, "token1155tx", chain_id)?;
+    let erc1155_txns: Vec<Erc1155Tx> =
+        serde_json::from_value(erc1155_json).map_err(|e| format!("parse ERC1155 txns: {e}"))?;
+
+    // 4. Group by hash
+    let groups = group_by_hash(normal_txns, internal_txns, erc20_txns, erc721_txns, erc1155_txns);
+
+    // 5. Sort groups by timestamp and process
+    let mut sorted_groups: Vec<TxHashGroup> = groups.into_values().collect();
+    sorted_groups.sort_by(|a, b| {
+        let a_ts: u64 = a.timestamp.parse().unwrap_or(0);
+        let b_ts: u64 = b.timestamp.parse().unwrap_or(0);
+        a_ts.cmp(&b_ts)
+    });
+
+    for group in &sorted_groups {
+        let source = format!("etherscan:{}:{}", chain_id, group.hash);
         if existing.contains(&source) {
             result.transactions_skipped += 1;
             continue;
         }
-        process_internal_tx(engine, tx, &address, label, &source, chain, &mut result)?;
+        process_hash_group(engine, group, &address, label, chain, &mut result)?;
     }
 
     Ok(result)
@@ -351,18 +505,18 @@ fn fetch_paginated(
     Ok(serde_json::Value::Array(all_results))
 }
 
-// ---- Transaction processing ----
+// ---- Item builders ----
 
-fn process_normal_tx(
+fn build_normal_items(
     engine: &LedgerEngine,
     tx: &NormalTx,
     our_address: &str,
     label: &str,
-    source: &str,
+    entry_id: Uuid,
+    date: NaiveDate,
     chain: &ChainInfo,
     result: &mut EtherscanSyncResult,
-) -> Result<(), String> {
-    let date = timestamp_to_date(&tx.timestamp)?;
+) -> Result<Vec<LineItem>, String> {
     let value = wei_to_native(&tx.value, chain.decimals)?;
     let gas_fee = calculate_gas_fee(&tx.gas_used, &tx.gas_price, chain.decimals)?;
 
@@ -371,28 +525,25 @@ fn process_normal_tx(
 
     let chain_name = chain.name;
     let our_account = format!("Assets:{chain_name}:{label}");
-    let entry_id = Uuid::now_v7();
     let mut items = Vec::new();
 
     if from == our_address && to == our_address {
         // Self-transfer: only gas
-        if gas_fee.is_zero() {
-            return Ok(());
+        if !gas_fee.is_zero() {
+            let gas_acc_id = ensure_account(engine, &format!("Expenses:{chain_name}:Gas"), date, result)?;
+            let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+            items.push(make_line_item(entry_id, gas_acc_id, gas_fee, chain.native_currency));
+            items.push(make_line_item(entry_id, our_acc_id, -gas_fee, chain.native_currency));
         }
-        let gas_acc_id = ensure_account(engine, &format!("Expenses:{chain_name}:Gas"), date, result)?;
-        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, gas_acc_id, gas_fee, chain.native_currency));
-        items.push(make_line_item(entry_id, our_acc_id, -gas_fee, chain.native_currency));
     } else if to.is_empty() {
         // Contract creation
-        if gas_fee.is_zero() {
-            return Ok(());
+        if !gas_fee.is_zero() {
+            let cc_acc_id =
+                ensure_account(engine, &format!("Expenses:{chain_name}:ContractCreation"), date, result)?;
+            let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+            items.push(make_line_item(entry_id, cc_acc_id, gas_fee, chain.native_currency));
+            items.push(make_line_item(entry_id, our_acc_id, -gas_fee, chain.native_currency));
         }
-        let cc_acc_id =
-            ensure_account(engine, &format!("Expenses:{chain_name}:ContractCreation"), date, result)?;
-        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, cc_acc_id, gas_fee, chain.native_currency));
-        items.push(make_line_item(entry_id, our_acc_id, -gas_fee, chain.native_currency));
     } else if from == our_address {
         // Outgoing
         let counterparty = short_addr(&to);
@@ -414,55 +565,32 @@ fn process_normal_tx(
         }
     } else if to == our_address {
         // Incoming
-        if value.is_zero() {
-            return Ok(());
+        if !value.is_zero() {
+            let counterparty = short_addr(&from);
+            let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+            let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+            let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+            items.push(make_line_item(entry_id, our_acc_id, value, chain.native_currency));
+            items.push(make_line_item(entry_id, ext_acc_id, -value, chain.native_currency));
         }
-        let counterparty = short_addr(&from);
-        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
-        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
-        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, our_acc_id, value, chain.native_currency));
-        items.push(make_line_item(entry_id, ext_acc_id, -value, chain.native_currency));
-    } else {
-        return Ok(());
     }
 
-    if items.is_empty() {
-        return Ok(());
-    }
-
-    let description = format_tx_description(tx, our_address, chain);
-    let entry = JournalEntry {
-        id: entry_id,
-        date,
-        description,
-        status: JournalEntryStatus::Confirmed,
-        source: source.to_string(),
-        voided_by: None,
-        created_at: date,
-    };
-
-    engine
-        .post_journal_entry(&entry, &items)
-        .map_err(|e| format!("post tx {}: {e}", tx.hash))?;
-    result.transactions_imported += 1;
-    Ok(())
+    Ok(items)
 }
 
-fn process_internal_tx(
+fn build_internal_items(
     engine: &LedgerEngine,
     tx: &InternalTx,
     our_address: &str,
     label: &str,
-    source: &str,
+    entry_id: Uuid,
+    date: NaiveDate,
     chain: &ChainInfo,
     result: &mut EtherscanSyncResult,
-) -> Result<(), String> {
-    let date = timestamp_to_date(&tx.timestamp)?;
+) -> Result<Vec<LineItem>, String> {
     let value = wei_to_native(&tx.value, chain.decimals)?;
-
     if value.is_zero() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let from = tx.from.to_lowercase();
@@ -470,14 +598,11 @@ fn process_internal_tx(
 
     let chain_name = chain.name;
     let our_account = format!("Assets:{chain_name}:{label}");
-    let entry_id = Uuid::now_v7();
     let mut items = Vec::new();
 
     if from == our_address && to == our_address {
         // Self-transfer internal: no net effect
-        return Ok(());
     } else if from == our_address {
-        // Outgoing internal
         let counterparty = short_addr(&to);
         let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
         let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
@@ -485,39 +610,357 @@ fn process_internal_tx(
         items.push(make_line_item(entry_id, ext_acc_id, value, chain.native_currency));
         items.push(make_line_item(entry_id, our_acc_id, -value, chain.native_currency));
     } else if to == our_address {
-        // Incoming internal
         let counterparty = short_addr(&from);
         let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
         let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
         items.push(make_line_item(entry_id, our_acc_id, value, chain.native_currency));
         items.push(make_line_item(entry_id, ext_acc_id, -value, chain.native_currency));
+    }
+
+    Ok(items)
+}
+
+fn build_erc20_items(
+    engine: &LedgerEngine,
+    tx: &Erc20Tx,
+    our_address: &str,
+    label: &str,
+    entry_id: Uuid,
+    date: NaiveDate,
+    chain: &ChainInfo,
+    result: &mut EtherscanSyncResult,
+) -> Result<Vec<LineItem>, String> {
+    let decimals: u8 = tx.token_decimal.parse().unwrap_or(18);
+    let value = wei_to_native(&tx.value, decimals)?;
+    if value.is_zero() {
+        return Ok(Vec::new());
+    }
+
+    let currency = if tx.token_symbol.is_empty() {
+        format!("ERC20:{}", short_addr(&tx.contract_address))
     } else {
+        tx.token_symbol.clone()
+    };
+
+    ensure_currency(engine, &currency, decimals, result)?;
+
+    let from = tx.from.to_lowercase();
+    let to = tx.to.to_lowercase();
+    let chain_name = chain.name;
+    let our_account = format!("Assets:{chain_name}:{label}");
+    let mut items = Vec::new();
+
+    if from == our_address && to == our_address {
+        // Self-transfer: no net effect
+    } else if from == our_address {
+        let counterparty = short_addr(&to);
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+        items.push(make_line_item(entry_id, ext_acc_id, value, &currency));
+        items.push(make_line_item(entry_id, our_acc_id, -value, &currency));
+    } else if to == our_address {
+        let counterparty = short_addr(&from);
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+        items.push(make_line_item(entry_id, our_acc_id, value, &currency));
+        items.push(make_line_item(entry_id, ext_acc_id, -value, &currency));
+    }
+
+    Ok(items)
+}
+
+fn build_erc721_items(
+    engine: &LedgerEngine,
+    tx: &Erc721Tx,
+    our_address: &str,
+    label: &str,
+    entry_id: Uuid,
+    date: NaiveDate,
+    chain: &ChainInfo,
+    result: &mut EtherscanSyncResult,
+) -> Result<Vec<LineItem>, String> {
+    let value = Decimal::ONE;
+
+    let currency = if tx.token_symbol.is_empty() {
+        format!("NFT:{}", short_addr(&tx.contract_address))
+    } else {
+        tx.token_symbol.clone()
+    };
+
+    ensure_currency(engine, &currency, 0, result)?;
+
+    let from = tx.from.to_lowercase();
+    let to = tx.to.to_lowercase();
+    let chain_name = chain.name;
+    let our_account = format!("Assets:{chain_name}:{label}");
+    let mut items = Vec::new();
+
+    if from == our_address && to == our_address {
+        // Self-transfer: no net effect
+    } else if from == our_address {
+        let counterparty = short_addr(&to);
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+        items.push(make_line_item(entry_id, ext_acc_id, value, &currency));
+        items.push(make_line_item(entry_id, our_acc_id, -value, &currency));
+    } else if to == our_address {
+        let counterparty = short_addr(&from);
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+        items.push(make_line_item(entry_id, our_acc_id, value, &currency));
+        items.push(make_line_item(entry_id, ext_acc_id, -value, &currency));
+    }
+
+    Ok(items)
+}
+
+fn build_erc1155_items(
+    engine: &LedgerEngine,
+    tx: &Erc1155Tx,
+    our_address: &str,
+    label: &str,
+    entry_id: Uuid,
+    date: NaiveDate,
+    chain: &ChainInfo,
+    result: &mut EtherscanSyncResult,
+) -> Result<Vec<LineItem>, String> {
+    let value = Decimal::from_str(&tx.token_value).unwrap_or(Decimal::ZERO);
+    if value.is_zero() {
+        return Ok(Vec::new());
+    }
+
+    let currency = if tx.token_symbol.is_empty() {
+        format!("ERC1155:{}", short_addr(&tx.contract_address))
+    } else {
+        tx.token_symbol.clone()
+    };
+
+    ensure_currency(engine, &currency, 0, result)?;
+
+    let from = tx.from.to_lowercase();
+    let to = tx.to.to_lowercase();
+    let chain_name = chain.name;
+    let our_account = format!("Assets:{chain_name}:{label}");
+    let mut items = Vec::new();
+
+    if from == our_address && to == our_address {
+        // Self-transfer: no net effect
+    } else if from == our_address {
+        let counterparty = short_addr(&to);
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+        items.push(make_line_item(entry_id, ext_acc_id, value, &currency));
+        items.push(make_line_item(entry_id, our_acc_id, -value, &currency));
+    } else if to == our_address {
+        let counterparty = short_addr(&from);
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
+        let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
+        let our_acc_id = ensure_account(engine, &our_account, date, result)?;
+        items.push(make_line_item(entry_id, our_acc_id, value, &currency));
+        items.push(make_line_item(entry_id, ext_acc_id, -value, &currency));
+    }
+
+    Ok(items)
+}
+
+// ---- Item merging ----
+
+fn merge_items(items: Vec<LineItem>) -> Vec<LineItem> {
+    // Group by (account_id, currency), sum amounts, drop zeros
+    let mut sums: BTreeMap<(Uuid, String), (Uuid, Decimal)> = BTreeMap::new();
+
+    for item in &items {
+        let key = (item.account_id, item.currency.clone());
+        let entry = sums
+            .entry(key)
+            .or_insert((item.journal_entry_id, Decimal::ZERO));
+        entry.1 += item.amount;
+    }
+
+    sums.into_iter()
+        .filter(|(_, (_, amount))| !amount.is_zero())
+        .map(|((account_id, currency), (entry_id, amount))| LineItem {
+            id: Uuid::now_v7(),
+            journal_entry_id: entry_id,
+            account_id,
+            currency,
+            amount,
+            lot_id: None,
+        })
+        .collect()
+}
+
+// ---- Hash group processing ----
+
+fn process_hash_group(
+    engine: &LedgerEngine,
+    group: &TxHashGroup,
+    our_address: &str,
+    label: &str,
+    chain: &ChainInfo,
+    result: &mut EtherscanSyncResult,
+) -> Result<(), String> {
+    // Skip if normal tx has isError == "1"
+    if let Some(ref normal) = group.normal {
+        if normal.is_error == "1" {
+            return Ok(());
+        }
+    }
+
+    let date = timestamp_to_date(&group.timestamp)?;
+    let entry_id = Uuid::now_v7();
+    let mut all_items = Vec::new();
+
+    // Build normal items
+    if let Some(ref normal) = group.normal {
+        let items = build_normal_items(engine, normal, our_address, label, entry_id, date, chain, result)?;
+        all_items.extend(items);
+    }
+
+    // Build internal items (skip isError == "1")
+    for internal in &group.internals {
+        if internal.is_error == "1" {
+            continue;
+        }
+        let items = build_internal_items(engine, internal, our_address, label, entry_id, date, chain, result)?;
+        all_items.extend(items);
+    }
+
+    // Build ERC20 items
+    for erc20 in &group.erc20s {
+        let items = build_erc20_items(engine, erc20, our_address, label, entry_id, date, chain, result)?;
+        all_items.extend(items);
+    }
+
+    // Build ERC721 items
+    for erc721 in &group.erc721s {
+        let items = build_erc721_items(engine, erc721, our_address, label, entry_id, date, chain, result)?;
+        all_items.extend(items);
+    }
+
+    // Build ERC1155 items
+    for erc1155 in &group.erc1155s {
+        let items = build_erc1155_items(engine, erc1155, our_address, label, entry_id, date, chain, result)?;
+        all_items.extend(items);
+    }
+
+    // Merge items sharing the same (account_id, currency)
+    let merged = merge_items(all_items);
+    if merged.is_empty() {
         return Ok(());
     }
 
-    let hash_short = if tx.hash.len() >= 10 {
-        &tx.hash[..10]
-    } else {
-        &tx.hash
-    };
-    let currency = chain.native_currency;
-    let description = format!("{currency} internal transfer ({hash_short})");
+    // Build description
+    let description = build_group_description(group, our_address, chain);
+
+    // Post journal entry
+    let source = format!("etherscan:{}:{}", chain.chain_id, group.hash);
     let entry = JournalEntry {
         id: entry_id,
         date,
         description,
         status: JournalEntryStatus::Confirmed,
-        source: source.to_string(),
+        source,
         voided_by: None,
         created_at: date,
     };
 
     engine
-        .post_journal_entry(&entry, &items)
-        .map_err(|e| format!("post internal tx {}: {e}", tx.hash))?;
+        .post_journal_entry(&entry, &merged)
+        .map_err(|e| format!("post tx {}: {e}", group.hash))?;
     result.transactions_imported += 1;
     Ok(())
+}
+
+// ---- Description builders ----
+
+fn build_group_description(group: &TxHashGroup, our_address: &str, chain: &ChainInfo) -> String {
+    let hash_short = if group.hash.len() >= 10 {
+        &group.hash[..10]
+    } else {
+        &group.hash
+    };
+    let token_count = group.erc20s.len() + group.erc721s.len() + group.erc1155s.len();
+
+    if let Some(ref normal) = group.normal {
+        let base = format_tx_description(normal, our_address, chain);
+        if token_count > 0 {
+            format!("{base} + {token_count} token transfer(s)")
+        } else {
+            base
+        }
+    } else if !group.internals.is_empty() && token_count == 0 {
+        // Internal-only
+        let currency = chain.native_currency;
+        format!("{currency} internal transfer ({hash_short})")
+    } else {
+        // Token-only or mixed internal+token (no normal)
+        build_token_description(group, our_address, hash_short)
+    }
+}
+
+fn build_token_description(group: &TxHashGroup, our_address: &str, hash_short: &str) -> String {
+    let total = group.erc20s.len() + group.erc721s.len() + group.erc1155s.len();
+
+    // Find the first token transfer involving our address
+    for tx in &group.erc20s {
+        let symbol = if tx.token_symbol.is_empty() {
+            format!("ERC20:{}", short_addr(&tx.contract_address))
+        } else {
+            tx.token_symbol.clone()
+        };
+        let from = tx.from.to_lowercase();
+        let to = tx.to.to_lowercase();
+        if from == our_address {
+            let base = format!("{symbol} sent to {} ({hash_short})", short_addr(&to));
+            return if total > 1 { format!("{base} + {} more", total - 1) } else { base };
+        } else if to == our_address {
+            let base = format!("{symbol} received from {} ({hash_short})", short_addr(&from));
+            return if total > 1 { format!("{base} + {} more", total - 1) } else { base };
+        }
+    }
+
+    for tx in &group.erc721s {
+        let symbol = if tx.token_symbol.is_empty() {
+            format!("NFT:{}", short_addr(&tx.contract_address))
+        } else {
+            tx.token_symbol.clone()
+        };
+        let from = tx.from.to_lowercase();
+        let to = tx.to.to_lowercase();
+        if from == our_address {
+            let base = format!("{symbol} sent to {} ({hash_short})", short_addr(&to));
+            return if total > 1 { format!("{base} + {} more", total - 1) } else { base };
+        } else if to == our_address {
+            let base = format!("{symbol} received from {} ({hash_short})", short_addr(&from));
+            return if total > 1 { format!("{base} + {} more", total - 1) } else { base };
+        }
+    }
+
+    for tx in &group.erc1155s {
+        let symbol = if tx.token_symbol.is_empty() {
+            format!("ERC1155:{}", short_addr(&tx.contract_address))
+        } else {
+            tx.token_symbol.clone()
+        };
+        let from = tx.from.to_lowercase();
+        let to = tx.to.to_lowercase();
+        if from == our_address {
+            let base = format!("{symbol} sent to {} ({hash_short})", short_addr(&to));
+            return if total > 1 { format!("{base} + {} more", total - 1) } else { base };
+        } else if to == our_address {
+            let base = format!("{symbol} received from {} ({hash_short})", short_addr(&from));
+            return if total > 1 { format!("{base} + {} more", total - 1) } else { base };
+        }
+    }
+
+    format!("token transfer ({hash_short})")
 }
 
 // ---- Helpers ----
@@ -607,6 +1050,8 @@ fn collect_existing_sources(engine: &LedgerEngine, chain_id: u64) -> Result<Hash
         .map_err(|e| e.to_string())?;
 
     let mut set: HashSet<String> = HashSet::new();
+    let prefix = format!("etherscan:{chain_id}:");
+
     for (e, _) in entries {
         if !e.source.starts_with("etherscan:") {
             continue;
@@ -616,14 +1061,28 @@ fn collect_existing_sources(engine: &LedgerEngine, chain_id: u64) -> Result<Hash
         // Backward compat: old sources like "etherscan:0x..." (no chain_id prefix)
         // When syncing chain_id=1, also match these legacy entries
         if chain_id == 1 && !e.source.starts_with("etherscan:1:") {
-            // Check if it's an old-format source (etherscan:<hash> or etherscan:int:<hash>:<trace>)
             let rest = &e.source["etherscan:".len()..];
             if rest.starts_with("0x") {
-                // Old normal tx: "etherscan:0xhash" → also insert "etherscan:1:0xhash"
                 set.insert(format!("etherscan:1:{rest}"));
             } else if rest.starts_with("int:") {
-                // Old internal tx: "etherscan:int:0xhash:trace" → also insert "etherscan:1:int:0xhash:trace"
                 set.insert(format!("etherscan:1:{rest}"));
+                // Also add hash-level key for old internal sources
+                let parts: Vec<&str> = rest.splitn(3, ':').collect();
+                if parts.len() >= 2 {
+                    set.insert(format!("etherscan:1:{}", parts[1]));
+                }
+            }
+        }
+
+        // Backward compat: old internal sources "etherscan:{chainId}:int:{hash}:{traceId}"
+        // → also insert hash-level key "etherscan:{chainId}:{hash}"
+        if e.source.starts_with(&prefix) {
+            let after_prefix = &e.source[prefix.len()..];
+            if after_prefix.starts_with("int:") {
+                let parts: Vec<&str> = after_prefix.splitn(3, ':').collect();
+                if parts.len() >= 2 {
+                    set.insert(format!("etherscan:{chain_id}:{}", parts[1]));
+                }
             }
         }
     }

@@ -353,7 +353,7 @@
   <Card.Root>
     <Card.Header>
       <Card.Title>Blockchain Sync (Etherscan)</Card.Title>
-      <Card.Description>Sync native transactions from tracked addresses across multiple chains.</Card.Description>
+      <Card.Description>Sync transactions and token transfers from tracked addresses across multiple chains.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <!-- API Key -->
