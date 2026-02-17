@@ -320,7 +320,7 @@ export class SqlJsBackend implements Backend {
     const saved = await loadFromIndexedDB();
     const db = saved ? new SQL.Database(saved) : new SQL.Database();
     const backend = new SqlJsBackend(db);
-    db.run("PRAGMA foreign_keys=ON");
+    db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
       db.exec("INSERT INTO schema_version (version) VALUES (1)");
@@ -353,10 +353,13 @@ export class SqlJsBackend implements Backend {
     const stmt = this.db.prepare(sql);
     if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
     const results: T[] = [];
-    while (stmt.step()) {
-      results.push(mapRow(stmt.getAsObject()));
+    try {
+      while (stmt.step()) {
+        results.push(mapRow(stmt.getAsObject()));
+      }
+    } finally {
+      stmt.free();
     }
-    stmt.free();
     return results;
   }
 
@@ -368,10 +371,13 @@ export class SqlJsBackend implements Backend {
     const stmt = this.db.prepare(sql);
     if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
     let result: T | null = null;
-    if (stmt.step()) {
-      result = mapRow(stmt.getAsObject());
+    try {
+      if (stmt.step()) {
+        result = mapRow(stmt.getAsObject());
+      }
+    } finally {
+      stmt.free();
     }
-    stmt.free();
     return result;
   }
 

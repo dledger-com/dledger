@@ -3,16 +3,29 @@ const currencyFormatters = new Map<string, Intl.NumberFormat>();
 export function formatCurrency(amount: string | number, currency = "USD"): string {
   let formatter = currencyFormatters.get(currency);
   if (!formatter) {
-    formatter = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    try {
+      formatter = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    } catch {
+      // Non-ISO currency code (e.g. AAPL, BTC) — use plain decimal format
+      formatter = new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
     currencyFormatters.set(currency, formatter);
   }
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return formatter.format(num);
+  const formatted = formatter.format(num);
+  // If using the fallback (no currency symbol in output), append the code
+  if (!/[^\d.,\s-]/.test(formatted)) {
+    return `${formatted} ${currency}`;
+  }
+  return formatted;
 }
 
 export function formatDate(dateStr: string, format = "YYYY-MM-DD"): string {

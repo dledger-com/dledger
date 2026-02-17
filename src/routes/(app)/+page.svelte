@@ -29,13 +29,18 @@
   }
 
   onMount(async () => {
-    await Promise.all([
-      accountStore.load(),
-      journalStore.load({ limit: 10 }),
-      reportStore.loadBalanceSheet(today()),
-      reportStore.loadIncomeStatement(firstOfYear(), today()),
-    ]);
-    ready = true;
+    try {
+      await Promise.all([
+        accountStore.load(),
+        journalStore.load({ limit: 10 }),
+        reportStore.loadBalanceSheet(today()),
+        reportStore.loadIncomeStatement(firstOfYear(), today()),
+      ]);
+    } catch (e) {
+      console.error("Dashboard load failed:", e);
+    } finally {
+      ready = true;
+    }
   });
 </script>
 
