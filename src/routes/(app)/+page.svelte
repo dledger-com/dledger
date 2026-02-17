@@ -8,6 +8,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
+  import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -15,6 +16,14 @@
   const settings = new SettingsStore();
 
   let ready = $state(false);
+  let assetsSummary = $state<ConvertedSummary | null>(null);
+  let liabilitiesSummary = $state<ConvertedSummary | null>(null);
+  let revenueSummary = $state<ConvertedSummary | null>(null);
+  let netIncomeSummary = $state<ConvertedSummary | null>(null);
+  let showAssets = $state(false);
+  let showLiabilities = $state(false);
+  let showRevenue = $state(false);
+  let showNetIncome = $state(false);
 
   function today(): string {
     return new Date().toISOString().slice(0, 10);
@@ -44,8 +53,80 @@
     } finally {
       ready = true;
     }
+
+    // Convert balances to base currency (non-blocking)
+    const date = today();
+    const base = settings.currency;
+    const hidden = settings.hiddenCurrencySet;
+
+    try {
+      const promises: Promise<void>[] = [];
+      if (reportStore.balanceSheet) {
+        promises.push(
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden), base, date)
+            .then(s => { assetsSummary = s; }),
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden), base, date)
+            .then(s => { liabilitiesSummary = s; }),
+        );
+      }
+      if (reportStore.incomeStatement) {
+        promises.push(
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden), base, date)
+            .then(s => { revenueSummary = s; }),
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden), base, date)
+            .then(s => { netIncomeSummary = s; }),
+        );
+      }
+      await Promise.all(promises);
+    } catch (e) {
+      console.error("Currency conversion failed:", e);
+    }
   });
 </script>
+
+{#snippet summaryCard(title: string, summary: ConvertedSummary | null, fallbackBalances: { currency: string; amount: string }[] | undefined, showBreakdown: boolean, toggleBreakdown: () => void)}
+  <Card.Root>
+    <Card.Header>
+      <Card.Description>{title}</Card.Description>
+      <Card.Title class="text-2xl">
+        {#if !ready}
+          <Skeleton class="h-8 w-24" />
+        {:else if summary && (summary.converted.length > 0 || summary.unconverted.length === 0)}
+          {formatCurrency(summary.total, summary.baseCurrency)}
+        {:else if fallbackBalances}
+          {sumBalances(fallbackBalances)}
+        {:else}
+          --
+        {/if}
+      </Card.Title>
+      {#if ready && summary}
+        {@const count = summary.converted.length + summary.unconverted.length}
+        {#if count > 1 || summary.unconverted.length > 0}
+          <button onclick={toggleBreakdown}
+                  class="text-xs text-muted-foreground hover:underline text-left">
+            {count} {count === 1 ? "currency" : "currencies"}{#if summary.unconverted.length > 0}, {summary.unconverted.length} without rate{/if}
+          </button>
+          {#if showBreakdown}
+            <div class="mt-2 text-xs space-y-0.5">
+              {#each summary.converted as c}
+                <div class="flex justify-between gap-4">
+                  <span>{c.currency}</span>
+                  <span class="font-mono">{formatCurrency(c.amount, c.currency)}</span>
+                </div>
+              {/each}
+              {#each summary.unconverted as c}
+                <div class="flex justify-between gap-4 text-muted-foreground">
+                  <span>{c.currency} (no rate)</span>
+                  <span class="font-mono">{formatCurrency(c.amount, c.currency)}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/if}
+      {/if}
+    </Card.Header>
+  </Card.Root>
+{/snippet}
 
 <div class="space-y-6">
   <div>
@@ -54,62 +135,34 @@
   </div>
 
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <Card.Root>
-      <Card.Header>
-        <Card.Description>Total Assets</Card.Description>
-        <Card.Title class="text-2xl">
-          {#if !ready}
-            <Skeleton class="h-8 w-24" />
-          {:else if reportStore.balanceSheet}
-            {sumBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, settings.hiddenCurrencySet))}
-          {:else}
-            --
-          {/if}
-        </Card.Title>
-      </Card.Header>
-    </Card.Root>
-    <Card.Root>
-      <Card.Header>
-        <Card.Description>Total Liabilities</Card.Description>
-        <Card.Title class="text-2xl">
-          {#if !ready}
-            <Skeleton class="h-8 w-24" />
-          {:else if reportStore.balanceSheet}
-            {sumBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, settings.hiddenCurrencySet))}
-          {:else}
-            --
-          {/if}
-        </Card.Title>
-      </Card.Header>
-    </Card.Root>
-    <Card.Root>
-      <Card.Header>
-        <Card.Description>Revenue (YTD)</Card.Description>
-        <Card.Title class="text-2xl">
-          {#if !ready}
-            <Skeleton class="h-8 w-24" />
-          {:else if reportStore.incomeStatement}
-            {sumBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, settings.hiddenCurrencySet))}
-          {:else}
-            --
-          {/if}
-        </Card.Title>
-      </Card.Header>
-    </Card.Root>
-    <Card.Root>
-      <Card.Header>
-        <Card.Description>Net Income (YTD)</Card.Description>
-        <Card.Title class="text-2xl">
-          {#if !ready}
-            <Skeleton class="h-8 w-24" />
-          {:else if reportStore.incomeStatement}
-            {sumBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, settings.hiddenCurrencySet))}
-          {:else}
-            --
-          {/if}
-        </Card.Title>
-      </Card.Header>
-    </Card.Root>
+    {@render summaryCard(
+      "Total Assets",
+      assetsSummary,
+      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.assets.totals, settings.hiddenCurrencySet) : undefined,
+      showAssets,
+      () => { showAssets = !showAssets },
+    )}
+    {@render summaryCard(
+      "Total Liabilities",
+      liabilitiesSummary,
+      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, settings.hiddenCurrencySet) : undefined,
+      showLiabilities,
+      () => { showLiabilities = !showLiabilities },
+    )}
+    {@render summaryCard(
+      "Revenue (YTD)",
+      revenueSummary,
+      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, settings.hiddenCurrencySet) : undefined,
+      showRevenue,
+      () => { showRevenue = !showRevenue },
+    )}
+    {@render summaryCard(
+      "Net Income (YTD)",
+      netIncomeSummary,
+      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, settings.hiddenCurrencySet) : undefined,
+      showNetIncome,
+      () => { showNetIncome = !showNetIncome },
+    )}
   </div>
 
   <Card.Root>
