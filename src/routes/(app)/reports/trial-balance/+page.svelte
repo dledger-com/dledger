@@ -7,9 +7,12 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
 
   const store = new ReportStore();
+  const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
 
   async function generate() {
@@ -50,6 +53,10 @@
       </Card.Content>
     </Card.Root>
   {:else if store.trialBalance && store.trialBalance.lines.length > 0}
+    {@const hidden = settings.hiddenCurrencySet}
+    {@const filteredLines = filterHiddenTrialLines(store.trialBalance.lines, hidden)}
+    {@const filteredDebits = filterHiddenBalances(store.trialBalance.total_debits, hidden)}
+    {@const filteredCredits = filterHiddenBalances(store.trialBalance.total_credits, hidden)}
     <Card.Root>
       <Table.Root>
         <Table.Header>
@@ -61,7 +68,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each store.trialBalance.lines as line (line.account_id)}
+          {#each filteredLines as line (line.account_id)}
             <Table.Row>
               <Table.Cell>
                 <a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a>
@@ -84,12 +91,12 @@
           <Table.Row class="font-bold">
             <Table.Cell colspan={2}>Totals</Table.Cell>
             <Table.Cell class="text-right font-mono">
-              {#each store.trialBalance.total_debits as b}
+              {#each filteredDebits as b}
                 {formatCurrency(b.amount, b.currency)}
               {/each}
             </Table.Cell>
             <Table.Cell class="text-right font-mono">
-              {#each store.trialBalance.total_credits as b}
+              {#each filteredCredits as b}
                 {formatCurrency(b.amount, b.currency)}
               {/each}
             </Table.Cell>

@@ -5,11 +5,14 @@
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
   const reportStore = new ReportStore();
+  const settings = new SettingsStore();
 
   let ready = $state(false);
 
@@ -58,7 +61,7 @@
           {#if !ready}
             <Skeleton class="h-8 w-24" />
           {:else if reportStore.balanceSheet}
-            {sumBalances(reportStore.balanceSheet.assets.totals)}
+            {sumBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, settings.hiddenCurrencySet))}
           {:else}
             --
           {/if}
@@ -72,7 +75,7 @@
           {#if !ready}
             <Skeleton class="h-8 w-24" />
           {:else if reportStore.balanceSheet}
-            {sumBalances(reportStore.balanceSheet.liabilities.totals)}
+            {sumBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, settings.hiddenCurrencySet))}
           {:else}
             --
           {/if}
@@ -86,7 +89,7 @@
           {#if !ready}
             <Skeleton class="h-8 w-24" />
           {:else if reportStore.incomeStatement}
-            {sumBalances(reportStore.incomeStatement.revenue.totals)}
+            {sumBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, settings.hiddenCurrencySet))}
           {:else}
             --
           {/if}
@@ -100,7 +103,7 @@
           {#if !ready}
             <Skeleton class="h-8 w-24" />
           {:else if reportStore.incomeStatement}
-            {sumBalances(reportStore.incomeStatement.net_income)}
+            {sumBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, settings.hiddenCurrencySet))}
           {:else}
             --
           {/if}
@@ -121,13 +124,13 @@
             <Skeleton class="h-10 w-full" />
           {/each}
         </div>
-      {:else if journalStore.entries.length === 0}
+      {:else if filterHiddenEntries(journalStore.entries, settings.hiddenCurrencySet).length === 0}
         <p class="text-sm text-muted-foreground py-8 text-center">
           No journal entries yet. Create your first entry to get started.
         </p>
       {:else}
         <div class="space-y-2">
-          {#each journalStore.entries as [entry, items]}
+          {#each filterHiddenEntries(journalStore.entries, settings.hiddenCurrencySet) as [entry, items]}
             <a href="/journal/{entry.id}" class="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors">
               <div class="flex items-center gap-3">
                 <span class="text-sm text-muted-foreground w-24">{entry.date}</span>

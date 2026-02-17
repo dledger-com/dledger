@@ -6,10 +6,13 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import type { ReportSection } from "$lib/types/index.js";
 
   const store = new ReportStore();
+  const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
 
   async function generate() {
@@ -17,8 +20,9 @@
   }
 
   function renderTotals(section: ReportSection): string {
-    if (section.totals.length === 0) return formatCurrency(0);
-    return section.totals.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
+    const totals = filterHiddenBalances(section.totals, settings.hiddenCurrencySet);
+    if (totals.length === 0) return formatCurrency(0);
+    return totals.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
 
   onMount(generate);
@@ -47,16 +51,17 @@
   {:else if store.balanceSheet}
     {@const report = store.balanceSheet}
     {#each [report.assets, report.liabilities, report.equity] as section (section.title)}
+      {@const filteredLines = filterHiddenTrialLines(section.lines, settings.hiddenCurrencySet)}
       <Card.Root>
         <Card.Header><Card.Title>{section.title}</Card.Title></Card.Header>
-        {#if section.lines.length === 0}
+        {#if filteredLines.length === 0}
           <Card.Content>
             <p class="text-sm text-muted-foreground py-4 text-center">No accounts with balances.</p>
           </Card.Content>
         {:else}
           <Table.Root>
             <Table.Body>
-              {#each section.lines as line (line.account_id)}
+              {#each filteredLines as line (line.account_id)}
                 <Table.Row>
                   <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
                   <Table.Cell class="text-right font-mono">

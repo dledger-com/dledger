@@ -235,10 +235,11 @@
               <Table.Head>Name</Table.Head>
               <Table.Head class="text-right">Decimals</Table.Head>
               <Table.Head>Base</Table.Head>
+              <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each currencies as c}
+            {#each currencies.filter((c) => !settings.hiddenCurrencySet.has(c.code)) as c}
               <Table.Row>
                 <Table.Cell class="font-mono">{c.code}</Table.Cell>
                 <Table.Cell>{c.name}</Table.Cell>
@@ -248,10 +249,46 @@
                     <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Base</span>
                   {/if}
                 </Table.Cell>
+                <Table.Cell class="text-right">
+                  {#if !c.is_base}
+                    <Button variant="ghost" size="sm" onclick={() => settings.hideCurrency(c.code)}>Hide</Button>
+                  {/if}
+                </Table.Cell>
               </Table.Row>
             {/each}
           </Table.Body>
         </Table.Root>
+      {/if}
+
+      {#if settings.settings.hiddenCurrencies.length > 0}
+        <Separator />
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-medium">Hidden Currencies ({settings.settings.hiddenCurrencies.length})</h3>
+            <Button variant="outline" size="sm" onclick={() => settings.resetHiddenCurrencies()}>Reset All</Button>
+          </div>
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Code</Table.Head>
+                <Table.Head>Name</Table.Head>
+                <Table.Head class="text-right">Actions</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#each settings.settings.hiddenCurrencies as code}
+                {@const curr = currencies.find((c) => c.code === code)}
+                <Table.Row>
+                  <Table.Cell class="font-mono">{code}</Table.Cell>
+                  <Table.Cell>{curr?.name ?? ""}</Table.Cell>
+                  <Table.Cell class="text-right">
+                    <Button variant="ghost" size="sm" onclick={() => settings.unhideCurrency(code)}>Unhide</Button>
+                  </Table.Cell>
+                </Table.Row>
+              {/each}
+            </Table.Body>
+          </Table.Root>
+        </div>
       {/if}
     </Card.Content>
   </Card.Root>

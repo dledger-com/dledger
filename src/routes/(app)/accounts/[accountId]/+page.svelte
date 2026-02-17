@@ -7,16 +7,21 @@
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import type { Account, CurrencyBalance } from "$lib/types/index.js";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
+  const settings = new SettingsStore();
 
   const accountId = $derived(page.params.accountId);
   let account = $state<Account | null>(null);
   let balances = $state<CurrencyBalance[]>([]);
   let loading = $state(true);
+  const filteredEntries = $derived(filterHiddenEntries(journalStore.entries, settings.hiddenCurrencySet));
+  const filteredBalances = $derived(filterHiddenBalances(balances, settings.hiddenCurrencySet));
 
   onMount(async () => {
     const id = accountId;
@@ -57,10 +62,10 @@
         <Card.Header>
           <Card.Description>Current Balance</Card.Description>
           <Card.Title class="text-2xl">
-            {#if balances.length === 0}
+            {#if filteredBalances.length === 0}
               {formatCurrency(0)}
             {:else}
-              {balances.map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
+              {filteredBalances.map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
             {/if}
           </Card.Title>
         </Card.Header>
@@ -68,7 +73,7 @@
       <Card.Root>
         <Card.Header>
           <Card.Description>Transactions</Card.Description>
-          <Card.Title class="text-2xl">{journalStore.entries.length}</Card.Title>
+          <Card.Title class="text-2xl">{filteredEntries.length}</Card.Title>
         </Card.Header>
       </Card.Root>
     </div>
@@ -77,7 +82,7 @@
       <Card.Header>
         <Card.Title>Transaction History</Card.Title>
       </Card.Header>
-      {#if journalStore.entries.length === 0}
+      {#if filteredEntries.length === 0}
         <Card.Content>
           <p class="text-sm text-muted-foreground py-8 text-center">
             No transactions for this account yet.
@@ -94,7 +99,7 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each journalStore.entries as [entry, items] (entry.id)}
+            {#each filteredEntries as [entry, items] (entry.id)}
               {@const relevantItems = items.filter((i) => i.account_id === accountId)}
               <Table.Row>
                 <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>

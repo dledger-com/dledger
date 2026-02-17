@@ -3,6 +3,7 @@ export interface AppSettings {
   dateFormat: string;
   fiscalYearStart: string;
   etherscanApiKey: string;
+  hiddenCurrencies: string[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -10,6 +11,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   dateFormat: "YYYY-MM-DD",
   fiscalYearStart: "01-01",
   etherscanApiKey: "",
+  hiddenCurrencies: [],
 };
 
 const STORAGE_KEY = "dledger-settings";
@@ -53,6 +55,26 @@ export class SettingsStore {
 
   get etherscanApiKey() {
     return this.settings.etherscanApiKey;
+  }
+
+  get hiddenCurrencySet(): Set<string> {
+    return new Set(this.settings.hiddenCurrencies);
+  }
+
+  hideCurrency(code: string) {
+    const set = new Set(this.settings.hiddenCurrencies);
+    set.add(code);
+    this.update({ hiddenCurrencies: [...set] });
+  }
+
+  unhideCurrency(code: string) {
+    this.update({
+      hiddenCurrencies: this.settings.hiddenCurrencies.filter((c) => c !== code),
+    });
+  }
+
+  resetHiddenCurrencies() {
+    this.update({ hiddenCurrencies: [] });
   }
 
   update(partial: Partial<AppSettings>) {

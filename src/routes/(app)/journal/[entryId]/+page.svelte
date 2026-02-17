@@ -8,16 +8,20 @@
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { entryInvolvesHidden } from "$lib/utils/currency-filter.js";
   import { toast } from "svelte-sonner";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
 
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
+  const settings = new SettingsStore();
 
   const entryId = $derived(page.params.entryId);
   let entry = $state<JournalEntry | null>(null);
   let items = $state<LineItem[]>([]);
+  const isHidden = $derived(entryInvolvesHidden(items, settings.hiddenCurrencySet));
   let loading = $state(true);
 
   async function loadEntry() {
@@ -83,6 +87,11 @@
       </Card.Content>
     </Card.Root>
   {:else}
+    {#if isHidden}
+      <div class="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+        This entry involves hidden currencies. It is excluded from the journal list and reports.
+      </div>
+    {/if}
     <Card.Root>
       <Card.Header>
         <Card.Title>Details</Card.Title>

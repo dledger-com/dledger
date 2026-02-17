@@ -6,11 +6,15 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { filterHiddenEntries } from "$lib/utils/currency-filter.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
 
   const store = new JournalStore();
+  const settings = new SettingsStore();
+  const filteredEntries = $derived(filterHiddenEntries(store.entries, settings.hiddenCurrencySet));
   let exporting = $state(false);
 
   function totalDebits(items: { amount: string }[]): number {
@@ -67,7 +71,7 @@
         </div>
       </Card.Content>
     </Card.Root>
-  {:else if store.entries.length === 0}
+  {:else if filteredEntries.length === 0}
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
@@ -87,7 +91,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each store.entries as [entry, items] (entry.id)}
+          {#each filteredEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell>
