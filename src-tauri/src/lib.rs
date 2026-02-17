@@ -1,17 +1,13 @@
 mod commands;
 pub mod db;
-pub mod plugin;
-mod plugin_commands;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::Manager;
 
 use commands::AppState;
 use db::{apply_migrations, SqliteStorage};
 use dledger_core::LedgerEngine;
-use plugin::PluginManager;
-use plugin_commands::PluginManagerState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,32 +33,6 @@ pub fn run() {
                 engine: engine.clone(),
             });
 
-            // Set up plugin manager
-            let plugins_dir = match std::env::var("DLEDGER_PLUGINS_DIR") {
-                Ok(dir) => {
-                    let path = std::path::PathBuf::from(&dir);
-                    std::fs::canonicalize(&path).unwrap_or(path)
-                }
-                Err(_) => data_dir.join("plugins"),
-            };
-            let plugin_db_path = data_dir.join("plugins.db");
-            let plugin_db_str = plugin_db_path
-                .to_str()
-                .ok_or("invalid plugin db path")?;
-
-            let mut plugin_manager = PluginManager::new(
-                plugins_dir,
-                plugin_db_str,
-                engine,
-            )
-            .map_err(|e| e.to_string())?;
-
-            plugin_manager.discover().map_err(|e| e.to_string())?;
-
-            app.manage(PluginManagerState {
-                manager: Mutex::new(plugin_manager),
-            });
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -86,14 +56,8 @@ pub fn run() {
             commands::income_statement,
             commands::balance_sheet,
             commands::gain_loss_report,
-            plugin_commands::discover_plugins,
-            plugin_commands::list_plugins,
-            plugin_commands::plugin_config_schema,
-            plugin_commands::configure_plugin,
-            plugin_commands::sync_plugin,
-            plugin_commands::run_handler_plugin,
-            plugin_commands::generate_report_plugin,
-            plugin_commands::import_csv,
+            commands::import_ledger_file,
+            commands::export_ledger_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

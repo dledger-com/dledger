@@ -25,4 +25,11 @@ export type {
   GainLossReport,
   GainLossLine,
 } from "./report.js";
-export type { Extension, ExtensionConfig, ConfigField, CsvImportParams } from "./extension.js";
+
+export interface LedgerImportResult {
+  accounts_created: number;
+  currencies_created: number;
+  transactions_imported: number;
+  prices_imported: number;
+  warnings: string[];
+}

@@ -29,14 +29,5 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
-    headers: {
-      // Required for SharedArrayBuffer (wa-sqlite IDBBatchAtomicVFS)
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-    },
-  },
-  // wa-sqlite ships pre-built WASM; exclude from dep optimization
-  optimizeDeps: {
-    exclude: ["wa-sqlite"],
   },
 }));

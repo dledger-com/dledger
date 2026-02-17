@@ -3,6 +3,7 @@ pub mod storage;
 pub mod schema;
 pub mod validation;
 pub mod ledger;
+pub mod ledger_file;
 pub mod lots;
 pub mod reports;
 

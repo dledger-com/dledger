@@ -1,9 +1,0 @@
-[plugin]
-name = "Missing Info Detector"
-version = "0.1.0"
-description = "Scan ledger for transactions with missing or ambiguous data"
-author = "dledger"
-kind = "handler"
-
-[capabilities]
-ledger_read = true

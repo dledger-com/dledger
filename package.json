@@ -9,12 +9,10 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri",
-    "transpile-plugins": "node scripts/transpile-plugins.mjs"
+    "tauri": "tauri"
   },
   "license": "MIT",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.17.8",
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
@@ -22,11 +20,9 @@
     "lucide-svelte": "^0.563.0",
     "mode-watcher": "^1.1.0",
     "tailwindcss": "^4.1.18",
-    "uuid": "^13.0.0",
-    "wa-sqlite": "^1.0.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.17.0",
     "@internationalized/date": "^3.10.0",
     "@lucide/svelte": "^0.561.0",
     "@sveltejs/adapter-static": "^3.0.6",

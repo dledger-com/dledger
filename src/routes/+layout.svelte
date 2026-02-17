@@ -8,8 +8,7 @@
   let { children } = $props();
 
   onMount(() => {
-    const mode = "__TAURI_INTERNALS__" in window ? "tauri" : "wasm";
-    initBackend(mode);
+    initBackend();
   });
 </script>
 

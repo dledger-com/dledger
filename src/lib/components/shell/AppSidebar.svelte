@@ -5,7 +5,7 @@
   import BookOpen from "lucide-svelte/icons/book-open";
   import FileText from "lucide-svelte/icons/file-text";
   import BarChart3 from "lucide-svelte/icons/bar-chart-3";
-  import Puzzle from "lucide-svelte/icons/puzzle";
+  import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Settings from "lucide-svelte/icons/settings";
 
   const navItems = [
@@ -13,7 +13,7 @@
     { title: "Accounts", href: "/accounts", icon: BookOpen },
     { title: "Journal", href: "/journal", icon: FileText },
     { title: "Reports", href: "/reports", icon: BarChart3 },
-    { title: "Extensions", href: "/extensions", icon: Puzzle },
+    { title: "Import / Export", href: "/journal/import", icon: ArrowUpDown },
     { title: "Settings", href: "/settings", icon: Settings },
   ];
 

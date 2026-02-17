@@ -4,18 +4,6 @@ members = [
     "crates/dledger-core",
     "src-tauri",
 ]
-exclude = [
-    "plugins/test-source",
-    "plugins/csv-import",
-    "plugins/kraken",
-    "plugins/etherscan",
-    "plugins/mempool",
-    "plugins/cost-basis",
-    "plugins/missing-info",
-    "plugins/tax-report-fr",
-    "plugins/export-beancount",
-    "plugins/export-hledger",
-]
 
 [workspace.package]
 version = "0.1.0"

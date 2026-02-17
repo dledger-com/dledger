@@ -7,14 +7,36 @@
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { getBackend } from "$lib/backend.js";
+  import { toast } from "svelte-sonner";
 
   const store = new JournalStore();
+  let exporting = $state(false);
 
   function totalDebits(items: { amount: string }[]): number {
     return items.reduce((sum, i) => {
       const n = parseFloat(i.amount);
       return n > 0 ? sum + n : sum;
     }, 0);
+  }
+
+  async function handleExport() {
+    exporting = true;
+    try {
+      const content = await getBackend().exportLedgerFile();
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "dledger-export.ledger";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Ledger file exported");
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      exporting = false;
+    }
   }
 
   onMount(() => store.load());
@@ -27,7 +49,10 @@
       <p class="text-muted-foreground">View and manage all journal entries.</p>
     </div>
     <div class="flex gap-2">
-      <Button variant="outline" href="/journal/import">Import CSV</Button>
+      <Button variant="outline" onclick={handleExport} disabled={exporting}>
+        {exporting ? "Exporting..." : "Export"}
+      </Button>
+      <Button variant="outline" href="/journal/import">Import</Button>
       <Button href="/journal/new">New Entry</Button>
     </div>
   </div>
