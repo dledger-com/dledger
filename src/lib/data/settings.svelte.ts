@@ -2,12 +2,14 @@ export interface AppSettings {
   currency: string;
   dateFormat: string;
   fiscalYearStart: string;
+  etherscanApiKey: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   currency: "USD",
   dateFormat: "YYYY-MM-DD",
   fiscalYearStart: "01-01",
+  etherscanApiKey: "",
 };
 
 const STORAGE_KEY = "dledger-settings";
@@ -47,6 +49,10 @@ export class SettingsStore {
 
   get fiscalYearStart() {
     return this.settings.fiscalYearStart;
+  }
+
+  get etherscanApiKey() {
+    return this.settings.etherscanApiKey;
   }
 
   update(partial: Partial<AppSettings>) {

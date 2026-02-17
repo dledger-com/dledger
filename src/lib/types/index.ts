@@ -33,3 +33,15 @@ export interface LedgerImportResult {
   prices_imported: number;
   warnings: string[];
 }
+
+export interface EtherscanAccount {
+  address: string;
+  label: string;
+}
+
+export interface EtherscanSyncResult {
+  transactions_imported: number;
+  transactions_skipped: number;
+  accounts_created: number;
+  warnings: string[];
+}

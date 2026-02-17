@@ -11,6 +11,8 @@ import type {
   GainLossReport,
   ExchangeRate,
   LedgerImportResult,
+  EtherscanAccount,
+  EtherscanSyncResult,
 } from "./types/index.js";
 
 export interface Backend {
@@ -48,6 +50,12 @@ export interface Backend {
   // Ledger file import/export
   importLedgerFile(content: string): Promise<LedgerImportResult>;
   exportLedgerFile(): Promise<string>;
+
+  // Etherscan
+  listEtherscanAccounts(): Promise<EtherscanAccount[]>;
+  addEtherscanAccount(address: string, label: string): Promise<void>;
+  removeEtherscanAccount(address: string): Promise<void>;
+  syncEtherscan(apiKey: string, address: string, label: string): Promise<EtherscanSyncResult>;
 }
 
 class TauriBackend implements Backend {
@@ -131,6 +139,20 @@ class TauriBackend implements Backend {
   }
   async exportLedgerFile(): Promise<string> {
     return this.invoke("export_ledger_file");
+  }
+
+  // Etherscan
+  async listEtherscanAccounts(): Promise<EtherscanAccount[]> {
+    return this.invoke("list_etherscan_accounts");
+  }
+  async addEtherscanAccount(address: string, label: string): Promise<void> {
+    return this.invoke("add_etherscan_account", { address, label });
+  }
+  async removeEtherscanAccount(address: string): Promise<void> {
+    return this.invoke("remove_etherscan_account", { address });
+  }
+  async syncEtherscan(apiKey: string, address: string, label: string): Promise<EtherscanSyncResult> {
+    return this.invoke("sync_etherscan", { apiKey, address, label });
   }
 }
 

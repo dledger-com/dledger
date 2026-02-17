@@ -1,5 +1,6 @@
 mod commands;
 pub mod db;
+mod etherscan;
 
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use tauri::Manager;
 use commands::AppState;
 use db::{apply_migrations, SqliteStorage};
 use dledger_core::LedgerEngine;
+use etherscan::EtherscanState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,6 +34,10 @@ pub fn run() {
             app.manage(AppState {
                 engine: engine.clone(),
             });
+
+            let etherscan_state =
+                EtherscanState::new(db_path_str).map_err(|e| e.to_string())?;
+            app.manage(etherscan_state);
 
             Ok(())
         })
@@ -58,6 +64,10 @@ pub fn run() {
             commands::gain_loss_report,
             commands::import_ledger_file,
             commands::export_ledger_file,
+            commands::list_etherscan_accounts,
+            commands::add_etherscan_account,
+            commands::remove_etherscan_account,
+            commands::sync_etherscan,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

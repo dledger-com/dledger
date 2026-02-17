@@ -10,6 +10,8 @@ use dledger_core::models::*;
 use dledger_core::reports;
 use dledger_core::LedgerEngine;
 
+use crate::etherscan::{self, EtherscanAccount, EtherscanState, EtherscanSyncResult};
+
 pub struct AppState {
     pub engine: Arc<LedgerEngine>,
 }
@@ -250,3 +252,38 @@ pub fn export_ledger_file(
     ledger_file::export_ledger(&state.engine)
 }
 
+// -- Etherscan commands --
+
+#[tauri::command]
+pub fn list_etherscan_accounts(
+    state: State<'_, EtherscanState>,
+) -> Result<Vec<EtherscanAccount>, String> {
+    state.list_accounts()
+}
+
+#[tauri::command]
+pub fn add_etherscan_account(
+    state: State<'_, EtherscanState>,
+    address: String,
+    label: String,
+) -> Result<(), String> {
+    state.add_account(&address, &label)
+}
+
+#[tauri::command]
+pub fn remove_etherscan_account(
+    state: State<'_, EtherscanState>,
+    address: String,
+) -> Result<(), String> {
+    state.remove_account(&address)
+}
+
+#[tauri::command]
+pub fn sync_etherscan(
+    state: State<'_, AppState>,
+    api_key: String,
+    address: String,
+    label: String,
+) -> Result<EtherscanSyncResult, String> {
+    etherscan::sync_etherscan(&state.engine, &api_key, &address, &label)
+}
