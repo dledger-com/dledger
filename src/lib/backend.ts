@@ -176,14 +176,21 @@ class TauriBackend implements Backend {
 
 let backend: Backend | null = null;
 
-export function initBackend(): Backend {
-  backend = new TauriBackend();
+export async function initBackend(): Promise<Backend> {
+  if (backend) return backend;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((window as any).__TAURI_INTERNALS__) {
+    backend = new TauriBackend();
+  } else {
+    const { SqlJsBackend } = await import("./sql-js-backend.js");
+    backend = await SqlJsBackend.create();
+  }
   return backend;
 }
 
 export function getBackend(): Backend {
   if (!backend) {
-    initBackend();
+    throw new Error("Backend not initialized. Await initBackend() first.");
   }
-  return backend!;
+  return backend;
 }

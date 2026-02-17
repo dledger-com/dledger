@@ -7,11 +7,20 @@
 
   let { children } = $props();
 
-  onMount(() => {
-    initBackend();
+  let ready = $state(false);
+
+  onMount(async () => {
+    try {
+      await initBackend();
+      ready = true;
+    } catch (e) {
+      console.error("Backend init failed:", e);
+    }
   });
 </script>
 
 <ModeWatcher />
 <Toaster />
-{@render children?.()}
+{#if ready}
+  {@render children?.()}
+{/if}

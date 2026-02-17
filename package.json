@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/sql-wasm.wasm"
   },
   "license": "MIT",
   "dependencies": {
@@ -17,8 +18,10 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "bits-ui": "^2.15.5",
+    "decimal.js-light": "^2.5.1",
     "lucide-svelte": "^0.563.0",
     "mode-watcher": "^1.1.0",
+    "sql.js": "^1.14.0",
     "tailwindcss": "^4.1.18",
     "uuid": "^13.0.0"
   },
