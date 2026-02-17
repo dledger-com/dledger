@@ -7,11 +7,17 @@
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { toast } from "svelte-sonner";
+  import * as Command from "$lib/components/ui/command/index.js";
+  import * as Popover from "$lib/components/ui/popover/index.js";
+  import { cn } from "$lib/utils.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
   import Trash2 from "lucide-svelte/icons/trash-2";
   import RefreshCw from "lucide-svelte/icons/refresh-cw";
   import Plus from "lucide-svelte/icons/plus";
+  import Check from "lucide-svelte/icons/check";
+  import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
+  import X from "lucide-svelte/icons/x";
   import type {
     LedgerImportResult,
     ChainInfo,
@@ -36,6 +42,7 @@
   // -- Etherscan state --
   let ethAccounts = $state<EtherscanAccount[]>([]);
   let selectedChainIds = $state<Set<number>>(new Set([1]));
+  let chainPopoverOpen = $state(false);
   let newAddress = $state("");
   let newLabel = $state("");
   let addingAccount = $state(false);
@@ -449,24 +456,58 @@
         </div>
 
         <!-- Chain selector -->
-        {#if SUPPORTED_CHAINS.length > 0}
-          <div class="space-y-1">
-            <span class="text-xs font-medium">Chains</span>
-            <div class="flex flex-wrap gap-x-4 gap-y-1">
-              {#each SUPPORTED_CHAINS as chain}
-                <label class="flex items-center gap-1.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedChainIds.has(chain.chain_id)}
-                    onchange={() => toggleChain(chain.chain_id)}
-                    class="rounded border-input"
-                  />
-                  {chain.name} ({chain.native_currency})
-                </label>
+        <div class="space-y-2">
+          <span class="text-xs font-medium">Chains</span>
+          <Popover.Root bind:open={chainPopoverOpen}>
+            <Popover.Trigger>
+              <Button variant="outline" class="w-[300px] justify-between">
+                {#if selectedChainIds.size === 0}
+                  Select chains...
+                {:else}
+                  {selectedChainIds.size} chain{selectedChainIds.size === 1 ? "" : "s"} selected
+                {/if}
+                <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </Popover.Trigger>
+            <Popover.Content class="w-[300px] p-0">
+              <Command.Root>
+                <Command.Input placeholder="Search chains..." />
+                <Command.List>
+                  <Command.Empty>No chain found.</Command.Empty>
+                  <Command.Group>
+                    {#each SUPPORTED_CHAINS as chain}
+                      <Command.Item
+                        value={chain.name}
+                        onSelect={() => toggleChain(chain.chain_id)}
+                      >
+                        <Check
+                          class={cn(
+                            "mr-2 h-4 w-4",
+                            selectedChainIds.has(chain.chain_id) ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {chain.name} ({chain.native_currency})
+                      </Command.Item>
+                    {/each}
+                  </Command.Group>
+                </Command.List>
+              </Command.Root>
+            </Popover.Content>
+          </Popover.Root>
+
+          {#if selectedChainIds.size > 0}
+            <div class="flex flex-wrap gap-1">
+              {#each SUPPORTED_CHAINS.filter((c) => selectedChainIds.has(c.chain_id)) as chain}
+                <Badge variant="secondary" class="gap-1">
+                  {chain.name}
+                  <button onclick={() => toggleChain(chain.chain_id)} class="ml-0.5 rounded-full outline-none hover:bg-muted">
+                    <X class="h-3 w-3" />
+                  </button>
+                </Badge>
               {/each}
             </div>
-          </div>
-        {/if}
+          {/if}
+        </div>
       </div>
     </Card.Content>
     <Card.Footer class="flex justify-between">
