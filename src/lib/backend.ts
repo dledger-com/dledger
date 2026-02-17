@@ -10,6 +10,7 @@ import type {
   BalanceSheet,
   GainLossReport,
   CsvImportParams,
+  ConfigField,
   Extension,
   ExchangeRate,
 } from "./types/index.js";
@@ -47,10 +48,12 @@ export interface Backend {
   // Plugins
   discoverPlugins(): Promise<Extension[]>;
   listPlugins(): Promise<Extension[]>;
+  getPluginConfigSchema(pluginId: string): Promise<ConfigField[]>;
   configurePlugin(pluginId: string, config: [string, string][]): Promise<void>;
   syncPlugin(pluginId: string): Promise<string>;
   runHandler(pluginId: string, params: string): Promise<string>;
   generateReport(pluginId: string, format: string, params: string): Promise<number[]>;
+  resetPluginSync(pluginId: string): Promise<void>;
 
   // Exchange rates (extended)
   recordExchangeRate(rate: ExchangeRate): Promise<void>;
@@ -144,6 +147,9 @@ class TauriBackend implements Backend {
   async listPlugins(): Promise<Extension[]> {
     return this.invoke("list_plugins");
   }
+  async getPluginConfigSchema(pluginId: string): Promise<ConfigField[]> {
+    return this.invoke("plugin_config_schema", { pluginId });
+  }
   async configurePlugin(pluginId: string, config: [string, string][]): Promise<void> {
     return this.invoke("configure_plugin", { pluginId, config });
   }
@@ -155,6 +161,9 @@ class TauriBackend implements Backend {
   }
   async generateReport(pluginId: string, format: string, params: string): Promise<number[]> {
     return this.invoke("generate_report_plugin", { pluginId, format, params });
+  }
+  async resetPluginSync(pluginId: string): Promise<void> {
+    return this.invoke("reset_plugin_sync", { pluginId });
   }
 
   // Exchange rates (extended)
@@ -170,51 +179,200 @@ class TauriBackend implements Backend {
 }
 
 class WasmBackend implements Backend {
-  private fail(): never {
-    throw new Error("WasmBackend is not yet implemented");
+  private dbPromise: Promise<import("./wasm/db/wa-sqlite.js").WaSqliteDb> | null = null;
+  private pluginMgrPromise: Promise<import("./wasm/plugin-manager.js").BrowserPluginManager> | null = null;
+
+  private getDb(): Promise<import("./wasm/db/wa-sqlite.js").WaSqliteDb> {
+    if (!this.dbPromise) {
+      this.dbPromise = import("./wasm/db/wa-sqlite.js").then((m) => m.getDb());
+    }
+    return this.dbPromise;
   }
-  listCurrencies(): Promise<Currency[]> { return this.fail(); }
-  createCurrency(_c: Currency): Promise<void> { return this.fail(); }
-  listAccounts(): Promise<Account[]> { return this.fail(); }
-  getAccount(_id: string): Promise<Account | null> { return this.fail(); }
-  createAccount(_a: Account): Promise<void> { return this.fail(); }
-  archiveAccount(_id: string): Promise<void> { return this.fail(); }
-  postJournalEntry(_e: JournalEntry, _i: LineItem[]): Promise<void> { return this.fail(); }
-  voidJournalEntry(_id: string): Promise<JournalEntry> { return this.fail(); }
-  getJournalEntry(_id: string): Promise<[JournalEntry, LineItem[]] | null> { return this.fail(); }
-  queryJournalEntries(_f: TransactionFilter): Promise<[JournalEntry, LineItem[]][]> { return this.fail(); }
-  getAccountBalance(_id: string, _d?: string): Promise<CurrencyBalance[]> { return this.fail(); }
-  getAccountBalanceWithChildren(_id: string, _d?: string): Promise<CurrencyBalance[]> { return this.fail(); }
-  trialBalance(_d: string): Promise<TrialBalance> { return this.fail(); }
-  incomeStatement(_f: string, _t: string): Promise<IncomeStatement> { return this.fail(); }
-  balanceSheet(_d: string): Promise<BalanceSheet> { return this.fail(); }
-  gainLossReport(_f: string, _t: string): Promise<GainLossReport> { return this.fail(); }
-  importCsv(_p: CsvImportParams): Promise<string> { return this.fail(); }
-  discoverPlugins(): Promise<Extension[]> { return this.fail(); }
-  listPlugins(): Promise<Extension[]> { return this.fail(); }
-  configurePlugin(_pluginId: string, _config: [string, string][]): Promise<void> { return this.fail(); }
-  syncPlugin(_pluginId: string): Promise<string> { return this.fail(); }
-  runHandler(_pluginId: string, _params: string): Promise<string> { return this.fail(); }
-  generateReport(_pluginId: string, _format: string, _params: string): Promise<number[]> { return this.fail(); }
-  recordExchangeRate(_rate: ExchangeRate): Promise<void> { return this.fail(); }
-  getExchangeRate(_from: string, _to: string, _date: string): Promise<string | null> { return this.fail(); }
-  listExchangeRates(_from?: string, _to?: string): Promise<ExchangeRate[]> { return this.fail(); }
+
+  private async getPluginManager(): Promise<import("./wasm/plugin-manager.js").BrowserPluginManager> {
+    if (!this.pluginMgrPromise) {
+      this.pluginMgrPromise = (async () => {
+        const [db, { BrowserPluginManager }] = await Promise.all([
+          this.getDb(),
+          import("./wasm/plugin-manager.js"),
+        ]);
+        return new BrowserPluginManager(db);
+      })();
+    }
+    return this.pluginMgrPromise;
+  }
+
+  private async q() {
+    const [db, queries] = await Promise.all([
+      this.getDb(),
+      import("./wasm/db/queries.js"),
+    ]);
+    return { db, queries };
+  }
+
+  // Currencies
+  async listCurrencies(): Promise<Currency[]> {
+    const { db, queries } = await this.q();
+    return queries.listCurrencies(db);
+  }
+  async createCurrency(currency: Currency): Promise<void> {
+    const { db, queries } = await this.q();
+    return queries.createCurrency(db, currency);
+  }
+
+  // Accounts
+  async listAccounts(): Promise<Account[]> {
+    const { db, queries } = await this.q();
+    return queries.listAccounts(db);
+  }
+  async getAccount(id: string): Promise<Account | null> {
+    const { db, queries } = await this.q();
+    return queries.getAccount(db, id);
+  }
+  async createAccount(account: Account): Promise<void> {
+    const { db, queries } = await this.q();
+    return queries.createAccount(db, account);
+  }
+  async archiveAccount(id: string): Promise<void> {
+    const { db, queries } = await this.q();
+    return queries.archiveAccount(db, id);
+  }
+
+  // Journal entries
+  async postJournalEntry(entry: JournalEntry, items: LineItem[]): Promise<void> {
+    const { db, queries } = await this.q();
+    return queries.postJournalEntry(db, entry, items);
+  }
+  async voidJournalEntry(id: string): Promise<JournalEntry> {
+    const { db, queries } = await this.q();
+    return queries.voidJournalEntry(db, id);
+  }
+  async getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null> {
+    const { db, queries } = await this.q();
+    return queries.getJournalEntry(db, id);
+  }
+  async queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]> {
+    const { db, queries } = await this.q();
+    return queries.queryJournalEntries(db, filter);
+  }
+
+  // Balances
+  async getAccountBalance(accountId: string, asOf?: string): Promise<CurrencyBalance[]> {
+    const { db, queries } = await this.q();
+    return queries.getAccountBalance(db, accountId, asOf);
+  }
+  async getAccountBalanceWithChildren(accountId: string, asOf?: string): Promise<CurrencyBalance[]> {
+    const { db, queries } = await this.q();
+    return queries.getAccountBalanceWithChildren(db, accountId, asOf);
+  }
+
+  // Reports
+  async trialBalance(asOf: string): Promise<TrialBalance> {
+    const { db, queries } = await this.q();
+    return queries.trialBalance(db, asOf);
+  }
+  async incomeStatement(fromDate: string, toDate: string): Promise<IncomeStatement> {
+    const { db, queries } = await this.q();
+    return queries.incomeStatement(db, fromDate, toDate);
+  }
+  async balanceSheet(asOf: string): Promise<BalanceSheet> {
+    const { db, queries } = await this.q();
+    return queries.balanceSheet(db, asOf);
+  }
+  async gainLossReport(fromDate: string, toDate: string): Promise<GainLossReport> {
+    const { db, queries } = await this.q();
+    return queries.gainLossReport(db, fromDate, toDate);
+  }
+
+  // CSV Import
+  async importCsv(params: CsvImportParams): Promise<string> {
+    const { db, queries } = await this.q();
+    return queries.importCsv(db, params);
+  }
+
+  // Plugins — delegated to BrowserPluginManager
+  async discoverPlugins(): Promise<Extension[]> {
+    return this.listPlugins();
+  }
+  async listPlugins(): Promise<Extension[]> {
+    const { ALL_PLUGINS } = await import("./wasm/plugin-registry.js");
+    const { fromDeclaration } = await import("./wasm/host/capabilities.js");
+    return ALL_PLUGINS.map((m) => {
+      const caps = fromDeclaration(m.capabilities);
+      return {
+        id: m.id,
+        name: m.name,
+        version: m.version,
+        description: m.description,
+        author: m.author,
+        kind: m.kind,
+        enabled: true,
+        capabilities: {
+          ledger_read: caps.ledgerRead,
+          ledger_write: caps.ledgerWrite,
+          http: caps.http,
+          allowed_domains: Array.from(caps.allowedDomains),
+        },
+      };
+    });
+  }
+  async getPluginConfigSchema(pluginId: string): Promise<ConfigField[]> {
+    const mgr = await this.getPluginManager();
+    return mgr.getConfigSchema(pluginId);
+  }
+  async configurePlugin(pluginId: string, config: [string, string][]): Promise<void> {
+    const mgr = await this.getPluginManager();
+    return mgr.configurePlugin(pluginId, config);
+  }
+  async syncPlugin(pluginId: string): Promise<string> {
+    const mgr = await this.getPluginManager();
+    return mgr.syncPlugin(pluginId);
+  }
+  async runHandler(pluginId: string, params: string): Promise<string> {
+    const mgr = await this.getPluginManager();
+    return mgr.runHandler(pluginId, params);
+  }
+  async generateReport(pluginId: string, format: string, params: string): Promise<number[]> {
+    const mgr = await this.getPluginManager();
+    return mgr.generateReport(pluginId, format, params);
+  }
+  async resetPluginSync(pluginId: string): Promise<void> {
+    const mgr = await this.getPluginManager();
+    return mgr.resetPluginSync(pluginId);
+  }
+
+  // Exchange rates
+  async recordExchangeRate(rate: ExchangeRate): Promise<void> {
+    const { db, queries } = await this.q();
+    return queries.recordExchangeRate(db, rate);
+  }
+  async getExchangeRate(from: string, to: string, date: string): Promise<string | null> {
+    const { db, queries } = await this.q();
+    return queries.getExchangeRate(db, from, to, date);
+  }
+  async listExchangeRates(from?: string, to?: string): Promise<ExchangeRate[]> {
+    const { db, queries } = await this.q();
+    return queries.listExchangeRates(db, from, to);
+  }
 }
 
 let backend: Backend | null = null;
 
-export function initBackend(mode: "tauri" | "wasm" = "tauri"): Backend {
-  if (mode === "wasm") {
-    backend = new WasmBackend();
-  } else {
-    backend = new TauriBackend();
-  }
+function detectMode(): "tauri" | "wasm" {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+    ? "tauri"
+    : "wasm";
+}
+
+export function initBackend(mode?: "tauri" | "wasm"): Backend {
+  const m = mode ?? detectMode();
+  backend = m === "wasm" ? new WasmBackend() : new TauriBackend();
   return backend;
 }
 
 export function getBackend(): Backend {
   if (!backend) {
-    throw new Error("Backend not initialized. Call initBackend() first.");
+    initBackend();
   }
-  return backend;
+  return backend!;
 }

@@ -34,6 +34,17 @@ pub struct PluginCapabilitySummary {
     pub allowed_domains: Vec<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ConfigFieldInfo {
+    pub key: String,
+    pub label: String,
+    pub field_type: String,
+    pub required: bool,
+    pub default_value: String,
+    pub description: String,
+    pub options: String,
+}
+
 /// Manages plugin discovery, loading, and execution.
 pub struct PluginManager {
     wasm_engine: Engine,
@@ -173,6 +184,78 @@ impl PluginManager {
                 enabled: true,
             })
             .collect()
+    }
+
+    /// Get the config schema from a plugin.
+    pub fn get_config_schema(&self, plugin_id: &str) -> Result<Vec<ConfigFieldInfo>, String> {
+        let manifest = self
+            .manifests
+            .get(plugin_id)
+            .ok_or_else(|| format!("Plugin '{plugin_id}' not found"))?;
+
+        let component = self
+            .components
+            .get(plugin_id)
+            .ok_or_else(|| format!("Plugin '{plugin_id}' component not loaded"))?;
+
+        let caps = GrantedCapabilities::from_declaration(&manifest.capabilities);
+        let mut store = self.create_store(plugin_id, &manifest.plugin.name, &caps);
+
+        match manifest.plugin.kind.as_str() {
+            "source" => {
+                let mut linker = Linker::new(&self.wasm_engine);
+                self.add_source_imports(&mut linker)
+                    .map_err(|e| format!("Failed to link: {e}"))?;
+
+                let instance = Source::instantiate(&mut store, component, &linker)
+                    .map_err(|e| format!("Failed to instantiate: {e}"))?;
+
+                let fields = instance
+                    .dledger_plugin_source_ops()
+                    .call_config_schema(&mut store)
+                    .map_err(|e| format!("Failed to get config schema: {e}"))?;
+
+                Ok(fields
+                    .into_iter()
+                    .map(|f| ConfigFieldInfo {
+                        key: f.key,
+                        label: f.label,
+                        field_type: f.field_type,
+                        required: f.required,
+                        default_value: f.default_value,
+                        description: f.description,
+                        options: f.options,
+                    })
+                    .collect())
+            }
+            "handler" => {
+                let mut linker = Linker::new(&self.wasm_engine);
+                self.add_handler_imports(&mut linker)
+                    .map_err(|e| format!("Failed to link: {e}"))?;
+
+                let instance = Handler::instantiate(&mut store, component, &linker)
+                    .map_err(|e| format!("Failed to instantiate: {e}"))?;
+
+                let fields = instance
+                    .dledger_plugin_handler_ops()
+                    .call_config_schema(&mut store)
+                    .map_err(|e| format!("Failed to get config schema: {e}"))?;
+
+                Ok(fields
+                    .into_iter()
+                    .map(|f| ConfigFieldInfo {
+                        key: f.key,
+                        label: f.label,
+                        field_type: f.field_type,
+                        required: f.required,
+                        default_value: f.default_value,
+                        description: f.description,
+                        options: f.options,
+                    })
+                    .collect())
+            }
+            other => Err(format!("Unknown plugin kind: {other}")),
+        }
     }
 
     /// Configure a plugin with user-provided key-value pairs.

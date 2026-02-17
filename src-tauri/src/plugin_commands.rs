@@ -25,6 +25,15 @@ pub fn list_plugins(
 }
 
 #[tauri::command]
+pub fn plugin_config_schema(
+    state: State<'_, PluginManagerState>,
+    plugin_id: String,
+) -> Result<Vec<crate::plugin::ConfigFieldInfo>, String> {
+    let manager = state.manager.lock().map_err(|e| e.to_string())?;
+    manager.get_config_schema(&plugin_id)
+}
+
+#[tauri::command]
 pub fn configure_plugin(
     state: State<'_, PluginManagerState>,
     plugin_id: String,

@@ -65,7 +65,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
 
 const TEST_ADDRESS: &str = "bc1qtest123456789012345678901234567890";
 
-/// Mock Blockstream response: 1 incoming + 1 outgoing transaction.
+/// Mock Esplora response: 1 incoming + 1 outgoing transaction.
 const MOCK_BTC_TXS: &str = r#"[
     {
         "txid": "tx_incoming_001",
@@ -122,7 +122,7 @@ const MOCK_WITH_UNCONFIRMED: &str = r#"[
 /// Mock empty response.
 const MOCK_EMPTY: &str = "[]";
 
-fn blockstream_config(mock_data: &str) -> Vec<(String, String)> {
+fn mempool_config(mock_data: &str) -> Vec<(String, String)> {
     vec![
         ("address".into(), TEST_ADDRESS.into()),
         ("base_currency".into(), "EUR".into()),
@@ -131,22 +131,22 @@ fn blockstream_config(mock_data: &str) -> Vec<(String, String)> {
 }
 
 #[test]
-fn test_blockstream_discovery() {
+fn test_mempool_discovery() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine, &tmp);
 
     let plugins = manager.discover().expect("discovery failed");
-    let bs = plugins.iter().find(|p| p.id == "blockstream");
+    let bs = plugins.iter().find(|p| p.id == "mempool");
 
-    assert!(bs.is_some(), "should discover blockstream plugin");
+    assert!(bs.is_some(), "should discover mempool plugin");
     let b = bs.unwrap();
-    assert_eq!(b.name, "Blockstream BTC");
+    assert_eq!(b.name, "mempool.space BTC");
     assert_eq!(b.kind, "source");
     assert!(b.capabilities.http);
 }
 
 #[test]
-fn test_blockstream_missing_address_fails() {
+fn test_mempool_missing_address_fails() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine, &tmp);
 
@@ -157,7 +157,7 @@ fn test_blockstream_missing_address_fails() {
         ("mock_data".into(), MOCK_BTC_TXS.into()),
     ];
 
-    let result = manager.configure_plugin("blockstream", config);
+    let result = manager.configure_plugin("mempool", config);
     assert!(result.is_err(), "should fail without address");
     assert!(
         result.unwrap_err().contains("address"),
@@ -166,16 +166,16 @@ fn test_blockstream_missing_address_fails() {
 }
 
 #[test]
-fn test_blockstream_basic_sync() {
+fn test_mempool_basic_sync() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_BTC_TXS))
+        .configure_plugin("mempool", mempool_config(MOCK_BTC_TXS))
         .expect("configure failed");
 
-    let result = manager.sync_source("blockstream").expect("sync failed");
+    let result = manager.sync_source("mempool").expect("sync failed");
 
     assert!(
         result.summary.contains("2"),
@@ -188,7 +188,7 @@ fn test_blockstream_basic_sync() {
         from_date: None,
         to_date: None,
         status: None,
-        source: Some("plugin:Blockstream BTC".to_string()),
+        source: Some("plugin:mempool.space BTC".to_string()),
         limit: Some(100),
         offset: Some(0),
     };
@@ -197,16 +197,16 @@ fn test_blockstream_basic_sync() {
 }
 
 #[test]
-fn test_blockstream_accounts_created() {
+fn test_mempool_accounts_created() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_BTC_TXS))
+        .configure_plugin("mempool", mempool_config(MOCK_BTC_TXS))
         .expect("configure failed");
 
-    manager.sync_source("blockstream").expect("sync failed");
+    manager.sync_source("mempool").expect("sync failed");
 
     let accounts = engine.list_accounts().expect("list_accounts failed");
     let names: Vec<&str> = accounts.iter().map(|a| a.full_name.as_str()).collect();
@@ -226,23 +226,23 @@ fn test_blockstream_accounts_created() {
 }
 
 #[test]
-fn test_blockstream_incoming_tx() {
+fn test_mempool_incoming_tx() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_BTC_TXS))
+        .configure_plugin("mempool", mempool_config(MOCK_BTC_TXS))
         .expect("configure failed");
 
-    manager.sync_source("blockstream").expect("sync failed");
+    manager.sync_source("mempool").expect("sync failed");
 
     let filter = dledger_core::models::TransactionFilter {
         account_id: None,
         from_date: None,
         to_date: None,
         status: None,
-        source: Some("plugin:Blockstream BTC".to_string()),
+        source: Some("plugin:mempool.space BTC".to_string()),
         limit: Some(100),
         offset: Some(0),
     };
@@ -268,23 +268,23 @@ fn test_blockstream_incoming_tx() {
 }
 
 #[test]
-fn test_blockstream_outgoing_tx_with_fee() {
+fn test_mempool_outgoing_tx_with_fee() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_BTC_TXS))
+        .configure_plugin("mempool", mempool_config(MOCK_BTC_TXS))
         .expect("configure failed");
 
-    manager.sync_source("blockstream").expect("sync failed");
+    manager.sync_source("mempool").expect("sync failed");
 
     let filter = dledger_core::models::TransactionFilter {
         account_id: None,
         from_date: None,
         to_date: None,
         status: None,
-        source: Some("plugin:Blockstream BTC".to_string()),
+        source: Some("plugin:mempool.space BTC".to_string()),
         limit: Some(100),
         offset: Some(0),
     };
@@ -308,16 +308,16 @@ fn test_blockstream_outgoing_tx_with_fee() {
 }
 
 #[test]
-fn test_blockstream_balances() {
+fn test_mempool_balances() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_BTC_TXS))
+        .configure_plugin("mempool", mempool_config(MOCK_BTC_TXS))
         .expect("configure failed");
 
-    manager.sync_source("blockstream").expect("sync failed");
+    manager.sync_source("mempool").expect("sync failed");
 
     let accounts = engine.list_accounts().expect("list_accounts failed");
 
@@ -346,23 +346,23 @@ fn test_blockstream_balances() {
 }
 
 #[test]
-fn test_blockstream_skips_unconfirmed() {
+fn test_mempool_skips_unconfirmed() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_WITH_UNCONFIRMED))
+        .configure_plugin("mempool", mempool_config(MOCK_WITH_UNCONFIRMED))
         .expect("configure failed");
 
-    let _result = manager.sync_source("blockstream").expect("sync failed");
+    let _result = manager.sync_source("mempool").expect("sync failed");
 
     let filter = dledger_core::models::TransactionFilter {
         account_id: None,
         from_date: None,
         to_date: None,
         status: None,
-        source: Some("plugin:Blockstream BTC".to_string()),
+        source: Some("plugin:mempool.space BTC".to_string()),
         limit: Some(100),
         offset: Some(0),
     };
@@ -376,16 +376,16 @@ fn test_blockstream_skips_unconfirmed() {
 }
 
 #[test]
-fn test_blockstream_empty_response() {
+fn test_mempool_empty_response() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine, &tmp);
 
     manager.discover().expect("discovery failed");
     manager
-        .configure_plugin("blockstream", blockstream_config(MOCK_EMPTY))
+        .configure_plugin("mempool", mempool_config(MOCK_EMPTY))
         .expect("configure failed");
 
-    let result = manager.sync_source("blockstream").expect("sync failed");
+    let result = manager.sync_source("mempool").expect("sync failed");
 
     assert!(
         result.summary.contains("No new transactions"),

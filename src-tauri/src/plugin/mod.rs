@@ -6,4 +6,4 @@ pub mod rate_limiter;
 pub mod state;
 pub mod storage;
 
-pub use manager::{PluginInfo, PluginManager};
+pub use manager::{ConfigFieldInfo, PluginInfo, PluginManager};

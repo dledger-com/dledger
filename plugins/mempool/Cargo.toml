@@ -1,5 +1,5 @@
 [package]
-name = "blockstream-plugin"
+name = "mempool-plugin"
 version = "0.1.0"
 edition = "2021"
 

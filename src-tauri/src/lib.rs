@@ -50,12 +50,14 @@ pub fn run() {
                 .to_str()
                 .ok_or("invalid plugin db path")?;
 
-            let plugin_manager = PluginManager::new(
+            let mut plugin_manager = PluginManager::new(
                 plugins_dir,
                 plugin_db_str,
                 engine,
             )
             .map_err(|e| e.to_string())?;
+
+            plugin_manager.discover().map_err(|e| e.to_string())?;
 
             app.manage(PluginManagerState {
                 manager: Mutex::new(plugin_manager),
@@ -86,6 +88,7 @@ pub fn run() {
             commands::gain_loss_report,
             plugin_commands::discover_plugins,
             plugin_commands::list_plugins,
+            plugin_commands::plugin_config_schema,
             plugin_commands::configure_plugin,
             plugin_commands::sync_plugin,
             plugin_commands::run_handler_plugin,

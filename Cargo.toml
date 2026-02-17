@@ -9,7 +9,7 @@ exclude = [
     "plugins/csv-import",
     "plugins/kraken",
     "plugins/etherscan",
-    "plugins/blockstream",
+    "plugins/mempool",
     "plugins/cost-basis",
     "plugins/missing-info",
     "plugins/tax-report-fr",

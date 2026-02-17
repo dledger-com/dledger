@@ -8,7 +8,7 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { ExtensionStore } from "$lib/data/extensions.svelte.js";
-  import type { Extension } from "$lib/types/index.js";
+  import type { Extension, ConfigField } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
 
   const extensionId = $derived(page.params.extensionId ?? "");
@@ -16,8 +16,10 @@
 
   let ext = $derived(store.byId.get(extensionId));
 
-  // Config form
-  let configEntries = $state<{ key: string; value: string }[]>([{ key: "", value: "" }]);
+  // Config schema
+  let configSchema = $state<ConfigField[]>([]);
+  let configValues = $state<Record<string, string>>({});
+  let schemaLoading = $state(false);
 
   // Action state
   let syncing = $state(false);
@@ -26,18 +28,28 @@
   let reportFormat = $state("json");
   let lastOutput = $state<string | null>(null);
 
-  function addConfigEntry() {
-    configEntries = [...configEntries, { key: "", value: "" }];
-  }
-
-  function removeConfigEntry(index: number) {
-    configEntries = configEntries.filter((_, i) => i !== index);
+  async function loadSchema() {
+    schemaLoading = true;
+    try {
+      configSchema = await store.getConfigSchema(extensionId);
+      // Initialize values with defaults
+      const values: Record<string, string> = {};
+      for (const field of configSchema) {
+        values[field.key] = field.default_value || "";
+      }
+      configValues = values;
+    } catch (e) {
+      // Fall back to empty schema on error
+      configSchema = [];
+    } finally {
+      schemaLoading = false;
+    }
   }
 
   async function saveConfig() {
-    const config: [string, string][] = configEntries
-      .filter((e) => e.key.trim())
-      .map((e) => [e.key.trim(), e.value]);
+    const config: [string, string][] = configSchema
+      .filter((f) => configValues[f.key]?.trim())
+      .map((f) => [f.key, configValues[f.key]]);
     try {
       await store.configure(extensionId, config);
       toast.success("Configuration saved");
@@ -53,6 +65,20 @@
       const result = await store.sync(extensionId);
       lastOutput = result;
       toast.success("Sync complete");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      syncing = false;
+    }
+  }
+
+  async function handleFullImport() {
+    syncing = true;
+    lastOutput = null;
+    try {
+      const result = await store.resetAndSync(extensionId);
+      lastOutput = result;
+      toast.success("Full import complete");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -93,7 +119,10 @@
     }
   }
 
-  onMount(() => store.load());
+  onMount(() => {
+    store.load();
+    loadSchema();
+  });
 </script>
 
 <div class="space-y-6">
@@ -157,36 +186,52 @@
     <Card.Root>
       <Card.Header>
         <Card.Title>Configuration</Card.Title>
-        <Card.Description>Set key-value configuration pairs for this plugin.</Card.Description>
+        <Card.Description>Configure this plugin's settings.</Card.Description>
       </Card.Header>
       <Card.Content>
-        <div class="space-y-3">
-          {#each configEntries as entry, i}
-            <div class="flex gap-2 items-center">
-              <Input
-                placeholder="Key"
-                bind:value={entry.key}
-                class="flex-1"
-              />
-              <Input
-                placeholder="Value"
-                bind:value={entry.value}
-                class="flex-1"
-              />
-              <Button variant="ghost" size="sm" onclick={() => removeConfigEntry(i)}>
-                Remove
-              </Button>
-            </div>
-          {/each}
-          <div class="flex gap-2">
-            <Button variant="outline" size="sm" onclick={addConfigEntry}>
-              Add Entry
-            </Button>
+        {#if schemaLoading}
+          <Skeleton class="h-24 w-full" />
+        {:else if configSchema.length === 0}
+          <p class="text-sm text-muted-foreground">This plugin has no configuration fields.</p>
+        {:else}
+          <div class="space-y-4">
+            {#each configSchema as field}
+              <div class="space-y-1.5">
+                <label for="config-{field.key}" class="text-sm font-medium">
+                  {field.label}
+                  {#if field.required}
+                    <span class="text-destructive">*</span>
+                  {/if}
+                </label>
+                {#if field.field_type === "select"}
+                  <select
+                    id="config-{field.key}"
+                    bind:value={configValues[field.key]}
+                    class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  >
+                    <option value="">Select...</option>
+                    {#each field.options.split(",") as opt}
+                      <option value={opt.trim()}>{opt.trim()}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <Input
+                    id="config-{field.key}"
+                    type={field.field_type === "password" ? "password" : "text"}
+                    placeholder={field.default_value || field.key}
+                    bind:value={configValues[field.key]}
+                  />
+                {/if}
+                {#if field.description}
+                  <p class="text-xs text-muted-foreground">{field.description}</p>
+                {/if}
+              </div>
+            {/each}
             <Button size="sm" onclick={saveConfig}>
               Save Configuration
             </Button>
           </div>
-        </div>
+        {/if}
       </Card.Content>
     </Card.Root>
 
@@ -201,7 +246,10 @@
             <Button disabled={syncing} onclick={handleSync}>
               {syncing ? "Syncing..." : "Sync Now"}
             </Button>
-            <p class="text-sm text-muted-foreground">Pull data from this source into the ledger.</p>
+            <Button variant="outline" disabled={syncing} onclick={handleFullImport}>
+              {syncing ? "Importing..." : "Full Import"}
+            </Button>
+            <p class="text-sm text-muted-foreground">Sync pulls new data; Full Import resets and re-imports everything.</p>
           </div>
         {:else}
           <div class="space-y-3">

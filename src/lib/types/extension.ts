@@ -19,6 +19,16 @@ export interface ExtensionConfig {
   config: Record<string, unknown>;
 }
 
+export interface ConfigField {
+  key: string;
+  label: string;
+  field_type: string;
+  required: boolean;
+  default_value: string;
+  description: string;
+  options: string;
+}
+
 export interface CsvImportParams {
   csvData: string;
   account: string;

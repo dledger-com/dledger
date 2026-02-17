@@ -71,7 +71,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
     Ok(())
 }
 
-/// Mock Blockstream response with an incoming BTC tx.
+/// Mock Esplora response with an incoming BTC tx.
 /// This will create accounts with "External" in the name (Equity:External:BTC).
 const MOCK_BTC_TXS: &str = r#"[
     {
@@ -90,7 +90,7 @@ const MOCK_BTC_TXS: &str = r#"[
 
 const TEST_ADDRESS: &str = "bc1qtest123456789012345678901234567890";
 
-fn populate_with_blockstream(manager: &mut PluginManager) {
+fn populate_with_mempool(manager: &mut PluginManager) {
     manager.discover().expect("discovery failed");
 
     let config = vec![
@@ -99,10 +99,10 @@ fn populate_with_blockstream(manager: &mut PluginManager) {
         ("mock_data".into(), MOCK_BTC_TXS.into()),
     ];
     manager
-        .configure_plugin("blockstream", config)
+        .configure_plugin("mempool", config)
         .expect("configure failed");
 
-    manager.sync_source("blockstream").expect("sync failed");
+    manager.sync_source("mempool").expect("sync failed");
 }
 
 fn handler_config() -> Vec<(String, String)> {
@@ -149,8 +149,8 @@ fn test_missing_info_detects_external_accounts() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
-    // Blockstream creates "Equity:External:BTC" accounts
-    populate_with_blockstream(&mut manager);
+    // mempool.space creates "Equity:External:BTC" accounts
+    populate_with_mempool(&mut manager);
 
     manager
         .configure_plugin("missing-info", handler_config())
@@ -172,8 +172,8 @@ fn test_missing_info_detects_missing_exchange_rate() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
-    // Blockstream transactions have no exchange rate info (pure BTC on-chain)
-    populate_with_blockstream(&mut manager);
+    // mempool.space transactions have no exchange rate info (pure BTC on-chain)
+    populate_with_mempool(&mut manager);
 
     manager
         .configure_plugin("missing-info", handler_config())
@@ -195,7 +195,7 @@ fn test_missing_info_severity_ordering() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
-    populate_with_blockstream(&mut manager);
+    populate_with_mempool(&mut manager);
 
     manager
         .configure_plugin("missing-info", handler_config())
@@ -222,7 +222,7 @@ fn test_missing_info_csv_report() {
     let (engine, tmp) = setup_engine();
     let mut manager = setup_manager(engine.clone(), &tmp);
 
-    populate_with_blockstream(&mut manager);
+    populate_with_mempool(&mut manager);
 
     manager
         .configure_plugin("missing-info", handler_config())

@@ -9,7 +9,7 @@ use dledger::plugin::logging;
 use dledger::plugin::plugin_storage;
 use dledger::plugin::types::*;
 
-struct Blockstream;
+struct Mempool;
 
 // --- Config keys ---
 const KEY_ADDRESS: &str = "address";
@@ -17,20 +17,20 @@ const KEY_BASE_CURRENCY: &str = "base_currency";
 const KEY_MOCK_DATA: &str = "mock_data";
 const KEY_API_URL: &str = "api_url";
 
-const DEFAULT_API_URL: &str = "https://blockstream.info/api";
+const DEFAULT_API_URL: &str = "https://mempool.space/api";
 
-impl exports::dledger::plugin::metadata::Guest for Blockstream {
+impl exports::dledger::plugin::metadata::Guest for Mempool {
     fn get_metadata() -> PluginMetadata {
         PluginMetadata {
-            name: "Blockstream BTC".to_string(),
+            name: "mempool.space BTC".to_string(),
             version: "0.1.0".to_string(),
-            description: "Track Bitcoin transactions via Blockstream.info API".to_string(),
+            description: "Track Bitcoin transactions via mempool.space API".to_string(),
             author: "dledger".to_string(),
         }
     }
 }
 
-impl exports::dledger::plugin::source_ops::Guest for Blockstream {
+impl exports::dledger::plugin::source_ops::Guest for Mempool {
     fn config_schema() -> Vec<ConfigField> {
         vec![
             ConfigField {
@@ -57,7 +57,7 @@ impl exports::dledger::plugin::source_ops::Guest for Blockstream {
                 field_type: "string".into(),
                 required: false,
                 default_value: DEFAULT_API_URL.into(),
-                description: "Blockstream API URL (override for testing or self-hosted)".into(),
+                description: "mempool.space API URL (override for testing or self-hosted)".into(),
                 options: String::new(),
             },
             ConfigField {
@@ -92,7 +92,7 @@ impl exports::dledger::plugin::source_ops::Guest for Blockstream {
                 .map_err(|e| format!("Failed to store config '{key}': {e:?}"))?;
         }
 
-        logging::info("Blockstream BTC plugin configured successfully");
+        logging::info("mempool.space BTC plugin configured successfully");
         Ok(())
     }
 
@@ -119,14 +119,14 @@ impl exports::dledger::plugin::source_ops::Guest for Blockstream {
 
         if resp.status == 200 {
             let height = String::from_utf8(resp.body).unwrap_or_default();
-            Ok(format!("Connected to Blockstream. Current block height: {height}"))
+            Ok(format!("Connected to mempool.space. Current block height: {height}"))
         } else {
-            Err(format!("Blockstream API returned status {}", resp.status))
+            Err(format!("mempool.space API returned status {}", resp.status))
         }
     }
 
     fn sync(state: SyncState) -> Result<SyncResult, String> {
-        logging::info("Starting Blockstream BTC sync");
+        logging::info("Starting mempool.space BTC sync");
 
         let config = load_config()?;
 
@@ -282,11 +282,11 @@ impl exports::dledger::plugin::source_ops::Guest for Blockstream {
     }
 }
 
-export!(Blockstream);
+export!(Mempool);
 
 // --- Internal types ---
 
-struct BlockstreamConfig {
+struct MempoolConfig {
     address: String,
     #[allow(dead_code)]
     base_currency: String,
@@ -294,7 +294,7 @@ struct BlockstreamConfig {
     mock_data: String,
 }
 
-fn load_config() -> Result<BlockstreamConfig, String> {
+fn load_config() -> Result<MempoolConfig, String> {
     let get = |key: &str| -> Result<String, String> {
         plugin_storage::get(key)
             .map_err(|e| format!("Storage error for '{key}': {e:?}"))?
@@ -308,7 +308,7 @@ fn load_config() -> Result<BlockstreamConfig, String> {
             .unwrap_or_else(|| default.to_string())
     };
 
-    Ok(BlockstreamConfig {
+    Ok(MempoolConfig {
         address: get(KEY_ADDRESS)?,
         base_currency: get(KEY_BASE_CURRENCY)?,
         api_url: get_or(KEY_API_URL, DEFAULT_API_URL),
@@ -348,14 +348,14 @@ impl BtcTransaction {
 }
 
 fn fetch_transactions(
-    config: &BlockstreamConfig,
+    config: &MempoolConfig,
     _last_txid: Option<&str>,
 ) -> Result<Vec<BtcTransaction>, String> {
     if !config.mock_data.is_empty() {
-        return parse_blockstream_response(&config.mock_data);
+        return parse_mempool_response(&config.mock_data);
     }
 
-    // Blockstream API: GET /address/:address/txs
+    // Esplora API: GET /address/:address/txs
     let url = format!("{}/address/{}/txs", config.api_url, config.address);
 
     let resp = http_client::send(&HttpRequest {
@@ -367,14 +367,14 @@ fn fetch_transactions(
     .map_err(|e| format!("HTTP error: {e:?}"))?;
 
     if resp.status != 200 {
-        return Err(format!("Blockstream API returned status {}", resp.status));
+        return Err(format!("mempool.space API returned status {}", resp.status));
     }
 
     let body = String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 in response")?;
-    parse_blockstream_response(&body)
+    parse_mempool_response(&body)
 }
 
-/// Parse Blockstream API response.
+/// Parse Esplora API response (used by mempool.space).
 /// Format: JSON array of transaction objects:
 /// [
 ///   {
@@ -385,7 +385,7 @@ fn fetch_transactions(
 ///     "vout": [ { "scriptpubkey_address": "bc1...", "value": 40000 } ]
 ///   }
 /// ]
-fn parse_blockstream_response(json: &str) -> Result<Vec<BtcTransaction>, String> {
+fn parse_mempool_response(json: &str) -> Result<Vec<BtcTransaction>, String> {
     let trimmed = json.trim();
 
     // Handle empty array

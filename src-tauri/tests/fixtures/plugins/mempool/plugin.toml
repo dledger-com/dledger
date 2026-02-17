@@ -1,7 +1,7 @@
 [plugin]
-name = "Blockstream BTC"
+name = "mempool.space BTC"
 version = "0.1.0"
-description = "Track Bitcoin transactions via Blockstream.info API"
+description = "Track Bitcoin transactions via mempool.space API"
 author = "dledger"
 kind = "source"
 
@@ -11,5 +11,5 @@ ledger_write = true
 http = true
 
 [capabilities.network]
-allowed_domains = ["blockstream.info"]
+allowed_domains = ["mempool.space"]
 rate_limit = 10

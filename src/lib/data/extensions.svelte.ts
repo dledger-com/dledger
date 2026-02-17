@@ -1,4 +1,4 @@
-import type { Extension } from "$lib/types/index.js";
+import type { Extension, ConfigField } from "$lib/types/index.js";
 import { getBackend } from "$lib/backend.js";
 
 export class ExtensionStore {
@@ -19,13 +19,17 @@ export class ExtensionStore {
     this.loading = true;
     this.error = null;
     try {
-      this.extensions = await getBackend().discoverPlugins();
+      this.extensions = await getBackend().listPlugins();
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
       this.extensions = [];
     } finally {
       this.loading = false;
     }
+  }
+
+  async getConfigSchema(id: string): Promise<ConfigField[]> {
+    return getBackend().getPluginConfigSchema(id);
   }
 
   async configure(id: string, config: [string, string][]): Promise<void> {
@@ -39,6 +43,16 @@ export class ExtensionStore {
 
   async sync(id: string): Promise<string> {
     try {
+      return await getBackend().syncPlugin(id);
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      throw e;
+    }
+  }
+
+  async resetAndSync(id: string): Promise<string> {
+    try {
+      await getBackend().resetPluginSync(id);
       return await getBackend().syncPlugin(id);
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);

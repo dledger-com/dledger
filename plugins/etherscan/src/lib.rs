@@ -18,7 +18,7 @@ const KEY_BASE_CURRENCY: &str = "base_currency";
 const KEY_MOCK_DATA: &str = "mock_data";
 const KEY_API_URL: &str = "api_url";
 
-const DEFAULT_API_URL: &str = "https://api.etherscan.io";
+const DEFAULT_API_URL: &str = "https://api.etherscan.io/v2/api";
 
 impl exports::dledger::plugin::metadata::Guest for Etherscan {
     fn get_metadata() -> PluginMetadata {
@@ -67,7 +67,7 @@ impl exports::dledger::plugin::source_ops::Guest for Etherscan {
                 field_type: "string".into(),
                 required: false,
                 default_value: DEFAULT_API_URL.into(),
-                description: "Etherscan API base URL (override for testing)".into(),
+                description: "Etherscan API V2 base URL (override for testing)".into(),
                 options: String::new(),
             },
             ConfigField {
@@ -139,7 +139,7 @@ impl exports::dledger::plugin::source_ops::Guest for Etherscan {
         let resp = http_client::send(&HttpRequest {
             method: "GET".into(),
             url: format!(
-                "{api_url}/api?module=proxy&action=eth_blockNumber&apikey={api_key}"
+                "{api_url}?chainid=1&module=proxy&action=eth_blockNumber&apikey={api_key}"
             ),
             headers: vec![],
             body: vec![],
@@ -373,11 +373,20 @@ fn load_config() -> Result<EtherscanConfig, String> {
             .unwrap_or_else(|| default.to_string())
     };
 
+    // Migrate old V1 URLs to V2
+    let mut api_url = get_or(KEY_API_URL, DEFAULT_API_URL);
+    if api_url == "https://api.etherscan.io"
+        || api_url == "https://api.etherscan.io/api"
+        || api_url == "https://api.etherscan.io/v2"
+    {
+        api_url = DEFAULT_API_URL.to_string();
+    }
+
     Ok(EtherscanConfig {
         api_key: get_or(KEY_API_KEY, ""),
         address: get(KEY_ADDRESS)?,
         base_currency: get(KEY_BASE_CURRENCY)?,
-        api_url: get_or(KEY_API_URL, DEFAULT_API_URL),
+        api_url,
         mock_data: get_or(KEY_MOCK_DATA, ""),
     })
 }
@@ -401,7 +410,7 @@ fn fetch_transactions(
     }
 
     let url = format!(
-        "{}/api?module=account&action=txlist&address={}&startblock={}&endblock=99999999&sort=asc&apikey={}",
+        "{}?chainid=1&module=account&action=txlist&address={}&startblock={}&endblock=99999999&sort=asc&apikey={}",
         config.api_url, config.address, start_block, config.api_key
     );
 
