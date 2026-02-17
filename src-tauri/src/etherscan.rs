@@ -13,11 +13,45 @@ use uuid::Uuid;
 use dledger_core::models::*;
 use dledger_core::LedgerEngine;
 
+// ---- Chain definitions ----
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ChainInfo {
+    pub chain_id: u64,
+    pub name: &'static str,
+    pub native_currency: &'static str,
+    pub decimals: u8,
+}
+
+pub const SUPPORTED_CHAINS: &[ChainInfo] = &[
+    ChainInfo { chain_id: 1,      name: "Ethereum",  native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 10,     name: "Optimism",  native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 42161,  name: "Arbitrum",  native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 8453,   name: "Base",      native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 59144,  name: "Linea",     native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 534352, name: "Scroll",    native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 324,    name: "ZkSync",    native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 81457,  name: "Blast",     native_currency: "ETH",  decimals: 18 },
+    ChainInfo { chain_id: 56,     name: "BSC",       native_currency: "BNB",  decimals: 18 },
+    ChainInfo { chain_id: 137,    name: "Polygon",   native_currency: "POL",  decimals: 18 },
+    ChainInfo { chain_id: 43114,  name: "Avalanche", native_currency: "AVAX", decimals: 18 },
+    ChainInfo { chain_id: 250,    name: "Fantom",    native_currency: "FTM",  decimals: 18 },
+    ChainInfo { chain_id: 100,    name: "Gnosis",    native_currency: "xDAI", decimals: 18 },
+];
+
+pub fn get_chain_info(chain_id: u64) -> Result<&'static ChainInfo, String> {
+    SUPPORTED_CHAINS
+        .iter()
+        .find(|c| c.chain_id == chain_id)
+        .ok_or_else(|| format!("unsupported chain_id: {chain_id}"))
+}
+
 // ---- Public types ----
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EtherscanAccount {
     pub address: String,
+    pub chain_id: u64,
     pub label: String,
 }
 
@@ -38,13 +72,60 @@ pub struct EtherscanState {
 impl EtherscanState {
     pub fn new(db_path: &str) -> Result<Self, String> {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS etherscan_account (
-                address TEXT PRIMARY KEY,
-                label TEXT NOT NULL
-            )",
-        )
-        .map_err(|e| e.to_string())?;
+
+        // Check if we need to migrate from old schema (address-only PK) to new (address, chain_id)
+        let has_chain_id = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(etherscan_account)")
+                .map_err(|e| e.to_string())?;
+            let cols: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            if cols.is_empty() {
+                // Table doesn't exist yet
+                None
+            } else {
+                Some(cols.iter().any(|c| c == "chain_id"))
+            }
+        };
+
+        match has_chain_id {
+            None => {
+                // Fresh install — create table with composite key
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS etherscan_account (
+                        address  TEXT NOT NULL,
+                        chain_id INTEGER NOT NULL DEFAULT 1,
+                        label    TEXT NOT NULL,
+                        PRIMARY KEY (address, chain_id)
+                    )",
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            Some(false) => {
+                // Old table exists without chain_id — migrate
+                conn.execute_batch(
+                    "ALTER TABLE etherscan_account RENAME TO etherscan_account_old;
+                     CREATE TABLE etherscan_account (
+                         address  TEXT NOT NULL,
+                         chain_id INTEGER NOT NULL DEFAULT 1,
+                         label    TEXT NOT NULL,
+                         PRIMARY KEY (address, chain_id)
+                     );
+                     INSERT INTO etherscan_account (address, chain_id, label)
+                         SELECT address, 1, label FROM etherscan_account_old;
+                     DROP TABLE etherscan_account_old;",
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            Some(true) => {
+                // Already has chain_id — nothing to do
+            }
+        }
+
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -53,13 +134,14 @@ impl EtherscanState {
     pub fn list_accounts(&self) -> Result<Vec<EtherscanAccount>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare("SELECT address, label FROM etherscan_account ORDER BY label")
+            .prepare("SELECT address, chain_id, label FROM etherscan_account ORDER BY label, chain_id")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
                 Ok(EtherscanAccount {
                     address: row.get(0)?,
-                    label: row.get(1)?,
+                    chain_id: row.get(1)?,
+                    label: row.get(2)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -67,21 +149,21 @@ impl EtherscanState {
             .map_err(|e| e.to_string())
     }
 
-    pub fn add_account(&self, address: &str, label: &str) -> Result<(), String> {
+    pub fn add_account(&self, address: &str, chain_id: u64, label: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
-            "INSERT OR REPLACE INTO etherscan_account (address, label) VALUES (?1, ?2)",
-            params![address.to_lowercase(), label],
+            "INSERT OR REPLACE INTO etherscan_account (address, chain_id, label) VALUES (?1, ?2, ?3)",
+            params![address.to_lowercase(), chain_id, label],
         )
         .map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    pub fn remove_account(&self, address: &str) -> Result<(), String> {
+    pub fn remove_account(&self, address: &str, chain_id: u64) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
-            "DELETE FROM etherscan_account WHERE address = ?1",
-            params![address.to_lowercase()],
+            "DELETE FROM etherscan_account WHERE address = ?1 AND chain_id = ?2",
+            params![address.to_lowercase(), chain_id],
         )
         .map_err(|e| e.to_string())?;
         Ok(())
@@ -134,7 +216,10 @@ pub fn sync_etherscan(
     api_key: &str,
     address: &str,
     label: &str,
+    chain_id: u64,
 ) -> Result<EtherscanSyncResult, String> {
+    let chain = get_chain_info(chain_id)?;
+
     let mut result = EtherscanSyncResult {
         transactions_imported: 0,
         transactions_skipped: 0,
@@ -143,19 +228,19 @@ pub fn sync_etherscan(
     };
     let address = address.to_lowercase();
 
-    // 1. Ensure ETH currency exists
-    ensure_currency(engine, "ETH", 18, &mut result)?;
+    // 1. Ensure native currency exists
+    ensure_currency(engine, chain.native_currency, chain.decimals, &mut result)?;
 
     // 2. Collect existing etherscan sources for dedup
-    let existing = collect_existing_sources(engine)?;
+    let existing = collect_existing_sources(engine, chain_id)?;
 
     // 3. Fetch normal transactions (paginated)
-    let normal_json = fetch_paginated(api_key, &address, "txlist")?;
+    let normal_json = fetch_paginated(api_key, &address, "txlist", chain_id)?;
     let normal_txns: Vec<NormalTx> =
         serde_json::from_value(normal_json).map_err(|e| format!("parse normal txns: {e}"))?;
 
     // 4. Fetch internal transactions (paginated)
-    let internal_json = fetch_paginated(api_key, &address, "txlistinternal")?;
+    let internal_json = fetch_paginated(api_key, &address, "txlistinternal", chain_id)?;
     let internal_txns: Vec<InternalTx> =
         serde_json::from_value(internal_json).map_err(|e| format!("parse internal txns: {e}"))?;
 
@@ -164,12 +249,12 @@ pub fn sync_etherscan(
         if tx.is_error == "1" {
             continue;
         }
-        let source = format!("etherscan:{}", tx.hash);
+        let source = format!("etherscan:{}:{}", chain_id, tx.hash);
         if existing.contains(&source) {
             result.transactions_skipped += 1;
             continue;
         }
-        process_normal_tx(engine, tx, &address, label, &source, &mut result)?;
+        process_normal_tx(engine, tx, &address, label, &source, chain, &mut result)?;
     }
 
     // 6. Process internal transactions
@@ -177,12 +262,12 @@ pub fn sync_etherscan(
         if tx.is_error == "1" {
             continue;
         }
-        let source = format!("etherscan:int:{}:{}", tx.hash, tx.trace_id);
+        let source = format!("etherscan:{}:int:{}:{}", chain_id, tx.hash, tx.trace_id);
         if existing.contains(&source) {
             result.transactions_skipped += 1;
             continue;
         }
-        process_internal_tx(engine, tx, &address, label, &source, &mut result)?;
+        process_internal_tx(engine, tx, &address, label, &source, chain, &mut result)?;
     }
 
     Ok(result)
@@ -194,6 +279,7 @@ fn fetch_paginated(
     api_key: &str,
     address: &str,
     action: &str,
+    chain_id: u64,
 ) -> Result<serde_json::Value, String> {
     let mut all_results: Vec<serde_json::Value> = Vec::new();
     let mut page = 1u32;
@@ -201,7 +287,7 @@ fn fetch_paginated(
     loop {
         let url = format!(
             "https://api.etherscan.io/v2/api\
-             ?chainid=1&module=account&action={action}\
+             ?chainid={chain_id}&module=account&action={action}\
              &address={address}&startblock=0&endblock=99999999\
              &page={page}&offset=10000&sort=asc&apikey={api_key}"
         );
@@ -251,16 +337,18 @@ fn process_normal_tx(
     our_address: &str,
     label: &str,
     source: &str,
+    chain: &ChainInfo,
     result: &mut EtherscanSyncResult,
 ) -> Result<(), String> {
     let date = timestamp_to_date(&tx.timestamp)?;
-    let value = wei_to_eth(&tx.value)?;
-    let gas_fee = calculate_gas_fee(&tx.gas_used, &tx.gas_price)?;
+    let value = wei_to_native(&tx.value, chain.decimals)?;
+    let gas_fee = calculate_gas_fee(&tx.gas_used, &tx.gas_price, chain.decimals)?;
 
     let from = tx.from.to_lowercase();
     let to = tx.to.to_lowercase();
 
-    let our_account = format!("Assets:Ethereum:{label}");
+    let chain_name = chain.name;
+    let our_account = format!("Assets:{chain_name}:{label}");
     let entry_id = Uuid::now_v7();
     let mut items = Vec::new();
 
@@ -269,38 +357,38 @@ fn process_normal_tx(
         if gas_fee.is_zero() {
             return Ok(());
         }
-        let gas_acc_id = ensure_account(engine, "Expenses:Ethereum:Gas", date, result)?;
+        let gas_acc_id = ensure_account(engine, &format!("Expenses:{chain_name}:Gas"), date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, gas_acc_id, gas_fee));
-        items.push(make_line_item(entry_id, our_acc_id, -gas_fee));
+        items.push(make_line_item(entry_id, gas_acc_id, gas_fee, chain.native_currency));
+        items.push(make_line_item(entry_id, our_acc_id, -gas_fee, chain.native_currency));
     } else if to.is_empty() {
         // Contract creation
         if gas_fee.is_zero() {
             return Ok(());
         }
         let cc_acc_id =
-            ensure_account(engine, "Expenses:Ethereum:ContractCreation", date, result)?;
+            ensure_account(engine, &format!("Expenses:{chain_name}:ContractCreation"), date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, cc_acc_id, gas_fee));
-        items.push(make_line_item(entry_id, our_acc_id, -gas_fee));
+        items.push(make_line_item(entry_id, cc_acc_id, gas_fee, chain.native_currency));
+        items.push(make_line_item(entry_id, our_acc_id, -gas_fee, chain.native_currency));
     } else if from == our_address {
         // Outgoing
         let counterparty = short_addr(&to);
-        let ext_account = format!("Equity:Ethereum:External:{counterparty}");
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
         let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
 
         if !value.is_zero() {
-            items.push(make_line_item(entry_id, ext_acc_id, value));
+            items.push(make_line_item(entry_id, ext_acc_id, value, chain.native_currency));
         }
         if !gas_fee.is_zero() {
             let gas_acc_id =
-                ensure_account(engine, "Expenses:Ethereum:Gas", date, result)?;
-            items.push(make_line_item(entry_id, gas_acc_id, gas_fee));
+                ensure_account(engine, &format!("Expenses:{chain_name}:Gas"), date, result)?;
+            items.push(make_line_item(entry_id, gas_acc_id, gas_fee, chain.native_currency));
         }
         let total_out = value + gas_fee;
         if !total_out.is_zero() {
-            items.push(make_line_item(entry_id, our_acc_id, -total_out));
+            items.push(make_line_item(entry_id, our_acc_id, -total_out, chain.native_currency));
         }
     } else if to == our_address {
         // Incoming
@@ -308,11 +396,11 @@ fn process_normal_tx(
             return Ok(());
         }
         let counterparty = short_addr(&from);
-        let ext_account = format!("Equity:Ethereum:External:{counterparty}");
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
         let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, our_acc_id, value));
-        items.push(make_line_item(entry_id, ext_acc_id, -value));
+        items.push(make_line_item(entry_id, our_acc_id, value, chain.native_currency));
+        items.push(make_line_item(entry_id, ext_acc_id, -value, chain.native_currency));
     } else {
         return Ok(());
     }
@@ -321,7 +409,7 @@ fn process_normal_tx(
         return Ok(());
     }
 
-    let description = format_tx_description(tx, our_address);
+    let description = format_tx_description(tx, our_address, chain);
     let entry = JournalEntry {
         id: entry_id,
         date,
@@ -345,10 +433,11 @@ fn process_internal_tx(
     our_address: &str,
     label: &str,
     source: &str,
+    chain: &ChainInfo,
     result: &mut EtherscanSyncResult,
 ) -> Result<(), String> {
     let date = timestamp_to_date(&tx.timestamp)?;
-    let value = wei_to_eth(&tx.value)?;
+    let value = wei_to_native(&tx.value, chain.decimals)?;
 
     if value.is_zero() {
         return Ok(());
@@ -357,7 +446,8 @@ fn process_internal_tx(
     let from = tx.from.to_lowercase();
     let to = tx.to.to_lowercase();
 
-    let our_account = format!("Assets:Ethereum:{label}");
+    let chain_name = chain.name;
+    let our_account = format!("Assets:{chain_name}:{label}");
     let entry_id = Uuid::now_v7();
     let mut items = Vec::new();
 
@@ -367,19 +457,19 @@ fn process_internal_tx(
     } else if from == our_address {
         // Outgoing internal
         let counterparty = short_addr(&to);
-        let ext_account = format!("Equity:Ethereum:External:{counterparty}");
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
         let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, ext_acc_id, value));
-        items.push(make_line_item(entry_id, our_acc_id, -value));
+        items.push(make_line_item(entry_id, ext_acc_id, value, chain.native_currency));
+        items.push(make_line_item(entry_id, our_acc_id, -value, chain.native_currency));
     } else if to == our_address {
         // Incoming internal
         let counterparty = short_addr(&from);
-        let ext_account = format!("Equity:Ethereum:External:{counterparty}");
+        let ext_account = format!("Equity:{chain_name}:External:{counterparty}");
         let ext_acc_id = ensure_account(engine, &ext_account, date, result)?;
         let our_acc_id = ensure_account(engine, &our_account, date, result)?;
-        items.push(make_line_item(entry_id, our_acc_id, value));
-        items.push(make_line_item(entry_id, ext_acc_id, -value));
+        items.push(make_line_item(entry_id, our_acc_id, value, chain.native_currency));
+        items.push(make_line_item(entry_id, ext_acc_id, -value, chain.native_currency));
     } else {
         return Ok(());
     }
@@ -389,7 +479,8 @@ fn process_internal_tx(
     } else {
         &tx.hash
     };
-    let description = format!("ETH internal transfer ({hash_short})");
+    let currency = chain.native_currency;
+    let description = format!("{currency} internal transfer ({hash_short})");
     let entry = JournalEntry {
         id: entry_id,
         date,
@@ -409,25 +500,33 @@ fn process_internal_tx(
 
 // ---- Helpers ----
 
-fn wei_to_eth(wei_str: &str) -> Result<Decimal, String> {
+fn pow10(exp: u8) -> Decimal {
+    let mut result = Decimal::ONE;
+    let ten = Decimal::from(10);
+    for _ in 0..exp {
+        result *= ten;
+    }
+    result
+}
+
+fn wei_to_native(wei_str: &str, decimals: u8) -> Result<Decimal, String> {
     if wei_str.is_empty() || wei_str == "0" {
         return Ok(Decimal::ZERO);
     }
     let wei =
         Decimal::from_str(wei_str).map_err(|e| format!("bad wei value '{wei_str}': {e}"))?;
-    // 1 ETH = 10^18 wei
-    let divisor = Decimal::from_str("1000000000000000000").unwrap();
+    let divisor = pow10(decimals);
     Ok(wei / divisor)
 }
 
-fn calculate_gas_fee(gas_used: &str, gas_price: &str) -> Result<Decimal, String> {
+fn calculate_gas_fee(gas_used: &str, gas_price: &str, decimals: u8) -> Result<Decimal, String> {
     let used = Decimal::from_str(gas_used).unwrap_or(Decimal::ZERO);
     let price = Decimal::from_str(gas_price).unwrap_or(Decimal::ZERO);
     let wei_fee = used * price;
     if wei_fee.is_zero() {
         return Ok(Decimal::ZERO);
     }
-    let divisor = Decimal::from_str("1000000000000000000").unwrap();
+    let divisor = pow10(decimals);
     Ok(wei_fee / divisor)
 }
 
@@ -448,7 +547,7 @@ fn short_addr(addr: &str) -> String {
     }
 }
 
-fn format_tx_description(tx: &NormalTx, our_address: &str) -> String {
+fn format_tx_description(tx: &NormalTx, our_address: &str, chain: &ChainInfo) -> String {
     let from = tx.from.to_lowercase();
     let to = tx.to.to_lowercase();
     let hash_short = if tx.hash.len() >= 10 {
@@ -456,38 +555,57 @@ fn format_tx_description(tx: &NormalTx, our_address: &str) -> String {
     } else {
         &tx.hash
     };
+    let currency = chain.native_currency;
 
     if from == our_address && to == our_address {
-        format!("ETH self-transfer ({hash_short})")
+        format!("{currency} self-transfer ({hash_short})")
     } else if to.is_empty() {
-        format!("ETH contract creation ({hash_short})")
+        format!("{currency} contract creation ({hash_short})")
     } else if from == our_address {
-        format!("ETH sent to {} ({hash_short})", short_addr(&to))
+        format!("{currency} sent to {} ({hash_short})", short_addr(&to))
     } else {
-        format!("ETH received from {} ({hash_short})", short_addr(&from))
+        format!("{currency} received from {} ({hash_short})", short_addr(&from))
     }
 }
 
-fn make_line_item(entry_id: Uuid, account_id: Uuid, amount: Decimal) -> LineItem {
+fn make_line_item(entry_id: Uuid, account_id: Uuid, amount: Decimal, currency: &str) -> LineItem {
     LineItem {
         id: Uuid::now_v7(),
         journal_entry_id: entry_id,
         account_id,
-        currency: "ETH".to_string(),
+        currency: currency.to_string(),
         amount,
         lot_id: None,
     }
 }
 
-fn collect_existing_sources(engine: &LedgerEngine) -> Result<HashSet<String>, String> {
+fn collect_existing_sources(engine: &LedgerEngine, chain_id: u64) -> Result<HashSet<String>, String> {
     let entries = engine
         .query_journal_entries(&TransactionFilter::default())
         .map_err(|e| e.to_string())?;
-    Ok(entries
-        .into_iter()
-        .filter(|(e, _)| e.source.starts_with("etherscan:"))
-        .map(|(e, _)| e.source)
-        .collect())
+
+    let mut set: HashSet<String> = HashSet::new();
+    for (e, _) in entries {
+        if !e.source.starts_with("etherscan:") {
+            continue;
+        }
+        set.insert(e.source.clone());
+
+        // Backward compat: old sources like "etherscan:0x..." (no chain_id prefix)
+        // When syncing chain_id=1, also match these legacy entries
+        if chain_id == 1 && !e.source.starts_with("etherscan:1:") {
+            // Check if it's an old-format source (etherscan:<hash> or etherscan:int:<hash>:<trace>)
+            let rest = &e.source["etherscan:".len()..];
+            if rest.starts_with("0x") {
+                // Old normal tx: "etherscan:0xhash" → also insert "etherscan:1:0xhash"
+                set.insert(format!("etherscan:1:{rest}"));
+            } else if rest.starts_with("int:") {
+                // Old internal tx: "etherscan:int:0xhash:trace" → also insert "etherscan:1:int:0xhash:trace"
+                set.insert(format!("etherscan:1:{rest}"));
+            }
+        }
+    }
+    Ok(set)
 }
 
 fn ensure_currency(

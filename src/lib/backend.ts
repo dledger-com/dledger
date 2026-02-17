@@ -53,13 +53,31 @@ export interface Backend {
 
   // Etherscan
   listEtherscanAccounts(): Promise<EtherscanAccount[]>;
-  addEtherscanAccount(address: string, label: string): Promise<void>;
-  removeEtherscanAccount(address: string): Promise<void>;
-  syncEtherscan(apiKey: string, address: string, label: string): Promise<EtherscanSyncResult>;
+  addEtherscanAccount(address: string, chainId: number, label: string): Promise<void>;
+  removeEtherscanAccount(address: string, chainId: number): Promise<void>;
+  syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
 }
 
 class TauriBackend implements Backend {
+  private bridgeReady: Promise<void> | null = null;
+
+  private waitForBridge(): Promise<void> {
+    if (this.bridgeReady) return this.bridgeReady;
+    this.bridgeReady = new Promise<void>((resolve, reject) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((window as any).__TAURI_INTERNALS__) { resolve(); return; }
+      let elapsed = 0;
+      const poll = setInterval(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((window as any).__TAURI_INTERNALS__) { clearInterval(poll); resolve(); }
+        else if ((elapsed += 50) >= 3000) { clearInterval(poll); reject(new Error("Tauri IPC bridge not available")); }
+      }, 50);
+    });
+    return this.bridgeReady;
+  }
+
   private async invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+    await this.waitForBridge();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<T>(command, args);
   }
@@ -145,14 +163,14 @@ class TauriBackend implements Backend {
   async listEtherscanAccounts(): Promise<EtherscanAccount[]> {
     return this.invoke("list_etherscan_accounts");
   }
-  async addEtherscanAccount(address: string, label: string): Promise<void> {
-    return this.invoke("add_etherscan_account", { address, label });
+  async addEtherscanAccount(address: string, chainId: number, label: string): Promise<void> {
+    return this.invoke("add_etherscan_account", { address, chainId, label });
   }
-  async removeEtherscanAccount(address: string): Promise<void> {
-    return this.invoke("remove_etherscan_account", { address });
+  async removeEtherscanAccount(address: string, chainId: number): Promise<void> {
+    return this.invoke("remove_etherscan_account", { address, chainId });
   }
-  async syncEtherscan(apiKey: string, address: string, label: string): Promise<EtherscanSyncResult> {
-    return this.invoke("sync_etherscan", { apiKey, address, label });
+  async syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult> {
+    return this.invoke("sync_etherscan", { apiKey, address, label, chainId });
   }
 }
 

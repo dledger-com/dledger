@@ -3,6 +3,7 @@
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { toast } from "svelte-sonner";
@@ -13,9 +14,11 @@
   import Plus from "lucide-svelte/icons/plus";
   import type {
     LedgerImportResult,
+    ChainInfo,
     EtherscanAccount,
     EtherscanSyncResult,
   } from "$lib/types/index.js";
+  import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 
   const settings = new SettingsStore();
 
@@ -32,12 +35,22 @@
 
   // -- Etherscan state --
   let ethAccounts = $state<EtherscanAccount[]>([]);
+  let selectedChainIds = $state<Set<number>>(new Set([1]));
   let newAddress = $state("");
   let newLabel = $state("");
   let addingAccount = $state(false);
-  let syncingAddress = $state<string | null>(null);
+  let syncingKey = $state<string | null>(null);
   let syncingAll = $state(false);
   let ethResult = $state<EtherscanSyncResult | null>(null);
+
+  function accountSyncKey(account: EtherscanAccount): string {
+    return `${account.address}:${account.chain_id}`;
+  }
+
+  function getChainName(chainId: number): string {
+    const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
+    return chain?.name ?? `Chain ${chainId}`;
+  }
 
   // Load etherscan accounts on mount
   async function loadEthAccounts() {
@@ -86,6 +99,16 @@
   }
 
   // -- Etherscan handlers --
+  function toggleChain(chainId: number) {
+    const next = new Set(selectedChainIds);
+    if (next.has(chainId)) {
+      next.delete(chainId);
+    } else {
+      next.add(chainId);
+    }
+    selectedChainIds = next;
+  }
+
   async function handleAddEthAccount() {
     const addr = newAddress.trim();
     const label = newLabel.trim();
@@ -97,13 +120,19 @@
       toast.error("Invalid Ethereum address");
       return;
     }
+    if (selectedChainIds.size === 0) {
+      toast.error("Select at least one chain");
+      return;
+    }
     addingAccount = true;
     try {
-      await getBackend().addEtherscanAccount(addr, label);
+      for (const chainId of selectedChainIds) {
+        await getBackend().addEtherscanAccount(addr, chainId, label);
+      }
       newAddress = "";
       newLabel = "";
       await loadEthAccounts();
-      toast.success("Address added");
+      toast.success(`Address added to ${selectedChainIds.size} chain(s)`);
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -111,9 +140,9 @@
     }
   }
 
-  async function handleRemoveEthAccount(address: string) {
+  async function handleRemoveEthAccount(account: EtherscanAccount) {
     try {
-      await getBackend().removeEtherscanAccount(address);
+      await getBackend().removeEtherscanAccount(account.address, account.chain_id);
       await loadEthAccounts();
       toast.success("Address removed");
     } catch (err) {
@@ -127,21 +156,22 @@
       toast.error("Etherscan API key is required");
       return;
     }
-    syncingAddress = account.address;
+    syncingKey = accountSyncKey(account);
     ethResult = null;
     try {
       ethResult = await getBackend().syncEtherscan(
         apiKey,
         account.address,
         account.label,
+        account.chain_id,
       );
       toast.success(
-        `Synced ${account.label}: ${ethResult.transactions_imported} imported`,
+        `Synced ${account.label} (${getChainName(account.chain_id)}): ${ethResult.transactions_imported} imported`,
       );
     } catch (err) {
       toast.error(String(err));
     } finally {
-      syncingAddress = null;
+      syncingKey = null;
     }
   }
 
@@ -164,11 +194,12 @@
 
     try {
       for (const account of ethAccounts) {
-        syncingAddress = account.address;
+        syncingKey = accountSyncKey(account);
         const r = await getBackend().syncEtherscan(
           apiKey,
           account.address,
           account.label,
+          account.chain_id,
         );
         totalImported += r.transactions_imported;
         totalSkipped += r.transactions_skipped;
@@ -185,7 +216,7 @@
     } catch (err) {
       toast.error(String(err));
     } finally {
-      syncingAddress = null;
+      syncingKey = null;
       syncingAll = false;
     }
   }
@@ -311,11 +342,11 @@
     </Card.Root>
   {/if}
 
-  <!-- Etherscan Sync -->
+  <!-- Blockchain Sync -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Ethereum (Etherscan)</Card.Title>
-      <Card.Description>Sync ETH transactions from tracked Ethereum addresses.</Card.Description>
+      <Card.Title>Blockchain Sync (Etherscan)</Card.Title>
+      <Card.Description>Sync native transactions from tracked addresses across multiple chains.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <!-- API Key -->
@@ -336,7 +367,7 @@
             href="https://etherscan.io/apis"
             target="_blank"
             class="underline hover:text-foreground">etherscan.io</a
-          >
+          >. One key works for all supported chains.
         </p>
       </div>
 
@@ -346,14 +377,19 @@
           <Table.Header>
             <Table.Row>
               <Table.Head>Address</Table.Head>
+              <Table.Head>Chain</Table.Head>
               <Table.Head>Label</Table.Head>
               <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {#each ethAccounts as account}
+              {@const key = accountSyncKey(account)}
               <Table.Row>
                 <Table.Cell class="font-mono text-sm">{formatAddress(account.address)}</Table.Cell>
+                <Table.Cell>
+                  <Badge variant="secondary">{getChainName(account.chain_id)}</Badge>
+                </Table.Cell>
                 <Table.Cell>{account.label}</Table.Cell>
                 <Table.Cell class="text-right">
                   <div class="flex justify-end gap-1">
@@ -361,16 +397,16 @@
                       variant="outline"
                       size="sm"
                       onclick={() => handleSyncOne(account)}
-                      disabled={syncingAddress !== null || syncingAll}
+                      disabled={syncingKey !== null || syncingAll}
                     >
                       <RefreshCw class="mr-1 h-3 w-3" />
-                      {syncingAddress === account.address ? "Syncing..." : "Sync"}
+                      {syncingKey === key ? "Syncing..." : "Sync"}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onclick={() => handleRemoveEthAccount(account.address)}
-                      disabled={syncingAddress !== null || syncingAll}
+                      onclick={() => handleRemoveEthAccount(account)}
+                      disabled={syncingKey !== null || syncingAll}
                     >
                       <Trash2 class="h-3 w-3" />
                     </Button>
@@ -385,37 +421,59 @@
       {/if}
 
       <!-- Add Address Form -->
-      <div class="flex items-end gap-2">
-        <div class="flex-1 space-y-1">
-          <label for="new-eth-address" class="text-xs font-medium">Address</label>
-          <Input
-            id="new-eth-address"
-            placeholder="0x..."
-            bind:value={newAddress}
-          />
+      <div class="space-y-3">
+        <div class="flex items-end gap-2">
+          <div class="flex-1 space-y-1">
+            <label for="new-eth-address" class="text-xs font-medium">Address</label>
+            <Input
+              id="new-eth-address"
+              placeholder="0x..."
+              bind:value={newAddress}
+            />
+          </div>
+          <div class="flex-1 space-y-1">
+            <label for="new-eth-label" class="text-xs font-medium">Label</label>
+            <Input
+              id="new-eth-label"
+              placeholder="My Wallet"
+              bind:value={newLabel}
+            />
+          </div>
+          <Button
+            onclick={handleAddEthAccount}
+            disabled={addingAccount || !newAddress.trim() || !newLabel.trim() || selectedChainIds.size === 0}
+          >
+            <Plus class="mr-1 h-4 w-4" />
+            Add
+          </Button>
         </div>
-        <div class="flex-1 space-y-1">
-          <label for="new-eth-label" class="text-xs font-medium">Label</label>
-          <Input
-            id="new-eth-label"
-            placeholder="My Wallet"
-            bind:value={newLabel}
-          />
-        </div>
-        <Button
-          onclick={handleAddEthAccount}
-          disabled={addingAccount || !newAddress.trim() || !newLabel.trim()}
-        >
-          <Plus class="mr-1 h-4 w-4" />
-          Add
-        </Button>
+
+        <!-- Chain selector -->
+        {#if SUPPORTED_CHAINS.length > 0}
+          <div class="space-y-1">
+            <span class="text-xs font-medium">Chains</span>
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+              {#each SUPPORTED_CHAINS as chain}
+                <label class="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedChainIds.has(chain.chain_id)}
+                    onchange={() => toggleChain(chain.chain_id)}
+                    class="rounded border-input"
+                  />
+                  {chain.name} ({chain.native_currency})
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     </Card.Content>
     <Card.Footer class="flex justify-between">
       <Button variant="outline" href="/journal">Back</Button>
       <Button
         onclick={handleSyncAll}
-        disabled={syncingAll || syncingAddress !== null || ethAccounts.length === 0 || !settings.etherscanApiKey}
+        disabled={syncingAll || syncingKey !== null || ethAccounts.length === 0 || !settings.etherscanApiKey}
       >
         <RefreshCw class="mr-1 h-4 w-4" />
         {syncingAll ? "Syncing All..." : "Sync All"}
@@ -427,7 +485,7 @@
   {#if ethResult}
     <Card.Root class="border-green-200 dark:border-green-800">
       <Card.Header>
-        <Card.Title>Etherscan Sync Results</Card.Title>
+        <Card.Title>Sync Results</Card.Title>
       </Card.Header>
       <Card.Content class="space-y-3">
         <div class="grid grid-cols-3 gap-4">
