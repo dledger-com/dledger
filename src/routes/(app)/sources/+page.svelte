@@ -238,7 +238,7 @@
 
 <div class="space-y-6">
   <div>
-    <h1 class="text-2xl font-bold tracking-tight">Import / Export</h1>
+    <h1 class="text-2xl font-bold tracking-tight">Sources</h1>
     <p class="text-muted-foreground">
       Import data from ledger files or sync transactions from external sources.
     </p>
@@ -352,7 +352,7 @@
   <!-- Blockchain Sync -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Blockchain Sync (Etherscan)</Card.Title>
+      <Card.Title>Etherscan (Ethereum and derivatives)</Card.Title>
       <Card.Description>Sync transactions and token transfers from tracked addresses across multiple chains.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">

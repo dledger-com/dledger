@@ -13,7 +13,7 @@
     { title: "Accounts", href: "/accounts", icon: BookOpen },
     { title: "Journal", href: "/journal", icon: FileText },
     { title: "Reports", href: "/reports", icon: BarChart3 },
-    { title: "Import / Export", href: "/journal/import", icon: ArrowUpDown },
+    { title: "Sources", href: "/sources", icon: ArrowUpDown },
     { title: "Settings", href: "/settings", icon: Settings },
   ];
 

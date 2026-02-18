@@ -56,7 +56,7 @@
       <Button variant="outline" onclick={handleExport} disabled={exporting}>
         {exporting ? "Exporting..." : "Export"}
       </Button>
-      <Button variant="outline" href="/journal/import">Import</Button>
+      <Button variant="outline" href="/sources">Import</Button>
       <Button href="/journal/new">New Entry</Button>
     </div>
   </div>
