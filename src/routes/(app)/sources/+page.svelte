@@ -66,6 +66,7 @@
         getBackend(),
         settings.currency,
         settings.coingeckoApiKey,
+        settings.hiddenCurrencySet,
       );
       if (rateResult.errors.length > 0) {
         toast.warning(

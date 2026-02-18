@@ -70,6 +70,7 @@ export async function syncExchangeRates(
   backend: Backend,
   baseCurrency: string,
   coingeckoApiKey: string,
+  hiddenCurrencies: Set<string>,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -79,7 +80,9 @@ export async function syncExchangeRates(
 
   const today = todayISO();
   const currencies = await backend.listCurrencies();
-  const codes = currencies.map((c) => c.code).filter((c) => c !== baseCurrency);
+  const codes = currencies
+    .map((c) => c.code)
+    .filter((c) => c !== baseCurrency && !hiddenCurrencies.has(c));
 
   if (codes.length === 0) return result;
 
