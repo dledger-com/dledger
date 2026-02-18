@@ -382,6 +382,12 @@ impl LedgerEngine {
         Ok(())
     }
 
+    pub fn clear_ledger_data(&self) -> LedgerResult<()> {
+        // Skip auditing since audit_log itself gets cleared
+        self.storage.clear_ledger_data()?;
+        Ok(())
+    }
+
     pub fn clear_all_data(&self) -> LedgerResult<()> {
         // Skip auditing since audit_log itself gets cleared
         self.storage.clear_all_data()?;

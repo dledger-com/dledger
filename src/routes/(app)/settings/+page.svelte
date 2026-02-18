@@ -141,6 +141,17 @@
     }
   }
 
+  async function handleClearLedgerData() {
+    if (!window.confirm("Are you sure you want to clear all ledger data? This will remove all accounts, transactions, and currencies. Exchange rates, sources, and settings will be preserved. This cannot be undone.")) return;
+    try {
+      await getBackend().clearLedgerData();
+      currencies = [];
+      toast.success("Ledger data cleared");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function handleClearAllData() {
     if (!window.confirm("Are you sure you want to delete ALL data? This will remove all accounts, transactions, currencies, exchange rates, and reset settings. This cannot be undone.")) return;
     try {
@@ -461,6 +472,14 @@
           <p class="text-sm text-muted-foreground">Remove all synced and manual exchange rates.</p>
         </div>
         <Button variant="destructive" size="sm" onclick={handleClearExchangeRates}>Clear Rates</Button>
+      </div>
+      <Separator />
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Clear Ledger Data</p>
+          <p class="text-sm text-muted-foreground">Remove all accounts, transactions, and currencies. Exchange rates, sources, and settings are preserved.</p>
+        </div>
+        <Button variant="destructive" size="sm" onclick={handleClearLedgerData}>Clear Ledger</Button>
       </div>
       <Separator />
       <div class="flex items-center justify-between">

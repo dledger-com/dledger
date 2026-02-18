@@ -160,6 +160,7 @@ pub trait Storage: Send + Sync {
     // -- Data management --
 
     fn clear_exchange_rates(&self) -> StorageResult<()>;
+    fn clear_ledger_data(&self) -> StorageResult<()>;
     fn clear_all_data(&self) -> StorageResult<()>;
 
     // -- Schema --

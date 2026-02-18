@@ -731,6 +731,19 @@ impl Storage for TestStorage {
         Ok(results)
     }
 
+    fn clear_ledger_data(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DELETE FROM lot_disposal; DELETE FROM lot; DELETE FROM line_item;
+             DELETE FROM journal_entry_metadata; DELETE FROM balance_assertion;
+             DELETE FROM audit_log; DELETE FROM journal_entry;
+             DELETE FROM account_closure; DELETE FROM account; DELETE FROM currency;
+             PRAGMA foreign_keys=ON;"
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
     fn clear_all_data(&self) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute_batch(

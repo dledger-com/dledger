@@ -275,6 +275,14 @@ pub fn clear_exchange_rates(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn clear_ledger_data(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .engine
+        .clear_ledger_data()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn clear_all_data(state: State<'_, AppState>) -> Result<(), String> {
     state
         .engine

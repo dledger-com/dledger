@@ -66,6 +66,7 @@ pub fn run() {
             commands::export_ledger_file,
             commands::get_currency_origins,
             commands::clear_exchange_rates,
+            commands::clear_ledger_data,
             commands::clear_all_data,
             commands::list_supported_chains,
             commands::list_etherscan_accounts,

@@ -63,6 +63,7 @@ export interface Backend {
 
   // Data management
   clearExchangeRates(): Promise<void>;
+  clearLedgerData(): Promise<void>;
   clearAllData(): Promise<void>;
 }
 
@@ -189,6 +190,9 @@ class TauriBackend implements Backend {
   // Data management
   async clearExchangeRates(): Promise<void> {
     return this.invoke("clear_exchange_rates");
+  }
+  async clearLedgerData(): Promise<void> {
+    return this.invoke("clear_ledger_data");
   }
   async clearAllData(): Promise<void> {
     return this.invoke("clear_all_data");
