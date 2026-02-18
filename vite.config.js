@@ -1,13 +1,23 @@
+// @ts-nocheck
+import { execSync } from "child_process";
+import { readFileSync } from "fs";
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+
+const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
+const gitHash = execSync("git rev-parse --short HEAD").toString().trim();
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [tailwindcss(), sveltekit()],
+
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __GIT_HASH__: JSON.stringify(gitHash),
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dev } from "$app/environment";
   import { page } from "$app/state";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import LayoutDashboard from "lucide-svelte/icons/layout-dashboard";
@@ -7,6 +8,8 @@
   import BarChart3 from "lucide-svelte/icons/bar-chart-3";
   import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Settings from "lucide-svelte/icons/settings";
+
+  const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
 
   const navItems = [
     { title: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -62,7 +65,7 @@
 
   <Sidebar.Footer>
     <div class="px-2 py-1 text-xs text-muted-foreground">
-      dLedger v0.1.0
+      dLedger {versionLabel}
     </div>
   </Sidebar.Footer>
   <Sidebar.Rail />
