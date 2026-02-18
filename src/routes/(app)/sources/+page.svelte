@@ -57,10 +57,12 @@
   // -- Exchange rate sync state --
   let syncingRates = $state(false);
   let rateResult = $state<ExchangeRateSyncResult | null>(null);
+  let pendingChoices = $state<{ currency: string; sources: string[]; selected: string }[]>([]);
 
   async function handleSyncRates() {
     syncingRates = true;
     rateResult = null;
+    pendingChoices = [];
     try {
       rateResult = await syncExchangeRates(
         getBackend(),
@@ -68,7 +70,25 @@
         settings.coingeckoApiKey,
         settings.finnhubApiKey,
         settings.hiddenCurrencySet,
+        settings.rateSources,
+        settings.initializedRateSources,
       );
+
+      // Persist updated source maps
+      settings.update({
+        rateSources: rateResult.updatedRateSources,
+        initializedRateSources: rateResult.updatedInitializedSources,
+      });
+
+      // Build pending choices with default selection
+      if (rateResult.pendingChoices.length > 0) {
+        pendingChoices = rateResult.pendingChoices.map((pc) => ({
+          currency: pc.currency,
+          sources: pc.sources,
+          selected: pc.sources[0],
+        }));
+      }
+
       if (rateResult.errors.length > 0) {
         toast.warning(
           `Synced ${rateResult.rates_fetched} rate(s) with ${rateResult.errors.length} warning(s)`,
@@ -81,6 +101,21 @@
     } finally {
       syncingRates = false;
     }
+  }
+
+  function handleSavePreferences() {
+    const updated = { ...settings.rateSources };
+    for (const choice of pendingChoices) {
+      if (updated[choice.currency]) {
+        updated[choice.currency] = {
+          ...updated[choice.currency],
+          preferred: choice.selected,
+        };
+      }
+    }
+    settings.update({ rateSources: updated });
+    pendingChoices = [];
+    toast.success("Source preferences saved");
   }
 
   function accountSyncKey(account: EtherscanAccount): string {
@@ -692,6 +727,55 @@
           </div>
         {/if}
       </Card.Content>
+    </Card.Root>
+  {/if}
+
+  {#if pendingChoices.length > 0}
+    <Card.Root class="border-blue-200 dark:border-blue-800">
+      <Card.Header>
+        <Card.Title>Source Selection</Card.Title>
+        <Card.Description>
+          Multiple rate sources found for these currencies. Choose your preferred source for each.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <Table.Root>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Currency</Table.Head>
+              <Table.Head>Available Sources</Table.Head>
+              <Table.Head>Preferred</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each pendingChoices as choice, i}
+              <Table.Row>
+                <Table.Cell class="font-mono">{choice.currency}</Table.Cell>
+                <Table.Cell>
+                  {choice.sources.join(", ")}
+                </Table.Cell>
+                <Table.Cell>
+                  <select
+                    value={choice.selected}
+                    onchange={(e) => {
+                      const val = (e.target as HTMLSelectElement).value;
+                      pendingChoices[i] = { ...choice, selected: val };
+                    }}
+                    class="flex h-8 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
+                  >
+                    {#each choice.sources as src}
+                      <option value={src}>{src}</option>
+                    {/each}
+                  </select>
+                </Table.Cell>
+              </Table.Row>
+            {/each}
+          </Table.Body>
+        </Table.Root>
+      </Card.Content>
+      <Card.Footer class="flex justify-end">
+        <Button onclick={handleSavePreferences}>Save Preferences</Button>
+      </Card.Footer>
     </Card.Root>
   {/if}
 </div>

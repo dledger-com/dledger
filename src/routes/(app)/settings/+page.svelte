@@ -339,12 +339,35 @@
           </Table.Header>
           <Table.Body>
             {#each exchangeRates.slice(0, 50) as rate}
+              {@const sourceInfo = settings.rateSources[rate.from_currency]}
               <Table.Row>
                 <Table.Cell>{rate.date}</Table.Cell>
                 <Table.Cell>{rate.from_currency}</Table.Cell>
                 <Table.Cell>{rate.to_currency}</Table.Cell>
                 <Table.Cell class="text-right font-mono">{rate.rate}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{rate.source}</Table.Cell>
+                <Table.Cell>
+                  {#if sourceInfo && sourceInfo.available.length >= 2}
+                    <select
+                      value={sourceInfo.preferred || rate.source}
+                      onchange={(e) => {
+                        const val = (e.target as HTMLSelectElement).value;
+                        const updated = { ...settings.rateSources };
+                        updated[rate.from_currency] = {
+                          ...updated[rate.from_currency],
+                          preferred: val,
+                        };
+                        settings.update({ rateSources: updated });
+                      }}
+                      class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm text-muted-foreground"
+                    >
+                      {#each sourceInfo.available as src}
+                        <option value={src}>{src}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <span class="text-muted-foreground">{rate.source}</span>
+                  {/if}
+                </Table.Cell>
               </Table.Row>
             {/each}
           </Table.Body>

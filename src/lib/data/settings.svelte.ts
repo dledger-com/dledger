@@ -1,3 +1,8 @@
+export interface RateSourceInfo {
+  available: string[];   // sources that returned valid data
+  preferred: string;     // user's chosen source ("" = not yet chosen)
+}
+
 export interface AppSettings {
   currency: string;
   dateFormat: string;
@@ -6,6 +11,8 @@ export interface AppSettings {
   coingeckoApiKey: string;
   finnhubApiKey: string;
   hiddenCurrencies: string[];
+  rateSources: Record<string, RateSourceInfo>;
+  initializedRateSources: string[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -16,6 +23,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   coingeckoApiKey: "",
   finnhubApiKey: "",
   hiddenCurrencies: [],
+  rateSources: {},
+  initializedRateSources: [],
 };
 
 const STORAGE_KEY = "dledger-settings";
@@ -71,6 +80,14 @@ export class SettingsStore {
 
   get hiddenCurrencySet(): Set<string> {
     return new Set(this.settings.hiddenCurrencies);
+  }
+
+  get rateSources(): Record<string, RateSourceInfo> {
+    return this.settings.rateSources;
+  }
+
+  get initializedRateSources(): string[] {
+    return this.settings.initializedRateSources;
   }
 
   hideCurrency(code: string) {
