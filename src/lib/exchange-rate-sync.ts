@@ -70,6 +70,7 @@ export async function syncExchangeRates(
   backend: Backend,
   baseCurrency: string,
   coingeckoApiKey: string,
+  finnhubApiKey: string,
   hiddenCurrencies: Set<string>,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
@@ -87,7 +88,8 @@ export async function syncExchangeRates(
   if (codes.length === 0) return result;
 
   const fiatCodes = codes.filter((c) => FRANKFURTER_FIAT.has(c));
-  const cryptoCodes = codes.filter((c) => !FRANKFURTER_FIAT.has(c));
+  const cryptoCodes = codes.filter((c) => c in COINGECKO_IDS);
+  const stockCodes = codes.filter((c) => !FRANKFURTER_FIAT.has(c) && !(c in COINGECKO_IDS));
 
   // ---- Fiat rates via Frankfurter ----
   if (fiatCodes.length > 0 && FRANKFURTER_FIAT.has(baseCurrency)) {
@@ -203,6 +205,56 @@ export async function syncExchangeRates(
         result.errors.push(`CoinGecko: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         geckoFetch.dispose();
+      }
+    }
+  }
+
+  // ---- Stock prices via Finnhub ----
+  if (stockCodes.length > 0) {
+    if (!finnhubApiKey) {
+      result.errors.push(
+        `Finnhub: no API key provided; skipping ${stockCodes.length} stock price(s)`,
+      );
+    } else {
+      const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
+      try {
+        for (const code of stockCodes) {
+          // Check if rate already exists for today
+          const existing = await backend.getExchangeRate(code, "USD", today);
+          if (existing !== null) {
+            result.rates_skipped++;
+            continue;
+          }
+
+          const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
+          const resp = await finnhubFetch.fetch(url);
+
+          if (!resp.ok) {
+            result.errors.push(`Finnhub HTTP ${resp.status} for ${code}`);
+            continue;
+          }
+
+          const data = await resp.json();
+          // data.c = current price, data.t = timestamp; c=0 means unknown symbol
+          if (!data.c || data.c === 0) {
+            result.errors.push(`Finnhub: no price for ${code}`);
+            continue;
+          }
+
+          await backend.recordExchangeRate({
+            id: uuidv7(),
+            date: today,
+            from_currency: code,
+            to_currency: "USD",
+            rate: data.c.toString(),
+            source: "finnhub",
+          });
+          result.rates_fetched++;
+        }
+      } catch (err) {
+        result.errors.push(`Finnhub: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        finnhubFetch.dispose();
       }
     }
   }

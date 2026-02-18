@@ -66,6 +66,7 @@
         getBackend(),
         settings.currency,
         settings.coingeckoApiKey,
+        settings.finnhubApiKey,
         settings.hiddenCurrencySet,
       );
       if (rateResult.errors.length > 0) {
@@ -601,7 +602,7 @@
   <Card.Root>
     <Card.Header>
       <Card.Title>Exchange Rates</Card.Title>
-      <Card.Description>Fetch latest rates for currencies in your ledger. Fiat from ECB via Frankfurter. Crypto from CoinGecko (free API key).</Card.Description>
+      <Card.Description>Fetch latest rates for currencies in your ledger. Fiat from ECB via Frankfurter. Crypto from CoinGecko. Stocks from Finnhub.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <div class="space-y-2">
@@ -622,6 +623,25 @@
             target="_blank"
             class="underline hover:text-foreground">coingecko.com</a
           >. Required for crypto rates. Fiat rates work without a key.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <label for="finnhub-api-key" class="text-sm font-medium">Finnhub API Key</label>
+        <Input
+          id="finnhub-api-key"
+          type="password"
+          placeholder="Finnhub API key (optional)"
+          value={settings.finnhubApiKey}
+          oninput={(e: Event) => {
+            const val = (e.target as HTMLInputElement).value;
+            settings.update({ finnhubApiKey: val });
+          }}
+        />
+        <p class="text-xs text-muted-foreground">
+          Get a free key at <a href="https://finnhub.io" target="_blank"
+            class="underline hover:text-foreground">finnhub.io</a>.
+          Required for stock prices (AAPL, GOOG, etc.).
         </p>
       </div>
 

@@ -4,6 +4,7 @@ export interface AppSettings {
   fiscalYearStart: string;
   etherscanApiKey: string;
   coingeckoApiKey: string;
+  finnhubApiKey: string;
   hiddenCurrencies: string[];
 }
 
@@ -13,6 +14,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   fiscalYearStart: "01-01",
   etherscanApiKey: "",
   coingeckoApiKey: "",
+  finnhubApiKey: "",
   hiddenCurrencies: [],
 };
 
@@ -61,6 +63,10 @@ export class SettingsStore {
 
   get coingeckoApiKey() {
     return this.settings.coingeckoApiKey;
+  }
+
+  get finnhubApiKey() {
+    return this.settings.finnhubApiKey;
   }
 
   get hiddenCurrencySet(): Set<string> {
