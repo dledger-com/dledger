@@ -18,6 +18,10 @@
   import Check from "lucide-svelte/icons/check";
   import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
   import X from "lucide-svelte/icons/x";
+  import {
+    syncExchangeRates,
+    type ExchangeRateSyncResult,
+  } from "$lib/exchange-rate-sync.js";
   import type {
     LedgerImportResult,
     ChainInfo,
@@ -49,6 +53,33 @@
   let syncingKey = $state<string | null>(null);
   let syncingAll = $state(false);
   let ethResult = $state<EtherscanSyncResult | null>(null);
+
+  // -- Exchange rate sync state --
+  let syncingRates = $state(false);
+  let rateResult = $state<ExchangeRateSyncResult | null>(null);
+
+  async function handleSyncRates() {
+    syncingRates = true;
+    rateResult = null;
+    try {
+      rateResult = await syncExchangeRates(
+        getBackend(),
+        settings.currency,
+        settings.coingeckoApiKey,
+      );
+      if (rateResult.errors.length > 0) {
+        toast.warning(
+          `Synced ${rateResult.rates_fetched} rate(s) with ${rateResult.errors.length} warning(s)`,
+        );
+      } else {
+        toast.success(`Synced ${rateResult.rates_fetched} exchange rate(s)`);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      syncingRates = false;
+    }
+  }
 
   function accountSyncKey(account: EtherscanAccount): string {
     return `${account.address}:${account.chain_id}`;
@@ -561,6 +592,84 @@
           <Button variant="outline" size="sm" href="/journal">View Journal</Button>
           <Button variant="outline" size="sm" href="/accounts">View Accounts</Button>
         </div>
+      </Card.Content>
+    </Card.Root>
+  {/if}
+
+  <!-- Exchange Rates -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Exchange Rates</Card.Title>
+      <Card.Description>Fetch latest rates for currencies in your ledger. Fiat from ECB via Frankfurter. Crypto from CoinGecko (free API key).</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <div class="space-y-2">
+        <label for="coingecko-api-key" class="text-sm font-medium">CoinGecko API Key</label>
+        <Input
+          id="coingecko-api-key"
+          type="password"
+          placeholder="CoinGecko demo API key (optional)"
+          value={settings.coingeckoApiKey}
+          oninput={(e: Event) => {
+            const val = (e.target as HTMLInputElement).value;
+            settings.update({ coingeckoApiKey: val });
+          }}
+        />
+        <p class="text-xs text-muted-foreground">
+          Get a free demo key at <a
+            href="https://www.coingecko.com/en/api"
+            target="_blank"
+            class="underline hover:text-foreground">coingecko.com</a
+          >. Required for crypto rates. Fiat rates work without a key.
+        </p>
+      </div>
+
+      <p class="text-sm text-muted-foreground">
+        Base currency: <strong>{settings.currency}</strong>
+        <a href="/settings" class="ml-1 underline hover:text-foreground">Change</a>
+      </p>
+    </Card.Content>
+    <Card.Footer class="flex justify-between">
+      <Button variant="outline" href="/journal">Back</Button>
+      <Button
+        onclick={handleSyncRates}
+        disabled={syncingRates}
+      >
+        <RefreshCw class="mr-1 h-4 w-4" />
+        {syncingRates ? "Syncing..." : "Sync Rates"}
+      </Button>
+    </Card.Footer>
+  </Card.Root>
+
+  {#if rateResult}
+    <Card.Root class="border-green-200 dark:border-green-800">
+      <Card.Header>
+        <Card.Title>Rate Sync Results</Card.Title>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="text-center">
+            <p class="text-2xl font-bold">{rateResult.rates_fetched}</p>
+            <p class="text-xs text-muted-foreground">Fetched</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold">{rateResult.rates_skipped}</p>
+            <p class="text-xs text-muted-foreground">Skipped</p>
+          </div>
+        </div>
+
+        {#if rateResult.errors.length > 0}
+          <div class="mt-4">
+            <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+              Warnings ({rateResult.errors.length})
+            </p>
+            <ul class="mt-1 max-h-40 overflow-y-auto text-xs text-muted-foreground">
+              {#each rateResult.errors as error}
+                <li class="py-0.5">{error}</li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
       </Card.Content>
     </Card.Root>
   {/if}

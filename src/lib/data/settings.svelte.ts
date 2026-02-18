@@ -3,6 +3,7 @@ export interface AppSettings {
   dateFormat: string;
   fiscalYearStart: string;
   etherscanApiKey: string;
+  coingeckoApiKey: string;
   hiddenCurrencies: string[];
 }
 
@@ -11,6 +12,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   dateFormat: "YYYY-MM-DD",
   fiscalYearStart: "01-01",
   etherscanApiKey: "",
+  coingeckoApiKey: "",
   hiddenCurrencies: [],
 };
 
@@ -55,6 +57,10 @@ export class SettingsStore {
 
   get etherscanApiKey() {
     return this.settings.etherscanApiKey;
+  }
+
+  get coingeckoApiKey() {
+    return this.settings.coingeckoApiKey;
   }
 
   get hiddenCurrencySet(): Set<string> {
