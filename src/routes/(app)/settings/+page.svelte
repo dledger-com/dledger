@@ -10,6 +10,7 @@
   import type { Currency, ExchangeRate } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
+  import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
   const settings = new SettingsStore();
 
   // Currency list from backend
@@ -30,6 +31,7 @@
   // Exchange rates list
   let exchangeRates = $state<ExchangeRate[]>([]);
   let ratesLoading = $state(false);
+  let refetchingCurrency = $state<string | null>(null);
 
   const dateFormats = [
     { value: "YYYY-MM-DD", label: "YYYY-MM-DD (ISO)" },
@@ -149,6 +151,39 @@
       toast.success("All data cleared");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function handleSourceChange(currencyCode: string, newSource: string) {
+    // Save preference immediately
+    const updated = { ...settings.rateSources };
+    updated[currencyCode] = {
+      ...updated[currencyCode],
+      preferred: newSource,
+    };
+    settings.update({ rateSources: updated });
+
+    // Refetch rate from new source
+    refetchingCurrency = currencyCode;
+    try {
+      const res = await fetchSingleRate(
+        getBackend(),
+        currencyCode,
+        newSource as SourceName,
+        settings.currency,
+        settings.coingeckoApiKey,
+        settings.finnhubApiKey,
+      );
+      if (res.success) {
+        await loadExchangeRates();
+        toast.success(`Fetched ${currencyCode} rate from ${newSource}`);
+      } else {
+        toast.error(res.error ?? `Failed to fetch ${currencyCode} rate`);
+      }
+    } catch (err) {
+      toast.error(`Failed to refetch rate: ${err}`);
+    } finally {
+      refetchingCurrency = null;
     }
   }
 
@@ -376,14 +411,10 @@
                       value={sourceInfo.preferred || rate.source}
                       onchange={(e) => {
                         const val = (e.target as HTMLSelectElement).value;
-                        const updated = { ...settings.rateSources };
-                        updated[rate.from_currency] = {
-                          ...updated[rate.from_currency],
-                          preferred: val,
-                        };
-                        settings.update({ rateSources: updated });
+                        handleSourceChange(rate.from_currency, val);
                       }}
-                      class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm text-muted-foreground"
+                      disabled={refetchingCurrency === rate.from_currency}
+                      class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm text-muted-foreground disabled:opacity-50"
                     >
                       {#each sourceInfo.available as src}
                         <option value={src}>{src}</option>

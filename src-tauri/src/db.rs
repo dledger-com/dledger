@@ -591,6 +591,15 @@ impl Storage for SqliteStorage {
     fn insert_exchange_rate(&self, rate: &ExchangeRate) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
+            "DELETE FROM exchange_rate WHERE date = ?1 AND from_currency = ?2 AND to_currency = ?3",
+            params![
+                rate.date.format("%Y-%m-%d").to_string(),
+                rate.from_currency,
+                rate.to_currency,
+            ],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        conn.execute(
             "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![

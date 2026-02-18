@@ -70,7 +70,7 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-type SourceName = "frankfurter" | "coingecko" | "finnhub";
+export type SourceName = "frankfurter" | "coingecko" | "finnhub";
 
 function applicableSources(code: string, baseCurrency: string): SourceName[] {
   const sources: SourceName[] = [];
@@ -388,4 +388,87 @@ export async function syncExchangeRates(
   }
 
   return result;
+}
+
+export async function fetchSingleRate(
+  backend: Backend,
+  code: string,
+  source: SourceName,
+  baseCurrency: string,
+  coingeckoApiKey: string,
+  finnhubApiKey: string,
+): Promise<{ success: boolean; error?: string }> {
+  const today = todayISO();
+
+  switch (source) {
+    case "frankfurter": {
+      try {
+        const url = `https://api.frankfurter.dev/v1/latest?base=${baseCurrency}&symbols=${code}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return { success: false, error: `Frankfurter HTTP ${resp.status}: ${resp.statusText}` };
+        const data: FrankfurterResponse = await resp.json();
+        const rateValue = data.rates[code];
+        if (rateValue == null) return { success: false, error: `Frankfurter: no rate for ${code}` };
+        const invertedRate = 1 / rateValue;
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate: invertedRate.toString(),
+          source: "frankfurter",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `Frankfurter: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "coingecko": {
+      if (!coingeckoApiKey) return { success: false, error: "CoinGecko API key is required" };
+      try {
+        const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
+        const vsBase = baseCurrency.toLowerCase();
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return { success: false, error: `CoinGecko HTTP ${resp.status}: ${resp.statusText}` };
+        const data: CoinGeckoResponse = await resp.json();
+        const priceData = data[geckoId];
+        if (!priceData || priceData[vsBase] == null) return { success: false, error: `CoinGecko: no rate for ${code}` };
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate: priceData[vsBase].toString(),
+          source: "coingecko",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `CoinGecko: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "finnhub": {
+      if (!finnhubApiKey) return { success: false, error: "Finnhub API key is required" };
+      try {
+        const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return { success: false, error: `Finnhub HTTP ${resp.status} for ${code}` };
+        const data = await resp.json();
+        if (!data.c || data.c === 0) return { success: false, error: `Finnhub: no price for ${code}` };
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: "USD",
+          rate: data.c.toString(),
+          source: "finnhub",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `Finnhub: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+  }
 }

@@ -20,7 +20,9 @@
   import X from "lucide-svelte/icons/x";
   import {
     syncExchangeRates,
+    fetchSingleRate,
     type ExchangeRateSyncResult,
+    type SourceName,
   } from "$lib/exchange-rate-sync.js";
   import type {
     LedgerImportResult,
@@ -58,6 +60,7 @@
   let syncingRates = $state(false);
   let rateResult = $state<ExchangeRateSyncResult | null>(null);
   let pendingChoices = $state<{ currency: string; sources: string[]; selected: string }[]>([]);
+  let savingPreferences = $state(false);
 
   async function handleSyncRates() {
     syncingRates = true;
@@ -103,7 +106,7 @@
     }
   }
 
-  function handleSavePreferences() {
+  async function handleSavePreferences() {
     const updated = { ...settings.rateSources };
     for (const choice of pendingChoices) {
       if (updated[choice.currency]) {
@@ -114,8 +117,38 @@
       }
     }
     settings.update({ rateSources: updated });
-    pendingChoices = [];
-    toast.success("Source preferences saved");
+
+    // Refetch rates from newly selected sources
+    savingPreferences = true;
+    const errors: string[] = [];
+    let fetched = 0;
+    try {
+      for (const choice of pendingChoices) {
+        const res = await fetchSingleRate(
+          getBackend(),
+          choice.currency,
+          choice.selected as SourceName,
+          settings.currency,
+          settings.coingeckoApiKey,
+          settings.finnhubApiKey,
+        );
+        if (res.success) {
+          fetched++;
+        } else if (res.error) {
+          errors.push(res.error);
+        }
+      }
+      if (errors.length > 0) {
+        toast.warning(`Preferences saved. Fetched ${fetched} rate(s) with ${errors.length} error(s): ${errors.join("; ")}`);
+      } else {
+        toast.success(`Preferences saved and ${fetched} rate(s) fetched`);
+      }
+    } catch (err) {
+      toast.error(`Preferences saved but refetch failed: ${err}`);
+    } finally {
+      savingPreferences = false;
+      pendingChoices = [];
+    }
   }
 
   function accountSyncKey(account: EtherscanAccount): string {
@@ -774,7 +807,9 @@
         </Table.Root>
       </Card.Content>
       <Card.Footer class="flex justify-end">
-        <Button onclick={handleSavePreferences}>Save Preferences</Button>
+        <Button onclick={handleSavePreferences} disabled={savingPreferences}>
+          {savingPreferences ? "Saving..." : "Save Preferences"}
+        </Button>
       </Card.Footer>
     </Card.Root>
   {/if}

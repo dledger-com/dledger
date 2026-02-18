@@ -1074,6 +1074,10 @@ export class SqlJsBackend implements Backend {
 
   async recordExchangeRate(rate: ExchangeRate): Promise<void> {
     this.run(
+      "DELETE FROM exchange_rate WHERE date = ? AND from_currency = ? AND to_currency = ?",
+      [rate.date, rate.from_currency, rate.to_currency],
+    );
+    this.run(
       "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source) VALUES (?, ?, ?, ?, ?, ?)",
       [
         rate.id,
