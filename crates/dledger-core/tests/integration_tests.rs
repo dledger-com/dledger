@@ -712,6 +712,25 @@ impl Storage for TestStorage {
         Ok(())
     }
 
+    fn get_currency_origins(&self) -> StorageResult<Vec<CurrencyOrigin>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT li.currency,
+               CASE WHEN je.source LIKE 'etherscan:%' THEN 'etherscan' ELSE je.source END AS origin
+             FROM line_item li JOIN journal_entry je ON li.journal_entry_id = je.id
+             WHERE je.status != 'voided'",
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }).map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut results = Vec::new();
+        for row in rows {
+            let (currency, origin) = row.map_err(|e| StorageError::Internal(e.to_string()))?;
+            results.push(CurrencyOrigin { currency, origin });
+        }
+        Ok(results)
+    }
+
     fn clear_all_data(&self) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute_batch(

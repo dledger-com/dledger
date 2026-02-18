@@ -13,6 +13,7 @@ import type {
   LedgerImportResult,
   EtherscanAccount,
   EtherscanSyncResult,
+  CurrencyOrigin,
 } from "./types/index.js";
 
 export interface Backend {
@@ -56,6 +57,9 @@ export interface Backend {
   addEtherscanAccount(address: string, chainId: number, label: string): Promise<void>;
   removeEtherscanAccount(address: string, chainId: number): Promise<void>;
   syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
+
+  // Currency origins
+  getCurrencyOrigins(): Promise<CurrencyOrigin[]>;
 
   // Data management
   clearExchangeRates(): Promise<void>;
@@ -175,6 +179,11 @@ class TauriBackend implements Backend {
   }
   async syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult> {
     return this.invoke("sync_etherscan", { apiKey, address, label, chainId });
+  }
+
+  // Currency origins
+  async getCurrencyOrigins(): Promise<CurrencyOrigin[]> {
+    return this.invoke("get_currency_origins");
   }
 
   // Data management

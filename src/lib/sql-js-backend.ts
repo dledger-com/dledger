@@ -20,6 +20,7 @@ import type {
   LedgerImportResult,
   EtherscanAccount,
   EtherscanSyncResult,
+  CurrencyOrigin,
 } from "./types/index.js";
 import type { Backend } from "./backend.js";
 
@@ -1234,6 +1235,26 @@ export class SqlJsBackend implements Backend {
   ): Promise<EtherscanSyncResult> {
     const { syncEtherscan } = await import("./browser-etherscan.js");
     return syncEtherscan(this, apiKey, address, label, chainId);
+  }
+
+  // ---- Currency origins ----
+
+  async getCurrencyOrigins(): Promise<CurrencyOrigin[]> {
+    return this.query(
+      `SELECT DISTINCT li.currency,
+         CASE
+           WHEN je.source LIKE 'etherscan:%' THEN 'etherscan'
+           ELSE je.source
+         END AS origin
+       FROM line_item li
+       JOIN journal_entry je ON li.journal_entry_id = je.id
+       WHERE je.status != 'voided'`,
+      [],
+      (row) => ({
+        currency: row.currency as string,
+        origin: row.origin as string,
+      }),
+    );
   }
 
   // ---- Data management ----

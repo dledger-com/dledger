@@ -3,6 +3,7 @@ import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend } from "./backend.js";
 import type { RateSourceInfo } from "./data/settings.svelte.js";
 import type { SourceName } from "./exchange-rate-sync.js";
+import type { CurrencyContextMap } from "./currency-context.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -52,9 +53,19 @@ function classifySource(
   currency: string,
   baseCurrency: string,
   rateSources: Record<string, RateSourceInfo>,
+  currencyContext?: CurrencyContextMap,
 ): SourceName {
+  // 1. User preference always wins
   const info = rateSources[currency];
   if (info?.preferred) return info.preferred as SourceName;
+  // 2. Check context map before falling back to static heuristic
+  if (currencyContext) {
+    const ctx = currencyContext.get(currency);
+    if (ctx && ctx.recommendedSources.length > 0) {
+      return ctx.recommendedSources[0];
+    }
+  }
+  // 3. Static heuristic fallback
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (COINGECKO_IDS[currency]) return "coingecko";
   return "finnhub";
@@ -67,6 +78,7 @@ export async function findMissingRates(
   baseCurrency: string,
   currencyDates: { currency: string; date: string }[],
   rateSources: Record<string, RateSourceInfo>,
+  currencyContext?: CurrencyContextMap,
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -86,7 +98,7 @@ export async function findMissingRates(
     const rate = await backend.getExchangeRate(currency, baseCurrency, date);
     if (rate !== null) continue;
 
-    const source = classifySource(currency, baseCurrency, rateSources);
+    const source = classifySource(currency, baseCurrency, rateSources, currencyContext);
     const key = `${currency}:${source}`;
     if (!missing.has(key)) {
       missing.set(key, { currency, dates: [], source });
@@ -367,6 +379,7 @@ export async function ensurePeriodicRates(
   intervalDays: number,
   config: HistoricalFetchConfig,
   rateSources: Record<string, RateSourceInfo>,
+  currencyContext?: CurrencyContextMap,
 ): Promise<HistoricalFetchResult> {
   // Generate target dates at intervalDays intervals
   const targets: { currency: string; date: string }[] = [];
@@ -380,7 +393,7 @@ export async function ensurePeriodicRates(
     }
   }
 
-  const missing = await findMissingRates(backend, config.baseCurrency, targets, rateSources);
+  const missing = await findMissingRates(backend, config.baseCurrency, targets, rateSources, currencyContext);
   if (missing.length === 0) return { fetched: 0, skipped: 0, errors: [] };
 
   return fetchHistoricalRates(backend, missing, config);

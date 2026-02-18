@@ -248,3 +248,10 @@ impl Default for BookingMethod {
         Self::Fifo
     }
 }
+
+/// Which normalized source types a currency appears in (e.g. "etherscan", "manual", "ledger-file").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CurrencyOrigin {
+    pub currency: String,
+    pub origin: String,
+}

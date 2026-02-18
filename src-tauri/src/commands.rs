@@ -252,6 +252,18 @@ pub fn export_ledger_file(
     ledger_file::export_ledger(&state.engine)
 }
 
+// -- Currency origins --
+
+#[tauri::command]
+pub fn get_currency_origins(
+    state: State<'_, AppState>,
+) -> Result<Vec<dledger_core::models::CurrencyOrigin>, String> {
+    state
+        .engine
+        .get_currency_origins()
+        .map_err(|e| e.to_string())
+}
+
 // -- Data management commands --
 
 #[tauri::command]

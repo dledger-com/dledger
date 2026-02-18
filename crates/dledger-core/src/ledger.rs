@@ -368,6 +368,12 @@ impl LedgerEngine {
         Ok(self.storage.get_metadata(journal_entry_id)?)
     }
 
+    // --- Currency origins ---
+
+    pub fn get_currency_origins(&self) -> LedgerResult<Vec<CurrencyOrigin>> {
+        Ok(self.storage.get_currency_origins()?)
+    }
+
     // --- Data management ---
 
     pub fn clear_exchange_rates(&self) -> LedgerResult<()> {

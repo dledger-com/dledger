@@ -2,6 +2,7 @@ import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend } from "./backend.js";
 import type { RateSourceInfo } from "./data/settings.svelte.js";
+import type { CurrencyContextMap } from "./currency-context.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -55,6 +56,7 @@ export interface ExchangeRateSyncResult {
   pendingChoices: { currency: string; sources: string[] }[];
   updatedRateSources: Record<string, RateSourceInfo>;
   updatedInitializedSources: string[];
+  spamSuggestions: string[];
 }
 
 interface FrankfurterResponse {
@@ -72,7 +74,17 @@ function todayISO(): string {
 
 export type SourceName = "frankfurter" | "coingecko" | "finnhub";
 
-function applicableSources(code: string, baseCurrency: string): SourceName[] {
+function applicableSources(
+  code: string,
+  baseCurrency: string,
+  currencyContext?: CurrencyContextMap,
+): SourceName[] {
+  // If context has recommended sources for this currency, use those
+  if (currencyContext) {
+    const ctx = currencyContext.get(code);
+    if (ctx) return [...ctx.recommendedSources];
+  }
+  // Fall back to static heuristic
   const sources: SourceName[] = [];
   if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
     sources.push("frankfurter");
@@ -92,6 +104,7 @@ export async function syncExchangeRates(
   hiddenCurrencies: Set<string>,
   rateSources: Record<string, RateSourceInfo>,
   initializedRateSources: string[],
+  currencyContext?: CurrencyContextMap,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -100,6 +113,7 @@ export async function syncExchangeRates(
     pendingChoices: [],
     updatedRateSources: JSON.parse(JSON.stringify(rateSources)),
     updatedInitializedSources: [...initializedRateSources],
+    spamSuggestions: [],
   };
 
   const today = todayISO();
@@ -130,7 +144,7 @@ export async function syncExchangeRates(
   for (const code of codes) {
     const info = result.updatedRateSources[code];
     const preferred = info?.preferred || "";
-    const applicable = applicableSources(code, baseCurrency);
+    const applicable = applicableSources(code, baseCurrency, currencyContext);
 
     if (preferred) {
       // Has preference: only fetch from preferred source
@@ -372,6 +386,19 @@ export async function syncExchangeRates(
           currency: code,
           sources: [...info.available],
         });
+      }
+    }
+  }
+
+  // Phase 3b: Spam detection — etherscanOnly currencies where CoinGecko didn't succeed
+  if (currencyContext) {
+    for (const [code, ctx] of currencyContext) {
+      if (!ctx.etherscanOnly) continue;
+      if (hiddenCurrencies.has(code)) continue;
+      // If CoinGecko didn't return a valid rate for this currency, suggest as spam
+      const succeeded = successMap.get(code);
+      if (!succeeded || !succeeded.has("coingecko")) {
+        result.spamSuggestions.push(code);
       }
     }
   }

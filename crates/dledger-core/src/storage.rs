@@ -152,6 +152,11 @@ pub trait Storage: Send + Sync {
         f: &mut dyn FnMut(&dyn Storage) -> StorageResult<()>,
     ) -> StorageResult<()>;
 
+    // -- Currency origins --
+
+    /// Get distinct (currency, normalized_source) pairs from non-voided journal entries.
+    fn get_currency_origins(&self) -> StorageResult<Vec<CurrencyOrigin>>;
+
     // -- Data management --
 
     fn clear_exchange_rates(&self) -> StorageResult<()>;

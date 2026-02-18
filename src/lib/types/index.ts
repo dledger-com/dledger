@@ -81,6 +81,11 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 747474, name: "Katana",          native_currency: "ETH",    decimals: 18 },
 ];
 
+export interface CurrencyOrigin {
+  currency: string;
+  origin: string;
+}
+
 export interface EtherscanAccount {
   address: string;
   chain_id: number;

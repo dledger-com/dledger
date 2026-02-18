@@ -30,6 +30,8 @@
     type HistoricalRateRequest,
     type HistoricalFetchResult,
   } from "$lib/exchange-rate-historical.js";
+  import { buildCurrencyContextMap, type CurrencyContextMap } from "$lib/currency-context.js";
+  import AlertTriangle from "lucide-svelte/icons/alert-triangle";
   import type {
     LedgerImportResult,
     ChainInfo,
@@ -73,6 +75,9 @@
   let rateResult = $state<ExchangeRateSyncResult | null>(null);
   let pendingChoices = $state<{ currency: string; sources: string[]; selected: string }[]>([]);
   let savingPreferences = $state(false);
+
+  // -- Spam suggestion state --
+  let spamSuggestions = $state<string[]>([]);
 
   // -- Historical backfill state --
   let backfillCurrencies = $state<string[]>([]);
@@ -171,15 +176,21 @@
     syncingRates = true;
     rateResult = null;
     pendingChoices = [];
+    spamSuggestions = [];
     try {
+      const backend = getBackend();
+      const origins = await backend.getCurrencyOrigins();
+      const contextMap = buildCurrencyContextMap(origins, settings.currency);
+
       rateResult = await syncExchangeRates(
-        getBackend(),
+        backend,
         settings.currency,
         settings.coingeckoApiKey,
         settings.finnhubApiKey,
         settings.hiddenCurrencySet,
         settings.rateSources,
         settings.initializedRateSources,
+        contextMap,
       );
 
       // Persist updated source maps
@@ -195,6 +206,11 @@
           sources: pc.sources,
           selected: pc.sources[0],
         }));
+      }
+
+      // Capture spam suggestions
+      if (rateResult.spamSuggestions.length > 0) {
+        spamSuggestions = [...rateResult.spamSuggestions];
       }
 
       if (rateResult.errors.length > 0) {
@@ -986,6 +1002,46 @@
           </div>
         {/if}
       </Card.Content>
+    </Card.Root>
+  {/if}
+
+  {#if spamSuggestions.length > 0}
+    <Card.Root class="border-amber-200 dark:border-amber-800">
+      <Card.Header>
+        <Card.Title class="flex items-center gap-2">
+          <AlertTriangle class="h-5 w-5 text-amber-500" />
+          Possible Spam Tokens
+        </Card.Title>
+        <Card.Description>
+          These currencies were found only in Etherscan transactions but aren't recognized by CoinGecko.
+          They may be airdropped spam tokens.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <div class="flex flex-wrap gap-2">
+          {#each spamSuggestions as code}
+            <Badge variant="secondary">{code}</Badge>
+          {/each}
+        </div>
+      </Card.Content>
+      <Card.Footer class="flex justify-end gap-2">
+        <Button variant="outline" onclick={() => { spamSuggestions = []; }}>
+          Dismiss
+        </Button>
+        <Button
+          variant="destructive"
+          onclick={() => {
+            for (const code of spamSuggestions) {
+              settings.hideCurrency(code);
+            }
+            toast.success(`Hidden ${spamSuggestions.length} currency(ies)`);
+            spamSuggestions = [];
+            loadAvailableCurrencies();
+          }}
+        >
+          Hide All
+        </Button>
+      </Card.Footer>
     </Card.Root>
   {/if}
 
