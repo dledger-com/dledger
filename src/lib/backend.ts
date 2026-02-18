@@ -56,6 +56,10 @@ export interface Backend {
   addEtherscanAccount(address: string, chainId: number, label: string): Promise<void>;
   removeEtherscanAccount(address: string, chainId: number): Promise<void>;
   syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
+
+  // Data management
+  clearExchangeRates(): Promise<void>;
+  clearAllData(): Promise<void>;
 }
 
 class TauriBackend implements Backend {
@@ -171,6 +175,14 @@ class TauriBackend implements Backend {
   }
   async syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult> {
     return this.invoke("sync_etherscan", { apiKey, address, label, chainId });
+  }
+
+  // Data management
+  async clearExchangeRates(): Promise<void> {
+    return this.invoke("clear_exchange_rates");
+  }
+  async clearAllData(): Promise<void> {
+    return this.invoke("clear_all_data");
   }
 }
 

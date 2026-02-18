@@ -252,6 +252,24 @@ pub fn export_ledger_file(
     ledger_file::export_ledger(&state.engine)
 }
 
+// -- Data management commands --
+
+#[tauri::command]
+pub fn clear_exchange_rates(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .engine
+        .clear_exchange_rates()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_all_data(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .engine
+        .clear_all_data()
+        .map_err(|e| e.to_string())
+}
+
 // -- Etherscan commands --
 
 #[tauri::command]

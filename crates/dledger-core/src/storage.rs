@@ -145,6 +145,11 @@ pub trait Storage: Send + Sync {
         f: &mut dyn FnMut(&dyn Storage) -> StorageResult<()>,
     ) -> StorageResult<()>;
 
+    // -- Data management --
+
+    fn clear_exchange_rates(&self) -> StorageResult<()>;
+    fn clear_all_data(&self) -> StorageResult<()>;
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()>;

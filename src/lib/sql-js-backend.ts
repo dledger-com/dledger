@@ -1182,4 +1182,29 @@ export class SqlJsBackend implements Backend {
     const { syncEtherscan } = await import("./browser-etherscan.js");
     return syncEtherscan(this, apiKey, address, label, chainId);
   }
+
+  // ---- Data management ----
+
+  async clearExchangeRates(): Promise<void> {
+    this.db.exec("DELETE FROM exchange_rate");
+    this.scheduleSave();
+  }
+
+  async clearAllData(): Promise<void> {
+    this.db.exec(`
+      DELETE FROM lot_disposal;
+      DELETE FROM lot;
+      DELETE FROM line_item;
+      DELETE FROM journal_entry_metadata;
+      DELETE FROM balance_assertion;
+      DELETE FROM audit_log;
+      DELETE FROM journal_entry;
+      DELETE FROM exchange_rate;
+      DELETE FROM account_closure;
+      DELETE FROM account;
+      DELETE FROM etherscan_account;
+      DELETE FROM currency;
+    `);
+    this.scheduleSave();
+  }
 }

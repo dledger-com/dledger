@@ -368,6 +368,20 @@ impl LedgerEngine {
         Ok(self.storage.get_metadata(journal_entry_id)?)
     }
 
+    // --- Data management ---
+
+    pub fn clear_exchange_rates(&self) -> LedgerResult<()> {
+        self.storage.clear_exchange_rates()?;
+        self.audit("clear", "exchange_rate", Uuid::nil(), "cleared all exchange rates")?;
+        Ok(())
+    }
+
+    pub fn clear_all_data(&self) -> LedgerResult<()> {
+        // Skip auditing since audit_log itself gets cleared
+        self.storage.clear_all_data()?;
+        Ok(())
+    }
+
     // --- Internal helpers ---
 
     fn audit(&self, action: &str, entity_type: &str, entity_id: Uuid, details: &str) -> LedgerResult<()> {

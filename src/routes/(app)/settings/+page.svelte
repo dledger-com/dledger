@@ -127,6 +127,31 @@
     settings.update({ fiscalYearStart: `${mm}-01` });
   }
 
+  async function handleClearExchangeRates() {
+    if (!window.confirm("Are you sure you want to clear all exchange rates? This cannot be undone.")) return;
+    try {
+      await getBackend().clearExchangeRates();
+      settings.update({ rateSources: {}, initializedRateSources: [] });
+      await loadExchangeRates();
+      toast.success("Exchange rates cleared");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function handleClearAllData() {
+    if (!window.confirm("Are you sure you want to delete ALL data? This will remove all accounts, transactions, currencies, exchange rates, and reset settings. This cannot be undone.")) return;
+    try {
+      await getBackend().clearAllData();
+      settings.reset();
+      currencies = [];
+      exchangeRates = [];
+      toast.success("All data cleared");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   onMount(() => {
     loadCurrencies();
     loadExchangeRates();
@@ -389,6 +414,31 @@
       <p class="text-sm text-muted-foreground">
         Use the theme toggle in the top bar to switch between light and dark mode.
       </p>
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Data Management -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Data Management</Card.Title>
+      <Card.Description>Clear stored data. These actions cannot be undone.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Clear Exchange Rates</p>
+          <p class="text-sm text-muted-foreground">Remove all synced and manual exchange rates.</p>
+        </div>
+        <Button variant="destructive" size="sm" onclick={handleClearExchangeRates}>Clear Rates</Button>
+      </div>
+      <Separator />
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Clear All Data</p>
+          <p class="text-sm text-muted-foreground">Delete all accounts, transactions, currencies, exchange rates, and reset settings.</p>
+        </div>
+        <Button variant="destructive" size="sm" onclick={handleClearAllData}>Clear All Data</Button>
+      </div>
     </Card.Content>
   </Card.Root>
 </div>

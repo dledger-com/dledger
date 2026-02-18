@@ -64,6 +64,8 @@ pub fn run() {
             commands::gain_loss_report,
             commands::import_ledger_file,
             commands::export_ledger_file,
+            commands::clear_exchange_rates,
+            commands::clear_all_data,
             commands::list_supported_chains,
             commands::list_etherscan_accounts,
             commands::add_etherscan_account,

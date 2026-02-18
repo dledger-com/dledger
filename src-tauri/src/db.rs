@@ -882,6 +882,34 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
+    // -- Data management --
+
+    fn clear_exchange_rates(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute_batch("DELETE FROM exchange_rate")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn clear_all_data(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute_batch(
+            "DELETE FROM lot_disposal;
+             DELETE FROM lot;
+             DELETE FROM line_item;
+             DELETE FROM journal_entry_metadata;
+             DELETE FROM balance_assertion;
+             DELETE FROM audit_log;
+             DELETE FROM journal_entry;
+             DELETE FROM exchange_rate;
+             DELETE FROM account_closure;
+             DELETE FROM account;
+             DELETE FROM currency;",
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
     // -- Transactions --
 
     fn in_transaction(
