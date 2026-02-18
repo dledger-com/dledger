@@ -538,6 +538,16 @@ impl Storage for TestStorage {
         }
     }
 
+    fn get_exchange_rate_source(&self, from: &str, to: &str, date: NaiveDate) -> StorageResult<Option<String>> {
+        let conn = self.conn.borrow();
+        let r = conn.query_row(
+            "SELECT source FROM exchange_rate WHERE date = ?1 AND from_currency = ?2 AND to_currency = ?3",
+            params![date.format("%Y-%m-%d").to_string(), from, to],
+            |row| row.get::<_, String>(0),
+        ).optional().map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(r)
+    }
+
     fn list_exchange_rates(&self, from: Option<&str>, to: Option<&str>) -> StorageResult<Vec<ExchangeRate>> {
         let conn = self.conn.borrow();
         let mut sql = String::from("SELECT id, date, from_currency, to_currency, rate, source FROM exchange_rate");

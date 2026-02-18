@@ -95,6 +95,13 @@ pub trait Storage: Send + Sync {
         to: &str,
         date: NaiveDate,
     ) -> StorageResult<Option<Decimal>>;
+    /// Get the source of an exchange rate for a specific date and currency pair.
+    fn get_exchange_rate_source(
+        &self,
+        from: &str,
+        to: &str,
+        date: NaiveDate,
+    ) -> StorageResult<Option<String>>;
     /// List exchange rates with optional currency filters.
     fn list_exchange_rates(
         &self,

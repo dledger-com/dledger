@@ -2,7 +2,9 @@
   import "../app.css";
   import { ModeWatcher } from "mode-watcher";
   import { Toaster } from "$lib/components/ui/sonner/index.js";
-  import { initBackend } from "$lib/backend.js";
+  import { initBackend, getBackend } from "$lib/backend.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
   import { onMount } from "svelte";
 
   let { children } = $props();
@@ -13,6 +15,29 @@
     try {
       await initBackend();
       ready = true;
+
+      // Daily auto-sync: fire-and-forget
+      const settings = new SettingsStore();
+      const today = new Date().toISOString().slice(0, 10);
+      if (settings.lastRateSync !== today) {
+        syncExchangeRates(
+          getBackend(),
+          settings.currency,
+          settings.coingeckoApiKey,
+          settings.finnhubApiKey,
+          settings.hiddenCurrencySet,
+          settings.rateSources,
+          settings.initializedRateSources,
+        ).then((result) => {
+          settings.update({
+            rateSources: result.updatedRateSources,
+            initializedRateSources: result.updatedInitializedSources,
+            lastRateSync: today,
+          });
+        }).catch(() => {
+          // Swallow errors — don't block the app
+        });
+      }
     } catch (e) {
       console.error("Backend init failed:", e);
     }

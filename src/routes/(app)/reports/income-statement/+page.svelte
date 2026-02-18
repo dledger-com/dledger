@@ -9,21 +9,103 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
+  import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
+  import { getBackend } from "$lib/backend.js";
+  import {
+    findMissingRates,
+    fetchHistoricalRates,
+    type HistoricalRateRequest,
+  } from "$lib/exchange-rate-historical.js";
+  import { toast } from "svelte-sonner";
   import type { ReportSection } from "$lib/types/index.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
   let fromDate = $state(`${new Date().getFullYear()}-01-01`);
   let toDate = $state(new Date().toISOString().slice(0, 10));
+  let convertToBase = $state(false);
+
+  // Conversion state
+  let revenueSummary = $state<ConvertedSummary | null>(null);
+  let expensesSummary = $state<ConvertedSummary | null>(null);
+  let netIncomeSummary = $state<ConvertedSummary | null>(null);
+  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
+  let fetchingRates = $state(false);
 
   async function generate() {
     await store.loadIncomeStatement(fromDate, toDate);
+    if (convertToBase && store.incomeStatement) {
+      await runConversion();
+    }
+  }
+
+  async function runConversion() {
+    if (!store.incomeStatement) return;
+    const baseCurrency = settings.currency;
+    revenueSummary = await convertBalances(store.incomeStatement.revenue.totals, baseCurrency, toDate);
+    expensesSummary = await convertBalances(store.incomeStatement.expenses.totals, baseCurrency, toDate);
+    netIncomeSummary = await convertBalances(store.incomeStatement.net_income, baseCurrency, toDate);
+
+    const allMissing = [
+      ...(revenueSummary.missingDates || []),
+      ...(expensesSummary.missingDates || []),
+      ...(netIncomeSummary.missingDates || []),
+    ];
+    if (allMissing.length > 0) {
+      missingRateRequests = await findMissingRates(
+        getBackend(),
+        baseCurrency,
+        allMissing,
+        settings.rateSources,
+      );
+    } else {
+      missingRateRequests = [];
+    }
+  }
+
+  async function handleToggleConvert() {
+    convertToBase = !convertToBase;
+    if (convertToBase && store.incomeStatement) {
+      await runConversion();
+    } else {
+      revenueSummary = null;
+      expensesSummary = null;
+      netIncomeSummary = null;
+      missingRateRequests = [];
+    }
+  }
+
+  async function handleFetchMissingRates() {
+    fetchingRates = true;
+    try {
+      await fetchHistoricalRates(
+        getBackend(),
+        missingRateRequests,
+        {
+          baseCurrency: settings.currency,
+          coingeckoApiKey: settings.coingeckoApiKey,
+          finnhubApiKey: settings.finnhubApiKey,
+        },
+      );
+      missingRateRequests = [];
+      await runConversion();
+      toast.success("Missing rates fetched");
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      fetchingRates = false;
+    }
   }
 
   function renderTotals(section: ReportSection): string {
     const totals = filterHiddenBalances(section.totals, settings.hiddenCurrencySet);
     if (totals.length === 0) return formatCurrency(0);
     return totals.map((b) => formatCurrency(Math.abs(parseFloat(b.amount)), b.currency)).join(", ");
+  }
+
+  function renderConvertedTotal(summary: ConvertedSummary | null): string {
+    if (!summary) return "";
+    return formatCurrency(Math.abs(summary.total), summary.baseCurrency);
   }
 
   onMount(generate);
@@ -47,7 +129,25 @@
     <Button onclick={generate} disabled={store.loading}>
       {store.loading ? "Loading..." : "Generate"}
     </Button>
+    {#if store.incomeStatement}
+      <Button variant="outline" onclick={handleToggleConvert}>
+        {convertToBase ? `Show native currencies` : `Convert to ${settings.currency}`}
+      </Button>
+    {/if}
   </div>
+
+  {#if missingRateRequests.length > 0}
+    <Card.Root class="border-amber-200 dark:border-amber-800">
+      <Card.Content class="flex items-center justify-between py-3">
+        <span class="text-sm">
+          Missing rates for {missingRateRequests.map((r) => r.currency).join(", ")}.
+        </span>
+        <Button size="sm" onclick={handleFetchMissingRates} disabled={fetchingRates}>
+          {fetchingRates ? "Fetching..." : "Fetch Missing Rates"}
+        </Button>
+      </Card.Content>
+    </Card.Root>
+  {/if}
 
   {#if store.loading}
     <Card.Root><Card.Content class="py-4">
@@ -72,7 +172,12 @@
         <Table.Footer>
           <Table.Row class="font-bold">
             <Table.Cell>Total Revenue</Table.Cell>
-            <Table.Cell class="text-right font-mono">{renderTotals(report.revenue)}</Table.Cell>
+            <Table.Cell class="text-right font-mono">
+              {renderTotals(report.revenue)}
+              {#if convertToBase && revenueSummary}
+                <span class="ml-2 text-primary">({renderConvertedTotal(revenueSummary)})</span>
+              {/if}
+            </Table.Cell>
           </Table.Row>
         </Table.Footer>
       </Table.Root>
@@ -94,7 +199,12 @@
         <Table.Footer>
           <Table.Row class="font-bold">
             <Table.Cell>Total Expenses</Table.Cell>
-            <Table.Cell class="text-right font-mono">{renderTotals(report.expenses)}</Table.Cell>
+            <Table.Cell class="text-right font-mono">
+              {renderTotals(report.expenses)}
+              {#if convertToBase && expensesSummary}
+                <span class="ml-2 text-primary">({renderConvertedTotal(expensesSummary)})</span>
+              {/if}
+            </Table.Cell>
           </Table.Row>
         </Table.Footer>
       </Table.Root>
@@ -107,6 +217,9 @@
           {filterHiddenBalances(report.net_income, hidden).length === 0
             ? formatCurrency(0)
             : filterHiddenBalances(report.net_income, hidden).map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
+          {#if convertToBase && netIncomeSummary}
+            <span class="ml-2 text-lg text-primary">({renderConvertedTotal(netIncomeSummary)})</span>
+          {/if}
         </Card.Title>
       </Card.Header>
     </Card.Root>

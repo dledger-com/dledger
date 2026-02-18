@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS exchange_rate (
     source TEXT NOT NULL DEFAULT 'manual'
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_rate_pair_date ON exchange_rate(from_currency, to_currency, date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency);
 
 CREATE TABLE IF NOT EXISTS balance_assertion (
     id TEXT PRIMARY KEY NOT NULL,
@@ -272,6 +273,19 @@ function mapExchangeRate(row: Row): ExchangeRate {
   };
 }
 
+// ---- Source priority helper ----
+
+function sourcePriority(source: string): number {
+  switch (source) {
+    case "manual":
+      return 3;
+    case "ledger-file":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
 // ---- Free helpers ----
 
 function mapToBalances(map: Map<string, Decimal>): CurrencyBalance[] {
@@ -323,12 +337,21 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
-      db.exec("INSERT INTO schema_version (version) VALUES (1)");
-    }
-    // Handle partially-initialized DB from previous failed session
-    const versionRows = db.exec("SELECT version FROM schema_version");
-    if (versionRows.length === 0 || versionRows[0].values.length === 0) {
-      db.exec("INSERT INTO schema_version (version) VALUES (1)");
+      db.exec("INSERT INTO schema_version (version) VALUES (2)");
+    } else {
+      // Handle partially-initialized DB from previous failed session
+      const versionRows = db.exec("SELECT version FROM schema_version");
+      if (versionRows.length === 0 || versionRows[0].values.length === 0) {
+        db.exec("INSERT INTO schema_version (version) VALUES (2)");
+      } else {
+        const currentVersion = versionRows[0].values[0][0] as number;
+        if (currentVersion < 2) {
+          db.exec("DELETE FROM exchange_rate WHERE rowid NOT IN (SELECT MAX(rowid) FROM exchange_rate GROUP BY date, from_currency, to_currency)");
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (2)");
+        }
+      }
     }
     return backend;
   }
@@ -1073,6 +1096,16 @@ export class SqlJsBackend implements Backend {
   // ---- Backend: Exchange rates ----
 
   async recordExchangeRate(rate: ExchangeRate): Promise<void> {
+    // Check existing source priority before overwriting
+    const existing = this.queryOne(
+      "SELECT source FROM exchange_rate WHERE date = ? AND from_currency = ? AND to_currency = ?",
+      [rate.date, rate.from_currency, rate.to_currency],
+      (row) => row.source as string,
+    );
+    if (existing !== null && sourcePriority(existing) > sourcePriority(rate.source)) {
+      return; // Don't overwrite higher-priority source
+    }
+
     this.run(
       "DELETE FROM exchange_rate WHERE date = ? AND from_currency = ? AND to_currency = ?",
       [rate.date, rate.from_currency, rate.to_currency],
@@ -1096,11 +1129,27 @@ export class SqlJsBackend implements Backend {
     to: string,
     date: string,
   ): Promise<string | null> {
-    return this.queryOne(
+    // Direct lookup
+    const direct = this.queryOne(
       "SELECT rate FROM exchange_rate WHERE from_currency = ? AND to_currency = ? AND date <= ? ORDER BY date DESC LIMIT 1",
       [from, to, date],
       (row) => row.rate as string,
     );
+    if (direct !== null) return direct;
+
+    // Inverse fallback: look for to→from and invert
+    const inverse = this.queryOne(
+      "SELECT rate FROM exchange_rate WHERE from_currency = ? AND to_currency = ? AND date <= ? ORDER BY date DESC LIMIT 1",
+      [to, from, date],
+      (row) => row.rate as string,
+    );
+    if (inverse !== null) {
+      const invRate = new Decimal(inverse);
+      if (invRate.isZero()) return null;
+      return new Decimal(1).div(invRate).toString();
+    }
+
+    return null;
   }
 
   async listExchangeRates(

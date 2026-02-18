@@ -24,6 +24,12 @@
     type ExchangeRateSyncResult,
     type SourceName,
   } from "$lib/exchange-rate-sync.js";
+  import {
+    findMissingRates,
+    fetchHistoricalRates,
+    type HistoricalRateRequest,
+    type HistoricalFetchResult,
+  } from "$lib/exchange-rate-historical.js";
   import type {
     LedgerImportResult,
     ChainInfo,
@@ -56,11 +62,110 @@
   let syncingAll = $state(false);
   let ethResult = $state<EtherscanSyncResult | null>(null);
 
+  // -- Post-import missing rate backfill state --
+  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
+  let fetchingMissingRates = $state(false);
+  let missingRateResult = $state<HistoricalFetchResult | null>(null);
+  let missingRateProgress = $state({ fetched: 0, total: 0 });
+
   // -- Exchange rate sync state --
   let syncingRates = $state(false);
   let rateResult = $state<ExchangeRateSyncResult | null>(null);
   let pendingChoices = $state<{ currency: string; sources: string[]; selected: string }[]>([]);
   let savingPreferences = $state(false);
+
+  // -- Historical backfill state --
+  let backfillCurrencies = $state<string[]>([]);
+  let backfillFromDate = $state("");
+  let backfillToDate = $state(new Date().toISOString().slice(0, 10));
+  let backfilling = $state(false);
+  let backfillResult = $state<HistoricalFetchResult | null>(null);
+  let backfillProgress = $state({ fetched: 0, total: 0 });
+  let availableCurrencies = $state<string[]>([]);
+
+  async function loadAvailableCurrencies() {
+    try {
+      const currencies = await getBackend().listCurrencies();
+      const baseCurrency = settings.currency;
+      availableCurrencies = currencies
+        .map((c) => c.code)
+        .filter((c) => c !== baseCurrency && !settings.hiddenCurrencySet.has(c))
+        .sort();
+    } catch {
+      // ignore
+    }
+  }
+
+  function toggleBackfillCurrency(code: string) {
+    if (backfillCurrencies.includes(code)) {
+      backfillCurrencies = backfillCurrencies.filter((c) => c !== code);
+    } else {
+      backfillCurrencies = [...backfillCurrencies, code];
+    }
+  }
+
+  async function handleBackfill() {
+    if (backfillCurrencies.length === 0 || !backfillFromDate || !backfillToDate) {
+      toast.error("Select currencies and date range");
+      return;
+    }
+
+    backfilling = true;
+    backfillResult = null;
+    backfillProgress = { fetched: 0, total: 0 };
+
+    try {
+      // Generate date targets for each currency
+      const currencyDates: { currency: string; date: string }[] = [];
+      for (const currency of backfillCurrencies) {
+        let current = new Date(backfillFromDate);
+        const end = new Date(backfillToDate);
+        while (current <= end) {
+          currencyDates.push({ currency, date: current.toISOString().slice(0, 10) });
+          current.setDate(current.getDate() + 1);
+        }
+      }
+
+      const missing = await findMissingRates(
+        getBackend(),
+        settings.currency,
+        currencyDates,
+        settings.rateSources,
+      );
+
+      if (missing.length === 0) {
+        toast.success("All rates already available for the selected range");
+        backfilling = false;
+        return;
+      }
+
+      const totalDates = missing.reduce((sum, r) => sum + r.dates.length, 0);
+      backfillProgress = { fetched: 0, total: totalDates };
+
+      backfillResult = await fetchHistoricalRates(
+        getBackend(),
+        missing,
+        {
+          baseCurrency: settings.currency,
+          coingeckoApiKey: settings.coingeckoApiKey,
+          finnhubApiKey: settings.finnhubApiKey,
+          onProgress: (fetched, total) => {
+            backfillProgress = { fetched, total };
+          },
+        },
+      );
+
+      if (backfillResult.errors.length > 0) {
+        toast.warning(`Fetched ${backfillResult.fetched} rate(s) with ${backfillResult.errors.length} warning(s)`);
+      } else {
+        toast.success(`Fetched ${backfillResult.fetched} historical rate(s)`);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      backfilling = false;
+    }
+  }
 
   async function handleSyncRates() {
     syncingRates = true;
@@ -171,6 +276,7 @@
 
   $effect(() => {
     loadEthAccounts();
+    loadAvailableCurrencies();
   });
 
   // -- Ledger file handlers --
@@ -195,14 +301,61 @@
 
     submitting = true;
     result = null;
+    missingRateRequests = [];
+    missingRateResult = null;
 
     try {
       result = await getBackend().importLedgerFile(fileContent);
       toast.success("Ledger file imported successfully");
+
+      // Check for missing historical rates
+      if (result.transaction_currency_dates && result.transaction_currency_dates.length > 0) {
+        const currencyDates = result.transaction_currency_dates.map(([currency, date]) => ({ currency, date }));
+        const missing = await findMissingRates(
+          getBackend(),
+          settings.currency,
+          currencyDates,
+          settings.rateSources,
+        );
+        if (missing.length > 0) {
+          missingRateRequests = missing;
+        }
+      }
     } catch (err) {
       toast.error(String(err));
     } finally {
       submitting = false;
+    }
+  }
+
+  async function handleFetchMissingRates() {
+    fetchingMissingRates = true;
+    missingRateResult = null;
+    const totalDates = missingRateRequests.reduce((sum, r) => sum + r.dates.length, 0);
+    missingRateProgress = { fetched: 0, total: totalDates };
+    try {
+      missingRateResult = await fetchHistoricalRates(
+        getBackend(),
+        missingRateRequests,
+        {
+          baseCurrency: settings.currency,
+          coingeckoApiKey: settings.coingeckoApiKey,
+          finnhubApiKey: settings.finnhubApiKey,
+          onProgress: (fetched, total) => {
+            missingRateProgress = { fetched, total };
+          },
+        },
+      );
+      missingRateRequests = [];
+      if (missingRateResult.errors.length > 0) {
+        toast.warning(`Fetched ${missingRateResult.fetched} rate(s) with ${missingRateResult.errors.length} warning(s)`);
+      } else {
+        toast.success(`Fetched ${missingRateResult.fetched} historical rate(s)`);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      fetchingMissingRates = false;
     }
   }
 
@@ -446,6 +599,79 @@
           <Button variant="outline" size="sm" href="/journal">View Journal</Button>
           <Button variant="outline" size="sm" href="/accounts">View Accounts</Button>
         </div>
+      </Card.Content>
+    </Card.Root>
+  {/if}
+
+  <!-- Missing Historical Rates Banner -->
+  {#if missingRateRequests.length > 0}
+    {@const totalMissing = missingRateRequests.reduce((sum, r) => sum + r.dates.length, 0)}
+    <Card.Root class="border-amber-200 dark:border-amber-800">
+      <Card.Header>
+        <Card.Title>Missing Historical Rates</Card.Title>
+        <Card.Description>
+          {totalMissing} historical rate(s) missing for {missingRateRequests.length} currency(ies).
+          Fetch them for accurate currency conversion.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <div class="flex flex-wrap gap-2">
+          {#each missingRateRequests as req}
+            <Badge variant="secondary">{req.currency} ({req.dates.length} date{req.dates.length === 1 ? "" : "s"})</Badge>
+          {/each}
+        </div>
+        {#if fetchingMissingRates}
+          <div class="mt-3">
+            <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                class="h-full bg-primary transition-all duration-300"
+                style="width: {missingRateProgress.total > 0 ? (missingRateProgress.fetched / missingRateProgress.total * 100) : 0}%"
+              ></div>
+            </div>
+            <p class="text-xs text-muted-foreground mt-1">
+              {missingRateProgress.fetched} / {missingRateProgress.total}
+            </p>
+          </div>
+        {/if}
+      </Card.Content>
+      <Card.Footer class="flex justify-end gap-2">
+        <Button variant="outline" onclick={() => { missingRateRequests = []; }}>Skip</Button>
+        <Button onclick={handleFetchMissingRates} disabled={fetchingMissingRates}>
+          {fetchingMissingRates ? "Fetching..." : "Fetch Now"}
+        </Button>
+      </Card.Footer>
+    </Card.Root>
+  {/if}
+
+  {#if missingRateResult}
+    <Card.Root class="border-green-200 dark:border-green-800">
+      <Card.Header>
+        <Card.Title>Historical Rate Fetch Results</Card.Title>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div class="text-center">
+            <p class="text-2xl font-bold">{missingRateResult.fetched}</p>
+            <p class="text-xs text-muted-foreground">Fetched</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold">{missingRateResult.skipped}</p>
+            <p class="text-xs text-muted-foreground">Skipped</p>
+          </div>
+          {#if missingRateResult.errors.length > 0}
+            <div class="text-center">
+              <p class="text-2xl font-bold text-yellow-600">{missingRateResult.errors.length}</p>
+              <p class="text-xs text-muted-foreground">Errors</p>
+            </div>
+          {/if}
+        </div>
+        {#if missingRateResult.errors.length > 0}
+          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
+            {#each missingRateResult.errors as error}
+              <li class="py-0.5">{error}</li>
+            {/each}
+          </ul>
+        {/if}
       </Card.Content>
     </Card.Root>
   {/if}
@@ -811,6 +1037,108 @@
           {savingPreferences ? "Saving..." : "Save Preferences"}
         </Button>
       </Card.Footer>
+    </Card.Root>
+  {/if}
+
+  <!-- Historical Backfill -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Historical Backfill</Card.Title>
+      <Card.Description>Fetch historical exchange rates for a date range. Frankfurter (fiat) returns the full timeseries in one call. CoinGecko and Finnhub fetch per-currency.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <!-- Currency selection -->
+      <div class="space-y-2">
+        <span class="text-sm font-medium">Currencies</span>
+        {#if availableCurrencies.length === 0}
+          <p class="text-sm text-muted-foreground">No non-base currencies found. Import data first.</p>
+        {:else}
+          <div class="flex flex-wrap gap-1.5">
+            {#each availableCurrencies as code}
+              <button
+                onclick={() => toggleBackfillCurrency(code)}
+                class={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors cursor-pointer ${backfillCurrencies.includes(code)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted text-muted-foreground border-input hover:bg-accent"
+                }`}
+              >
+                {code}
+              </button>
+            {/each}
+          </div>
+          <div class="flex gap-2">
+            <Button variant="outline" size="sm" onclick={() => { backfillCurrencies = [...availableCurrencies]; }}>Select All</Button>
+            <Button variant="outline" size="sm" onclick={() => { backfillCurrencies = []; }}>Clear</Button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Date range -->
+      <div class="flex items-end gap-4">
+        <div class="space-y-1">
+          <label for="backfill-from" class="text-xs font-medium">From</label>
+          <Input id="backfill-from" type="date" bind:value={backfillFromDate} class="w-44" />
+        </div>
+        <div class="space-y-1">
+          <label for="backfill-to" class="text-xs font-medium">To</label>
+          <Input id="backfill-to" type="date" bind:value={backfillToDate} class="w-44" />
+        </div>
+      </div>
+
+      {#if backfilling}
+        <div>
+          <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              class="h-full bg-primary transition-all duration-300"
+              style="width: {backfillProgress.total > 0 ? (backfillProgress.fetched / backfillProgress.total * 100) : 0}%"
+            ></div>
+          </div>
+          <p class="text-xs text-muted-foreground mt-1">
+            {backfillProgress.fetched} / {backfillProgress.total} rates
+          </p>
+        </div>
+      {/if}
+    </Card.Content>
+    <Card.Footer class="flex justify-end">
+      <Button
+        onclick={handleBackfill}
+        disabled={backfilling || backfillCurrencies.length === 0 || !backfillFromDate || !backfillToDate}
+      >
+        {backfilling ? "Fetching..." : "Fetch Historical Rates"}
+      </Button>
+    </Card.Footer>
+  </Card.Root>
+
+  {#if backfillResult}
+    <Card.Root class="border-green-200 dark:border-green-800">
+      <Card.Header>
+        <Card.Title>Backfill Results</Card.Title>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div class="text-center">
+            <p class="text-2xl font-bold">{backfillResult.fetched}</p>
+            <p class="text-xs text-muted-foreground">Fetched</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold">{backfillResult.skipped}</p>
+            <p class="text-xs text-muted-foreground">Skipped</p>
+          </div>
+          {#if backfillResult.errors.length > 0}
+            <div class="text-center">
+              <p class="text-2xl font-bold text-yellow-600">{backfillResult.errors.length}</p>
+              <p class="text-xs text-muted-foreground">Errors</p>
+            </div>
+          {/if}
+        </div>
+        {#if backfillResult.errors.length > 0}
+          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
+            {#each backfillResult.errors as error}
+              <li class="py-0.5">{error}</li>
+            {/each}
+          </ul>
+        {/if}
+      </Card.Content>
     </Card.Root>
   {/if}
 </div>

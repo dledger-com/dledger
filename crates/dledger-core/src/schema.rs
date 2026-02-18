@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS exchange_rate (
     source TEXT NOT NULL DEFAULT 'manual'
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_rate_pair_date ON exchange_rate(from_currency, to_currency, date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency);
 
 -- Balance assertions
 CREATE TABLE IF NOT EXISTS balance_assertion (
@@ -144,4 +145,15 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+"#;
+
+/// Migration from schema version 1 to 2: deduplicate exchange rates, then add unique index.
+pub const MIGRATION_V2: &str = r#"
+DELETE FROM exchange_rate
+WHERE rowid NOT IN (
+  SELECT MAX(rowid) FROM exchange_rate
+  GROUP BY date, from_currency, to_currency
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date
+    ON exchange_rate(date, from_currency, to_currency);
 "#;

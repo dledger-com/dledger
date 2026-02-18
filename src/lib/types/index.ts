@@ -32,6 +32,8 @@ export interface LedgerImportResult {
   transactions_imported: number;
   prices_imported: number;
   warnings: string[];
+  /** Unique (currency, date) pairs from imported transactions for historical rate backfill. */
+  transaction_currency_dates?: [string, string][];
 }
 
 export interface ChainInfo {

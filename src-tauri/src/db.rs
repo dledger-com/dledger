@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -90,6 +90,15 @@ fn parse_account_type(s: &str) -> StorageResult<AccountType> {
 fn parse_entry_status(s: &str) -> StorageResult<JournalEntryStatus> {
     JournalEntryStatus::from_str(s)
         .ok_or_else(|| StorageError::Internal(format!("invalid entry status: {s}")))
+}
+
+/// Source priority: manual (3) > ledger-file (2) > API (1).
+fn source_priority(source: &str) -> u8 {
+    match source {
+        "manual" => 3,
+        "ledger-file" => 2,
+        _ => 1,
+    }
 }
 
 impl Storage for SqliteStorage {
@@ -590,13 +599,30 @@ impl Storage for SqliteStorage {
 
     fn insert_exchange_rate(&self, rate: &ExchangeRate) -> StorageResult<()> {
         let conn = self.conn.borrow();
+        let date_str = rate.date.format("%Y-%m-%d").to_string();
+
+        // Check existing source priority before overwriting
+        let existing_source: Option<String> = conn
+            .prepare(
+                "SELECT source FROM exchange_rate WHERE date = ?1 AND from_currency = ?2 AND to_currency = ?3",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .query_row(
+                params![date_str, rate.from_currency, rate.to_currency],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+        if let Some(ref existing) = existing_source {
+            if source_priority(existing) > source_priority(&rate.source) {
+                return Ok(()); // Don't overwrite higher-priority source
+            }
+        }
+
         conn.execute(
             "DELETE FROM exchange_rate WHERE date = ?1 AND from_currency = ?2 AND to_currency = ?3",
-            params![
-                rate.date.format("%Y-%m-%d").to_string(),
-                rate.from_currency,
-                rate.to_currency,
-            ],
+            params![date_str, rate.from_currency, rate.to_currency],
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
         conn.execute(
@@ -604,7 +630,7 @@ impl Storage for SqliteStorage {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 rate.id.to_string(),
-                rate.date.format("%Y-%m-%d").to_string(),
+                date_str,
                 rate.from_currency,
                 rate.to_currency,
                 rate.rate.to_string(),
@@ -622,6 +648,9 @@ impl Storage for SqliteStorage {
         date: NaiveDate,
     ) -> StorageResult<Option<Decimal>> {
         let conn = self.conn.borrow();
+        let date_str = date.format("%Y-%m-%d").to_string();
+
+        // Direct lookup
         let mut stmt = conn
             .prepare(
                 "SELECT rate FROM exchange_rate
@@ -630,16 +659,57 @@ impl Storage for SqliteStorage {
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let result = stmt
-            .query_row(
-                params![from, to, date.format("%Y-%m-%d").to_string()],
-                |row| row.get::<_, String>(0),
-            )
+            .query_row(params![from, to, &date_str], |row| row.get::<_, String>(0))
             .optional()
             .map_err(|e| StorageError::Internal(e.to_string()))?;
-        match result {
-            Some(s) => Ok(Some(parse_decimal(&s)?)),
+
+        if let Some(s) = result {
+            return Ok(Some(parse_decimal(&s)?));
+        }
+
+        // Inverse fallback: look for to→from and invert
+        let mut inv_stmt = conn
+            .prepare(
+                "SELECT rate FROM exchange_rate
+                 WHERE from_currency = ?1 AND to_currency = ?2 AND date <= ?3
+                 ORDER BY date DESC LIMIT 1",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let inv_result = inv_stmt
+            .query_row(params![to, from, &date_str], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+        match inv_result {
+            Some(s) => {
+                let rate = parse_decimal(&s)?;
+                if rate.is_zero() {
+                    Ok(None)
+                } else {
+                    Ok(Some(Decimal::ONE / rate))
+                }
+            }
             None => Ok(None),
         }
+    }
+
+    fn get_exchange_rate_source(
+        &self,
+        from: &str,
+        to: &str,
+        date: NaiveDate,
+    ) -> StorageResult<Option<String>> {
+        let conn = self.conn.borrow();
+        let date_str = date.format("%Y-%m-%d").to_string();
+        let result = conn
+            .prepare(
+                "SELECT source FROM exchange_rate WHERE date = ?1 AND from_currency = ?2 AND to_currency = ?3",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .query_row(params![date_str, from, to], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(result)
     }
 
     fn list_exchange_rates(
@@ -988,8 +1058,18 @@ impl Storage for SqliteStorage {
 
 /// Apply migrations to the database.
 pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
-    storage.execute_sql(SCHEMA_SQL)?;
-    storage.set_schema_version(SCHEMA_VERSION)?;
+    let current = storage.get_schema_version()?;
+    if current == 0 {
+        // Fresh database — apply full schema
+        storage.execute_sql(SCHEMA_SQL)?;
+        storage.set_schema_version(SCHEMA_VERSION)?;
+    } else {
+        // Incremental migrations
+        if current < 2 {
+            storage.execute_sql(MIGRATION_V2)?;
+            storage.set_schema_version(2)?;
+        }
+    }
     Ok(())
 }
 

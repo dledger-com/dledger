@@ -4,25 +4,110 @@
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
-  import type { ReportSection } from "$lib/types/index.js";
+  import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
+  import { getBackend } from "$lib/backend.js";
+  import {
+    findMissingRates,
+    fetchHistoricalRates,
+    type HistoricalRateRequest,
+  } from "$lib/exchange-rate-historical.js";
+  import { toast } from "svelte-sonner";
+  import type { ReportSection, CurrencyBalance } from "$lib/types/index.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
+  let convertToBase = $state(false);
+
+  // Conversion state
+  let assetsSummary = $state<ConvertedSummary | null>(null);
+  let liabilitiesSummary = $state<ConvertedSummary | null>(null);
+  let equitySummary = $state<ConvertedSummary | null>(null);
+  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
+  let fetchingRates = $state(false);
 
   async function generate() {
     await store.loadBalanceSheet(asOf);
+    if (convertToBase && store.balanceSheet) {
+      await runConversion();
+    }
+  }
+
+  async function runConversion() {
+    if (!store.balanceSheet) return;
+    const baseCurrency = settings.currency;
+    assetsSummary = await convertBalances(store.balanceSheet.assets.totals, baseCurrency, asOf);
+    liabilitiesSummary = await convertBalances(store.balanceSheet.liabilities.totals, baseCurrency, asOf);
+    equitySummary = await convertBalances(store.balanceSheet.equity.totals, baseCurrency, asOf);
+
+    // Collect all missing rate dates
+    const allMissing = [
+      ...(assetsSummary.missingDates || []),
+      ...(liabilitiesSummary.missingDates || []),
+      ...(equitySummary.missingDates || []),
+    ];
+    if (allMissing.length > 0) {
+      missingRateRequests = await findMissingRates(
+        getBackend(),
+        baseCurrency,
+        allMissing,
+        settings.rateSources,
+      );
+    } else {
+      missingRateRequests = [];
+    }
+  }
+
+  async function handleToggleConvert() {
+    convertToBase = !convertToBase;
+    if (convertToBase && store.balanceSheet) {
+      await runConversion();
+    } else {
+      assetsSummary = null;
+      liabilitiesSummary = null;
+      equitySummary = null;
+      missingRateRequests = [];
+    }
+  }
+
+  async function handleFetchMissingRates() {
+    fetchingRates = true;
+    try {
+      await fetchHistoricalRates(
+        getBackend(),
+        missingRateRequests,
+        {
+          baseCurrency: settings.currency,
+          coingeckoApiKey: settings.coingeckoApiKey,
+          finnhubApiKey: settings.finnhubApiKey,
+        },
+      );
+      missingRateRequests = [];
+      // Re-run conversion with new rates
+      await runConversion();
+      toast.success("Missing rates fetched");
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      fetchingRates = false;
+    }
   }
 
   function renderTotals(section: ReportSection): string {
     const totals = filterHiddenBalances(section.totals, settings.hiddenCurrencySet);
     if (totals.length === 0) return formatCurrency(0);
     return totals.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
+  }
+
+  function renderConvertedTotal(summary: ConvertedSummary | null): string {
+    if (!summary) return "";
+    return formatCurrency(summary.total, summary.baseCurrency);
   }
 
   onMount(generate);
@@ -42,7 +127,27 @@
     <Button onclick={generate} disabled={store.loading}>
       {store.loading ? "Loading..." : "Generate"}
     </Button>
+    {#if store.balanceSheet}
+      <Button variant="outline" onclick={handleToggleConvert}>
+        {convertToBase ? `Show native currencies` : `Convert to ${settings.currency}`}
+      </Button>
+    {/if}
   </div>
+
+  {#if missingRateRequests.length > 0}
+    <Card.Root class="border-amber-200 dark:border-amber-800">
+      <Card.Content class="flex items-center justify-between py-3">
+        <div class="flex items-center gap-2">
+          <span class="text-sm">
+            Missing rates for {missingRateRequests.map((r) => r.currency).join(", ")} on {asOf}.
+          </span>
+        </div>
+        <Button size="sm" onclick={handleFetchMissingRates} disabled={fetchingRates}>
+          {fetchingRates ? "Fetching..." : "Fetch Missing Rates"}
+        </Button>
+      </Card.Content>
+    </Card.Root>
+  {/if}
 
   {#if store.loading}
     <Card.Root><Card.Content class="py-4">
@@ -50,10 +155,31 @@
     </Card.Content></Card.Root>
   {:else if store.balanceSheet}
     {@const report = store.balanceSheet}
-    {#each [report.assets, report.liabilities, report.equity] as section (section.title)}
+
+    {#if convertToBase && assetsSummary && liabilitiesSummary}
+      <Card.Root class="border-primary/30">
+        <Card.Header>
+          <Card.Description>Net Worth</Card.Description>
+          <Card.Title class="text-2xl">
+            {formatCurrency(
+              (assetsSummary?.total ?? 0) + (liabilitiesSummary?.total ?? 0),
+              settings.currency
+            )}
+          </Card.Title>
+        </Card.Header>
+      </Card.Root>
+    {/if}
+
+    {#each [
+      { section: report.assets, summary: assetsSummary },
+      { section: report.liabilities, summary: liabilitiesSummary },
+      { section: report.equity, summary: equitySummary },
+    ] as { section, summary } (section.title)}
       {@const filteredLines = filterHiddenTrialLines(section.lines, settings.hiddenCurrencySet)}
       <Card.Root>
-        <Card.Header><Card.Title>{section.title}</Card.Title></Card.Header>
+        <Card.Header>
+          <Card.Title>{section.title}</Card.Title>
+        </Card.Header>
         {#if filteredLines.length === 0}
           <Card.Content>
             <p class="text-sm text-muted-foreground py-4 text-center">No accounts with balances.</p>
@@ -73,7 +199,17 @@
             <Table.Footer>
               <Table.Row class="font-bold">
                 <Table.Cell>Total {section.title}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{renderTotals(section)}</Table.Cell>
+                <Table.Cell class="text-right font-mono">
+                  {renderTotals(section)}
+                  {#if convertToBase && summary}
+                    <span class="ml-2 text-primary">({renderConvertedTotal(summary)})</span>
+                    {#if summary.unconverted.length > 0}
+                      <span class="ml-1 text-xs text-amber-600">
+                        +{summary.unconverted.length} unconverted
+                      </span>
+                    {/if}
+                  {/if}
+                </Table.Cell>
               </Table.Row>
             </Table.Footer>
           </Table.Root>

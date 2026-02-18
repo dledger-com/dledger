@@ -13,6 +13,7 @@ export interface AppSettings {
   hiddenCurrencies: string[];
   rateSources: Record<string, RateSourceInfo>;
   initializedRateSources: string[];
+  lastRateSync: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   hiddenCurrencies: [],
   rateSources: {},
   initializedRateSources: [],
+  lastRateSync: "",
 };
 
 const STORAGE_KEY = "dledger-settings";
@@ -88,6 +90,10 @@ export class SettingsStore {
 
   get initializedRateSources(): string[] {
     return this.settings.initializedRateSources;
+  }
+
+  get lastRateSync(): string {
+    return this.settings.lastRateSync;
   }
 
   hideCurrency(code: string) {

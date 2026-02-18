@@ -16,6 +16,9 @@ pub struct LedgerImportResult {
     pub transactions_imported: usize,
     pub prices_imported: usize,
     pub warnings: Vec<String>,
+    /// Unique (currency, date) pairs from imported transactions for historical rate backfill.
+    #[serde(default)]
+    pub transaction_currency_dates: Vec<(String, String)>,
 }
 
 /// Import a beancount-like ledger file into the engine.
@@ -26,7 +29,9 @@ pub fn import_ledger(engine: &LedgerEngine, content: &str) -> Result<LedgerImpor
         transactions_imported: 0,
         prices_imported: 0,
         warnings: Vec::new(),
+        transaction_currency_dates: Vec::new(),
     };
+
 
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
@@ -676,6 +681,15 @@ fn parse_transaction_body(
         .post_journal_entry(&entry, &items)
         .map_err(|e| format!("line {}: {}", start_idx + 1, e))?;
     result.transactions_imported += 1;
+
+    // Collect unique (currency, date) pairs for historical rate backfill
+    let date_str = date.format("%Y-%m-%d").to_string();
+    for item in &items {
+        let pair = (item.currency.clone(), date_str.clone());
+        if !result.transaction_currency_dates.contains(&pair) {
+            result.transaction_currency_dates.push(pair);
+        }
+    }
 
     // Store cost price metadata
     for (eid, key, value) in &cost_prices {

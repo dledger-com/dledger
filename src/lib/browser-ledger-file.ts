@@ -67,7 +67,10 @@ export async function importLedger(
     transactions_imported: 0,
     prices_imported: 0,
     warnings: [],
+    transaction_currency_dates: [],
   };
+
+  const currencyDateSet = new Set<string>();
 
   // Build local caches
   const existingCurrencies = new Set(
@@ -520,6 +523,15 @@ export async function importLedger(
     try {
       await backend.postJournalEntry(entry, items);
       result.transactions_imported++;
+
+      // Collect unique (currency, date) pairs for historical rate backfill
+      for (const item of items) {
+        const key = `${item.currency}:${date}`;
+        if (!currencyDateSet.has(key)) {
+          currencyDateSet.add(key);
+          result.transaction_currency_dates!.push([item.currency, date]);
+        }
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new Error(`line ${startIdx + 1}: ${msg}`);

@@ -6,6 +6,7 @@ export interface ConvertedSummary {
   baseCurrency: string;
   converted: { currency: string; amount: number; rate: number; baseAmount: number }[];
   unconverted: { currency: string; amount: number }[];
+  missingDates: { currency: string; date: string }[];
 }
 
 export async function convertBalances(
@@ -17,6 +18,7 @@ export async function convertBalances(
   let total = 0;
   const converted: ConvertedSummary["converted"] = [];
   const unconverted: ConvertedSummary["unconverted"] = [];
+  const missingDates: ConvertedSummary["missingDates"] = [];
 
   for (const b of balances) {
     const amount = parseFloat(b.amount);
@@ -33,8 +35,9 @@ export async function convertBalances(
       converted.push({ currency: b.currency, amount, rate, baseAmount });
     } else {
       unconverted.push({ currency: b.currency, amount });
+      missingDates.push({ currency: b.currency, date: asOfDate });
     }
   }
 
-  return { total, baseCurrency, converted, unconverted };
+  return { total, baseCurrency, converted, unconverted, missingDates };
 }
