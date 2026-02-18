@@ -42,9 +42,10 @@
   async function runConversion() {
     if (!store.balanceSheet) return;
     const baseCurrency = settings.currency;
-    assetsSummary = await convertBalances(store.balanceSheet.assets.totals, baseCurrency, asOf);
-    liabilitiesSummary = await convertBalances(store.balanceSheet.liabilities.totals, baseCurrency, asOf);
-    equitySummary = await convertBalances(store.balanceSheet.equity.totals, baseCurrency, asOf);
+    const hidden = settings.hiddenCurrencySet;
+    assetsSummary = await convertBalances(filterHiddenBalances(store.balanceSheet.assets.totals, hidden), baseCurrency, asOf);
+    liabilitiesSummary = await convertBalances(filterHiddenBalances(store.balanceSheet.liabilities.totals, hidden), baseCurrency, asOf);
+    equitySummary = await convertBalances(filterHiddenBalances(store.balanceSheet.equity.totals, hidden), baseCurrency, asOf);
 
     // Collect all missing rate dates
     const allMissing = [

@@ -42,9 +42,10 @@
   async function runConversion() {
     if (!store.incomeStatement) return;
     const baseCurrency = settings.currency;
-    revenueSummary = await convertBalances(store.incomeStatement.revenue.totals, baseCurrency, toDate);
-    expensesSummary = await convertBalances(store.incomeStatement.expenses.totals, baseCurrency, toDate);
-    netIncomeSummary = await convertBalances(store.incomeStatement.net_income, baseCurrency, toDate);
+    const hidden = settings.hiddenCurrencySet;
+    revenueSummary = await convertBalances(filterHiddenBalances(store.incomeStatement.revenue.totals, hidden), baseCurrency, toDate);
+    expensesSummary = await convertBalances(filterHiddenBalances(store.incomeStatement.expenses.totals, hidden), baseCurrency, toDate);
+    netIncomeSummary = await convertBalances(filterHiddenBalances(store.incomeStatement.net_income, hidden), baseCurrency, toDate);
 
     const allMissing = [
       ...(revenueSummary.missingDates || []),
