@@ -17,6 +17,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { toast } from "svelte-sonner";
+  import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection } from "$lib/types/index.js";
 
   const store = new ReportStore();
@@ -177,6 +178,9 @@
               {renderTotals(report.revenue)}
               {#if convertToBase && revenueSummary}
                 <span class="ml-2 text-primary">({renderConvertedTotal(revenueSummary)})</span>
+                {#if settings.debugMode}
+                  <ConversionDebugDialog summary={revenueSummary} label="Revenue" />
+                {/if}
               {/if}
             </Table.Cell>
           </Table.Row>
@@ -204,6 +208,9 @@
               {renderTotals(report.expenses)}
               {#if convertToBase && expensesSummary}
                 <span class="ml-2 text-primary">({renderConvertedTotal(expensesSummary)})</span>
+                {#if settings.debugMode}
+                  <ConversionDebugDialog summary={expensesSummary} label="Expenses" />
+                {/if}
               {/if}
             </Table.Cell>
           </Table.Row>
@@ -220,6 +227,9 @@
             : filterHiddenBalances(report.net_income, hidden).map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
           {#if convertToBase && netIncomeSummary}
             <span class="ml-2 text-lg text-primary">({renderConvertedTotal(netIncomeSummary)})</span>
+            {#if settings.debugMode}
+              <ConversionDebugDialog summary={netIncomeSummary} label="Net Income" />
+            {/if}
           {/if}
         </Card.Title>
       </Card.Header>

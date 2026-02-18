@@ -472,4 +472,21 @@
       </div>
     </Card.Content>
   </Card.Root>
+
+  {#if import.meta.env.DEV}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Development</Card.Title>
+        <Card.Description>Debug tools (only visible in dev mode).</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <Button
+          variant={settings.debugMode ? "default" : "outline"}
+          onclick={() => settings.update({ debugMode: !settings.debugMode })}
+        >
+          {settings.debugMode ? "Debug Mode: ON" : "Debug Mode: OFF"}
+        </Button>
+      </Card.Content>
+    </Card.Root>
+  {/if}
 </div>

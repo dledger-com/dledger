@@ -9,6 +9,7 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
+  import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -93,6 +94,9 @@
           <Skeleton class="h-8 w-24" />
         {:else if summary && (summary.converted.length > 0 || summary.unconverted.length === 0)}
           {formatCurrency(summary.total, summary.baseCurrency)}
+          {#if settings.debugMode}
+            <ConversionDebugDialog {summary} label={title} />
+          {/if}
         {:else if fallbackBalances}
           {sumBalances(fallbackBalances)}
         {:else}

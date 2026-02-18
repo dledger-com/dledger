@@ -18,6 +18,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { toast } from "svelte-sonner";
+  import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection, CurrencyBalance } from "$lib/types/index.js";
 
   const store = new ReportStore();
@@ -208,6 +209,9 @@
                       <span class="ml-1 text-xs text-amber-600">
                         +{summary.unconverted.length} unconverted
                       </span>
+                    {/if}
+                    {#if settings.debugMode}
+                      <ConversionDebugDialog {summary} label={section.title} />
                     {/if}
                   {/if}
                 </Table.Cell>
