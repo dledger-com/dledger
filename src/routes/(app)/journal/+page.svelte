@@ -9,13 +9,28 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries } from "$lib/utils/currency-filter.js";
+  import { Input } from "$lib/components/ui/input/index.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
+  import Search from "lucide-svelte/icons/search";
+  import X from "lucide-svelte/icons/x";
 
   const store = new JournalStore();
   const settings = new SettingsStore();
   const filteredEntries = $derived(filterHiddenEntries(store.entries, settings.hiddenCurrencySet));
   let exporting = $state(false);
+  let searchTerm = $state("");
+
+  const searchedEntries = $derived.by(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return filteredEntries;
+    return filteredEntries.filter(
+      ([entry]) =>
+        entry.description.toLowerCase().includes(term) ||
+        entry.date.includes(term) ||
+        entry.status.toLowerCase().includes(term),
+    );
+  });
 
   function totalDebits(items: { amount: string }[]): number {
     return items.reduce((sum, i) => {
@@ -47,12 +62,23 @@
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
-    <div>
+  <div class="flex items-center justify-between gap-4">
+    <div class="shrink-0">
       <h1 class="text-2xl font-bold tracking-tight">Journal</h1>
       <p class="text-muted-foreground">View and manage all journal entries.</p>
     </div>
-    <div class="flex gap-2">
+    <div class="relative w-full max-w-sm">
+      <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+      <Input type="text" placeholder="Filter entries..." bind:value={searchTerm} class="pl-9 pr-9"
+        onkeydown={(e) => { if (e.key === 'Escape') searchTerm = ''; }} />
+      {#if searchTerm}
+        <button type="button" onclick={() => (searchTerm = "")}
+          class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground">
+          <X class="size-4" />
+        </button>
+      {/if}
+    </div>
+    <div class="flex gap-2 shrink-0">
       <Button variant="outline" onclick={handleExport} disabled={exporting}>
         {exporting ? "Exporting..." : "Export"}
       </Button>
@@ -79,6 +105,17 @@
         </p>
       </Card.Content>
     </Card.Root>
+  {:else if searchedEntries.length === 0}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          No entries match "{searchTerm}".
+        </p>
+        <div class="flex justify-center mt-2">
+          <Button variant="outline" size="sm" onclick={() => (searchTerm = "")}>Clear search</Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
   {:else}
     <Card.Root>
       <Table.Root>
@@ -91,7 +128,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each filteredEntries as [entry, items] (entry.id)}
+          {#each searchedEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell>

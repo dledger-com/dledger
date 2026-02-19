@@ -11,6 +11,8 @@
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import type { Account, AccountType } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
+  import Search from "lucide-svelte/icons/search";
+  import X from "lucide-svelte/icons/x";
 
   const store = new AccountStore();
   let dialogOpen = $state(false);
@@ -23,6 +25,18 @@
   let formIsPostable = $state(true);
 
   const accountTypes: AccountType[] = ["asset", "liability", "equity", "revenue", "expense"];
+
+  let searchTerm = $state("");
+
+  const filteredAccounts = $derived.by(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return store.active;
+    return store.active.filter(
+      (a) =>
+        a.full_name.toLowerCase().includes(term) ||
+        a.account_type.toLowerCase().includes(term),
+    );
+  });
 
   function resetForm() {
     formName = "";
@@ -69,10 +83,21 @@
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
-    <div>
+  <div class="flex items-center justify-between gap-4">
+    <div class="shrink-0">
       <h1 class="text-2xl font-bold tracking-tight">Chart of Accounts</h1>
       <p class="text-muted-foreground">Manage your account structure and hierarchy.</p>
+    </div>
+    <div class="relative w-full max-w-sm">
+      <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+      <Input type="text" placeholder="Filter accounts..." bind:value={searchTerm} class="pl-9 pr-9"
+        onkeydown={(e) => { if (e.key === 'Escape') searchTerm = ''; }} />
+      {#if searchTerm}
+        <button type="button" onclick={() => (searchTerm = "")}
+          class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground">
+          <X class="size-4" />
+        </button>
+      {/if}
     </div>
     <Dialog.Root bind:open={dialogOpen}>
       <Dialog.Trigger>
@@ -141,6 +166,17 @@
         </p>
       </Card.Content>
     </Card.Root>
+  {:else if filteredAccounts.length === 0}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          No accounts match "{searchTerm}".
+        </p>
+        <div class="flex justify-center mt-2">
+          <Button variant="outline" size="sm" onclick={() => (searchTerm = "")}>Clear search</Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
   {:else}
     <Card.Root>
       <Table.Root>
@@ -153,7 +189,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each store.active as account (account.id)}
+          {#each filteredAccounts as account (account.id)}
             <Table.Row>
               <Table.Cell>
                 <a href="/accounts/{account.id}" class="font-medium hover:underline">{account.full_name}</a>
