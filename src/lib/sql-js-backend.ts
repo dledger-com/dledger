@@ -1840,6 +1840,11 @@ export class SqlJsBackend implements Backend {
     this.scheduleSave();
   }
 
+  async clearCurrencyHandlers(): Promise<void> {
+    this.db.exec("DELETE FROM currency_handler");
+    this.scheduleSave();
+  }
+
   async getCurrencyHandlers(): Promise<Record<string, string>> {
     const rows = this.query(
       "SELECT currency, handler FROM currency_handler",

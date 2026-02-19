@@ -78,6 +78,7 @@ export interface Backend {
   // Currency handler ownership
   setCurrencyHandler(currency: string, handler: string): Promise<void>;
   getCurrencyHandlers(): Promise<Record<string, string>>;
+  clearCurrencyHandlers(): Promise<void>;
 
   // Balance assertions
   createBalanceAssertion(assertion: BalanceAssertion): Promise<void>;
@@ -250,6 +251,9 @@ class TauriBackend implements Backend {
   }
   async getCurrencyHandlers(): Promise<Record<string, string>> {
     return {};
+  }
+  async clearCurrencyHandlers(): Promise<void> {
+    // Not yet implemented in Rust backend
   }
 
   // Balance assertions (not yet implemented in Rust backend)

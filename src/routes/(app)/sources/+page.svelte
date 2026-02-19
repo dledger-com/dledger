@@ -591,6 +591,7 @@
       skipped: 0,
       errors: [],
       changes: [],
+      currencyClaims: {},
     };
 
     try {
@@ -610,6 +611,7 @@
         combined.skipped += r.skipped;
         combined.errors.push(...r.errors);
         combined.changes.push(...r.changes);
+        combined.currencyClaims = { ...combined.currencyClaims, ...r.currencyClaims };
       }
       reprocessPreview = combined;
       if (combined.changed === 0) {
@@ -637,6 +639,7 @@
       skipped: 0,
       errors: [],
       changes: [],
+      currencyClaims: {},
     };
 
     try {
@@ -670,6 +673,18 @@
           combined.total += r.total;
           combined.changed += r.changed;
           combined.errors.push(...r.errors);
+        }
+      }
+
+      // Rebuild currency handlers from dry-run claims
+      const backend = getBackend();
+      if (!reprocessTarget) {
+        // "Reprocess All" — safe to clear and rebuild entirely
+        await backend.clearCurrencyHandlers();
+      }
+      if (reprocessPreview!.currencyClaims) {
+        for (const [currency, handler] of Object.entries(reprocessPreview!.currencyClaims)) {
+          await backend.setCurrencyHandler(currency, handler);
         }
       }
 

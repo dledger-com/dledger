@@ -47,6 +47,7 @@ export interface ReprocessResult {
   skipped: number;
   errors: string[];
   changes: ReprocessChange[];
+  currencyClaims: Record<string, string>; // currency → handlerId
 }
 
 export async function syncEtherscanWithHandlers(
@@ -439,6 +440,7 @@ export async function dryRunReprocess(
     skipped: 0,
     errors: [],
     changes: [],
+    currencyClaims: {},
   };
 
   // Fetch raw transactions
@@ -512,6 +514,12 @@ export async function dryRunReprocess(
       }
 
       if (handlerResult.type === "entries" || handlerResult.type === "review") {
+        // Collect currency claims regardless of change status
+        if (handlerResult.claimedCurrencies) {
+          for (const currency of handlerResult.claimedCurrencies) {
+            result.currencyClaims[currency] = handlerResult.handlerId;
+          }
+        }
         const existing = entryBySource.get(source);
         if (!existing) {
           // No existing entry — this raw tx was never posted (unusual but possible)
@@ -575,6 +583,7 @@ export async function applyReprocess(
     skipped: 0,
     errors: [],
     changes: [],
+    currencyClaims: {},
   };
 
   // Build caches
