@@ -891,10 +891,27 @@ export class SqlJsBackend implements Backend {
     }
 
     const entries = this.query(sql, params, mapJournalEntry);
-    return entries.map((entry) => [
-      entry,
-      this.fetchLineItemsForEntry(entry.id),
-    ]);
+    if (entries.length === 0) return [];
+
+    // Batch: one query for ALL line items instead of N+1
+    const entryIds = entries.map((e) => e.id);
+    const ph = entryIds.map(() => "?").join(", ");
+    const allItems = this.query(
+      `SELECT id, journal_entry_id, account_id, currency, amount, lot_id
+       FROM line_item WHERE journal_entry_id IN (${ph})`,
+      entryIds,
+      mapLineItem,
+    );
+    const itemsByEntry = new Map<string, LineItem[]>();
+    for (const item of allItems) {
+      let list = itemsByEntry.get(item.journal_entry_id);
+      if (!list) {
+        list = [];
+        itemsByEntry.set(item.journal_entry_id, list);
+      }
+      list.push(item);
+    }
+    return entries.map((e) => [e, itemsByEntry.get(e.id) ?? []] as [JournalEntry, LineItem[]]);
   }
 
   // ---- Backend: Balances ----

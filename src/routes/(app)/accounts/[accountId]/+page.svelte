@@ -17,7 +17,8 @@
   import { scaleTime, scaleLinear } from "d3-scale";
   import { v7 as uuidv7 } from "uuid";
   import { toast } from "svelte-sonner";
-  import type { Account, CurrencyBalance, LineItem, BalanceAssertion } from "$lib/types/index.js";
+  import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
+  import type { Account, CurrencyBalance, JournalEntry, LineItem, BalanceAssertion } from "$lib/types/index.js";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -57,36 +58,58 @@
     return result.reverse();
   });
 
-  async function loadBalanceChart(id: string) {
+  async function loadBalanceChart(id: string, entries: [JournalEntry, LineItem[]][]) {
     chartLoading = true;
     try {
-      const backend = getBackend();
-      const entries = await backend.queryJournalEntries({ account_id: id });
       if (entries.length === 0) { chartLoading = false; return; }
 
+      // Sort entries chronologically and compute running balance per currency
+      const sorted = [...entries].sort((a, b) => a[0].date.localeCompare(b[0].date));
+      const runningMap = new Map<string, number>();
+      // Build per-entry snapshots: [date, balances]
+      const snapshots: { date: string; balances: Map<string, number> }[] = [];
+      for (const [entry, items] of sorted) {
+        const relevantItems = items.filter((i) => i.account_id === id);
+        for (const item of relevantItems) {
+          const current = runningMap.get(item.currency) ?? 0;
+          runningMap.set(item.currency, current + parseFloat(item.amount));
+        }
+        snapshots.push({ date: entry.date, balances: new Map(runningMap) });
+      }
+
       // Find date range
-      const dates = entries.map(([e]) => e.date).sort();
-      const first = new Date(dates[0]);
+      const first = new Date(snapshots[0].date);
       const last = new Date();
 
-      // Generate monthly dates
+      // Generate monthly end-of-month points
       const points: { date: Date; value: number }[] = [];
       const cursor = new Date(first.getFullYear(), first.getMonth(), 1);
+      const rateCache = new ExchangeRateCache(getBackend());
+      const baseCurrency = settings.currency;
 
       while (cursor <= last) {
         const endOfMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
         const dateStr = endOfMonth.toISOString().slice(0, 10);
-        const bal = await backend.getAccountBalance(id, dateStr);
 
-        // Sum all currencies to base currency where possible
+        // Find the last snapshot on or before this date
+        let balAtMonth: Map<string, number> | null = null;
+        for (let i = snapshots.length - 1; i >= 0; i--) {
+          if (snapshots[i].date <= dateStr) {
+            balAtMonth = snapshots[i].balances;
+            break;
+          }
+        }
+
         let total = 0;
-        for (const b of bal) {
-          if (b.currency === settings.currency) {
-            total += parseFloat(b.amount);
-          } else {
-            const rate = await backend.getExchangeRate(b.currency, settings.currency, dateStr);
-            if (rate) total += parseFloat(b.amount) * parseFloat(rate);
-            else total += parseFloat(b.amount); // Fallback: add raw amount
+        if (balAtMonth) {
+          for (const [currency, amount] of balAtMonth) {
+            if (currency === baseCurrency) {
+              total += amount;
+            } else {
+              const rate = await rateCache.get(currency, baseCurrency, dateStr);
+              if (rate) total += amount * parseFloat(rate);
+              else total += amount; // Fallback: add raw amount
+            }
           }
         }
         points.push({ date: new Date(dateStr + "T00:00:00"), value: Math.round(total * 100) / 100 });
@@ -108,7 +131,7 @@
     if (account) {
       balances = await accountStore.getBalance(id);
       await journalStore.load({ account_id: id });
-      loadBalanceChart(id);
+      loadBalanceChart(id, journalStore.entries);
       try {
         assertions = await getBackend().listBalanceAssertions(id);
       } catch { /* assertions not supported in this backend */ }
