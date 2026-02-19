@@ -1,9 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
-import type { Backend } from "./backend.js";
-import type { RateSourceInfo } from "./data/settings.svelte.js";
+import type { Backend, CurrencyRateSource } from "./backend.js";
 import type { SourceName } from "./exchange-rate-sync.js";
-import type { CurrencyContextMap } from "./currency-context.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -52,20 +50,14 @@ export interface HistoricalFetchResult {
 function classifySource(
   currency: string,
   baseCurrency: string,
-  rateSources: Record<string, RateSourceInfo>,
-  currencyContext?: CurrencyContextMap,
+  rateSourceMap: Map<string, CurrencyRateSource>,
 ): SourceName {
-  // 1. User preference always wins
-  const info = rateSources[currency];
-  if (info?.preferred) return info.preferred as SourceName;
-  // 2. Check context map before falling back to static heuristic
-  if (currencyContext) {
-    const ctx = currencyContext.get(currency);
-    if (ctx && ctx.recommendedSources.length > 0) {
-      return ctx.recommendedSources[0];
-    }
+  // 1. DB-stored source always wins
+  const stored = rateSourceMap.get(currency);
+  if (stored?.rate_source && stored.rate_source !== "none") {
+    return stored.rate_source as SourceName;
   }
-  // 3. Static heuristic fallback
+  // 2. Static heuristic fallback
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (COINGECKO_IDS[currency]) return "coingecko";
   return "finnhub";
@@ -77,8 +69,6 @@ export async function findMissingRates(
   backend: Backend,
   baseCurrency: string,
   currencyDates: { currency: string; date: string }[],
-  rateSources: Record<string, RateSourceInfo>,
-  currencyContext?: CurrencyContextMap,
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -91,6 +81,13 @@ export async function findMissingRates(
     unique.push(cd);
   }
 
+  // Load DB-stored rate sources
+  const storedSources = await backend.getCurrencyRateSources();
+  const rateSourceMap = new Map<string, CurrencyRateSource>();
+  for (const src of storedSources) {
+    rateSourceMap.set(src.currency, src);
+  }
+
   // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
 
@@ -100,7 +97,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSources, currencyContext);
+      const source = classifySource(currency, baseCurrency, rateSourceMap);
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -112,7 +109,7 @@ export async function findMissingRates(
       const rate = await backend.getExchangeRate(currency, baseCurrency, date);
       if (rate !== null) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSources, currencyContext);
+      const source = classifySource(currency, baseCurrency, rateSourceMap);
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -446,8 +443,6 @@ export async function ensurePeriodicRates(
   toDate: string,
   intervalDays: number,
   config: HistoricalFetchConfig,
-  rateSources: Record<string, RateSourceInfo>,
-  currencyContext?: CurrencyContextMap,
 ): Promise<HistoricalFetchResult> {
   // Generate target dates at intervalDays intervals
   const targets: { currency: string; date: string }[] = [];
@@ -461,7 +456,7 @@ export async function ensurePeriodicRates(
     }
   }
 
-  const missing = await findMissingRates(backend, config.baseCurrency, targets, rateSources, currencyContext);
+  const missing = await findMissingRates(backend, config.baseCurrency, targets);
   if (missing.length === 0) return { fetched: 0, skipped: 0, errors: [] };
 
   return fetchHistoricalRates(backend, missing, config);

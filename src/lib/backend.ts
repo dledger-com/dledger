@@ -18,6 +18,13 @@ import type {
   BalanceAssertionResult,
 } from "./types/index.js";
 
+export interface CurrencyRateSource {
+  currency: string;
+  rate_source: string | null; // null = auto-detect needed
+  set_by: string;             // "user" | "handler:<id>" | "auto"
+  updated_at: string;
+}
+
 export interface Backend {
   // Currencies
   listCurrencies(): Promise<Currency[]>;
@@ -75,10 +82,11 @@ export interface Backend {
   // Currency origins
   getCurrencyOrigins(): Promise<CurrencyOrigin[]>;
 
-  // Currency handler ownership
-  setCurrencyHandler(currency: string, handler: string): Promise<void>;
-  getCurrencyHandlers(): Promise<Record<string, string>>;
-  clearCurrencyHandlers(): Promise<void>;
+  // Currency rate source management
+  getCurrencyRateSources(): Promise<CurrencyRateSource[]>;
+  setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean>;
+  clearAutoRateSources(): Promise<void>;
+  clearNonUserRateSources(): Promise<void>;
 
   // Balance assertions
   createBalanceAssertion(assertion: BalanceAssertion): Promise<void>;
@@ -245,14 +253,17 @@ class TauriBackend implements Backend {
     return this.invoke("get_currency_origins");
   }
 
-  // Currency handler ownership
-  async setCurrencyHandler(_currency: string, _handler: string): Promise<void> {
+  // Currency rate source management (not yet implemented in Rust backend)
+  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
+    return [];
+  }
+  async setCurrencyRateSource(_currency: string, _rateSource: string | null, _setBy: string): Promise<boolean> {
+    return true;
+  }
+  async clearAutoRateSources(): Promise<void> {
     // Not yet implemented in Rust backend
   }
-  async getCurrencyHandlers(): Promise<Record<string, string>> {
-    return {};
-  }
-  async clearCurrencyHandlers(): Promise<void> {
+  async clearNonUserRateSources(): Promise<void> {
     // Not yet implemented in Rust backend
   }
 

@@ -23,8 +23,6 @@ export function createMockHandlerContext(
     coingeckoApiKey: "",
     finnhubApiKey: "",
     hiddenCurrencies: [],
-    rateSources: {},
-    initializedRateSources: [],
     lastRateSync: "",
     debugMode: false,
     handlers: {

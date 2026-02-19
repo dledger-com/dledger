@@ -1,8 +1,3 @@
-export interface RateSourceInfo {
-  available: string[];   // sources that returned valid data
-  preferred: string;     // user's chosen source ("" = not yet chosen)
-}
-
 export interface AppSettings {
   currency: string;
   dateFormat: string;
@@ -11,8 +6,6 @@ export interface AppSettings {
   coingeckoApiKey: string;
   finnhubApiKey: string;
   hiddenCurrencies: string[];
-  rateSources: Record<string, RateSourceInfo>;
-  initializedRateSources: string[];
   lastRateSync: string;
   debugMode: boolean;
   handlers: Record<string, { enabled: boolean }>;
@@ -26,8 +19,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   coingeckoApiKey: "",
   finnhubApiKey: "",
   hiddenCurrencies: [],
-  rateSources: {},
-  initializedRateSources: [],
   lastRateSync: "",
   debugMode: false,
   handlers: { "generic-etherscan": { enabled: true } },
@@ -90,14 +81,6 @@ export class SettingsStore {
 
   get hiddenCurrencySet(): Set<string> {
     return new Set(this.settings.hiddenCurrencies);
-  }
-
-  get rateSources(): Record<string, RateSourceInfo> {
-    return this.settings.rateSources;
-  }
-
-  get initializedRateSources(): string[] {
-    return this.settings.initializedRateSources;
   }
 
   get lastRateSync(): string {

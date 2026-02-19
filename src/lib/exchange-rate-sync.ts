@@ -1,8 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
-import type { Backend } from "./backend.js";
-import type { RateSourceInfo } from "./data/settings.svelte.js";
-import type { CurrencyContextMap } from "./currency-context.js";
+import type { Backend, CurrencyRateSource } from "./backend.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -53,11 +51,8 @@ export interface ExchangeRateSyncResult {
   rates_fetched: number;
   rates_skipped: number;
   errors: string[];
-  pendingChoices: { currency: string; sources: string[] }[];
-  updatedRateSources: Record<string, RateSourceInfo>;
-  updatedInitializedSources: string[];
-  spamSuggestions: string[];
   autoHidden: string[];
+  newlyDetected: string[]; // currencies auto-detected this run
 }
 
 interface FrankfurterResponse {
@@ -75,47 +70,36 @@ function todayISO(): string {
 
 export type SourceName = "frankfurter" | "coingecko" | "finnhub";
 
-function applicableSources(
-  code: string,
-  baseCurrency: string,
-  currencyContext?: CurrencyContextMap,
-): SourceName[] {
-  // If context has recommended sources for this currency, use those
-  if (currencyContext) {
-    const ctx = currencyContext.get(code);
-    if (ctx) return [...ctx.recommendedSources];
-  }
-  // Fall back to static heuristic
-  const sources: SourceName[] = [];
+/** Auto-detect the best source for a currency using static heuristics */
+function autoDetectSource(code: string, baseCurrency: string): SourceName {
   if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
-    sources.push("frankfurter");
+    return "frankfurter";
   }
-  if (!FRANKFURTER_FIAT.has(code)) {
-    sources.push("coingecko");
-    sources.push("finnhub");
-  }
-  return sources;
+  return "coingecko";
 }
 
+/**
+ * Simplified exchange rate sync. Uses DB-stored currency_rate_source as single source of truth.
+ *
+ * For each non-base, non-hidden currency:
+ * - Has stored rate_source → use that (skip "none")
+ * - No stored source → auto-detect: fiat → frankfurter, else → coingecko then finnhub
+ * - Write auto-detection results to DB inline
+ * - Etherscan-only currencies where all sources fail → auto-hide
+ */
 export async function syncExchangeRates(
   backend: Backend,
   baseCurrency: string,
   coingeckoApiKey: string,
   finnhubApiKey: string,
   hiddenCurrencies: Set<string>,
-  rateSources: Record<string, RateSourceInfo>,
-  initializedRateSources: string[],
-  currencyContext?: CurrencyContextMap,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
     rates_skipped: 0,
     errors: [],
-    pendingChoices: [],
-    updatedRateSources: JSON.parse(JSON.stringify(rateSources)),
-    updatedInitializedSources: [...initializedRateSources],
-    spamSuggestions: [],
     autoHidden: [],
+    newlyDetected: [],
   };
 
   const today = todayISO();
@@ -126,100 +110,64 @@ export async function syncExchangeRates(
 
   if (codes.length === 0) return result;
 
-  const initializedSet = new Set(initializedRateSources);
+  // Load stored rate source config
+  const storedSources = await backend.getCurrencyRateSources();
+  const sourceMap = new Map<string, CurrencyRateSource>();
+  for (const src of storedSources) {
+    sourceMap.set(src.currency, src);
+  }
 
-  // Determine which services are newly available (not yet initialized)
-  const newServices = new Set<SourceName>();
-  if (!initializedSet.has("frankfurter")) newServices.add("frankfurter");
-  if (coingeckoApiKey && !initializedSet.has("coingecko")) newServices.add("coingecko");
-  if (finnhubApiKey && !initializedSet.has("finnhub")) newServices.add("finnhub");
-
-  // Phase 1: Build per-currency fetch plan
-  // For each currency, determine which sources to fetch from and whether to skip existing rates
-  const frankfurterCodes: { code: string; discovery: boolean }[] = [];
-  const coingeckoCodes: { code: string; discovery: boolean }[] = [];
-  const finnhubCodes: { code: string; discovery: boolean }[] = [];
-
-  // Track which currencies succeeded on which source
-  const successMap = new Map<string, Set<string>>();
+  // Build per-source fetch lists
+  const frankfurterCodes: string[] = [];
+  const coingeckoCodes: string[] = [];
+  const finnhubCodes: string[] = [];
+  const autoDetectCodes: string[] = []; // codes needing auto-detection
 
   for (const code of codes) {
-    const info = result.updatedRateSources[code];
-    const preferred = info?.preferred || "";
-    const applicable = applicableSources(code, baseCurrency, currencyContext);
-
-    if (preferred) {
-      // Has preference: only fetch from preferred source
-      if (applicable.includes(preferred as SourceName)) {
-        const entry = { code, discovery: false };
-        if (preferred === "frankfurter") frankfurterCodes.push(entry);
-        else if (preferred === "coingecko") coingeckoCodes.push(entry);
-        else if (preferred === "finnhub") finnhubCodes.push(entry);
-      }
-      // Also check if any new service applies to this currency (discovery for new services)
-      for (const svc of newServices) {
-        if (applicable.includes(svc) && svc !== preferred) {
-          const entry = { code, discovery: true };
-          if (svc === "frankfurter") frankfurterCodes.push(entry);
-          else if (svc === "coingecko") coingeckoCodes.push(entry);
-          else if (svc === "finnhub") finnhubCodes.push(entry);
-        }
-      }
+    const stored = sourceMap.get(code);
+    if (stored && stored.rate_source !== null) {
+      // Has configured source
+      if (stored.rate_source === "none") continue; // skip entirely
+      if (stored.rate_source === "frankfurter") frankfurterCodes.push(code);
+      else if (stored.rate_source === "coingecko") coingeckoCodes.push(code);
+      else if (stored.rate_source === "finnhub") finnhubCodes.push(code);
     } else {
-      // No preference: discovery mode — try all applicable sources
-      for (const svc of applicable) {
-        const entry = { code, discovery: true };
-        if (svc === "frankfurter") frankfurterCodes.push(entry);
-        else if (svc === "coingecko") coingeckoCodes.push(entry);
-        else if (svc === "finnhub") finnhubCodes.push(entry);
-      }
+      // No stored source → auto-detect
+      const detected = autoDetectSource(code, baseCurrency);
+      if (detected === "frankfurter") frankfurterCodes.push(code);
+      else if (detected === "coingecko") coingeckoCodes.push(code);
+      else if (detected === "finnhub") finnhubCodes.push(code);
+      autoDetectCodes.push(code);
     }
   }
 
-  function trackSuccess(code: string, source: string) {
-    let set = successMap.get(code);
-    if (!set) {
-      set = new Set();
-      successMap.set(code, set);
-    }
-    set.add(source);
-  }
-
-  // Phase 2: Execute fetches
+  // Track which auto-detect currencies succeeded
+  const autoDetectSuccess = new Set<string>();
+  const autoDetectFailed = new Set<string>();
 
   // ---- Fiat rates via Frankfurter ----
   if (frankfurterCodes.length > 0) {
-    const uniqueCodes = [...new Set(frankfurterCodes.map((e) => e.code))];
-    const discoverySet = new Set(frankfurterCodes.filter((e) => e.discovery).map((e) => e.code));
     try {
-      const symbols = uniqueCodes.join(",");
+      const symbols = frankfurterCodes.join(",");
       const url = `https://api.frankfurter.dev/v1/latest?base=${baseCurrency}&symbols=${symbols}`;
       const resp = await fetch(url);
       if (!resp.ok) {
         result.errors.push(`Frankfurter HTTP ${resp.status}: ${resp.statusText}`);
       } else {
         const data: FrankfurterResponse = await resp.json();
-        for (const code of uniqueCodes) {
+        for (const code of frankfurterCodes) {
           const rateValue = data.rates[code];
           if (rateValue == null) {
             result.errors.push(`Frankfurter: no rate for ${code}`);
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
             continue;
           }
 
-          trackSuccess(code, "frankfurter");
+          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
 
-          // Skip recording if rate exists today and this is a non-discovery fetch
-          // For discovery fetches, we still record if the preferred source differs
           const existing = await backend.getExchangeRate(code, baseCurrency, today);
-          if (existing !== null && !discoverySet.has(code)) {
+          if (existing !== null) {
             result.rates_skipped++;
-            continue;
-          }
-
-          // For discovery: only record if this is the preferred source or no rate exists yet
-          const info = result.updatedRateSources[code];
-          if (existing !== null && info?.preferred && info.preferred !== "frankfurter") {
-            // Rate exists from preferred source; just note availability
             continue;
           }
 
@@ -246,14 +194,16 @@ export async function syncExchangeRates(
       result.errors.push(
         `CoinGecko: no API key provided; skipping ${coingeckoCodes.length} crypto rate(s)`,
       );
+      // Mark all as failed for auto-detect
+      for (const code of coingeckoCodes) {
+        if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+      }
     } else {
-      const uniqueCodes = [...new Set(coingeckoCodes.map((e) => e.code))];
-      const discoverySet = new Set(coingeckoCodes.filter((e) => e.discovery).map((e) => e.code));
       const geckoFetch = new RateLimitedFetcher({ maxRequests: 30, intervalMs: 60_000 });
       try {
         const idMap = new Map<string, string>(); // geckoId → ticker
         const geckoIds: string[] = [];
-        for (const code of uniqueCodes) {
+        for (const code of coingeckoCodes) {
           const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
           idMap.set(geckoId, code);
           geckoIds.push(geckoId);
@@ -266,25 +216,24 @@ export async function syncExchangeRates(
 
         if (!resp.ok) {
           result.errors.push(`CoinGecko HTTP ${resp.status}: ${resp.statusText}`);
+          for (const code of coingeckoCodes) {
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          }
         } else {
           const data: CoinGeckoResponse = await resp.json();
           for (const [geckoId, ticker] of idMap) {
             const priceData = data[geckoId];
             if (!priceData || priceData[vsBase] == null) {
               result.errors.push(`CoinGecko: no rate for ${ticker} (id: ${geckoId})`);
+              if (autoDetectCodes.includes(ticker)) autoDetectFailed.add(ticker);
               continue;
             }
 
-            trackSuccess(ticker, "coingecko");
+            if (autoDetectCodes.includes(ticker)) autoDetectSuccess.add(ticker);
 
             const existing = await backend.getExchangeRate(ticker, baseCurrency, today);
-            if (existing !== null && !discoverySet.has(ticker)) {
+            if (existing !== null) {
               result.rates_skipped++;
-              continue;
-            }
-
-            const info = result.updatedRateSources[ticker];
-            if (existing !== null && info?.preferred && info.preferred !== "coingecko") {
               continue;
             }
 
@@ -314,15 +263,17 @@ export async function syncExchangeRates(
       result.errors.push(
         `Finnhub: no API key provided; skipping ${finnhubCodes.length} stock price(s)`,
       );
+      for (const code of finnhubCodes) {
+        if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+      }
     } else {
-      const uniqueCodes = [...new Set(finnhubCodes.map((e) => e.code))];
-      const discoverySet = new Set(finnhubCodes.filter((e) => e.discovery).map((e) => e.code));
       const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
       try {
-        for (const code of uniqueCodes) {
+        for (const code of finnhubCodes) {
           const existing = await backend.getExchangeRate(code, "USD", today);
-          if (existing !== null && !discoverySet.has(code)) {
+          if (existing !== null) {
             result.rates_skipped++;
+            if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
             continue;
           }
 
@@ -331,21 +282,18 @@ export async function syncExchangeRates(
 
           if (!resp.ok) {
             result.errors.push(`Finnhub HTTP ${resp.status} for ${code}`);
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
             continue;
           }
 
           const data = await resp.json();
           if (!data.c || data.c === 0) {
             result.errors.push(`Finnhub: no price for ${code}`);
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
             continue;
           }
 
-          trackSuccess(code, "finnhub");
-
-          const info = result.updatedRateSources[code];
-          if (existing !== null && info?.preferred && info.preferred !== "finnhub") {
-            continue;
-          }
+          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
 
           await backend.recordExchangeRate({
             id: uuidv7(),
@@ -365,56 +313,64 @@ export async function syncExchangeRates(
     }
   }
 
-  // Phase 3: Post-process — update rateSources based on successes
-  for (const [code, sources] of successMap) {
-    if (!result.updatedRateSources[code]) {
-      result.updatedRateSources[code] = { available: [], preferred: "" };
-    }
-    const info = result.updatedRateSources[code];
-    // Merge newly discovered sources into available list
-    for (const src of sources) {
-      if (!info.available.includes(src)) {
-        info.available.push(src);
-      }
-    }
+  // Post-process: Write auto-detection results to DB
+  for (const code of autoDetectSuccess) {
+    const detected = autoDetectSource(code, baseCurrency);
+    await backend.setCurrencyRateSource(code, detected, "auto");
+    result.newlyDetected.push(code);
+  }
 
-    if (!info.preferred) {
-      if (info.available.length === 1) {
-        // Auto-set preference for single-source currencies
-        info.preferred = info.available[0];
-      } else if (info.available.length > 1) {
-        // Multiple sources available — needs user selection
-        result.pendingChoices.push({
-          currency: code,
-          sources: [...info.available],
+  // Auto-detect failures for CoinGecko: try Finnhub as fallback
+  const coingeckoFailedAutoDetect = [...autoDetectFailed].filter(
+    (code) => autoDetectSource(code, baseCurrency) === "coingecko" && !autoDetectSuccess.has(code),
+  );
+
+  if (coingeckoFailedAutoDetect.length > 0 && finnhubApiKey) {
+    const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
+    try {
+      for (const code of coingeckoFailedAutoDetect) {
+        const existing = await backend.getExchangeRate(code, "USD", today);
+        if (existing !== null) {
+          result.rates_skipped++;
+          autoDetectFailed.delete(code);
+          await backend.setCurrencyRateSource(code, "finnhub", "auto");
+          result.newlyDetected.push(code);
+          continue;
+        }
+
+        const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
+        const resp = await finnhubFetch.fetch(url);
+        if (!resp.ok) continue;
+
+        const data = await resp.json();
+        if (!data.c || data.c === 0) continue;
+
+        autoDetectFailed.delete(code);
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: "USD",
+          rate: data.c.toString(),
+          source: "finnhub",
         });
+        result.rates_fetched++;
+        await backend.setCurrencyRateSource(code, "finnhub", "auto");
+        result.newlyDetected.push(code);
       }
+    } catch {
+      // Swallow — this is a best-effort fallback
+    } finally {
+      finnhubFetch.dispose();
     }
   }
 
-  // Phase 3b: Auto-hide — etherscanOnly currencies where CoinGecko didn't succeed
-  if (currencyContext) {
-    for (const [code, ctx] of currencyContext) {
-      if (!ctx.etherscanOnly) continue;
-      if (hiddenCurrencies.has(code)) continue;
-      if (ctx.recommendedSources.length === 0) continue; // handler-owned, already skipped
-      // If CoinGecko didn't return a valid rate for this currency, auto-hide as spam
-      const succeeded = successMap.get(code);
-      if (!succeeded || !succeeded.has("coingecko")) {
-        result.autoHidden.push(code);
-      }
-    }
-  }
-
-  // Mark newly used services as initialized
-  if (frankfurterCodes.length > 0 && !initializedSet.has("frankfurter")) {
-    result.updatedInitializedSources.push("frankfurter");
-  }
-  if (coingeckoCodes.length > 0 && coingeckoApiKey && !initializedSet.has("coingecko")) {
-    result.updatedInitializedSources.push("coingecko");
-  }
-  if (finnhubCodes.length > 0 && finnhubApiKey && !initializedSet.has("finnhub")) {
-    result.updatedInitializedSources.push("finnhub");
+  // Auto-hide: currencies that failed all sources and have no stored config
+  // (likely spam tokens from etherscan)
+  for (const code of autoDetectFailed) {
+    if (autoDetectSuccess.has(code)) continue; // succeeded on fallback
+    await backend.setCurrencyRateSource(code, "none", "auto");
+    result.autoHidden.push(code);
   }
 
   return result;

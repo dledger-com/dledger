@@ -407,6 +407,117 @@ describe("SqlJsBackend", () => {
 
   // ---- Data management ----
 
+  describe("currency rate sources", () => {
+    it("starts with no rate sources", async () => {
+      const rows = await backend.getCurrencyRateSources();
+      expect(rows).toHaveLength(0);
+    });
+
+    it("inserts and retrieves a rate source", async () => {
+      await backend.createCurrency({ code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false });
+      const inserted = await backend.setCurrencyRateSource("BTC", "coingecko", "auto");
+      expect(inserted).toBe(true);
+      const rows = await backend.getCurrencyRateSources();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].currency).toBe("BTC");
+      expect(rows[0].rate_source).toBe("coingecko");
+      expect(rows[0].set_by).toBe("auto");
+    });
+
+    it("auto does not overwrite handler", async () => {
+      await backend.createCurrency({ code: "ETH", name: "Ethereum", decimal_places: 18, is_base: false });
+      await backend.setCurrencyRateSource("ETH", "none", "handler:pendle");
+      const skipped = await backend.setCurrencyRateSource("ETH", "coingecko", "auto");
+      expect(skipped).toBe(false);
+      const rows = await backend.getCurrencyRateSources();
+      const eth = rows.find((r) => r.currency === "ETH");
+      expect(eth?.rate_source).toBe("none");
+      expect(eth?.set_by).toBe("handler:pendle");
+    });
+
+    it("handler does not overwrite user", async () => {
+      await backend.createCurrency({ code: "SOL", name: "Solana", decimal_places: 9, is_base: false });
+      await backend.setCurrencyRateSource("SOL", "coingecko", "user");
+      const skipped = await backend.setCurrencyRateSource("SOL", "finnhub", "handler:test");
+      expect(skipped).toBe(false);
+      const rows = await backend.getCurrencyRateSources();
+      const sol = rows.find((r) => r.currency === "SOL");
+      expect(sol?.rate_source).toBe("coingecko");
+      expect(sol?.set_by).toBe("user");
+    });
+
+    it("user overwrites handler", async () => {
+      await backend.createCurrency({ code: "DOT", name: "Polkadot", decimal_places: 10, is_base: false });
+      await backend.setCurrencyRateSource("DOT", "none", "handler:test");
+      const updated = await backend.setCurrencyRateSource("DOT", "coingecko", "user");
+      expect(updated).toBe(true);
+      const rows = await backend.getCurrencyRateSources();
+      const dot = rows.find((r) => r.currency === "DOT");
+      expect(dot?.rate_source).toBe("coingecko");
+      expect(dot?.set_by).toBe("user");
+    });
+
+    it("user overwrites auto", async () => {
+      await backend.createCurrency({ code: "ADA", name: "Cardano", decimal_places: 6, is_base: false });
+      await backend.setCurrencyRateSource("ADA", "coingecko", "auto");
+      const updated = await backend.setCurrencyRateSource("ADA", "finnhub", "user");
+      expect(updated).toBe(true);
+      const rows = await backend.getCurrencyRateSources();
+      const ada = rows.find((r) => r.currency === "ADA");
+      expect(ada?.rate_source).toBe("finnhub");
+      expect(ada?.set_by).toBe("user");
+    });
+
+    it("handler overwrites auto", async () => {
+      await backend.createCurrency({ code: "LINK", name: "Chainlink", decimal_places: 18, is_base: false });
+      await backend.setCurrencyRateSource("LINK", "coingecko", "auto");
+      const updated = await backend.setCurrencyRateSource("LINK", "none", "handler:test");
+      expect(updated).toBe(true);
+      const rows = await backend.getCurrencyRateSources();
+      const link = rows.find((r) => r.currency === "LINK");
+      expect(link?.rate_source).toBe("none");
+      expect(link?.set_by).toBe("handler:test");
+    });
+
+    it("clearAutoRateSources removes only auto entries", async () => {
+      await backend.createCurrency({ code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false });
+      await backend.createCurrency({ code: "ETH", name: "Ethereum", decimal_places: 18, is_base: false });
+      await backend.createCurrency({ code: "SOL", name: "Solana", decimal_places: 9, is_base: false });
+      await backend.setCurrencyRateSource("BTC", "coingecko", "auto");
+      await backend.setCurrencyRateSource("ETH", "none", "handler:pendle");
+      await backend.setCurrencyRateSource("SOL", "coingecko", "user");
+
+      await backend.clearAutoRateSources();
+      const rows = await backend.getCurrencyRateSources();
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.currency).sort()).toEqual(["ETH", "SOL"]);
+    });
+
+    it("clearNonUserRateSources keeps only user entries", async () => {
+      await backend.createCurrency({ code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false });
+      await backend.createCurrency({ code: "ETH", name: "Ethereum", decimal_places: 18, is_base: false });
+      await backend.createCurrency({ code: "SOL", name: "Solana", decimal_places: 9, is_base: false });
+      await backend.setCurrencyRateSource("BTC", "coingecko", "auto");
+      await backend.setCurrencyRateSource("ETH", "none", "handler:pendle");
+      await backend.setCurrencyRateSource("SOL", "coingecko", "user");
+
+      await backend.clearNonUserRateSources();
+      const rows = await backend.getCurrencyRateSources();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].currency).toBe("SOL");
+      expect(rows[0].set_by).toBe("user");
+    });
+
+    it("setCurrencyRateSource with null clears rate_source", async () => {
+      await backend.createCurrency({ code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false });
+      await backend.setCurrencyRateSource("BTC", "coingecko", "user");
+      await backend.setCurrencyRateSource("BTC", null, "user");
+      const rows = await backend.getCurrencyRateSources();
+      const btc = rows.find((r) => r.currency === "BTC");
+      expect(btc?.rate_source).toBeNull();
+    });
+  });
+
   describe("data management", () => {
     it("clearLedgerData preserves exchange rates", async () => {
       const { backend: b } = await seedBasicLedger();

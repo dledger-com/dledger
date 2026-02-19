@@ -24,7 +24,7 @@ import type {
   BalanceAssertion,
   BalanceAssertionResult,
 } from "./types/index.js";
-import type { Backend } from "./backend.js";
+import type { Backend, CurrencyRateSource } from "./backend.js";
 
 // ---- IndexedDB persistence ----
 
@@ -218,9 +218,11 @@ CREATE TABLE IF NOT EXISTS raw_transaction (
     data TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS currency_handler (
+CREATE TABLE IF NOT EXISTS currency_rate_source (
     currency TEXT PRIMARY KEY NOT NULL,
-    handler TEXT NOT NULL
+    rate_source TEXT,
+    set_by TEXT NOT NULL DEFAULT 'auto',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 `;
 
@@ -299,6 +301,14 @@ function sourcePriority(source: string): number {
   }
 }
 
+// ---- set_by priority for currency_rate_source ----
+
+function setByPriority(setBy: string): number {
+  if (setBy === "user") return 3;
+  if (setBy.startsWith("handler:")) return 2;
+  return 1; // "auto"
+}
+
 // ---- Free helpers ----
 
 function mapToBalances(map: Map<string, Decimal>): CurrencyBalance[] {
@@ -347,7 +357,7 @@ export class SqlJsBackend implements Backend {
     const backend = new SqlJsBackend(db);
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
-    db.exec("INSERT INTO schema_version (version) VALUES (3)");
+    db.exec("INSERT INTO schema_version (version) VALUES (4)");
     return backend;
   }
 
@@ -361,12 +371,12 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
-      db.exec("INSERT INTO schema_version (version) VALUES (3)");
+      db.exec("INSERT INTO schema_version (version) VALUES (4)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
       if (versionRows.length === 0 || versionRows[0].values.length === 0) {
-        db.exec("INSERT INTO schema_version (version) VALUES (3)");
+        db.exec("INSERT INTO schema_version (version) VALUES (4)");
       } else {
         const currentVersion = versionRows[0].values[0][0] as number;
         if (currentVersion < 2) {
@@ -375,8 +385,57 @@ export class SqlJsBackend implements Backend {
         }
         if (currentVersion < 3) {
           db.exec("CREATE TABLE IF NOT EXISTS currency_handler (currency TEXT PRIMARY KEY NOT NULL, handler TEXT NOT NULL)");
+        }
+        if (currentVersion < 4) {
+          // Migrate v3 → v4: currency_handler → currency_rate_source
+          db.exec("CREATE TABLE IF NOT EXISTS currency_rate_source (currency TEXT PRIMARY KEY NOT NULL, rate_source TEXT, set_by TEXT NOT NULL DEFAULT 'auto', updated_at TEXT NOT NULL DEFAULT '')");
+          const today = new Date().toISOString().slice(0, 10);
+          // Migrate existing currency_handler rows: handler-owned tokens → rate_source = "none"
+          try {
+            const handlerRows = db.exec("SELECT currency, handler FROM currency_handler");
+            if (handlerRows.length > 0 && handlerRows[0].values.length > 0) {
+              const insertStmt = db.prepare("INSERT OR IGNORE INTO currency_rate_source (currency, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?)");
+              for (const row of handlerRows[0].values) {
+                const currency = row[0] as string;
+                const handler = row[1] as string;
+                insertStmt.bind([currency, "none", `handler:${handler}`, today]);
+                insertStmt.step();
+                insertStmt.reset();
+              }
+              insertStmt.free();
+            }
+          } catch {
+            // currency_handler might not exist
+          }
+          // Migrate rateSources from localStorage: preferred entries → set_by = "user"
+          try {
+            const raw = localStorage.getItem("dledger-settings");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              const rateSources = parsed.rateSources as Record<string, { available: string[]; preferred: string }> | undefined;
+              if (rateSources) {
+                const insertStmt = db.prepare("INSERT OR IGNORE INTO currency_rate_source (currency, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?)");
+                for (const [currency, info] of Object.entries(rateSources)) {
+                  if (info.preferred) {
+                    insertStmt.bind([currency, info.preferred, "user", today]);
+                    insertStmt.step();
+                    insertStmt.reset();
+                  }
+                }
+                insertStmt.free();
+              }
+            }
+          } catch {
+            // localStorage may not be available
+          }
+          // Drop old table
+          try {
+            db.exec("DROP TABLE IF EXISTS currency_handler");
+          } catch {
+            // ignore
+          }
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (3)");
+          db.exec("INSERT INTO schema_version (version) VALUES (4)");
         }
       }
     }
@@ -1830,30 +1889,59 @@ export class SqlJsBackend implements Backend {
     );
   }
 
-  // ---- Currency handler ownership ----
+  // ---- Currency rate source management ----
 
-  async setCurrencyHandler(currency: string, handler: string): Promise<void> {
-    this.run(
-      "INSERT OR REPLACE INTO currency_handler (currency, handler) VALUES (?, ?)",
-      [currency, handler],
-    );
-    this.scheduleSave();
-  }
-
-  async clearCurrencyHandlers(): Promise<void> {
-    this.db.exec("DELETE FROM currency_handler");
-    this.scheduleSave();
-  }
-
-  async getCurrencyHandlers(): Promise<Record<string, string>> {
-    const rows = this.query(
-      "SELECT currency, handler FROM currency_handler",
+  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
+    return this.query(
+      "SELECT currency, rate_source, set_by, updated_at FROM currency_rate_source ORDER BY currency",
       [],
-      (row) => ({ currency: row.currency as string, handler: row.handler as string }),
+      (row) => ({
+        currency: row.currency as string,
+        rate_source: (row.rate_source as string | null) ?? null,
+        set_by: row.set_by as string,
+        updated_at: row.updated_at as string,
+      }),
     );
-    const result: Record<string, string> = {};
-    for (const row of rows) result[row.currency] = row.handler;
-    return result;
+  }
+
+  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean> {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Check existing row for priority
+    const existing = this.queryOne(
+      "SELECT set_by FROM currency_rate_source WHERE currency = ?",
+      [currency],
+      (row) => row.set_by as string,
+    );
+
+    if (existing !== null) {
+      const existingPriority = setByPriority(existing);
+      const newPriority = setByPriority(setBy);
+      if (newPriority < existingPriority) {
+        return false; // Skip: existing has higher priority
+      }
+      this.run(
+        "UPDATE currency_rate_source SET rate_source = ?, set_by = ?, updated_at = ? WHERE currency = ?",
+        [rateSource, setBy, today, currency],
+      );
+    } else {
+      this.run(
+        "INSERT INTO currency_rate_source (currency, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?)",
+        [currency, rateSource, setBy, today],
+      );
+    }
+    this.scheduleSave();
+    return true;
+  }
+
+  async clearAutoRateSources(): Promise<void> {
+    this.db.exec("DELETE FROM currency_rate_source WHERE set_by = 'auto'");
+    this.scheduleSave();
+  }
+
+  async clearNonUserRateSources(): Promise<void> {
+    this.db.exec("DELETE FROM currency_rate_source WHERE set_by != 'user'");
+    this.scheduleSave();
   }
 
   // ---- Balance assertions ----
@@ -1974,7 +2062,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM audit_log;
       DELETE FROM journal_entry;
       DELETE FROM raw_transaction;
-      DELETE FROM currency_handler;
+      DELETE FROM currency_rate_source;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -1994,7 +2082,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM journal_entry;
       DELETE FROM exchange_rate;
       DELETE FROM raw_transaction;
-      DELETE FROM currency_handler;
+      DELETE FROM currency_rate_source;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM etherscan_account;

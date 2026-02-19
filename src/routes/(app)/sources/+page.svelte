@@ -30,8 +30,6 @@
     type HistoricalRateRequest,
     type HistoricalFetchResult,
   } from "$lib/exchange-rate-historical.js";
-  import { buildCurrencyContextMap, type CurrencyContextMap } from "$lib/currency-context.js";
-  import AlertTriangle from "lucide-svelte/icons/alert-triangle";
   import type {
     LedgerImportResult,
     ChainInfo,
@@ -84,11 +82,6 @@
   // -- Exchange rate sync state --
   let syncingRates = $state(false);
   let rateResult = $state<ExchangeRateSyncResult | null>(null);
-  let pendingChoices = $state<{ currency: string; sources: string[]; selected: string }[]>([]);
-  let savingPreferences = $state(false);
-
-  // -- Spam suggestion state --
-  let spamSuggestions = $state<string[]>([]);
 
   // -- Reprocess state --
   let reprocessing = $state(false);
@@ -154,7 +147,6 @@
         getBackend(),
         settings.currency,
         currencyDates,
-        settings.rateSources,
       );
 
       if (missing.length === 0) {
@@ -194,15 +186,8 @@
   async function handleSyncRates() {
     syncingRates = true;
     rateResult = null;
-    pendingChoices = [];
-    spamSuggestions = [];
     try {
       const backend = getBackend();
-      const [origins, currencyHandlers] = await Promise.all([
-        backend.getCurrencyOrigins(),
-        backend.getCurrencyHandlers(),
-      ]);
-      const contextMap = buildCurrencyContextMap(origins, settings.currency, currencyHandlers);
 
       rateResult = await syncExchangeRates(
         backend,
@@ -210,27 +195,12 @@
         settings.coingeckoApiKey,
         settings.finnhubApiKey,
         settings.hiddenCurrencySet,
-        settings.rateSources,
-        settings.initializedRateSources,
-        contextMap,
       );
 
-      // Persist updated source maps
-      settings.update({
-        rateSources: rateResult.updatedRateSources,
-        initializedRateSources: rateResult.updatedInitializedSources,
-      });
+      // Update last sync time
+      settings.update({ lastRateSync: new Date().toISOString().slice(0, 10) });
 
-      // Build pending choices with default selection
-      if (rateResult.pendingChoices.length > 0) {
-        pendingChoices = rateResult.pendingChoices.map((pc) => ({
-          currency: pc.currency,
-          sources: pc.sources,
-          selected: pc.sources[0],
-        }));
-      }
-
-      // Auto-hide unrecognized etherscan-only currencies
+      // Auto-hide unrecognized currencies
       if (rateResult.autoHidden.length > 0) {
         for (const code of rateResult.autoHidden) {
           settings.hideCurrency(code);
@@ -250,51 +220,6 @@
       toast.error(String(err));
     } finally {
       syncingRates = false;
-    }
-  }
-
-  async function handleSavePreferences() {
-    const updated = { ...settings.rateSources };
-    for (const choice of pendingChoices) {
-      if (updated[choice.currency]) {
-        updated[choice.currency] = {
-          ...updated[choice.currency],
-          preferred: choice.selected,
-        };
-      }
-    }
-    settings.update({ rateSources: updated });
-
-    // Refetch rates from newly selected sources
-    savingPreferences = true;
-    const errors: string[] = [];
-    let fetched = 0;
-    try {
-      for (const choice of pendingChoices) {
-        const res = await fetchSingleRate(
-          getBackend(),
-          choice.currency,
-          choice.selected as SourceName,
-          settings.currency,
-          settings.coingeckoApiKey,
-          settings.finnhubApiKey,
-        );
-        if (res.success) {
-          fetched++;
-        } else if (res.error) {
-          errors.push(res.error);
-        }
-      }
-      if (errors.length > 0) {
-        toast.warning(`Preferences saved. Fetched ${fetched} rate(s) with ${errors.length} error(s): ${errors.join("; ")}`);
-      } else {
-        toast.success(`Preferences saved and ${fetched} rate(s) fetched`);
-      }
-    } catch (err) {
-      toast.error(`Preferences saved but refetch failed: ${err}`);
-    } finally {
-      savingPreferences = false;
-      pendingChoices = [];
     }
   }
 
@@ -357,7 +282,6 @@
           getBackend(),
           settings.currency,
           currencyDates,
-          settings.rateSources,
         );
         if (missing.length > 0) {
           missingRateRequests = missing;
@@ -591,7 +515,7 @@
       skipped: 0,
       errors: [],
       changes: [],
-      currencyClaims: {},
+      currencyHints: {},
     };
 
     try {
@@ -611,7 +535,7 @@
         combined.skipped += r.skipped;
         combined.errors.push(...r.errors);
         combined.changes.push(...r.changes);
-        combined.currencyClaims = { ...combined.currencyClaims, ...r.currencyClaims };
+        combined.currencyHints = { ...combined.currencyHints, ...r.currencyHints };
       }
       reprocessPreview = combined;
       if (combined.changed === 0) {
@@ -639,7 +563,7 @@
       skipped: 0,
       errors: [],
       changes: [],
-      currencyClaims: {},
+      currencyHints: {},
     };
 
     try {
@@ -676,15 +600,16 @@
         }
       }
 
-      // Rebuild currency handlers from dry-run claims
+      // Rebuild currency rate sources from dry-run hints
       const backend = getBackend();
       if (!reprocessTarget) {
-        // "Reprocess All" — safe to clear and rebuild entirely
-        await backend.clearCurrencyHandlers();
+        // "Reprocess All" — safe to clear non-user entries and rebuild
+        await backend.clearNonUserRateSources();
       }
-      if (reprocessPreview!.currencyClaims) {
-        for (const [currency, handler] of Object.entries(reprocessPreview!.currencyClaims)) {
-          await backend.setCurrencyHandler(currency, handler);
+      if (reprocessPreview!.currencyHints) {
+        for (const [currency, hint] of Object.entries(reprocessPreview!.currencyHints)) {
+          const rateSource = hint.source ?? "none";
+          await backend.setCurrencyRateSource(currency, rateSource, `handler:${hint.handler}`);
         }
       }
 
@@ -1400,97 +1325,6 @@
           </div>
         {/if}
       </Card.Content>
-    </Card.Root>
-  {/if}
-
-  {#if spamSuggestions.length > 0}
-    <Card.Root class="border-amber-200 dark:border-amber-800">
-      <Card.Header>
-        <Card.Title class="flex items-center gap-2">
-          <AlertTriangle class="h-5 w-5 text-amber-500" />
-          Possible Spam Tokens
-        </Card.Title>
-        <Card.Description>
-          These currencies were found only in Etherscan transactions but aren't recognized by CoinGecko.
-          They may be airdropped spam tokens.
-        </Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <div class="flex flex-wrap gap-2">
-          {#each spamSuggestions as code}
-            <Badge variant="secondary">{code}</Badge>
-          {/each}
-        </div>
-      </Card.Content>
-      <Card.Footer class="flex justify-end gap-2">
-        <Button variant="outline" onclick={() => { spamSuggestions = []; }}>
-          Dismiss
-        </Button>
-        <Button
-          variant="destructive"
-          onclick={() => {
-            for (const code of spamSuggestions) {
-              settings.hideCurrency(code);
-            }
-            toast.success(`Hidden ${spamSuggestions.length} currency(ies)`);
-            spamSuggestions = [];
-            loadAvailableCurrencies();
-          }}
-        >
-          Hide All
-        </Button>
-      </Card.Footer>
-    </Card.Root>
-  {/if}
-
-  {#if pendingChoices.length > 0}
-    <Card.Root class="border-blue-200 dark:border-blue-800">
-      <Card.Header>
-        <Card.Title>Source Selection</Card.Title>
-        <Card.Description>
-          Multiple rate sources found for these currencies. Choose your preferred source for each.
-        </Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <Table.Root>
-          <Table.Header>
-            <Table.Row>
-              <Table.Head>Currency</Table.Head>
-              <Table.Head>Available Sources</Table.Head>
-              <Table.Head>Preferred</Table.Head>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#each pendingChoices as choice, i}
-              <Table.Row>
-                <Table.Cell class="font-mono">{choice.currency}</Table.Cell>
-                <Table.Cell>
-                  {choice.sources.join(", ")}
-                </Table.Cell>
-                <Table.Cell>
-                  <select
-                    value={choice.selected}
-                    onchange={(e) => {
-                      const val = (e.target as HTMLSelectElement).value;
-                      pendingChoices[i] = { ...choice, selected: val };
-                    }}
-                    class="flex h-8 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
-                  >
-                    {#each choice.sources as src}
-                      <option value={src}>{src}</option>
-                    {/each}
-                  </select>
-                </Table.Cell>
-              </Table.Row>
-            {/each}
-          </Table.Body>
-        </Table.Root>
-      </Card.Content>
-      <Card.Footer class="flex justify-end">
-        <Button onclick={handleSavePreferences} disabled={savingPreferences}>
-          {savingPreferences ? "Saving..." : "Save Preferences"}
-        </Button>
-      </Card.Footer>
     </Card.Root>
   {/if}
 

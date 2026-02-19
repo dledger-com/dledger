@@ -59,7 +59,6 @@
         getBackend(),
         baseCurrency,
         allMissing,
-        settings.rateSources,
       );
     } else {
       missingRateRequests = [];

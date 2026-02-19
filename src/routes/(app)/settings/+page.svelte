@@ -6,7 +6,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { getBackend } from "$lib/backend.js";
+  import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
   import type { Currency, ExchangeRate } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
@@ -15,6 +15,9 @@
 
   // Currency list from backend
   let currencies = $state<Currency[]>([]);
+
+  // Rate source config from DB
+  let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
 
   // Currency form
   let currCode = $state("");
@@ -60,6 +63,15 @@
       exchangeRates = [];
     } finally {
       ratesLoading = false;
+    }
+  }
+
+  async function loadRateSources() {
+    try {
+      const rows = await getBackend().getCurrencyRateSources();
+      rateSources = new Map(rows.map((r) => [r.currency, r]));
+    } catch {
+      rateSources = new Map();
     }
   }
 
@@ -133,7 +145,7 @@
     if (!window.confirm("Are you sure you want to clear all exchange rates? This cannot be undone.")) return;
     try {
       await getBackend().clearExchangeRates();
-      settings.update({ rateSources: {}, initializedRateSources: [] });
+      await getBackend().clearAutoRateSources();
       await loadExchangeRates();
       toast.success("Exchange rates cleared");
     } catch (e) {
@@ -166,13 +178,14 @@
   }
 
   async function handleSourceChange(currencyCode: string, newSource: string) {
-    // Save preference immediately
-    const updated = { ...settings.rateSources };
-    updated[currencyCode] = {
-      ...updated[currencyCode],
-      preferred: newSource,
-    };
-    settings.update({ rateSources: updated });
+    // Save to DB as user preference
+    await getBackend().setCurrencyRateSource(currencyCode, newSource === "auto" ? null : newSource, "user");
+
+    if (newSource === "auto" || newSource === "none") {
+      await loadRateSources();
+      toast.success(`Updated ${currencyCode} rate source to ${newSource}`);
+      return;
+    }
 
     // Refetch rate from new source
     refetchingCurrency = currencyCode;
@@ -195,12 +208,14 @@
       toast.error(`Failed to refetch rate: ${err}`);
     } finally {
       refetchingCurrency = null;
+      await loadRateSources();
     }
   }
 
   onMount(() => {
     loadCurrencies();
     loadExchangeRates();
+    loadRateSources();
   });
 </script>
 
@@ -270,8 +285,23 @@
   <!-- Currencies -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Currencies</Card.Title>
-      <Card.Description>Add currencies for use in accounts and transactions.</Card.Description>
+      <div class="flex items-center justify-between">
+        <div>
+          <Card.Title>Currencies</Card.Title>
+          <Card.Description>Add currencies and manage rate sources.</Card.Description>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={async () => {
+            await getBackend().clearAutoRateSources();
+            await loadRateSources();
+            toast.success("Auto-detected rate sources cleared. They will be re-detected on next sync.");
+          }}
+        >
+          Re-detect Sources
+        </Button>
+      </div>
     </Card.Header>
     <Card.Content class="space-y-4">
       <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
@@ -306,11 +336,13 @@
               <Table.Head>Name</Table.Head>
               <Table.Head class="text-right">Decimals</Table.Head>
               <Table.Head>Base</Table.Head>
+              <Table.Head>Rate Source</Table.Head>
               <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {#each currencies.filter((c) => !settings.hiddenCurrencySet.has(c.code)) as c}
+              {@const rs = rateSources.get(c.code)}
               <Table.Row>
                 <Table.Cell class="font-mono">{c.code}</Table.Cell>
                 <Table.Cell>{c.name}</Table.Cell>
@@ -318,6 +350,30 @@
                 <Table.Cell>
                   {#if c.is_base}
                     <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Base</span>
+                  {/if}
+                </Table.Cell>
+                <Table.Cell>
+                  {#if !c.is_base}
+                    <div class="flex items-center gap-2">
+                      <select
+                        value={rs?.rate_source ?? "auto"}
+                        onchange={(e) => {
+                          const val = (e.target as HTMLSelectElement).value;
+                          handleSourceChange(c.code, val);
+                        }}
+                        disabled={refetchingCurrency === c.code}
+                        class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm disabled:opacity-50"
+                      >
+                        <option value="auto">auto-detect</option>
+                        <option value="frankfurter">frankfurter</option>
+                        <option value="coingecko">coingecko</option>
+                        <option value="finnhub">finnhub</option>
+                        <option value="none">none</option>
+                      </select>
+                      {#if rs?.set_by}
+                        <span class="text-xs text-muted-foreground">{rs.set_by}</span>
+                      {/if}
+                    </div>
                   {/if}
                 </Table.Cell>
                 <Table.Cell class="text-right">
@@ -410,31 +466,12 @@
           </Table.Header>
           <Table.Body>
             {#each exchangeRates.slice(0, 50) as rate}
-              {@const sourceInfo = settings.rateSources[rate.from_currency]}
               <Table.Row>
                 <Table.Cell>{rate.date}</Table.Cell>
                 <Table.Cell>{rate.from_currency}</Table.Cell>
                 <Table.Cell>{rate.to_currency}</Table.Cell>
                 <Table.Cell class="text-right font-mono">{rate.rate}</Table.Cell>
-                <Table.Cell>
-                  {#if sourceInfo && sourceInfo.available.length >= 2}
-                    <select
-                      value={sourceInfo.preferred || rate.source}
-                      onchange={(e) => {
-                        const val = (e.target as HTMLSelectElement).value;
-                        handleSourceChange(rate.from_currency, val);
-                      }}
-                      disabled={refetchingCurrency === rate.from_currency}
-                      class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm text-muted-foreground disabled:opacity-50"
-                    >
-                      {#each sourceInfo.available as src}
-                        <option value={src}>{src}</option>
-                      {/each}
-                    </select>
-                  {:else}
-                    <span class="text-muted-foreground">{rate.source}</span>
-                  {/if}
-                </Table.Cell>
+                <Table.Cell class="text-muted-foreground">{rate.source}</Table.Cell>
               </Table.Row>
             {/each}
           </Table.Body>

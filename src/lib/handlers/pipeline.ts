@@ -47,7 +47,7 @@ export interface ReprocessResult {
   skipped: number;
   errors: string[];
   changes: ReprocessChange[];
-  currencyClaims: Record<string, string>; // currency → handlerId
+  currencyHints: Record<string, { source: string | null; handler: string }>; // currency → { source hint, handler id }
 }
 
 export async function syncEtherscanWithHandlers(
@@ -314,10 +314,11 @@ export async function syncEtherscanWithHandlers(
         }
       }
 
-      // Store claimed currencies for handler-owned tokens
-      if (handlerResult.claimedCurrencies) {
-        for (const currency of handlerResult.claimedCurrencies) {
-          await backend.setCurrencyHandler(currency, handlerResult.handlerId);
+      // Store currency hints as rate source entries
+      if (handlerResult.currencyHints) {
+        for (const [currency, source] of Object.entries(handlerResult.currencyHints)) {
+          const rateSource = source ?? "none";
+          await backend.setCurrencyRateSource(currency, rateSource, `handler:${handlerResult.handlerId}`);
         }
       }
     }
@@ -440,7 +441,7 @@ export async function dryRunReprocess(
     skipped: 0,
     errors: [],
     changes: [],
-    currencyClaims: {},
+    currencyHints: {},
   };
 
   // Fetch raw transactions
@@ -514,10 +515,10 @@ export async function dryRunReprocess(
       }
 
       if (handlerResult.type === "entries" || handlerResult.type === "review") {
-        // Collect currency claims regardless of change status
-        if (handlerResult.claimedCurrencies) {
-          for (const currency of handlerResult.claimedCurrencies) {
-            result.currencyClaims[currency] = handlerResult.handlerId;
+        // Collect currency hints regardless of change status
+        if (handlerResult.currencyHints) {
+          for (const [currency, source_] of Object.entries(handlerResult.currencyHints)) {
+            result.currencyHints[currency] = { source: source_, handler: handlerResult.handlerId };
           }
         }
         const existing = entryBySource.get(source);
@@ -583,7 +584,7 @@ export async function applyReprocess(
     skipped: 0,
     errors: [],
     changes: [],
-    currencyClaims: {},
+    currencyHints: {},
   };
 
   // Build caches
@@ -670,10 +671,11 @@ export async function applyReprocess(
             }
           }
 
-          // Store claimed currencies for handler-owned tokens
-          if (handlerResult.claimedCurrencies) {
-            for (const currency of handlerResult.claimedCurrencies) {
-              await backend.setCurrencyHandler(currency, handlerResult.handlerId);
+          // Store currency hints as rate source entries
+          if (handlerResult.currencyHints) {
+            for (const [currency, source] of Object.entries(handlerResult.currencyHints)) {
+              const rateSource = source ?? "none";
+              await backend.setCurrencyRateSource(currency, rateSource, `handler:${handlerResult.handlerId}`);
             }
           }
 

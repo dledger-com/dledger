@@ -508,11 +508,16 @@ export const pendleHandler: TransactionHandler = {
       metadata,
     };
 
-    const claimedCurrencies = allItems
+    const pendleTokens = allItems
       .map((i) => i.currency)
       .filter((c) => isPendleToken(c))
       .filter((c, i, arr) => arr.indexOf(c) === i);
 
-    return { type: "entries", entries: [handlerEntry], claimedCurrencies };
+    const currencyHints: Record<string, null> = {};
+    for (const token of pendleTokens) {
+      currencyHints[token] = null; // null = no public rate source
+    }
+
+    return { type: "entries", entries: [handlerEntry], currencyHints };
   },
 };
