@@ -81,6 +81,23 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 747474, name: "Katana",          native_currency: "ETH",    decimals: 18 },
 ];
 
+export interface BalanceAssertion {
+  id: string;
+  account_id: string;
+  date: string;
+  currency: string;
+  expected_balance: string;
+  is_passing: boolean;
+  actual_balance: string | null;
+}
+
+export interface BalanceAssertionResult {
+  assertion: BalanceAssertion;
+  actual_balance: string;
+  is_passing: boolean;
+  difference: string;
+}
+
 export interface CurrencyOrigin {
   currency: string;
   origin: string;

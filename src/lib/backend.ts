@@ -14,6 +14,8 @@ import type {
   EtherscanAccount,
   EtherscanSyncResult,
   CurrencyOrigin,
+  BalanceAssertion,
+  BalanceAssertionResult,
 } from "./types/index.js";
 
 export interface Backend {
@@ -69,6 +71,15 @@ export interface Backend {
 
   // Currency origins
   getCurrencyOrigins(): Promise<CurrencyOrigin[]>;
+
+  // Balance assertions
+  createBalanceAssertion(assertion: BalanceAssertion): Promise<void>;
+  listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]>;
+  checkBalanceAssertions(): Promise<BalanceAssertionResult[]>;
+
+  // Integrity checks
+  countOrphanedLineItems(): Promise<number>;
+  countDuplicateSources(): Promise<number>;
 
   // Data management
   clearExchangeRates(): Promise<void>;
@@ -215,6 +226,25 @@ class TauriBackend implements Backend {
   // Currency origins
   async getCurrencyOrigins(): Promise<CurrencyOrigin[]> {
     return this.invoke("get_currency_origins");
+  }
+
+  // Balance assertions (not yet implemented in Rust backend)
+  async createBalanceAssertion(_assertion: BalanceAssertion): Promise<void> {
+    throw new Error("Balance assertions not yet supported in Tauri backend");
+  }
+  async listBalanceAssertions(_accountId?: string): Promise<BalanceAssertion[]> {
+    return [];
+  }
+  async checkBalanceAssertions(): Promise<BalanceAssertionResult[]> {
+    return [];
+  }
+
+  // Integrity checks (not yet implemented in Rust backend)
+  async countOrphanedLineItems(): Promise<number> {
+    return 0;
+  }
+  async countDuplicateSources(): Promise<number> {
+    return 0;
   }
 
   // Data management

@@ -33,6 +33,22 @@
         </Card.Header>
       </Card.Root>
     </a>
+    <a href="/reports/gain-loss" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>Gain/Loss Report</Card.Title>
+          <Card.Description>Realized capital gains and losses from lot disposals.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
+    <a href="/reports/integrity" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>Data Integrity</Card.Title>
+          <Card.Description>Check ledger consistency and detect issues.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
     <a href="/reports/tax" class="block">
       <Card.Root class="transition-colors hover:bg-accent">
         <Card.Header>

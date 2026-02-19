@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
@@ -9,7 +10,11 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
+  import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
+  import { getBackend } from "$lib/backend.js";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
+  import { AreaChart, PieChart } from "layerchart";
+  import { scaleTime, scaleLinear } from "d3-scale";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -26,12 +31,37 @@
   let showRevenue = $state(false);
   let showNetIncome = $state(false);
 
+  // Charts
+  let netWorthData = $state<NetWorthPoint[]>([]);
+  let expenseData = $state<ExpenseCategory[]>([]);
+  let chartsLoading = $state(true);
+
+  // Date range
+  type RangePreset = "ytd" | "mtd" | "12m" | "all";
+  let rangePreset = $state<RangePreset>("ytd");
+
   function today(): string {
     return new Date().toISOString().slice(0, 10);
   }
 
-  function firstOfYear(): string {
-    return `${new Date().getFullYear()}-01-01`;
+  function rangeFromDate(): string {
+    const now = new Date();
+    switch (rangePreset) {
+      case "mtd":
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      case "12m": {
+        const d = new Date(now);
+        d.setFullYear(d.getFullYear() - 1);
+        return d.toISOString().slice(0, 10);
+      }
+      case "all":
+        return "2000-01-01";
+      case "ytd":
+      default: {
+        const fys = settings.fiscalYearStart || "01-01";
+        return `${now.getFullYear()}-${fys}`;
+      }
+    }
   }
 
   function sumBalances(balances: { currency: string; amount: string }[]): string {
@@ -41,13 +71,34 @@
       .join(", ");
   }
 
+  async function loadCharts() {
+    chartsLoading = true;
+    try {
+      const from = rangeFromDate();
+      const to = today();
+      const base = settings.currency;
+
+      const backend = getBackend();
+      const [nw, exp] = await Promise.all([
+        computeNetWorthSeries(backend, from, to, base),
+        computeExpenseBreakdown(backend, from, to, base),
+      ]);
+      netWorthData = nw;
+      expenseData = exp;
+    } catch (e) {
+      console.error("Charts failed:", e);
+    } finally {
+      chartsLoading = false;
+    }
+  }
+
   onMount(async () => {
     try {
       await Promise.all([
         accountStore.load(),
         journalStore.load({ limit: 10 }),
         reportStore.loadBalanceSheet(today()),
-        reportStore.loadIncomeStatement(firstOfYear(), today()),
+        reportStore.loadIncomeStatement(rangeFromDate(), today()),
       ]);
     } catch (e) {
       console.error("Dashboard load failed:", e);
@@ -82,7 +133,17 @@
     } catch (e) {
       console.error("Currency conversion failed:", e);
     }
+
+    // Load charts (non-blocking)
+    loadCharts();
   });
+
+  function selectRange(preset: RangePreset) {
+    rangePreset = preset;
+    // Reload income statement and charts
+    reportStore.loadIncomeStatement(rangeFromDate(), today());
+    loadCharts();
+  }
 </script>
 
 {#snippet summaryCard(title: string, summary: ConvertedSummary | null, fallbackBalances: { currency: string; amount: string }[] | undefined, showBreakdown: boolean, toggleBreakdown: () => void)}
@@ -133,9 +194,17 @@
 {/snippet}
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
-    <p class="text-muted-foreground">Overview of your financial data at a glance.</p>
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
+      <p class="text-muted-foreground">Overview of your financial data at a glance.</p>
+    </div>
+    <div class="flex gap-1">
+      <Button variant={rangePreset === "mtd" ? "default" : "outline"} size="sm" onclick={() => selectRange("mtd")}>MTD</Button>
+      <Button variant={rangePreset === "ytd" ? "default" : "outline"} size="sm" onclick={() => selectRange("ytd")}>YTD</Button>
+      <Button variant={rangePreset === "12m" ? "default" : "outline"} size="sm" onclick={() => selectRange("12m")}>12M</Button>
+      <Button variant={rangePreset === "all" ? "default" : "outline"} size="sm" onclick={() => selectRange("all")}>All</Button>
+    </div>
   </div>
 
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -154,14 +223,14 @@
       () => { showLiabilities = !showLiabilities },
     )}
     {@render summaryCard(
-      "Revenue (YTD)",
+      "Revenue ({rangePreset.toUpperCase()})",
       revenueSummary,
       reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, settings.hiddenCurrencySet) : undefined,
       showRevenue,
       () => { showRevenue = !showRevenue },
     )}
     {@render summaryCard(
-      "Net Income (YTD)",
+      "Net Income ({rangePreset.toUpperCase()})",
       netIncomeSummary,
       reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, settings.hiddenCurrencySet) : undefined,
       showNetIncome,
@@ -169,6 +238,77 @@
     )}
   </div>
 
+  <!-- Charts Row -->
+  <div class="grid gap-4 lg:grid-cols-3">
+    <!-- Net Worth Trend -->
+    <Card.Root class="lg:col-span-2">
+      <Card.Header>
+        <Card.Title>Net Worth</Card.Title>
+        <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {#if chartsLoading}
+          <Skeleton class="h-48 w-full" />
+        {:else if netWorthData.length < 2}
+          <p class="text-sm text-muted-foreground py-12 text-center">
+            Not enough data for chart. Import transactions spanning multiple months.
+          </p>
+        {:else}
+          <div class="h-48">
+            <AreaChart
+              data={netWorthData}
+              x="date"
+              xScale={scaleTime()}
+              y="value"
+              yScale={scaleLinear()}
+              series={[{ key: "value", label: "Net Worth", color: "hsl(var(--chart-1))" }]}
+              props={{ area: { opacity: 0.15 } }}
+            />
+          </div>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+
+    <!-- Expense Breakdown -->
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Expenses</Card.Title>
+        <Card.Description>Breakdown by category.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {#if chartsLoading}
+          <Skeleton class="h-48 w-full" />
+        {:else if expenseData.length === 0}
+          <p class="text-sm text-muted-foreground py-12 text-center">No expenses in period.</p>
+        {:else}
+          <div class="h-48">
+            <PieChart
+              data={expenseData}
+              value="amount"
+              series={expenseData.map((d) => ({
+                key: d.category,
+                label: d.category,
+                color: d.color,
+              }))}
+            />
+          </div>
+          <div class="mt-3 space-y-1">
+            {#each expenseData as cat}
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-1.5">
+                  <span class="h-2.5 w-2.5 rounded-full" style="background:{cat.color}"></span>
+                  <span>{cat.category}</span>
+                </div>
+                <span class="font-mono">{formatCurrency(cat.amount, settings.currency)}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+  </div>
+
+  <!-- Recent Journal Entries -->
   <Card.Root>
     <Card.Header>
       <Card.Title>Recent Journal Entries</Card.Title>

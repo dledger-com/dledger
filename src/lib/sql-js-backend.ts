@@ -21,6 +21,8 @@ import type {
   EtherscanAccount,
   EtherscanSyncResult,
   CurrencyOrigin,
+  BalanceAssertion,
+  BalanceAssertionResult,
 } from "./types/index.js";
 import type { Backend } from "./backend.js";
 
@@ -331,6 +333,16 @@ export class SqlJsBackend implements Backend {
 
   private constructor(db: Database) {
     this.db = db;
+  }
+
+  static async createInMemory(): Promise<SqlJsBackend> {
+    const SQL = await initSqlJs();
+    const db = new SQL.Database();
+    const backend = new SqlJsBackend(db);
+    db.exec("PRAGMA foreign_keys=ON");
+    db.exec(SCHEMA_SQL);
+    db.exec("INSERT INTO schema_version (version) VALUES (2)");
+    return backend;
   }
 
   static async create(): Promise<SqlJsBackend> {
@@ -1318,6 +1330,96 @@ export class SqlJsBackend implements Backend {
         origin: row.origin as string,
       }),
     );
+  }
+
+  // ---- Balance assertions ----
+
+  async createBalanceAssertion(assertion: BalanceAssertion): Promise<void> {
+    // Compute actual balance at the assertion date
+    const account = this.getAccountById(assertion.account_id);
+    if (!account) throw new Error(`account ${assertion.account_id} not found`);
+
+    const balances = this.sumLineItems([assertion.account_id], assertion.date);
+    const actual = balances.find((b) => b.currency === assertion.currency);
+    const actualAmount = actual ? actual.amount : "0";
+    const isPassing = actualAmount === assertion.expected_balance ||
+      new Decimal(actualAmount).eq(new Decimal(assertion.expected_balance));
+
+    this.run(
+      "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.expected_balance, isPassing ? 1 : 0, actualAmount],
+    );
+    this.scheduleSave();
+  }
+
+  async listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]> {
+    let sql = "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance FROM balance_assertion";
+    const params: unknown[] = [];
+    if (accountId) {
+      sql += " WHERE account_id = ?";
+      params.push(accountId);
+    }
+    sql += " ORDER BY date DESC";
+    return this.query(sql, params, (row) => ({
+      id: row.id as string,
+      account_id: row.account_id as string,
+      date: row.date as string,
+      currency: row.currency as string,
+      expected_balance: row.expected_balance as string,
+      is_passing: (row.is_passing as number) !== 0,
+      actual_balance: row.actual_balance as string | null,
+    }));
+  }
+
+  async checkBalanceAssertions(): Promise<BalanceAssertionResult[]> {
+    const assertions = await this.listBalanceAssertions();
+    const results: BalanceAssertionResult[] = [];
+
+    for (const assertion of assertions) {
+      const balances = this.sumLineItems([assertion.account_id], assertion.date);
+      const actual = balances.find((b) => b.currency === assertion.currency);
+      const actualAmount = actual ? actual.amount : "0";
+      const expected = new Decimal(assertion.expected_balance);
+      const actualDec = new Decimal(actualAmount);
+      const isPassing = actualDec.eq(expected);
+      const difference = actualDec.minus(expected).toString();
+
+      // Update stored assertion
+      this.run(
+        "UPDATE balance_assertion SET is_passing = ?, actual_balance = ? WHERE id = ?",
+        [isPassing ? 1 : 0, actualAmount, assertion.id],
+      );
+
+      results.push({
+        assertion: { ...assertion, is_passing: isPassing, actual_balance: actualAmount },
+        actual_balance: actualAmount,
+        is_passing: isPassing,
+        difference,
+      });
+    }
+
+    this.scheduleSave();
+    return results;
+  }
+
+  // ---- Integrity checks ----
+
+  async countOrphanedLineItems(): Promise<number> {
+    const result = this.queryOne(
+      "SELECT COUNT(*) as cnt FROM line_item WHERE journal_entry_id NOT IN (SELECT id FROM journal_entry) OR account_id NOT IN (SELECT id FROM account)",
+      [],
+      (row) => row.cnt as number,
+    );
+    return result ?? 0;
+  }
+
+  async countDuplicateSources(): Promise<number> {
+    const result = this.queryOne(
+      "SELECT COUNT(*) as cnt FROM (SELECT source, COUNT(*) as c FROM journal_entry WHERE source LIKE 'etherscan:%' GROUP BY source HAVING c > 1)",
+      [],
+      (row) => row.cnt as number,
+    );
+    return result ?? 0;
   }
 
   // ---- Data management ----

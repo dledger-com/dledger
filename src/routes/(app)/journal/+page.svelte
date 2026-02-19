@@ -15,11 +15,60 @@
   import Search from "lucide-svelte/icons/search";
   import X from "lucide-svelte/icons/x";
 
+  import * as Dialog from "$lib/components/ui/dialog/index.js";
+
   const store = new JournalStore();
   const settings = new SettingsStore();
   const filteredEntries = $derived(filterHiddenEntries(store.entries, settings.hiddenCurrencySet));
   let exporting = $state(false);
   let searchTerm = $state("");
+  let showDuplicates = $state(false);
+
+  interface DuplicateGroup {
+    confidence: "likely" | "possible";
+    entries: typeof filteredEntries;
+  }
+
+  const duplicateGroups = $derived.by((): DuplicateGroup[] => {
+    const groups: DuplicateGroup[] = [];
+    const entries = filteredEntries;
+    const checked = new Set<string>();
+
+    for (let i = 0; i < entries.length; i++) {
+      if (checked.has(entries[i][0].id)) continue;
+      const [entryA, itemsA] = entries[i];
+      const amountsA = itemsA.map((it) => `${it.amount}:${it.currency}`).sort().join(",");
+      const group: typeof filteredEntries = [];
+
+      for (let j = i + 1; j < entries.length; j++) {
+        if (checked.has(entries[j][0].id)) continue;
+        const [entryB, itemsB] = entries[j];
+        if (entryA.date !== entryB.date) continue;
+
+        const amountsB = itemsB.map((it) => `${it.amount}:${it.currency}`).sort().join(",");
+        if (amountsA !== amountsB) continue;
+
+        // Same date + same amounts
+        const isLikely = entryA.description === entryB.description;
+        if (group.length === 0) {
+          group.push(entries[i]);
+        }
+        group.push(entries[j]);
+        checked.add(entries[j][0].id);
+      }
+
+      if (group.length > 0) {
+        checked.add(entryA.id);
+        const isLikely = group.every(([e]) => e.description === group[0][0].description);
+        groups.push({
+          confidence: isLikely ? "likely" : "possible",
+          entries: group,
+        });
+      }
+    }
+
+    return groups;
+  });
 
   const searchedEntries = $derived.by(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -79,6 +128,9 @@
       {/if}
     </div>
     <div class="flex gap-2 shrink-0">
+      <Button variant="outline" size="sm" onclick={() => { showDuplicates = true; }}>
+        Detect Duplicates
+      </Button>
       <Button variant="outline" onclick={handleExport} disabled={exporting}>
         {exporting ? "Exporting..." : "Export"}
       </Button>
@@ -149,3 +201,57 @@
     </Card.Root>
   {/if}
 </div>
+
+<!-- Duplicate Detection Dialog -->
+<Dialog.Root bind:open={showDuplicates}>
+  <Dialog.Content class="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog.Header>
+      <Dialog.Title>Duplicate Detection</Dialog.Title>
+      <Dialog.Description>
+        Entries with the same date and amounts that may be duplicates.
+      </Dialog.Description>
+    </Dialog.Header>
+    {#if duplicateGroups.length === 0}
+      <p class="text-sm text-muted-foreground py-8 text-center">
+        No potential duplicates found.
+      </p>
+    {:else}
+      <div class="space-y-4">
+        {#each duplicateGroups as group, gi}
+          <div class="rounded-md border p-3 space-y-2">
+            <div class="flex items-center gap-2">
+              <Badge variant={group.confidence === "likely" ? "destructive" : "secondary"}>
+                {group.confidence === "likely" ? "Likely duplicate" : "Possible duplicate"}
+              </Badge>
+              <span class="text-xs text-muted-foreground">{group.entries.length} entries</span>
+            </div>
+            {#each group.entries as [entry, items]}
+              <div class="flex items-center justify-between text-sm rounded px-2 py-1.5 bg-muted/30">
+                <div class="flex items-center gap-3">
+                  <span class="text-muted-foreground w-24">{entry.date}</span>
+                  <a href="/journal/{entry.id}" class="hover:underline">{entry.description}</a>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-xs">{formatCurrency(totalDebits(items))}</span>
+                  <Badge variant="outline" class="text-xs">{entry.status}</Badge>
+                  {#if entry.status !== "voided"}
+                    <Button variant="ghost" size="sm" class="h-6 text-xs text-destructive hover:text-destructive"
+                      onclick={async () => {
+                        try {
+                          await getBackend().voidJournalEntry(entry.id);
+                          await store.load();
+                          toast.success("Entry voided");
+                        } catch (e) {
+                          toast.error(String(e));
+                        }
+                      }}>Void</Button>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
