@@ -72,7 +72,6 @@ pub fn run() {
             commands::list_etherscan_accounts,
             commands::add_etherscan_account,
             commands::remove_etherscan_account,
-            commands::sync_etherscan,
             commands::set_metadata,
             commands::get_metadata,
             commands::store_raw_transaction,

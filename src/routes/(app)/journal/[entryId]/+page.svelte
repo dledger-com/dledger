@@ -6,6 +6,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import { getBackend } from "$lib/backend.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
@@ -21,8 +22,20 @@
   const entryId = $derived(page.params.entryId);
   let entry = $state<JournalEntry | null>(null);
   let items = $state<LineItem[]>([]);
+  let metadata = $state<Record<string, string>>({});
   const isHidden = $derived(entryInvolvesHidden(items, settings.hiddenCurrencySet));
   let loading = $state(true);
+
+  function formatMetaKey(key: string): string {
+    let display = key.replace(/^handler:/, "");
+    return display.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function formatMetaValue(key: string, value: string): string {
+    if (key.endsWith("usd_value")) return `$${value}`;
+    if (key.endsWith("implied_apy")) return `${value}%`;
+    return value;
+  }
 
   async function loadEntry() {
     loading = true;
@@ -32,6 +45,11 @@
     if (result) {
       entry = result.entry;
       items = result.items;
+    }
+    try {
+      metadata = await getBackend().getMetadata(id);
+    } catch {
+      metadata = {};
     }
     loading = false;
   }
@@ -121,6 +139,30 @@
         </dl>
       </Card.Content>
     </Card.Root>
+
+    {#if Object.keys(metadata).length > 0}
+      <Card.Root>
+        <Card.Header>
+          <Card.Title>Metadata</Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <dl class="grid grid-cols-2 gap-4 text-sm">
+            {#each Object.entries(metadata) as [key, value]}
+              <div>
+                <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
+                <dd>
+                  {#if key === "handler"}
+                    <Badge variant="secondary">{value}</Badge>
+                  {:else}
+                    <span class="font-medium">{formatMetaValue(key, value)}</span>
+                  {/if}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        </Card.Content>
+      </Card.Root>
+    {/if}
 
     <Card.Root>
       <Card.Header>

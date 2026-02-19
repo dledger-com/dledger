@@ -10,7 +10,7 @@ use dledger_core::models::*;
 use dledger_core::reports;
 use dledger_core::LedgerEngine;
 
-use crate::etherscan::{self, ChainInfo, EtherscanAccount, EtherscanState, EtherscanSyncResult, SUPPORTED_CHAINS};
+use crate::etherscan::{ChainInfo, EtherscanAccount, EtherscanState, SUPPORTED_CHAINS};
 
 pub struct AppState {
     pub engine: Arc<LedgerEngine>,
@@ -392,13 +392,3 @@ pub fn remove_etherscan_account(
     state.remove_account(&address, chain_id)
 }
 
-#[tauri::command]
-pub fn sync_etherscan(
-    state: State<'_, AppState>,
-    api_key: String,
-    address: String,
-    label: String,
-    chain_id: u64,
-) -> Result<EtherscanSyncResult, String> {
-    etherscan::sync_etherscan(&state.engine, &api_key, &address, &label, chain_id)
-}

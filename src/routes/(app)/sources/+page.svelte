@@ -39,6 +39,10 @@
     EtherscanSyncResult,
   } from "$lib/types/index.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
+  import { getDefaultRegistry } from "$lib/handlers/index.js";
+
+  const handlerRegistry = getDefaultRegistry();
+  const handlers = handlerRegistry.getAll();
 
   const settings = new SettingsStore();
 
@@ -907,6 +911,64 @@
       </Card.Content>
     </Card.Root>
   {/if}
+
+  <!-- Transaction Handlers -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Transaction Handlers</Card.Title>
+      <Card.Description>Enable protocol-specific handlers for richer transaction interpretation.</Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <Table.Head>Handler</Table.Head>
+            <Table.Head>Description</Table.Head>
+            <Table.Head>Chains</Table.Head>
+            <Table.Head class="text-right">Enabled</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {#each handlers as handler}
+            {@const isGeneric = handler.id === "generic-etherscan"}
+            {@const isEnabled = isGeneric || settings.settings.handlers[handler.id]?.enabled}
+            <Table.Row>
+              <Table.Cell class="font-medium">{handler.name}</Table.Cell>
+              <Table.Cell class="text-muted-foreground">{handler.description}</Table.Cell>
+              <Table.Cell>
+                {#if handler.supportedChainIds.length === 0}
+                  <Badge variant="secondary">All chains</Badge>
+                {:else}
+                  <div class="flex flex-wrap gap-1">
+                    {#each handler.supportedChainIds as chainId}
+                      <Badge variant="secondary">{getChainName(chainId)}</Badge>
+                    {/each}
+                  </div>
+                {/if}
+              </Table.Cell>
+              <Table.Cell class="text-right">
+                {#if isGeneric}
+                  <span class="text-sm text-muted-foreground">Always enabled</span>
+                {:else}
+                  <Button
+                    variant={isEnabled ? "default" : "outline"}
+                    size="sm"
+                    onclick={() => {
+                      const current = { ...settings.settings.handlers };
+                      current[handler.id] = { enabled: !isEnabled };
+                      settings.update({ handlers: current });
+                    }}
+                  >
+                    {isEnabled ? "On" : "Off"}
+                  </Button>
+                {/if}
+              </Table.Cell>
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
+    </Card.Content>
+  </Card.Root>
 
   <!-- Exchange Rates -->
   <Card.Root>
