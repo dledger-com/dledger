@@ -1,9 +1,57 @@
 import type { Backend } from "$lib/backend.js";
+import type { CurrencyBalance } from "$lib/types/report.js";
 
 export interface NetWorthPoint {
   date: Date;
   label: string;
   value: number;
+}
+
+async function convertBalances(
+  balances: CurrencyBalance[],
+  baseCurrency: string,
+  date: string,
+  backend: Backend,
+): Promise<number> {
+  let total = 0;
+  for (const bal of balances) {
+    const amount = parseFloat(bal.amount);
+    if (bal.currency === baseCurrency) {
+      total += amount;
+    } else {
+      const rate = await backend.getExchangeRate(bal.currency, baseCurrency, date);
+      if (rate) {
+        total += amount * parseFloat(rate);
+      }
+    }
+  }
+  return total;
+}
+
+function monthEndDates(from: Date, to: Date): string[] {
+  const dates: string[] = [];
+  let year = from.getFullYear();
+  let month = from.getMonth(); // 0-indexed
+
+  while (true) {
+    // Last day of this month
+    const lastDay = new Date(year, month + 1, 0);
+    if (lastDay > to) break;
+    dates.push(lastDay.toISOString().slice(0, 10));
+    month++;
+    if (month > 11) {
+      month = 0;
+      year++;
+    }
+  }
+
+  // Always include the final date
+  const toStr = to.toISOString().slice(0, 10);
+  if (dates.length === 0 || dates[dates.length - 1] !== toStr) {
+    dates.push(toStr);
+  }
+
+  return dates;
 }
 
 export async function computeNetWorthSeries(
@@ -12,61 +60,17 @@ export async function computeNetWorthSeries(
   toDate: string,
   baseCurrency: string,
 ): Promise<NetWorthPoint[]> {
-  const points: NetWorthPoint[] = [];
   const from = new Date(fromDate);
   const to = new Date(toDate);
+  const dates = monthEndDates(from, to);
 
-  // Generate month-end dates
-  const dates: string[] = [];
-  const cursor = new Date(from.getFullYear(), from.getMonth() + 1, 0); // last day of from month
-  while (cursor <= to) {
-    dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setMonth(cursor.getMonth() + 1);
-    // Move to last day of next month
-    cursor.setDate(0);
-    cursor.setDate(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate());
-  }
-
-  // Always include the to date if not already included
-  const toStr = to.toISOString().slice(0, 10);
-  if (dates.length === 0 || dates[dates.length - 1] !== toStr) {
-    dates.push(toStr);
-  }
-
-  const accounts = await backend.listAccounts();
-  const assetAccounts = accounts.filter((a) => a.account_type === "asset" && a.is_postable);
-  const liabilityAccounts = accounts.filter((a) => a.account_type === "liability" && a.is_postable);
+  const points: NetWorthPoint[] = [];
 
   for (const date of dates) {
-    let netWorth = 0;
-
-    for (const account of assetAccounts) {
-      const balances = await backend.getAccountBalance(account.id, date);
-      for (const bal of balances) {
-        if (bal.currency === baseCurrency) {
-          netWorth += parseFloat(bal.amount);
-        } else {
-          const rate = await backend.getExchangeRate(bal.currency, baseCurrency, date);
-          if (rate) {
-            netWorth += parseFloat(bal.amount) * parseFloat(rate);
-          }
-        }
-      }
-    }
-
-    for (const account of liabilityAccounts) {
-      const balances = await backend.getAccountBalance(account.id, date);
-      for (const bal of balances) {
-        if (bal.currency === baseCurrency) {
-          netWorth += parseFloat(bal.amount); // liabilities are negative
-        } else {
-          const rate = await backend.getExchangeRate(bal.currency, baseCurrency, date);
-          if (rate) {
-            netWorth += parseFloat(bal.amount) * parseFloat(rate);
-          }
-        }
-      }
-    }
+    const sheet = await backend.balanceSheet(date);
+    const assets = await convertBalances(sheet.assets.totals, baseCurrency, date, backend);
+    const liabilities = await convertBalances(sheet.liabilities.totals, baseCurrency, date, backend);
+    const netWorth = assets + liabilities; // liabilities are already negative
 
     const d = new Date(date + "T00:00:00");
     const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
@@ -98,35 +102,26 @@ export async function computeExpenseBreakdown(
   baseCurrency: string,
   maxCategories = 6,
 ): Promise<ExpenseCategory[]> {
-  const accounts = await backend.listAccounts();
-  const expenseAccounts = accounts.filter(
-    (a) => a.account_type === "expense" && a.is_postable,
-  );
-
+  const stmt = await backend.incomeStatement(fromDate, toDate);
   const categoryTotals = new Map<string, number>();
 
-  for (const account of expenseAccounts) {
-    // Get balance at end of period minus balance at start of period
-    const endBalances = await backend.getAccountBalance(account.id, toDate);
-    const startBalances = await backend.getAccountBalance(account.id, fromDate);
+  for (const line of stmt.expenses.lines) {
+    for (const bal of line.balances) {
+      const amount = parseFloat(bal.amount);
+      if (amount <= 0) continue;
 
-    for (const bal of endBalances) {
-      const startBal = startBalances.find((s) => s.currency === bal.currency);
-      const periodAmount = parseFloat(bal.amount) - (startBal ? parseFloat(startBal.amount) : 0);
-      if (periodAmount <= 0) continue;
-
-      let converted = periodAmount;
+      let converted = amount;
       if (bal.currency !== baseCurrency) {
         const rate = await backend.getExchangeRate(bal.currency, baseCurrency, toDate);
         if (rate) {
-          converted = periodAmount * parseFloat(rate);
+          converted = amount * parseFloat(rate);
         } else {
-          continue; // Skip if can't convert
+          continue;
         }
       }
 
       // Group by second-level: Expenses:Food:Restaurants → "Food"
-      const parts = account.full_name.split(":");
+      const parts = line.account_name.split(":");
       const category = parts.length >= 2 ? parts[1] : parts[0];
       categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + converted);
     }
