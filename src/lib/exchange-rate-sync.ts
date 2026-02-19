@@ -57,6 +57,7 @@ export interface ExchangeRateSyncResult {
   updatedRateSources: Record<string, RateSourceInfo>;
   updatedInitializedSources: string[];
   spamSuggestions: string[];
+  autoHidden: string[];
 }
 
 interface FrankfurterResponse {
@@ -114,6 +115,7 @@ export async function syncExchangeRates(
     updatedRateSources: JSON.parse(JSON.stringify(rateSources)),
     updatedInitializedSources: [...initializedRateSources],
     spamSuggestions: [],
+    autoHidden: [],
   };
 
   const today = todayISO();
@@ -390,15 +392,16 @@ export async function syncExchangeRates(
     }
   }
 
-  // Phase 3b: Spam detection — etherscanOnly currencies where CoinGecko didn't succeed
+  // Phase 3b: Auto-hide — etherscanOnly currencies where CoinGecko didn't succeed
   if (currencyContext) {
     for (const [code, ctx] of currencyContext) {
       if (!ctx.etherscanOnly) continue;
       if (hiddenCurrencies.has(code)) continue;
-      // If CoinGecko didn't return a valid rate for this currency, suggest as spam
+      if (ctx.recommendedSources.length === 0) continue; // handler-owned, already skipped
+      // If CoinGecko didn't return a valid rate for this currency, auto-hide as spam
       const succeeded = successMap.get(code);
       if (!succeeded || !succeeded.has("coingecko")) {
-        result.spamSuggestions.push(code);
+        result.autoHidden.push(code);
       }
     }
   }

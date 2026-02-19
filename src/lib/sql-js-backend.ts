@@ -217,6 +217,11 @@ CREATE TABLE IF NOT EXISTS raw_transaction (
     source TEXT PRIMARY KEY,
     data TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS currency_handler (
+    currency TEXT PRIMARY KEY NOT NULL,
+    handler TEXT NOT NULL
+);
 `;
 
 // ---- Row type helpers ----
@@ -342,7 +347,7 @@ export class SqlJsBackend implements Backend {
     const backend = new SqlJsBackend(db);
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
-    db.exec("INSERT INTO schema_version (version) VALUES (2)");
+    db.exec("INSERT INTO schema_version (version) VALUES (3)");
     return backend;
   }
 
@@ -356,19 +361,22 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
-      db.exec("INSERT INTO schema_version (version) VALUES (2)");
+      db.exec("INSERT INTO schema_version (version) VALUES (3)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
       if (versionRows.length === 0 || versionRows[0].values.length === 0) {
-        db.exec("INSERT INTO schema_version (version) VALUES (2)");
+        db.exec("INSERT INTO schema_version (version) VALUES (3)");
       } else {
         const currentVersion = versionRows[0].values[0][0] as number;
         if (currentVersion < 2) {
           db.exec("DELETE FROM exchange_rate WHERE rowid NOT IN (SELECT MAX(rowid) FROM exchange_rate GROUP BY date, from_currency, to_currency)");
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency)");
+        }
+        if (currentVersion < 3) {
+          db.exec("CREATE TABLE IF NOT EXISTS currency_handler (currency TEXT PRIMARY KEY NOT NULL, handler TEXT NOT NULL)");
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (2)");
+          db.exec("INSERT INTO schema_version (version) VALUES (3)");
         }
       }
     }
@@ -1822,6 +1830,27 @@ export class SqlJsBackend implements Backend {
     );
   }
 
+  // ---- Currency handler ownership ----
+
+  async setCurrencyHandler(currency: string, handler: string): Promise<void> {
+    this.run(
+      "INSERT OR REPLACE INTO currency_handler (currency, handler) VALUES (?, ?)",
+      [currency, handler],
+    );
+    this.scheduleSave();
+  }
+
+  async getCurrencyHandlers(): Promise<Record<string, string>> {
+    const rows = this.query(
+      "SELECT currency, handler FROM currency_handler",
+      [],
+      (row) => ({ currency: row.currency as string, handler: row.handler as string }),
+    );
+    const result: Record<string, string> = {};
+    for (const row of rows) result[row.currency] = row.handler;
+    return result;
+  }
+
   // ---- Balance assertions ----
 
   async createBalanceAssertion(assertion: BalanceAssertion): Promise<void> {
@@ -1940,6 +1969,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM audit_log;
       DELETE FROM journal_entry;
       DELETE FROM raw_transaction;
+      DELETE FROM currency_handler;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -1959,6 +1989,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM journal_entry;
       DELETE FROM exchange_rate;
       DELETE FROM raw_transaction;
+      DELETE FROM currency_handler;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM etherscan_account;

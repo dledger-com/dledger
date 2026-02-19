@@ -198,8 +198,11 @@
     spamSuggestions = [];
     try {
       const backend = getBackend();
-      const origins = await backend.getCurrencyOrigins();
-      const contextMap = buildCurrencyContextMap(origins, settings.currency);
+      const [origins, currencyHandlers] = await Promise.all([
+        backend.getCurrencyOrigins(),
+        backend.getCurrencyHandlers(),
+      ]);
+      const contextMap = buildCurrencyContextMap(origins, settings.currency, currencyHandlers);
 
       rateResult = await syncExchangeRates(
         backend,
@@ -227,9 +230,13 @@
         }));
       }
 
-      // Capture spam suggestions
-      if (rateResult.spamSuggestions.length > 0) {
-        spamSuggestions = [...rateResult.spamSuggestions];
+      // Auto-hide unrecognized etherscan-only currencies
+      if (rateResult.autoHidden.length > 0) {
+        for (const code of rateResult.autoHidden) {
+          settings.hideCurrency(code);
+        }
+        toast.info(`Auto-hidden ${rateResult.autoHidden.length} unrecognized currency(ies)`);
+        loadAvailableCurrencies();
       }
 
       if (rateResult.errors.length > 0) {

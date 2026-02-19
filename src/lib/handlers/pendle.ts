@@ -508,6 +508,11 @@ export const pendleHandler: TransactionHandler = {
       metadata,
     };
 
-    return { type: "entries", entries: [handlerEntry] };
+    const claimedCurrencies = allItems
+      .map((i) => i.currency)
+      .filter((c) => isPendleToken(c))
+      .filter((c, i, arr) => arr.indexOf(c) === i);
+
+    return { type: "entries", entries: [handlerEntry], claimedCurrencies };
   },
 };

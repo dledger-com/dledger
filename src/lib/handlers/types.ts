@@ -38,9 +38,9 @@ export interface HandlerContext {
 }
 
 export type HandlerResult =
-  | { type: "entries"; entries: HandlerEntry[] }
+  | { type: "entries"; entries: HandlerEntry[]; claimedCurrencies?: string[] }
   | { type: "skip"; reason: string }
-  | { type: "review"; entries: HandlerEntry[]; reason: string };
+  | { type: "review"; entries: HandlerEntry[]; reason: string; claimedCurrencies?: string[] };
 
 export interface HandlerEntry {
   entry: Omit<JournalEntry, "id" | "created_at">;

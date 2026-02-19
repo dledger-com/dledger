@@ -312,6 +312,13 @@ export async function syncEtherscanWithHandlers(
           result.warnings.push(`post tx ${group.hash}: ${msg}`);
         }
       }
+
+      // Store claimed currencies for handler-owned tokens
+      if (handlerResult.claimedCurrencies) {
+        for (const currency of handlerResult.claimedCurrencies) {
+          await backend.setCurrencyHandler(currency, handlerResult.handlerId);
+        }
+      }
     }
   }
 
@@ -653,6 +660,14 @@ export async function applyReprocess(
               await backend.setMetadata(entryId, handlerEntry.metadata);
             }
           }
+
+          // Store claimed currencies for handler-owned tokens
+          if (handlerResult.claimedCurrencies) {
+            for (const currency of handlerResult.claimedCurrencies) {
+              await backend.setCurrencyHandler(currency, handlerResult.handlerId);
+            }
+          }
+
           result.changed++;
         }
       } catch (e: unknown) {

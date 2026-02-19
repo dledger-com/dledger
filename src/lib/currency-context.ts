@@ -28,6 +28,7 @@ export type CurrencyContextMap = Map<string, CurrencyContext>;
 export function buildCurrencyContextMap(
   rows: CurrencyOrigin[],
   baseCurrency: string,
+  currencyHandlers?: Record<string, string>,
 ): CurrencyContextMap {
   // Group origins by currency
   const originsByCode = new Map<string, Set<string>>();
@@ -44,6 +45,12 @@ export function buildCurrencyContextMap(
   const result: CurrencyContextMap = new Map();
 
   for (const [code, origins] of originsByCode) {
+    // Skip currencies owned by a specialized handler (not generic-etherscan)
+    if (currencyHandlers?.[code] && currencyHandlers[code] !== "generic-etherscan") {
+      result.set(code, { origins, recommendedSources: [], etherscanOnly: false });
+      continue;
+    }
+
     const isFiat = FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency);
     const etherscanOnly = !isFiat && origins.size === 1 && origins.has("etherscan");
 
