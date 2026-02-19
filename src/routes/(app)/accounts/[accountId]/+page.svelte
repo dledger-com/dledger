@@ -27,7 +27,7 @@
   let account = $state<Account | null>(null);
   let balances = $state<CurrencyBalance[]>([]);
   let loading = $state(true);
-  let balanceChartData = $state<{ date: string; value: number }[]>([]);
+  let balanceChartData = $state<{ date: Date; value: number }[]>([]);
   let chartLoading = $state(true);
   let assertions = $state<BalanceAssertion[]>([]);
   let showAssertionForm = $state(false);
@@ -70,7 +70,7 @@
       const last = new Date();
 
       // Generate monthly dates
-      const points: { date: string; value: number }[] = [];
+      const points: { date: Date; value: number }[] = [];
       const cursor = new Date(first.getFullYear(), first.getMonth(), 1);
 
       while (cursor <= last) {
@@ -89,7 +89,7 @@
             else total += parseFloat(b.amount); // Fallback: add raw amount
           }
         }
-        points.push({ date: dateStr, value: Math.round(total * 100) / 100 });
+        points.push({ date: new Date(dateStr + "T00:00:00"), value: Math.round(total * 100) / 100 });
         cursor.setMonth(cursor.getMonth() + 1);
       }
       balanceChartData = points;

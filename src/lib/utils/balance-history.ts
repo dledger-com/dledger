@@ -1,7 +1,7 @@
 import type { Backend } from "$lib/backend.js";
 
 export interface NetWorthPoint {
-  date: string;
+  date: Date;
   label: string;
   value: number;
 }
@@ -68,9 +68,9 @@ export async function computeNetWorthSeries(
       }
     }
 
-    const d = new Date(date);
+    const d = new Date(date + "T00:00:00");
     const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-    points.push({ date, label, value: Math.round(netWorth * 100) / 100 });
+    points.push({ date: d, label, value: Math.round(netWorth * 100) / 100 });
   }
 
   return points;
