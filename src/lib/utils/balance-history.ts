@@ -7,11 +7,29 @@ export interface NetWorthPoint {
   value: number;
 }
 
+/** Caches exchange rate lookups for the lifetime of a computation. */
+class ExchangeRateCache {
+  private cache = new Map<string, string | null>();
+  private backend: Backend;
+
+  constructor(backend: Backend) {
+    this.backend = backend;
+  }
+
+  async get(from: string, to: string, date: string): Promise<string | null> {
+    const key = `${from}:${to}:${date}`;
+    if (this.cache.has(key)) return this.cache.get(key)!;
+    const rate = await this.backend.getExchangeRate(from, to, date);
+    this.cache.set(key, rate);
+    return rate;
+  }
+}
+
 async function convertBalances(
   balances: CurrencyBalance[],
   baseCurrency: string,
   date: string,
-  backend: Backend,
+  rateCache: ExchangeRateCache,
 ): Promise<number> {
   let total = 0;
   for (const bal of balances) {
@@ -19,7 +37,7 @@ async function convertBalances(
     if (bal.currency === baseCurrency) {
       total += amount;
     } else {
-      const rate = await backend.getExchangeRate(bal.currency, baseCurrency, date);
+      const rate = await rateCache.get(bal.currency, baseCurrency, date);
       if (rate) {
         total += amount * parseFloat(rate);
       }
@@ -63,13 +81,14 @@ export async function computeNetWorthSeries(
   const from = new Date(fromDate);
   const to = new Date(toDate);
   const dates = monthEndDates(from, to);
+  const rateCache = new ExchangeRateCache(backend);
 
   const points: NetWorthPoint[] = [];
 
   for (const date of dates) {
     const sheet = await backend.balanceSheet(date);
-    const assets = await convertBalances(sheet.assets.totals, baseCurrency, date, backend);
-    const liabilities = await convertBalances(sheet.liabilities.totals, baseCurrency, date, backend);
+    const assets = await convertBalances(sheet.assets.totals, baseCurrency, date, rateCache);
+    const liabilities = await convertBalances(sheet.liabilities.totals, baseCurrency, date, rateCache);
     const netWorth = assets + liabilities; // liabilities are already negative
 
     const d = new Date(date + "T00:00:00");
@@ -103,6 +122,7 @@ export async function computeExpenseBreakdown(
   maxCategories = 6,
 ): Promise<ExpenseCategory[]> {
   const stmt = await backend.incomeStatement(fromDate, toDate);
+  const rateCache = new ExchangeRateCache(backend);
   const categoryTotals = new Map<string, number>();
 
   for (const line of stmt.expenses.lines) {
@@ -112,7 +132,7 @@ export async function computeExpenseBreakdown(
 
       let converted = amount;
       if (bal.currency !== baseCurrency) {
-        const rate = await backend.getExchangeRate(bal.currency, baseCurrency, toDate);
+        const rate = await rateCache.get(bal.currency, baseCurrency, toDate);
         if (rate) {
           converted = amount * parseFloat(rate);
         } else {

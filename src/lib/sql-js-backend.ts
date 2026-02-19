@@ -544,6 +544,57 @@ export class SqlJsBackend implements Backend {
     return balances;
   }
 
+  /**
+   * Single-query batch: returns balances for ALL accounts at once.
+   * Result map is keyed by account_id → CurrencyBalance[].
+   */
+  private sumAllLineItemsByAccount(
+    beforeDate?: string,
+  ): Map<string, CurrencyBalance[]> {
+    const params: unknown[] = [];
+    let sql =
+      "SELECT li.account_id, li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id";
+    if (beforeDate) {
+      sql += " WHERE je.date < ?";
+      params.push(beforeDate);
+    }
+
+    // Accumulate per (account_id, currency)
+    const accum = new Map<string, Map<string, Decimal>>();
+    const stmt = this.db.prepare(sql);
+    if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
+    try {
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        const accountId = row.account_id as string;
+        const currency = row.currency as string;
+        const amount = new Decimal(row.amount as string);
+
+        let currencies = accum.get(accountId);
+        if (!currencies) {
+          currencies = new Map<string, Decimal>();
+          accum.set(accountId, currencies);
+        }
+        const current = currencies.get(currency) ?? new Decimal(0);
+        currencies.set(currency, current.plus(amount));
+      }
+    } finally {
+      stmt.free();
+    }
+
+    // Convert to CurrencyBalance[]
+    const result = new Map<string, CurrencyBalance[]>();
+    for (const [accountId, currencies] of accum) {
+      const balances: CurrencyBalance[] = [];
+      for (const [currency, amount] of currencies) {
+        balances.push({ currency, amount: amount.toString() });
+      }
+      balances.sort((a, b) => a.currency.localeCompare(b.currency));
+      result.set(accountId, balances);
+    }
+    return result;
+  }
+
   // ---- Validation (port of validation.rs) ----
 
   private validateJournalEntry(items: LineItem[]): void {
@@ -873,13 +924,14 @@ export class SqlJsBackend implements Backend {
       mapAccount,
     );
 
+    const allBalances = this.sumAllLineItemsByAccount(asOf);
     const lines: TrialBalanceLine[] = [];
     const debitTotals = new Map<string, Decimal>();
     const creditTotals = new Map<string, Decimal>();
 
     for (const account of accounts) {
       if (!account.is_postable) continue;
-      const balances = this.sumLineItems([account.id], asOf);
+      const balances = allBalances.get(account.id) ?? [];
       if (balances.length === 0) continue;
 
       for (const bal of balances) {
@@ -919,6 +971,8 @@ export class SqlJsBackend implements Backend {
       mapAccount,
     );
 
+    const allBalancesEnd = this.sumAllLineItemsByAccount(toDate);
+    const allBalancesStart = this.sumAllLineItemsByAccount(fromDate);
     const revenueLines: TrialBalanceLine[] = [];
     const expenseLines: TrialBalanceLine[] = [];
     const revenueTotals = new Map<string, Decimal>();
@@ -932,8 +986,8 @@ export class SqlJsBackend implements Backend {
       )
         continue;
 
-      const balEnd = this.sumLineItems([account.id], toDate);
-      const balStart = this.sumLineItems([account.id], fromDate);
+      const balEnd = allBalancesEnd.get(account.id) ?? [];
+      const balStart = allBalancesStart.get(account.id) ?? [];
       const periodBalances = subtractBalances(balEnd, balStart);
       if (periodBalances.length === 0) continue;
 
@@ -991,6 +1045,7 @@ export class SqlJsBackend implements Backend {
       mapAccount,
     );
 
+    const allBalances = this.sumAllLineItemsByAccount(asOf);
     const assetLines: TrialBalanceLine[] = [];
     const liabilityLines: TrialBalanceLine[] = [];
     const equityLines: TrialBalanceLine[] = [];
@@ -1019,7 +1074,7 @@ export class SqlJsBackend implements Backend {
           continue;
       }
 
-      const balances = this.sumLineItems([account.id], asOf);
+      const balances = allBalances.get(account.id) ?? [];
       if (balances.length === 0) continue;
 
       for (const bal of balances) {
