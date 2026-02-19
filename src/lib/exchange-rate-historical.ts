@@ -401,6 +401,23 @@ export async function ensurePeriodicRates(
 
 // ---- Helpers ----
 
+const knownCurrencies = new Set<string>();
+
+async function ensureCurrency(backend: Backend, code: string): Promise<void> {
+  if (knownCurrencies.has(code)) return;
+  try {
+    await backend.createCurrency({
+      code,
+      name: code,
+      decimal_places: code.length <= 3 ? 2 : 8,
+      is_base: false,
+    });
+  } catch {
+    // Already exists — expected
+  }
+  knownCurrencies.add(code);
+}
+
 async function recordRate(
   backend: Backend,
   fromCurrency: string,
@@ -410,6 +427,8 @@ async function recordRate(
   source: string,
   result: HistoricalFetchResult,
 ): Promise<void> {
+  await ensureCurrency(backend, fromCurrency);
+  await ensureCurrency(backend, toCurrency);
   await backend.recordExchangeRate({
     id: uuidv7(),
     date,
