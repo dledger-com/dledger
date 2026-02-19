@@ -43,6 +43,7 @@ export interface Backend {
   trialBalance(asOf: string): Promise<TrialBalance>;
   incomeStatement(fromDate: string, toDate: string): Promise<IncomeStatement>;
   balanceSheet(asOf: string): Promise<BalanceSheet>;
+  balanceSheetBatch(dates: string[]): Promise<Map<string, BalanceSheet>>;
   gainLossReport(fromDate: string, toDate: string): Promise<GainLossReport>;
 
   // Exchange rates
@@ -164,6 +165,10 @@ class TauriBackend implements Backend {
   }
   async balanceSheet(asOf: string): Promise<BalanceSheet> {
     return this.invoke("balance_sheet", { asOf });
+  }
+  async balanceSheetBatch(dates: string[]): Promise<Map<string, BalanceSheet>> {
+    const entries = await Promise.all(dates.map(async d => [d, await this.balanceSheet(d)] as const));
+    return new Map(entries);
   }
   async gainLossReport(fromDate: string, toDate: string): Promise<GainLossReport> {
     return this.invoke("gain_loss_report", { fromDate, toDate });

@@ -1,5 +1,6 @@
 import type { CurrencyBalance } from "$lib/types/index.js";
 import { getBackend } from "$lib/backend.js";
+import type { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
 
 export interface ConvertedSummary {
   total: number;
@@ -13,6 +14,7 @@ export async function convertBalances(
   balances: CurrencyBalance[],
   baseCurrency: string,
   asOfDate: string,
+  cache?: ExchangeRateCache,
 ): Promise<ConvertedSummary> {
   const backend = getBackend();
   let total = 0;
@@ -27,7 +29,9 @@ export async function convertBalances(
       converted.push({ currency: b.currency, amount, rate: 1, baseAmount: amount });
       continue;
     }
-    const rateStr = await backend.getExchangeRate(b.currency, baseCurrency, asOfDate);
+    const rateStr = cache
+      ? await cache.get(b.currency, baseCurrency, asOfDate)
+      : await backend.getExchangeRate(b.currency, baseCurrency, asOfDate);
     if (rateStr) {
       const rate = parseFloat(rateStr);
       const baseAmount = amount * rate;

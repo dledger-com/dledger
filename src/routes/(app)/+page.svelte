@@ -11,6 +11,7 @@
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
+  import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
   import { getBackend } from "$lib/backend.js";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import { AreaChart, PieChart } from "layerchart";
@@ -71,7 +72,7 @@
       .join(", ");
   }
 
-  async function loadCharts() {
+  async function loadCharts(sharedCache?: ExchangeRateCache) {
     chartsLoading = true;
     try {
       const from = rangeFromDate();
@@ -79,9 +80,10 @@
       const base = settings.currency;
 
       const backend = getBackend();
+      const cache = sharedCache ?? new ExchangeRateCache(backend);
       const [nw, exp] = await Promise.all([
-        computeNetWorthSeries(backend, from, to, base),
-        computeExpenseBreakdown(backend, from, to, base),
+        computeNetWorthSeries(backend, from, to, base, cache),
+        computeExpenseBreakdown(backend, from, to, base, 6, reportStore.incomeStatement ?? undefined, cache),
       ]);
       netWorthData = nw;
       expenseData = exp;
@@ -106,26 +108,27 @@
       ready = true;
     }
 
-    // Convert balances to base currency (non-blocking)
+    // Shared exchange rate cache for all conversions + charts
     const date = today();
     const base = settings.currency;
     const hidden = settings.hiddenCurrencySet;
+    const rateCache = new ExchangeRateCache(getBackend());
 
     try {
       const promises: Promise<void>[] = [];
       if (reportStore.balanceSheet) {
         promises.push(
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden), base, date)
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden), base, date, rateCache)
             .then(s => { assetsSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden), base, date)
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden), base, date, rateCache)
             .then(s => { liabilitiesSummary = s; }),
         );
       }
       if (reportStore.incomeStatement) {
         promises.push(
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden), base, date)
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden), base, date, rateCache)
             .then(s => { revenueSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden), base, date)
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden), base, date, rateCache)
             .then(s => { netIncomeSummary = s; }),
         );
       }
@@ -134,15 +137,16 @@
       console.error("Currency conversion failed:", e);
     }
 
-    // Load charts (non-blocking)
-    loadCharts();
+    // Load charts (non-blocking), reusing the shared cache
+    loadCharts(rateCache);
   });
 
-  function selectRange(preset: RangePreset) {
+  async function selectRange(preset: RangePreset) {
     rangePreset = preset;
-    // Reload income statement and charts
-    reportStore.loadIncomeStatement(rangeFromDate(), today());
-    loadCharts();
+    // Reload income statement first, then pass it to charts
+    await reportStore.loadIncomeStatement(rangeFromDate(), today());
+    const rateCache = new ExchangeRateCache(getBackend());
+    loadCharts(rateCache);
   }
 </script>
 

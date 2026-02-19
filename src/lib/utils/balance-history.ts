@@ -1,5 +1,7 @@
 import type { Backend } from "$lib/backend.js";
 import type { CurrencyBalance } from "$lib/types/report.js";
+import type { IncomeStatement } from "$lib/types/index.js";
+import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
 
 export interface NetWorthPoint {
   date: Date;
@@ -7,25 +9,7 @@ export interface NetWorthPoint {
   value: number;
 }
 
-/** Caches exchange rate lookups for the lifetime of a computation. */
-class ExchangeRateCache {
-  private cache = new Map<string, string | null>();
-  private backend: Backend;
-
-  constructor(backend: Backend) {
-    this.backend = backend;
-  }
-
-  async get(from: string, to: string, date: string): Promise<string | null> {
-    const key = `${from}:${to}:${date}`;
-    if (this.cache.has(key)) return this.cache.get(key)!;
-    const rate = await this.backend.getExchangeRate(from, to, date);
-    this.cache.set(key, rate);
-    return rate;
-  }
-}
-
-async function convertBalances(
+async function convertBalancesToNumber(
   balances: CurrencyBalance[],
   baseCurrency: string,
   date: string,
@@ -77,18 +61,20 @@ export async function computeNetWorthSeries(
   fromDate: string,
   toDate: string,
   baseCurrency: string,
+  sharedCache?: ExchangeRateCache,
 ): Promise<NetWorthPoint[]> {
   const from = new Date(fromDate);
   const to = new Date(toDate);
   const dates = monthEndDates(from, to);
-  const rateCache = new ExchangeRateCache(backend);
+  const rateCache = sharedCache ?? new ExchangeRateCache(backend);
 
+  const sheets = await backend.balanceSheetBatch(dates);
   const points: NetWorthPoint[] = [];
 
   for (const date of dates) {
-    const sheet = await backend.balanceSheet(date);
-    const assets = await convertBalances(sheet.assets.totals, baseCurrency, date, rateCache);
-    const liabilities = await convertBalances(sheet.liabilities.totals, baseCurrency, date, rateCache);
+    const sheet = sheets.get(date)!;
+    const assets = await convertBalancesToNumber(sheet.assets.totals, baseCurrency, date, rateCache);
+    const liabilities = await convertBalancesToNumber(sheet.liabilities.totals, baseCurrency, date, rateCache);
     const netWorth = assets + liabilities; // liabilities are already negative
 
     const d = new Date(date + "T00:00:00");
@@ -120,9 +106,11 @@ export async function computeExpenseBreakdown(
   toDate: string,
   baseCurrency: string,
   maxCategories = 6,
+  preloadedStatement?: IncomeStatement,
+  sharedCache?: ExchangeRateCache,
 ): Promise<ExpenseCategory[]> {
-  const stmt = await backend.incomeStatement(fromDate, toDate);
-  const rateCache = new ExchangeRateCache(backend);
+  const stmt = preloadedStatement ?? await backend.incomeStatement(fromDate, toDate);
+  const rateCache = sharedCache ?? new ExchangeRateCache(backend);
   const categoryTotals = new Map<string, number>();
 
   for (const line of stmt.expenses.lines) {

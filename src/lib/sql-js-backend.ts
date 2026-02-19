@@ -1113,6 +1113,157 @@ export class SqlJsBackend implements Backend {
     };
   }
 
+  async balanceSheetBatch(dates: string[]): Promise<Map<string, BalanceSheet>> {
+    if (dates.length === 0) return new Map();
+
+    // Single-pass: query accounts once, scan line_items once up to max date
+    const accounts = this.query(
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account ORDER BY full_name",
+      [],
+      mapAccount,
+    );
+
+    const sortedDates = [...dates].sort();
+    const maxDate = sortedDates[sortedDates.length - 1];
+
+    // Single scan of all line items up to the max date, ordered chronologically
+    const sql =
+      "SELECT li.account_id, li.currency, li.amount, je.date FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.date < ? ORDER BY je.date ASC";
+    const stmt = this.db.prepare(sql);
+    stmt.bind([maxDate]);
+
+    // Running totals per (account_id, currency)
+    const running = new Map<string, Map<string, Decimal>>();
+    // Snapshots: date -> Map<accountId, Map<currency, Decimal>>
+    const snapshots = new Map<string, Map<string, Map<string, Decimal>>>();
+
+    // Track which sorted dates we've passed
+    let dateIdx = 0;
+
+    try {
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        const rowDate = row.date as string;
+
+        // Snapshot at each date boundary we've passed
+        while (dateIdx < sortedDates.length && rowDate >= sortedDates[dateIdx]) {
+          // Deep-copy running totals for this snapshot
+          const snap = new Map<string, Map<string, Decimal>>();
+          for (const [accId, currencies] of running) {
+            snap.set(accId, new Map(currencies));
+          }
+          snapshots.set(sortedDates[dateIdx], snap);
+          dateIdx++;
+        }
+
+        // Accumulate this row into running totals
+        const accountId = row.account_id as string;
+        const currency = row.currency as string;
+        const amount = new Decimal(row.amount as string);
+
+        let currencies = running.get(accountId);
+        if (!currencies) {
+          currencies = new Map<string, Decimal>();
+          running.set(accountId, currencies);
+        }
+        const current = currencies.get(currency) ?? new Decimal(0);
+        currencies.set(currency, current.plus(amount));
+      }
+    } finally {
+      stmt.free();
+    }
+
+    // Capture any remaining dates that are >= all rows
+    while (dateIdx < sortedDates.length) {
+      const snap = new Map<string, Map<string, Decimal>>();
+      for (const [accId, currencies] of running) {
+        snap.set(accId, new Map(currencies));
+      }
+      snapshots.set(sortedDates[dateIdx], snap);
+      dateIdx++;
+    }
+
+    // Build BalanceSheet objects from snapshots
+    const result = new Map<string, BalanceSheet>();
+    for (const date of dates) {
+      const allBalances = snapshots.get(date) ?? new Map();
+
+      const assetLines: TrialBalanceLine[] = [];
+      const liabilityLines: TrialBalanceLine[] = [];
+      const equityLines: TrialBalanceLine[] = [];
+      const assetTotals = new Map<string, Decimal>();
+      const liabilityTotals = new Map<string, Decimal>();
+      const equityTotals = new Map<string, Decimal>();
+
+      for (const account of accounts) {
+        if (!account.is_postable) continue;
+        let totalsMap: Map<string, Decimal>;
+        let linesList: TrialBalanceLine[];
+        switch (account.account_type) {
+          case "asset":
+            totalsMap = assetTotals;
+            linesList = assetLines;
+            break;
+          case "liability":
+            totalsMap = liabilityTotals;
+            linesList = liabilityLines;
+            break;
+          case "equity":
+            totalsMap = equityTotals;
+            linesList = equityLines;
+            break;
+          default:
+            continue;
+        }
+
+        const currencyMap = allBalances.get(account.id);
+        if (!currencyMap || currencyMap.size === 0) continue;
+
+        const balances: CurrencyBalance[] = [];
+        for (const [currency, amount] of currencyMap) {
+          if (!amount.isZero()) {
+            balances.push({ currency, amount: amount.toString() });
+            const cur = totalsMap.get(currency) ?? new Decimal(0);
+            totalsMap.set(currency, cur.plus(amount));
+          }
+        }
+        balances.sort((a, b) => a.currency.localeCompare(b.currency));
+        if (balances.length === 0) continue;
+
+        linesList.push({
+          account_id: account.id,
+          account_name: account.full_name,
+          account_type: account.account_type,
+          balances,
+        });
+      }
+
+      result.set(date, {
+        as_of: date,
+        assets: {
+          title: "Assets",
+          account_type: "asset",
+          lines: assetLines,
+          totals: mapToBalances(assetTotals),
+        },
+        liabilities: {
+          title: "Liabilities",
+          account_type: "liability",
+          lines: liabilityLines,
+          totals: mapToBalances(liabilityTotals),
+        },
+        equity: {
+          title: "Equity",
+          account_type: "equity",
+          lines: equityLines,
+          totals: mapToBalances(equityTotals),
+        },
+      });
+    }
+
+    return result;
+  }
+
   async gainLossReport(
     fromDate: string,
     toDate: string,
