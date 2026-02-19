@@ -39,7 +39,14 @@
     EtherscanSyncResult,
   } from "$lib/types/index.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
-  import { getDefaultRegistry } from "$lib/handlers/index.js";
+  import {
+    getDefaultRegistry,
+    dryRunReprocess,
+    applyReprocess,
+    type ReprocessResult,
+    type ReprocessChange,
+  } from "$lib/handlers/index.js";
+  import RotateCw from "lucide-svelte/icons/rotate-cw";
 
   const handlerRegistry = getDefaultRegistry();
   const handlers = handlerRegistry.getAll();
@@ -82,6 +89,14 @@
 
   // -- Spam suggestion state --
   let spamSuggestions = $state<string[]>([]);
+
+  // -- Reprocess state --
+  let reprocessing = $state(false);
+  let reprocessPreview = $state<ReprocessResult | null>(null);
+  let reprocessTarget = $state<{ chainId: number; address: string; label: string } | null>(null);
+  let reprocessProgress = $state({ processed: 0, total: 0 });
+  let applyingReprocess = $state(false);
+  let reprocessApplyResult = $state<ReprocessResult | null>(null);
 
   // -- Historical backfill state --
   let backfillCurrencies = $state<string[]>([]);
@@ -527,6 +542,150 @@
     }
   }
 
+  async function handleReprocessOne(account: EtherscanAccount) {
+    reprocessing = true;
+    reprocessPreview = null;
+    reprocessApplyResult = null;
+    reprocessTarget = { chainId: account.chain_id, address: account.address, label: account.label };
+    reprocessProgress = { processed: 0, total: 0 };
+    try {
+      reprocessPreview = await dryRunReprocess(getBackend(), handlerRegistry, {
+        chainId: account.chain_id,
+        address: account.address,
+        label: account.label,
+        settings: settings.settings,
+        onProgress: (processed, total) => {
+          reprocessProgress = { processed, total };
+        },
+      });
+      if (reprocessPreview.changed === 0) {
+        toast.success("All transactions unchanged — nothing to reprocess");
+      }
+    } catch (err) {
+      toast.error(String(err));
+      reprocessTarget = null;
+    } finally {
+      reprocessing = false;
+    }
+  }
+
+  async function handleReprocessAll() {
+    if (ethAccounts.length === 0) return;
+    reprocessing = true;
+    reprocessPreview = null;
+    reprocessApplyResult = null;
+    reprocessTarget = null;
+    reprocessProgress = { processed: 0, total: 0 };
+
+    const combined: ReprocessResult = {
+      total: 0,
+      unchanged: 0,
+      changed: 0,
+      skipped: 0,
+      errors: [],
+      changes: [],
+    };
+
+    try {
+      for (const account of ethAccounts) {
+        const r = await dryRunReprocess(getBackend(), handlerRegistry, {
+          chainId: account.chain_id,
+          address: account.address,
+          label: account.label,
+          settings: settings.settings,
+          onProgress: (processed, total) => {
+            reprocessProgress = { processed: combined.total + processed, total: combined.total + total };
+          },
+        });
+        combined.total += r.total;
+        combined.unchanged += r.unchanged;
+        combined.changed += r.changed;
+        combined.skipped += r.skipped;
+        combined.errors.push(...r.errors);
+        combined.changes.push(...r.changes);
+      }
+      reprocessPreview = combined;
+      if (combined.changed === 0) {
+        toast.success("All transactions unchanged — nothing to reprocess");
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      reprocessing = false;
+    }
+  }
+
+  async function handleApplyReprocess() {
+    if (!reprocessPreview || reprocessPreview.changes.length === 0) return;
+    applyingReprocess = true;
+    reprocessApplyResult = null;
+    reprocessProgress = { processed: 0, total: 0 };
+
+    // Group changes by chainId (derived from reprocessTarget or from changes)
+    // If reprocessTarget is set, apply for that single account; else iterate all accounts
+    const combined: ReprocessResult = {
+      total: 0,
+      unchanged: 0,
+      changed: 0,
+      skipped: 0,
+      errors: [],
+      changes: [],
+    };
+
+    try {
+      if (reprocessTarget) {
+        const r = await applyReprocess(getBackend(), handlerRegistry, {
+          chainId: reprocessTarget.chainId,
+          address: reprocessTarget.address,
+          label: reprocessTarget.label,
+          settings: settings.settings,
+          onProgress: (processed, total) => {
+            reprocessProgress = { processed, total };
+          },
+        }, reprocessPreview.changes);
+        combined.total += r.total;
+        combined.changed += r.changed;
+        combined.errors.push(...r.errors);
+      } else {
+        // "Reprocess All" — re-run apply per account with all changes.
+        // applyReprocess only processes hashes present in the changes list,
+        // so passing the full list to each account is safe.
+        for (const account of ethAccounts) {
+          const r = await applyReprocess(getBackend(), handlerRegistry, {
+            chainId: account.chain_id,
+            address: account.address,
+            label: account.label,
+            settings: settings.settings,
+            onProgress: (processed, total) => {
+              reprocessProgress = { processed: combined.changed + processed, total: reprocessPreview!.changes.length };
+            },
+          }, reprocessPreview.changes);
+          combined.total += r.total;
+          combined.changed += r.changed;
+          combined.errors.push(...r.errors);
+        }
+      }
+
+      reprocessApplyResult = combined;
+      reprocessPreview = null;
+
+      if (combined.errors.length > 0) {
+        toast.warning(`Reprocessed ${combined.changed} transaction(s) with ${combined.errors.length} error(s)`);
+      } else {
+        toast.success(`Reprocessed ${combined.changed} transaction(s)`);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      applyingReprocess = false;
+    }
+  }
+
+  function formatHash(hash: string): string {
+    if (hash.length > 14) return `${hash.slice(0, 8)}...${hash.slice(-4)}`;
+    return hash;
+  }
+
   function formatAddress(addr: string): string {
     if (addr.length > 12) {
       return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -776,7 +935,7 @@
                       variant="outline"
                       size="sm"
                       onclick={() => handleSyncOne(account)}
-                      disabled={syncingKey !== null || syncingAll}
+                      disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
                     >
                       <RefreshCw class="mr-1 h-3 w-3" />
                       {syncingKey === key ? "Syncing..." : "Sync"}
@@ -784,8 +943,17 @@
                     <Button
                       variant="outline"
                       size="sm"
+                      onclick={() => handleReprocessOne(account)}
+                      disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                    >
+                      <RotateCw class="mr-1 h-3 w-3" />
+                      {reprocessing && reprocessTarget?.address === account.address && reprocessTarget?.chainId === account.chain_id ? "Scanning..." : "Reprocess"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onclick={() => handleRemoveEthAccount(account)}
-                      disabled={syncingKey !== null || syncingAll}
+                      disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
                     >
                       <Trash2 class="h-3 w-3" />
                     </Button>
@@ -884,13 +1052,23 @@
     </Card.Content>
     <Card.Footer class="flex justify-between">
       <Button variant="outline" href="/journal">Back</Button>
-      <Button
-        onclick={handleSyncAll}
-        disabled={syncingAll || syncingKey !== null || ethAccounts.length === 0 || !settings.etherscanApiKey}
-      >
-        <RefreshCw class="mr-1 h-4 w-4" />
-        {syncingAll ? "Syncing All..." : "Sync All"}
-      </Button>
+      <div class="flex gap-2">
+        <Button
+          variant="outline"
+          onclick={handleReprocessAll}
+          disabled={syncingAll || syncingKey !== null || reprocessing || applyingReprocess || ethAccounts.length === 0}
+        >
+          <RotateCw class="mr-1 h-4 w-4" />
+          {reprocessing && !reprocessTarget ? "Scanning..." : "Reprocess All"}
+        </Button>
+        <Button
+          onclick={handleSyncAll}
+          disabled={syncingAll || syncingKey !== null || reprocessing || applyingReprocess || ethAccounts.length === 0 || !settings.etherscanApiKey}
+        >
+          <RefreshCw class="mr-1 h-4 w-4" />
+          {syncingAll ? "Syncing All..." : "Sync All"}
+        </Button>
+      </div>
     </Card.Footer>
   </Card.Root>
 
@@ -932,6 +1110,117 @@
         <div class="mt-4 flex gap-2">
           <Button variant="outline" size="sm" href="/journal">View Journal</Button>
           <Button variant="outline" size="sm" href="/accounts">View Accounts</Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
+  {/if}
+
+  <!-- Reprocess Preview -->
+  {#if reprocessPreview && reprocessPreview.changed > 0}
+    <Card.Root class="border-blue-200 dark:border-blue-800">
+      <Card.Header>
+        <Card.Title>Reprocess Preview</Card.Title>
+        <Card.Description>
+          {reprocessPreview.changed} of {reprocessPreview.total} transaction(s) would change.
+          {reprocessPreview.unchanged} unchanged, {reprocessPreview.skipped} skipped.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        {#if reprocessPreview.changes.length > 0}
+          <div class="max-h-64 overflow-y-auto">
+            <Table.Root>
+              <Table.Header>
+                <Table.Row>
+                  <Table.Head>Tx Hash</Table.Head>
+                  <Table.Head>Old Handler</Table.Head>
+                  <Table.Head>New Handler</Table.Head>
+                  <Table.Head>Old Description</Table.Head>
+                  <Table.Head>New Description</Table.Head>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {#each reprocessPreview.changes as change}
+                  <Table.Row>
+                    <Table.Cell class="font-mono text-xs">{formatHash(change.hash)}</Table.Cell>
+                    <Table.Cell><Badge variant="secondary">{change.oldHandler}</Badge></Table.Cell>
+                    <Table.Cell><Badge variant="default">{change.newHandler}</Badge></Table.Cell>
+                    <Table.Cell class="text-xs max-w-48 truncate">{change.oldDescription}</Table.Cell>
+                    <Table.Cell class="text-xs max-w-48 truncate">{change.newDescription}</Table.Cell>
+                  </Table.Row>
+                {/each}
+              </Table.Body>
+            </Table.Root>
+          </div>
+        {/if}
+
+        {#if reprocessPreview.errors.length > 0}
+          <div>
+            <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+              Errors ({reprocessPreview.errors.length})
+            </p>
+            <ul class="mt-1 max-h-32 overflow-y-auto text-xs text-muted-foreground">
+              {#each reprocessPreview.errors as error}
+                <li class="py-0.5">{error}</li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+
+        {#if applyingReprocess}
+          <div>
+            <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                class="h-full bg-primary transition-all duration-300"
+                style="width: {reprocessProgress.total > 0 ? (reprocessProgress.processed / reprocessProgress.total * 100) : 0}%"
+              ></div>
+            </div>
+            <p class="text-xs text-muted-foreground mt-1">
+              {reprocessProgress.processed} / {reprocessProgress.total}
+            </p>
+          </div>
+        {/if}
+      </Card.Content>
+      <Card.Footer class="flex justify-end gap-2">
+        <Button variant="outline" onclick={() => { reprocessPreview = null; reprocessTarget = null; }}>
+          Cancel
+        </Button>
+        <Button onclick={handleApplyReprocess} disabled={applyingReprocess}>
+          {applyingReprocess ? "Applying..." : `Apply ${reprocessPreview.changed} Change(s)`}
+        </Button>
+      </Card.Footer>
+    </Card.Root>
+  {/if}
+
+  <!-- Reprocess Apply Results -->
+  {#if reprocessApplyResult}
+    <Card.Root class="border-green-200 dark:border-green-800">
+      <Card.Header>
+        <Card.Title>Reprocess Results</Card.Title>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="text-center">
+            <p class="text-2xl font-bold">{reprocessApplyResult.changed}</p>
+            <p class="text-xs text-muted-foreground">Reprocessed</p>
+          </div>
+          {#if reprocessApplyResult.errors.length > 0}
+            <div class="text-center">
+              <p class="text-2xl font-bold text-yellow-600">{reprocessApplyResult.errors.length}</p>
+              <p class="text-xs text-muted-foreground">Errors</p>
+            </div>
+          {/if}
+        </div>
+
+        {#if reprocessApplyResult.errors.length > 0}
+          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
+            {#each reprocessApplyResult.errors as error}
+              <li class="py-0.5">{error}</li>
+            {/each}
+          </ul>
+        {/if}
+
+        <div class="mt-4 flex gap-2">
+          <Button variant="outline" size="sm" href="/journal">View Journal</Button>
         </div>
       </Card.Content>
     </Card.Root>
