@@ -41,16 +41,15 @@
     loading = true;
     const id = entryId;
     if (!id) { loading = false; return; }
-    const result = await journalStore.get(id);
-    if (result) {
-      entry = result.entry;
-      items = result.items;
+    const [entryResult, metaResult] = await Promise.all([
+      journalStore.get(id),
+      getBackend().getMetadata(id).catch(() => ({}) as Record<string, string>),
+    ]);
+    if (entryResult) {
+      entry = entryResult.entry;
+      items = entryResult.items;
     }
-    try {
-      metadata = await getBackend().getMetadata(id);
-    } catch {
-      metadata = {};
-    }
+    metadata = metaResult;
     loading = false;
   }
 
@@ -70,8 +69,10 @@
   }
 
   onMount(async () => {
-    await accountStore.load();
-    await loadEntry();
+    await Promise.all([
+      accountStore.load(),
+      loadEntry(),
+    ]);
   });
 </script>
 

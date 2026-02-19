@@ -91,19 +91,34 @@ export async function findMissingRates(
     unique.push(cd);
   }
 
-  // Check which rates are missing
+  // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
 
-  for (const { currency, date } of unique) {
-    const rate = await backend.getExchangeRate(currency, baseCurrency, date);
-    if (rate !== null) continue;
+  if (backend.getExchangeRatesBatch && unique.length > 0) {
+    const existenceMap = await backend.getExchangeRatesBatch(unique, baseCurrency);
+    for (const { currency, date } of unique) {
+      const key = `${currency}:${date}`;
+      if (existenceMap.get(key)) continue;
 
-    const source = classifySource(currency, baseCurrency, rateSources, currencyContext);
-    const key = `${currency}:${source}`;
-    if (!missing.has(key)) {
-      missing.set(key, { currency, dates: [], source });
+      const source = classifySource(currency, baseCurrency, rateSources, currencyContext);
+      const groupKey = `${currency}:${source}`;
+      if (!missing.has(groupKey)) {
+        missing.set(groupKey, { currency, dates: [], source });
+      }
+      missing.get(groupKey)!.dates.push(date);
     }
-    missing.get(key)!.dates.push(date);
+  } else {
+    for (const { currency, date } of unique) {
+      const rate = await backend.getExchangeRate(currency, baseCurrency, date);
+      if (rate !== null) continue;
+
+      const source = classifySource(currency, baseCurrency, rateSources, currencyContext);
+      const groupKey = `${currency}:${source}`;
+      if (!missing.has(groupKey)) {
+        missing.set(groupKey, { currency, dates: [], source });
+      }
+      missing.get(groupKey)!.dates.push(date);
+    }
   }
 
   return Array.from(missing.values()).map((m) => ({
@@ -201,6 +216,9 @@ async function fetchFrankfurterHistorical(
   // Chunk into yearly segments for reliability
   const chunks = chunkDateRange(startDate, endDate, 365);
 
+  // Collect all rates for batch insert
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
+
   for (const [chunkStart, chunkEnd] of chunks) {
     try {
       const url = `https://api.frankfurter.dev/v1/${chunkStart}..${chunkEnd}?base=${config.baseCurrency}&symbols=${symbols}`;
@@ -213,20 +231,38 @@ async function fetchFrankfurterHistorical(
 
       for (const [date, rates] of Object.entries(data.rates)) {
         for (const [code, rateValue] of Object.entries(rates)) {
-          const key = `${code}:${date}`;
-          if (!neededSet.has(key)) {
-            // Store all rates we get (free data), but only count needed ones
-            await recordRate(backend, code, config.baseCurrency, date, 1 / rateValue, "frankfurter", result);
-            continue;
-          }
-          neededSet.delete(key);
+          await ensureCurrency(backend, code);
+          await ensureCurrency(backend, config.baseCurrency);
           const invertedRate = 1 / rateValue;
-          await recordRate(backend, code, config.baseCurrency, date, invertedRate, "frankfurter", result);
-          onDateDone();
+          rateBatch.push({
+            id: uuidv7(),
+            date,
+            from_currency: code,
+            to_currency: config.baseCurrency,
+            rate: invertedRate.toString(),
+            source: "frankfurter",
+          });
+          result.fetched++;
+          const key = `${code}:${date}`;
+          if (neededSet.has(key)) {
+            neededSet.delete(key);
+            onDateDone();
+          }
         }
       }
     } catch (err) {
       result.errors.push(`Frankfurter: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Batch insert all collected rates
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
     }
   }
 }
@@ -245,6 +281,7 @@ async function fetchCoinGeckoHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const geckoFetch = new RateLimitedFetcher({ maxRequests: 25, intervalMs: 60_000 });
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
   try {
     for (const req of requests) {
       const geckoId = COINGECKO_IDS[req.currency] ?? req.currency.toLowerCase();
@@ -271,21 +308,25 @@ async function fetchCoinGeckoHistorical(
           dateMap.set(date, price);
         }
 
+        await ensureCurrency(backend, req.currency);
+        await ensureCurrency(backend, config.baseCurrency);
+
         for (const date of neededDates) {
-          const price = dateMap.get(date);
+          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 1);
           if (price != null) {
-            await recordRate(backend, req.currency, config.baseCurrency, date, price, "coingecko", result);
+            rateBatch.push({
+              id: uuidv7(),
+              date,
+              from_currency: req.currency,
+              to_currency: config.baseCurrency,
+              rate: price.toString(),
+              source: "coingecko",
+            });
+            result.fetched++;
             onDateDone();
           } else {
-            // Try nearest date within ±1 day
-            const nearby = findNearestPrice(dateMap, date, 1);
-            if (nearby !== null) {
-              await recordRate(backend, req.currency, config.baseCurrency, date, nearby, "coingecko", result);
-              onDateDone();
-            } else {
-              result.skipped++;
-              onDateDone();
-            }
+            result.skipped++;
+            onDateDone();
           }
         }
       } catch (err) {
@@ -294,6 +335,17 @@ async function fetchCoinGeckoHistorical(
     }
   } finally {
     geckoFetch.dispose();
+  }
+
+  // Batch insert all collected rates
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
+    }
   }
 }
 
@@ -313,6 +365,7 @@ async function fetchFinnhubHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const finnhubFetch = new RateLimitedFetcher({ maxRequests: 50, intervalMs: 60_000 });
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
   try {
     for (const req of requests) {
       const sortedDates = [...req.dates].sort();
@@ -343,21 +396,25 @@ async function fetchFinnhubHistorical(
 
         // Finnhub returns USD prices
         const toCurrency = "USD";
+        await ensureCurrency(backend, req.currency);
+        await ensureCurrency(backend, toCurrency);
+
         for (const date of neededDates) {
-          const price = dateMap.get(date);
+          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 3);
           if (price != null) {
-            await recordRate(backend, req.currency, toCurrency, date, price, "finnhub", result);
+            rateBatch.push({
+              id: uuidv7(),
+              date,
+              from_currency: req.currency,
+              to_currency: toCurrency,
+              rate: price.toString(),
+              source: "finnhub",
+            });
+            result.fetched++;
             onDateDone();
           } else {
-            // Try nearest trading day within ±3 days
-            const nearby = findNearestPrice(dateMap, date, 3);
-            if (nearby !== null) {
-              await recordRate(backend, req.currency, toCurrency, date, nearby, "finnhub", result);
-              onDateDone();
-            } else {
-              result.skipped++;
-              onDateDone();
-            }
+            result.skipped++;
+            onDateDone();
           }
         }
       } catch (err) {
@@ -366,6 +423,17 @@ async function fetchFinnhubHistorical(
     }
   } finally {
     finnhubFetch.dispose();
+  }
+
+  // Batch insert all collected rates
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
+    }
   }
 }
 

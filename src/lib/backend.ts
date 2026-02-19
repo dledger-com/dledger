@@ -48,7 +48,9 @@ export interface Backend {
 
   // Exchange rates
   recordExchangeRate(rate: ExchangeRate): Promise<void>;
+  recordExchangeRateBatch?(rates: ExchangeRate[]): Promise<void>;
   getExchangeRate(from: string, to: string, date: string): Promise<string | null>;
+  getExchangeRatesBatch?(pairs: { currency: string; date: string }[], baseCurrency: string): Promise<Map<string, boolean>>;
   listExchangeRates(from?: string, to?: string): Promise<ExchangeRate[]>;
 
   // Ledger file import/export
@@ -81,6 +83,11 @@ export interface Backend {
   // Integrity checks
   countOrphanedLineItems(): Promise<number>;
   countDuplicateSources(): Promise<number>;
+
+  // Transaction control (optional, SqlJsBackend only)
+  beginTransaction?(): void;
+  commitTransaction?(): void;
+  rollbackTransaction?(): void;
 
   // Data management
   clearExchangeRates(): Promise<void>;

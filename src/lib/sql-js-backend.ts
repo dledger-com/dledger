@@ -330,6 +330,7 @@ function subtractBalances(
 export class SqlJsBackend implements Backend {
   private db: Database;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private inTransaction = false;
 
   private constructor(db: Database) {
     this.db = db;
@@ -429,11 +430,28 @@ export class SqlJsBackend implements Backend {
   }
 
   private scheduleSave(): void {
+    if (this.inTransaction) return;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       const data = this.db.export();
       saveToIndexedDB(data).catch(console.error);
     }, 500);
+  }
+
+  beginTransaction(): void {
+    this.db.exec("BEGIN");
+    this.inTransaction = true;
+  }
+
+  commitTransaction(): void {
+    this.db.exec("COMMIT");
+    this.inTransaction = false;
+    this.scheduleSave();
+  }
+
+  rollbackTransaction(): void {
+    this.db.exec("ROLLBACK");
+    this.inTransaction = false;
   }
 
   private today(): string {
@@ -628,30 +646,53 @@ export class SqlJsBackend implements Backend {
       }
     }
 
-    const currencies = new Set(items.map((i) => i.currency));
-    for (const code of currencies) {
-      if (!this.getCurrencyByCode(code)) {
-        throw new Error(`currency ${code} does not exist`);
+    // Batch: check all currencies in one query
+    const currencyCodes = [...new Set(items.map((i) => i.currency))];
+    if (currencyCodes.length > 0) {
+      const ph = currencyCodes.map(() => "?").join(", ");
+      const found = new Set(
+        this.query(
+          `SELECT code FROM currency WHERE code IN (${ph})`,
+          currencyCodes,
+          (row) => row.code as string,
+        ),
+      );
+      for (const code of currencyCodes) {
+        if (!found.has(code)) {
+          throw new Error(`currency ${code} does not exist`);
+        }
       }
     }
 
-    const accountIds = new Set(items.map((i) => i.account_id));
-    for (const accountId of accountIds) {
-      const account = this.getAccountById(accountId);
-      if (!account) throw new Error(`account ${accountId} does not exist`);
-      if (!account.is_postable)
-        throw new Error(`account ${accountId} is not postable`);
-      if (account.is_archived)
-        throw new Error(`account ${accountId} is archived`);
-      if (account.allowed_currencies.length > 0) {
-        for (const item of items) {
-          if (
-            item.account_id === accountId &&
-            !account.allowed_currencies.includes(item.currency)
-          ) {
-            throw new Error(
-              `account ${accountId} does not allow currency ${item.currency}`,
-            );
+    // Batch: check all accounts in one query
+    const accountIdList = [...new Set(items.map((i) => i.account_id))];
+    if (accountIdList.length > 0) {
+      const ph = accountIdList.map(() => "?").join(", ");
+      const accountMap = new Map<string, Account>();
+      const accounts = this.query(
+        `SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE id IN (${ph})`,
+        accountIdList,
+        mapAccount,
+      );
+      for (const a of accounts) accountMap.set(a.id, a);
+
+      for (const accountId of accountIdList) {
+        const account = accountMap.get(accountId);
+        if (!account) throw new Error(`account ${accountId} does not exist`);
+        if (!account.is_postable)
+          throw new Error(`account ${accountId} is not postable`);
+        if (account.is_archived)
+          throw new Error(`account ${accountId} is archived`);
+        if (account.allowed_currencies.length > 0) {
+          for (const item of items) {
+            if (
+              item.account_id === accountId &&
+              !account.allowed_currencies.includes(item.currency)
+            ) {
+              throw new Error(
+                `account ${accountId} does not allow currency ${item.currency}`,
+              );
+            }
           }
         }
       }
@@ -978,6 +1019,82 @@ export class SqlJsBackend implements Backend {
     };
   }
 
+  /**
+   * Single-pass dual-date scan: returns balances for ALL accounts at two dates.
+   * Scans line_items once up to the later date, snapshots at the earlier boundary.
+   */
+  private sumAllLineItemsByAccountDual(
+    date1: string,
+    date2: string,
+  ): [Map<string, CurrencyBalance[]>, Map<string, CurrencyBalance[]>] {
+    const [earlier, later] = date1 < date2 ? [date1, date2] : [date2, date1];
+
+    const sql =
+      "SELECT li.account_id, li.currency, li.amount, je.date FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.date < ? ORDER BY je.date ASC";
+    const stmt = this.db.prepare(sql);
+    stmt.bind([later]);
+
+    const running = new Map<string, Map<string, Decimal>>();
+    let snapshotAtEarlier: Map<string, Map<string, Decimal>> | null = null;
+    let passedEarlier = false;
+
+    try {
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        const rowDate = row.date as string;
+
+        if (!passedEarlier && rowDate >= earlier) {
+          // Snapshot running totals at the earlier boundary
+          snapshotAtEarlier = new Map();
+          for (const [accId, currencies] of running) {
+            snapshotAtEarlier.set(accId, new Map(currencies));
+          }
+          passedEarlier = true;
+        }
+
+        const accountId = row.account_id as string;
+        const currency = row.currency as string;
+        const amount = new Decimal(row.amount as string);
+
+        let currencies = running.get(accountId);
+        if (!currencies) {
+          currencies = new Map<string, Decimal>();
+          running.set(accountId, currencies);
+        }
+        const current = currencies.get(currency) ?? new Decimal(0);
+        currencies.set(currency, current.plus(amount));
+      }
+    } finally {
+      stmt.free();
+    }
+
+    if (!passedEarlier) {
+      // All rows were before the earlier date boundary
+      snapshotAtEarlier = new Map();
+      for (const [accId, currencies] of running) {
+        snapshotAtEarlier.set(accId, new Map(currencies));
+      }
+    }
+
+    const toBalanceMap = (accum: Map<string, Map<string, Decimal>>): Map<string, CurrencyBalance[]> => {
+      const result = new Map<string, CurrencyBalance[]>();
+      for (const [accountId, currencies] of accum) {
+        const balances: CurrencyBalance[] = [];
+        for (const [currency, amount] of currencies) {
+          balances.push({ currency, amount: amount.toString() });
+        }
+        balances.sort((a, b) => a.currency.localeCompare(b.currency));
+        result.set(accountId, balances);
+      }
+      return result;
+    };
+
+    const earlierResult = toBalanceMap(snapshotAtEarlier!);
+    const laterResult = toBalanceMap(running);
+
+    return date1 < date2 ? [earlierResult, laterResult] : [laterResult, earlierResult];
+  }
+
   async incomeStatement(
     fromDate: string,
     toDate: string,
@@ -988,8 +1105,7 @@ export class SqlJsBackend implements Backend {
       mapAccount,
     );
 
-    const allBalancesEnd = this.sumAllLineItemsByAccount(toDate);
-    const allBalancesStart = this.sumAllLineItemsByAccount(fromDate);
+    const [allBalancesStart, allBalancesEnd] = this.sumAllLineItemsByAccountDual(fromDate, toDate);
     const revenueLines: TrialBalanceLine[] = [];
     const expenseLines: TrialBalanceLine[] = [];
     const revenueTotals = new Map<string, Decimal>();
@@ -1300,16 +1416,28 @@ export class SqlJsBackend implements Backend {
     const lines: GainLossLine[] = [];
     let totalGainLoss = new Decimal(0);
 
-    for (const disposal of disposals) {
-      const lot = this.queryOne(
-        "SELECT currency, acquired_date, cost_basis_per_unit FROM lot WHERE id = ?",
-        [disposal.lot_id],
+    // Batch: fetch all lots at once
+    const uniqueLotIds = [...new Set(disposals.map((d) => d.lot_id))];
+    const lotMap = new Map<string, { currency: string; acquired_date: string; cost_basis_per_unit: string }>();
+    if (uniqueLotIds.length > 0) {
+      const ph = uniqueLotIds.map(() => "?").join(", ");
+      const lots = this.query(
+        `SELECT id, currency, acquired_date, cost_basis_per_unit FROM lot WHERE id IN (${ph})`,
+        uniqueLotIds,
         (row) => ({
+          id: row.id as string,
           currency: row.currency as string,
           acquired_date: row.acquired_date as string,
           cost_basis_per_unit: row.cost_basis_per_unit as string,
         }),
       );
+      for (const lot of lots) {
+        lotMap.set(lot.id, lot);
+      }
+    }
+
+    for (const disposal of disposals) {
+      const lot = lotMap.get(disposal.lot_id);
       if (!lot) continue;
 
       const qty = new Decimal(disposal.quantity);
@@ -1371,6 +1499,60 @@ export class SqlJsBackend implements Backend {
     this.scheduleSave();
   }
 
+  async recordExchangeRateBatch(rates: ExchangeRate[]): Promise<void> {
+    if (rates.length === 0) return;
+
+    // Fetch existing sources for all (date, from, to) tuples in one query
+    const keys = rates.map((r) => `${r.date}|${r.from_currency}|${r.to_currency}`);
+    const uniqueKeys = [...new Set(keys)];
+    const placeholders = uniqueKeys.map(() => "(?, ?, ?)").join(", ");
+    const params: unknown[] = [];
+    for (const key of uniqueKeys) {
+      const [date, from, to] = key.split("|");
+      params.push(date, from, to);
+    }
+
+    const existingSources = new Map<string, string>();
+    if (uniqueKeys.length > 0) {
+      const rows = this.query(
+        `SELECT date, from_currency, to_currency, source FROM exchange_rate WHERE (date, from_currency, to_currency) IN (VALUES ${placeholders})`,
+        params,
+        (row) => ({
+          key: `${row.date}|${row.from_currency}|${row.to_currency}`,
+          source: row.source as string,
+        }),
+      );
+      for (const row of rows) {
+        existingSources.set(row.key, row.source);
+      }
+    }
+
+    const wasInTransaction = this.inTransaction;
+    if (!wasInTransaction) this.beginTransaction();
+    try {
+      for (const rate of rates) {
+        const key = `${rate.date}|${rate.from_currency}|${rate.to_currency}`;
+        const existing = existingSources.get(key);
+        if (existing !== undefined && sourcePriority(existing) > sourcePriority(rate.source)) {
+          continue;
+        }
+
+        this.run(
+          "DELETE FROM exchange_rate WHERE date = ? AND from_currency = ? AND to_currency = ?",
+          [rate.date, rate.from_currency, rate.to_currency],
+        );
+        this.run(
+          "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source) VALUES (?, ?, ?, ?, ?, ?)",
+          [rate.id, rate.date, rate.from_currency, rate.to_currency, rate.rate, rate.source],
+        );
+      }
+      if (!wasInTransaction) this.commitTransaction();
+    } catch (e) {
+      if (!wasInTransaction) this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   async getExchangeRate(
     from: string,
     to: string,
@@ -1397,6 +1579,75 @@ export class SqlJsBackend implements Backend {
     }
 
     return null;
+  }
+
+  async getExchangeRatesBatch(
+    pairs: { currency: string; date: string }[],
+    baseCurrency: string,
+  ): Promise<Map<string, boolean>> {
+    if (pairs.length === 0) return new Map();
+
+    // Collect unique currencies
+    const currencies = [...new Set(pairs.map((p) => p.currency))];
+    if (currencies.length === 0) return new Map();
+
+    // Fetch all rates for these currencies to/from baseCurrency in two queries
+    const ph = currencies.map(() => "?").join(", ");
+
+    // Direct: from_currency IN currencies, to_currency = baseCurrency
+    const directRows = this.query(
+      `SELECT from_currency, date FROM exchange_rate WHERE from_currency IN (${ph}) AND to_currency = ?`,
+      [...currencies, baseCurrency],
+      (row) => ({ currency: row.from_currency as string, date: row.date as string }),
+    );
+
+    // Inverse: from_currency = baseCurrency, to_currency IN currencies
+    const inverseRows = this.query(
+      `SELECT to_currency AS currency, date FROM exchange_rate WHERE from_currency = ? AND to_currency IN (${ph})`,
+      [baseCurrency, ...currencies],
+      (row) => ({ currency: row.currency as string, date: row.date as string }),
+    );
+
+    // Build index: currency → sorted dates with rates
+    const rateIndex = new Map<string, string[]>();
+    for (const row of [...directRows, ...inverseRows]) {
+      let dates = rateIndex.get(row.currency);
+      if (!dates) {
+        dates = [];
+        rateIndex.set(row.currency, dates);
+      }
+      dates.push(row.date);
+    }
+    // Sort each currency's dates
+    for (const dates of rateIndex.values()) {
+      dates.sort();
+    }
+
+    // For each pair, check if a rate exists on or before the given date
+    const result = new Map<string, boolean>();
+    for (const { currency, date } of pairs) {
+      const key = `${currency}:${date}`;
+      const dates = rateIndex.get(currency);
+      if (!dates || dates.length === 0) {
+        result.set(key, false);
+        continue;
+      }
+      // Binary search for last date <= target
+      let lo = 0, hi = dates.length - 1;
+      let found = false;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (dates[mid] <= date) {
+          found = true;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      result.set(key, found);
+    }
+
+    return result;
   }
 
   async listExchangeRates(
@@ -1428,7 +1679,15 @@ export class SqlJsBackend implements Backend {
 
   async importLedgerFile(content: string): Promise<LedgerImportResult> {
     const { importLedger } = await import("./browser-ledger-file.js");
-    return importLedger(this, content);
+    this.beginTransaction();
+    try {
+      const result = await importLedger(this, content);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
   }
 
   async exportLedgerFile(): Promise<string> {
@@ -1532,7 +1791,15 @@ export class SqlJsBackend implements Backend {
   ): Promise<EtherscanSyncResult> {
     const { syncEtherscanWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
-    return syncEtherscanWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+    this.beginTransaction();
+    try {
+      const result = await syncEtherscanWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
   }
 
   // ---- Currency origins ----
@@ -1596,11 +1863,21 @@ export class SqlJsBackend implements Backend {
 
   async checkBalanceAssertions(): Promise<BalanceAssertionResult[]> {
     const assertions = await this.listBalanceAssertions();
+    if (assertions.length === 0) return [];
+
+    // Batch: compute balances once per distinct date
+    const distinctDates = [...new Set(assertions.map((a) => a.date))];
+    const balancesByDate = new Map<string, Map<string, CurrencyBalance[]>>();
+    for (const date of distinctDates) {
+      balancesByDate.set(date, this.sumAllLineItemsByAccount(date));
+    }
+
     const results: BalanceAssertionResult[] = [];
 
     for (const assertion of assertions) {
-      const balances = this.sumLineItems([assertion.account_id], assertion.date);
-      const actual = balances.find((b) => b.currency === assertion.currency);
+      const allBalances = balancesByDate.get(assertion.date)!;
+      const accountBalances = allBalances.get(assertion.account_id) ?? [];
+      const actual = accountBalances.find((b) => b.currency === assertion.currency);
       const actualAmount = actual ? actual.amount : "0";
       const expected = new Decimal(assertion.expected_balance);
       const actualDec = new Decimal(actualAmount);

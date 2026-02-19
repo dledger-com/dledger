@@ -126,16 +126,16 @@
   onMount(async () => {
     const id = accountId;
     if (!id) { loading = false; return; }
-    await accountStore.load();
+    const [, balResult, , assertResult] = await Promise.all([
+      accountStore.load(),
+      accountStore.getBalance(id),
+      journalStore.load({ account_id: id }),
+      getBackend().listBalanceAssertions(id).catch(() => [] as BalanceAssertion[]),
+    ]);
     account = accountStore.byId.get(id) ?? null;
-    if (account) {
-      balances = await accountStore.getBalance(id);
-      await journalStore.load({ account_id: id });
-      loadBalanceChart(id, journalStore.entries);
-      try {
-        assertions = await getBackend().listBalanceAssertions(id);
-      } catch { /* assertions not supported in this backend */ }
-    }
+    balances = balResult;
+    assertions = assertResult;
+    if (account) loadBalanceChart(id, journalStore.entries);
     loading = false;
   });
 </script>

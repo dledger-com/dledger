@@ -116,10 +116,10 @@ export async function runIntegrityChecks(backend: Backend): Promise<IntegrityIss
   // 5. Voided entry consistency
   try {
     const allEntries = await backend.queryJournalEntries({});
+    const allEntryIds = new Set(allEntries.map(([e]) => e.id));
     for (const [entry] of allEntries) {
       if (entry.status === "voided" && entry.voided_by) {
-        const reversal = await backend.getJournalEntry(entry.voided_by);
-        if (!reversal) {
+        if (!allEntryIds.has(entry.voided_by)) {
           issues.push({
             severity: "error",
             category: "Void Consistency",

@@ -37,6 +37,13 @@
   let expenseData = $state<ExpenseCategory[]>([]);
   let chartsLoading = $state(true);
 
+  // Persistent exchange rate cache — rates are immutable by (from, to, date)
+  let rateCache: ExchangeRateCache | undefined;
+  function getOrCreateRateCache() {
+    if (!rateCache) rateCache = new ExchangeRateCache(getBackend());
+    return rateCache;
+  }
+
   // Date range
   type RangePreset = "ytd" | "mtd" | "12m" | "all";
   let rangePreset = $state<RangePreset>("ytd");
@@ -112,23 +119,23 @@
     const date = today();
     const base = settings.currency;
     const hidden = settings.hiddenCurrencySet;
-    const rateCache = new ExchangeRateCache(getBackend());
+    const sharedCache = getOrCreateRateCache();
 
     try {
       const promises: Promise<void>[] = [];
       if (reportStore.balanceSheet) {
         promises.push(
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden), base, date, rateCache)
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden), base, date, sharedCache)
             .then(s => { assetsSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden), base, date, rateCache)
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden), base, date, sharedCache)
             .then(s => { liabilitiesSummary = s; }),
         );
       }
       if (reportStore.incomeStatement) {
         promises.push(
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden), base, date, rateCache)
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden), base, date, sharedCache)
             .then(s => { revenueSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden), base, date, rateCache)
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden), base, date, sharedCache)
             .then(s => { netIncomeSummary = s; }),
         );
       }
@@ -138,15 +145,14 @@
     }
 
     // Load charts (non-blocking), reusing the shared cache
-    loadCharts(rateCache);
+    loadCharts(sharedCache);
   });
 
   async function selectRange(preset: RangePreset) {
     rangePreset = preset;
     // Reload income statement first, then pass it to charts
     await reportStore.loadIncomeStatement(rangeFromDate(), today());
-    const rateCache = new ExchangeRateCache(getBackend());
-    loadCharts(rateCache);
+    loadCharts(getOrCreateRateCache());
   }
 </script>
 
