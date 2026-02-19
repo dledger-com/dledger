@@ -290,6 +290,75 @@ pub fn clear_all_data(state: State<'_, AppState>) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// -- Metadata commands --
+
+#[tauri::command]
+pub fn set_metadata(
+    state: State<'_, AppState>,
+    entry_id: Uuid,
+    entries: std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    for (key, value) in &entries {
+        state
+            .engine
+            .set_metadata(&entry_id, key, value)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_metadata(
+    state: State<'_, AppState>,
+    entry_id: Uuid,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let meta = state
+        .engine
+        .get_metadata(&entry_id)
+        .map_err(|e| e.to_string())?;
+    let mut map = std::collections::HashMap::new();
+    for m in meta {
+        map.insert(m.key, m.value);
+    }
+    Ok(map)
+}
+
+// -- Raw transaction commands --
+
+#[tauri::command]
+pub fn store_raw_transaction(
+    state: State<'_, AppState>,
+    source: String,
+    data: String,
+) -> Result<(), String> {
+    state
+        .engine
+        .store_raw_transaction(&source, &data)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_raw_transaction(
+    state: State<'_, AppState>,
+    source: String,
+) -> Result<Option<String>, String> {
+    state
+        .engine
+        .get_raw_transaction(&source)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn query_raw_transactions(
+    state: State<'_, AppState>,
+    source_prefix: String,
+) -> Result<Vec<(String, String)>, String> {
+    state
+        .engine
+        .query_raw_transactions(&source_prefix)
+        .map_err(|e| e.to_string())
+}
+
 // -- Etherscan commands --
 
 #[tauri::command]

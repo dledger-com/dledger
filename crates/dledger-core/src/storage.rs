@@ -131,6 +131,12 @@ pub trait Storage: Send + Sync {
         account_id: Option<&Uuid>,
     ) -> StorageResult<Vec<BalanceAssertion>>;
 
+    // -- Raw transactions --
+
+    fn store_raw_transaction(&self, source: &str, data: &str) -> StorageResult<()>;
+    fn get_raw_transaction(&self, source: &str) -> StorageResult<Option<String>>;
+    fn query_raw_transactions(&self, source_prefix: &str) -> StorageResult<Vec<(String, String)>>;
+
     // -- Metadata --
 
     fn insert_metadata(

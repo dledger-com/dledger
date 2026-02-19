@@ -13,7 +13,7 @@ import { SUPPORTED_CHAINS } from "./types/index.js";
 
 // ---- API types ----
 
-interface NormalTx {
+export interface NormalTx {
   hash: string;
   timeStamp: string;
   from: string;
@@ -24,7 +24,7 @@ interface NormalTx {
   gasPrice: string;
 }
 
-interface InternalTx {
+export interface InternalTx {
   hash: string;
   timeStamp: string;
   from: string;
@@ -34,7 +34,7 @@ interface InternalTx {
   traceId: string;
 }
 
-interface Erc20Tx {
+export interface Erc20Tx {
   hash: string;
   timeStamp: string;
   from: string;
@@ -46,7 +46,7 @@ interface Erc20Tx {
   tokenDecimal: string;
 }
 
-interface Erc721Tx {
+export interface Erc721Tx {
   hash: string;
   timeStamp: string;
   from: string;
@@ -57,7 +57,7 @@ interface Erc721Tx {
   tokenSymbol: string;
 }
 
-interface Erc1155Tx {
+export interface Erc1155Tx {
   hash: string;
   timeStamp: string;
   from: string;
@@ -77,7 +77,7 @@ interface ApiResponse {
 
 // ---- Hash grouping ----
 
-interface TxHashGroup {
+export interface TxHashGroup {
   hash: string;
   timestamp: string;
   normal: NormalTx | null;
@@ -111,7 +111,7 @@ function updateMinTimestamp(group: TxHashGroup, newTs: string): void {
   }
 }
 
-function groupByHash(
+export function groupByHash(
   normal: NormalTx[],
   internal: InternalTx[],
   erc20: Erc20Tx[],
@@ -165,19 +165,19 @@ function groupByHash(
 
 // ---- Helpers ----
 
-function pow10(exp: number): Decimal {
+export function pow10(exp: number): Decimal {
   let result = new Decimal(1);
   const ten = new Decimal(10);
   for (let i = 0; i < exp; i++) result = result.times(ten);
   return result;
 }
 
-function weiToNative(weiStr: string, decimals: number): Decimal {
+export function weiToNative(weiStr: string, decimals: number): Decimal {
   if (!weiStr || weiStr === "0") return new Decimal(0);
   return new Decimal(weiStr).dividedBy(pow10(decimals));
 }
 
-function calculateGasFee(
+export function calculateGasFee(
   gasUsed: string,
   gasPrice: string,
   decimals: number,
@@ -189,13 +189,13 @@ function calculateGasFee(
   return weiFee.dividedBy(pow10(decimals));
 }
 
-function timestampToDate(ts: string): string {
+export function timestampToDate(ts: string): string {
   const secs = parseInt(ts, 10);
   if (isNaN(secs)) throw new Error(`bad timestamp '${ts}'`);
   return new Date(secs * 1000).toISOString().slice(0, 10);
 }
 
-function shortAddr(addr: string): string {
+export function shortAddr(addr: string): string {
   return addr.length >= 10 ? addr.substring(0, 10) : addr;
 }
 
@@ -221,7 +221,7 @@ function formatTxDescription(
   }
 }
 
-function inferAccountType(fullName: string): AccountType {
+export function inferAccountType(fullName: string): AccountType {
   const first = fullName.split(":")[0];
   switch (first) {
     case "Assets":
@@ -241,7 +241,7 @@ function inferAccountType(fullName: string): AccountType {
 
 // ---- HTTP ----
 
-async function fetchPaginated<T>(
+export async function fetchPaginated<T>(
   apiKey: string,
   address: string,
   action: string,

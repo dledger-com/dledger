@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -142,9 +142,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
 
+-- Raw transaction data for re-processing
+CREATE TABLE IF NOT EXISTS raw_transaction (
+    source TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+"#;
+
+pub const MIGRATION_V3: &str = r#"
+CREATE TABLE IF NOT EXISTS raw_transaction (
+    source TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+);
 "#;
 
 /// Migration from schema version 1 to 2: deduplicate exchange rates, then add unique index.

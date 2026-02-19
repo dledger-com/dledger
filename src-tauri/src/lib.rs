@@ -73,6 +73,11 @@ pub fn run() {
             commands::add_etherscan_account,
             commands::remove_etherscan_account,
             commands::sync_etherscan,
+            commands::set_metadata,
+            commands::get_metadata,
+            commands::store_raw_transaction,
+            commands::get_raw_transaction,
+            commands::query_raw_transactions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

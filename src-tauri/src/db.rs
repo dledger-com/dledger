@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -941,6 +941,44 @@ impl Storage for SqliteStorage {
             .collect()
     }
 
+    // -- Raw transactions --
+
+    fn store_raw_transaction(&self, source: &str, data: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT OR REPLACE INTO raw_transaction (source, data) VALUES (?1, ?2)",
+            params![source, data],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn get_raw_transaction(&self, source: &str) -> StorageResult<Option<String>> {
+        let conn = self.conn.borrow();
+        let result = conn
+            .prepare("SELECT data FROM raw_transaction WHERE source = ?1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .query_row(params![source], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(result)
+    }
+
+    fn query_raw_transactions(&self, source_prefix: &str) -> StorageResult<Vec<(String, String)>> {
+        let conn = self.conn.borrow();
+        let pattern = format!("{}%", source_prefix);
+        let mut stmt = conn
+            .prepare("SELECT source, data FROM raw_transaction WHERE source LIKE ?1 ORDER BY source")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![pattern], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
     // -- Audit --
 
     fn insert_audit_log(&self, entry: &AuditLogEntry) -> StorageResult<()> {
@@ -1014,6 +1052,7 @@ impl Storage for SqliteStorage {
              DELETE FROM account_closure;
              DELETE FROM account;
              DELETE FROM currency;
+             DELETE FROM raw_transaction;
              PRAGMA foreign_keys=ON;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1033,7 +1072,8 @@ impl Storage for SqliteStorage {
              DELETE FROM exchange_rate;
              DELETE FROM account_closure;
              DELETE FROM account;
-             DELETE FROM currency;",
+             DELETE FROM currency;
+             DELETE FROM raw_transaction;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
         Ok(())
@@ -1118,6 +1158,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 2 {
             storage.execute_sql(MIGRATION_V2)?;
             storage.set_schema_version(2)?;
+        }
+        if current < 3 {
+            storage.execute_sql(MIGRATION_V3)?;
+            storage.set_schema_version(3)?;
         }
     }
     Ok(())

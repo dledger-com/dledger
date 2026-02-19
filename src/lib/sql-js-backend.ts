@@ -210,6 +210,11 @@ CREATE TABLE IF NOT EXISTS etherscan_account (
     label TEXT NOT NULL,
     PRIMARY KEY (address, chain_id)
 );
+
+CREATE TABLE IF NOT EXISTS raw_transaction (
+    source TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+);
 `;
 
 // ---- Row type helpers ----
@@ -353,6 +358,12 @@ export class SqlJsBackend implements Backend {
           db.exec("INSERT INTO schema_version (version) VALUES (2)");
         }
       }
+    }
+    // Ensure raw_transaction table exists (added post-v2)
+    try {
+      db.exec("CREATE TABLE IF NOT EXISTS raw_transaction (source TEXT PRIMARY KEY, data TEXT NOT NULL)");
+    } catch {
+      // ignore if already exists
     }
     return backend;
   }
@@ -1190,6 +1201,57 @@ export class SqlJsBackend implements Backend {
     return exportLedger(this);
   }
 
+  // ---- Backend: Metadata ----
+
+  async setMetadata(entryId: string, entries: Record<string, string>): Promise<void> {
+    for (const [key, value] of Object.entries(entries)) {
+      this.run(
+        "INSERT OR REPLACE INTO journal_entry_metadata (journal_entry_id, key, value) VALUES (?, ?, ?)",
+        [entryId, key, value],
+      );
+    }
+    this.scheduleSave();
+  }
+
+  async getMetadata(entryId: string): Promise<Record<string, string>> {
+    const rows = this.query(
+      "SELECT key, value FROM journal_entry_metadata WHERE journal_entry_id = ? ORDER BY key",
+      [entryId],
+      (row) => ({ key: row.key as string, value: row.value as string }),
+    );
+    const result: Record<string, string> = {};
+    for (const { key, value } of rows) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  // ---- Backend: Raw transactions ----
+
+  async storeRawTransaction(source: string, data: string): Promise<void> {
+    this.run(
+      "INSERT OR REPLACE INTO raw_transaction (source, data) VALUES (?, ?)",
+      [source, data],
+    );
+    this.scheduleSave();
+  }
+
+  async getRawTransaction(source: string): Promise<string | null> {
+    return this.queryOne(
+      "SELECT data FROM raw_transaction WHERE source = ?",
+      [source],
+      (row) => row.data as string,
+    );
+  }
+
+  async queryRawTransactions(sourcePrefix: string): Promise<Array<{ source: string; data: string }>> {
+    return this.query(
+      "SELECT source, data FROM raw_transaction WHERE source LIKE ? ORDER BY source",
+      [sourcePrefix + "%"],
+      (row) => ({ source: row.source as string, data: row.data as string }),
+    );
+  }
+
   // ---- Backend: Etherscan ----
 
   async listEtherscanAccounts(): Promise<EtherscanAccount[]> {
@@ -1233,8 +1295,9 @@ export class SqlJsBackend implements Backend {
     label: string,
     chainId: number,
   ): Promise<EtherscanSyncResult> {
-    const { syncEtherscan } = await import("./browser-etherscan.js");
-    return syncEtherscan(this, apiKey, address, label, chainId);
+    const { syncEtherscanWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    return syncEtherscanWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
   }
 
   // ---- Currency origins ----
@@ -1274,6 +1337,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM balance_assertion;
       DELETE FROM audit_log;
       DELETE FROM journal_entry;
+      DELETE FROM raw_transaction;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -1292,6 +1356,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM audit_log;
       DELETE FROM journal_entry;
       DELETE FROM exchange_rate;
+      DELETE FROM raw_transaction;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM etherscan_account;

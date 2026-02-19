@@ -58,6 +58,15 @@ export interface Backend {
   removeEtherscanAccount(address: string, chainId: number): Promise<void>;
   syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
 
+  // Metadata
+  setMetadata(entryId: string, entries: Record<string, string>): Promise<void>;
+  getMetadata(entryId: string): Promise<Record<string, string>>;
+
+  // Raw transactions
+  storeRawTransaction(source: string, data: string): Promise<void>;
+  getRawTransaction(source: string): Promise<string | null>;
+  queryRawTransactions(sourcePrefix: string): Promise<Array<{ source: string; data: string }>>;
+
   // Currency origins
   getCurrencyOrigins(): Promise<CurrencyOrigin[]>;
 
@@ -168,6 +177,25 @@ class TauriBackend implements Backend {
     return this.invoke("export_ledger_file");
   }
 
+  // Metadata
+  async setMetadata(entryId: string, entries: Record<string, string>): Promise<void> {
+    return this.invoke("set_metadata", { entryId, entries });
+  }
+  async getMetadata(entryId: string): Promise<Record<string, string>> {
+    return this.invoke("get_metadata", { entryId });
+  }
+
+  // Raw transactions
+  async storeRawTransaction(source: string, data: string): Promise<void> {
+    return this.invoke("store_raw_transaction", { source, data });
+  }
+  async getRawTransaction(source: string): Promise<string | null> {
+    return this.invoke("get_raw_transaction", { source });
+  }
+  async queryRawTransactions(sourcePrefix: string): Promise<Array<{ source: string; data: string }>> {
+    return this.invoke("query_raw_transactions", { sourcePrefix });
+  }
+
   // Etherscan
   async listEtherscanAccounts(): Promise<EtherscanAccount[]> {
     return this.invoke("list_etherscan_accounts");
@@ -179,7 +207,9 @@ class TauriBackend implements Backend {
     return this.invoke("remove_etherscan_account", { address, chainId });
   }
   async syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult> {
-    return this.invoke("sync_etherscan", { apiKey, address, label, chainId });
+    const { syncEtherscanWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    return syncEtherscanWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
   }
 
   // Currency origins

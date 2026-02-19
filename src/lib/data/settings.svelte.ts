@@ -15,6 +15,7 @@ export interface AppSettings {
   initializedRateSources: string[];
   lastRateSync: string;
   debugMode: boolean;
+  handlers: Record<string, { enabled: boolean }>;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -29,9 +30,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   initializedRateSources: [],
   lastRateSync: "",
   debugMode: false,
+  handlers: { "generic-etherscan": { enabled: true } },
 };
 
 const STORAGE_KEY = "dledger-settings";
+
+export function loadSettings(): AppSettings {
+  return loadFromStorage();
+}
 
 function loadFromStorage(): AppSettings {
   try {

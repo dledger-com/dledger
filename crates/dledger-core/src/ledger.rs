@@ -364,8 +364,33 @@ impl LedgerEngine {
         Ok(())
     }
 
+    pub fn set_metadata(
+        &self,
+        journal_entry_id: &Uuid,
+        key: &str,
+        value: &str,
+    ) -> LedgerResult<()> {
+        self.storage.insert_metadata(journal_entry_id, key, value)?;
+        Ok(())
+    }
+
     pub fn get_metadata(&self, journal_entry_id: &Uuid) -> LedgerResult<Vec<Metadata>> {
         Ok(self.storage.get_metadata(journal_entry_id)?)
+    }
+
+    // --- Raw transactions ---
+
+    pub fn store_raw_transaction(&self, source: &str, data: &str) -> LedgerResult<()> {
+        self.storage.store_raw_transaction(source, data)?;
+        Ok(())
+    }
+
+    pub fn get_raw_transaction(&self, source: &str) -> LedgerResult<Option<String>> {
+        Ok(self.storage.get_raw_transaction(source)?)
+    }
+
+    pub fn query_raw_transactions(&self, source_prefix: &str) -> LedgerResult<Vec<(String, String)>> {
+        Ok(self.storage.query_raw_transactions(source_prefix)?)
     }
 
     // --- Currency origins ---

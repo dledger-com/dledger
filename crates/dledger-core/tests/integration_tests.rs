@@ -754,6 +754,41 @@ impl Storage for TestStorage {
         ).map_err(|e| StorageError::Internal(e.to_string()))?;
         Ok(())
     }
+
+    fn store_raw_transaction(&self, source: &str, data: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT OR REPLACE INTO raw_transaction (source, data) VALUES (?1, ?2)",
+            rusqlite::params![source, data],
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn get_raw_transaction(&self, source: &str) -> StorageResult<Option<String>> {
+        let conn = self.conn.borrow();
+        let result = conn
+            .prepare("SELECT data FROM raw_transaction WHERE source = ?1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .query_row(rusqlite::params![source], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(result)
+    }
+
+    fn query_raw_transactions(&self, source_prefix: &str) -> StorageResult<Vec<(String, String)>> {
+        let conn = self.conn.borrow();
+        let pattern = format!("{}%", source_prefix);
+        let mut stmt = conn
+            .prepare("SELECT source, data FROM raw_transaction WHERE source LIKE ?1 ORDER BY source")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params![pattern], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
 }
 
 // ============================================================================
