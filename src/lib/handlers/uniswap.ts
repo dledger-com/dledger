@@ -121,7 +121,10 @@ interface UniswapEnrichment {
 
 async function fetchUniswapEnrichment(
   flows: TokenFlow[],
+  apiKey: string,
 ): Promise<UniswapEnrichment | null> {
+  if (!apiKey) return null;
+
   // Identify token pair from flows
   const outFlow = flows.find((f) => f.direction === "out");
   const inFlow = flows.find((f) => f.direction === "in");
@@ -146,7 +149,7 @@ async function fetchUniswapEnrichment(
   }`;
 
   const resp = await fetch(
-    "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
+    `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -238,7 +241,7 @@ export const uniswapHandler: TransactionHandler = {
     // Enrichment: fetch pool info from The Graph (opt-in)
     if (ctx.enrichment && action === "SWAP") {
       try {
-        const enrichment = await fetchUniswapEnrichment(flows);
+        const enrichment = await fetchUniswapEnrichment(flows, ctx.settings.theGraphApiKey);
         if (enrichment) {
           metadata["handler:fee_tier"] = enrichment.fee_tier;
           metadata["handler:pool_tvl_usd"] = enrichment.pool_tvl_usd;

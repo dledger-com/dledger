@@ -5,6 +5,7 @@ export interface AppSettings {
   etherscanApiKey: string;
   coingeckoApiKey: string;
   finnhubApiKey: string;
+  theGraphApiKey: string;
   showHidden: boolean;
   lastRateSync: string;
   debugMode: boolean;
@@ -19,6 +20,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   etherscanApiKey: "",
   coingeckoApiKey: "",
   finnhubApiKey: "",
+  theGraphApiKey: "",
   showHidden: false,
   lastRateSync: "",
   debugMode: false,
@@ -84,6 +86,10 @@ export class SettingsStore {
 
   get finnhubApiKey() {
     return this.settings.finnhubApiKey;
+  }
+
+  get theGraphApiKey() {
+    return this.settings.theGraphApiKey;
   }
 
   get showHidden(): boolean {

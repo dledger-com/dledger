@@ -66,6 +66,7 @@ describe("lidoHandler", () => {
         etherscanApiKey: "",
         coingeckoApiKey: "",
         finnhubApiKey: "",
+        theGraphApiKey: "",
         showHidden: false,
         lastRateSync: "",
         debugMode: false,

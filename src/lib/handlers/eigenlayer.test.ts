@@ -52,6 +52,7 @@ describe("eigenLayerHandler", () => {
         etherscanApiKey: "",
         coingeckoApiKey: "",
         finnhubApiKey: "",
+        theGraphApiKey: "",
         showHidden: false,
         lastRateSync: "",
         debugMode: false,

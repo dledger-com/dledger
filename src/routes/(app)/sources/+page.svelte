@@ -1329,6 +1329,25 @@
         </p>
       </div>
 
+      <div class="space-y-2">
+        <label for="thegraph-api-key" class="text-sm font-medium">The Graph API Key</label>
+        <Input
+          id="thegraph-api-key"
+          type="password"
+          placeholder="The Graph API key (optional)"
+          value={settings.theGraphApiKey}
+          oninput={(e: Event) => {
+            const val = (e.target as HTMLInputElement).value;
+            settings.update({ theGraphApiKey: val });
+          }}
+        />
+        <p class="text-xs text-muted-foreground">
+          Get a free key at <a href="https://thegraph.com/studio/apikeys/" target="_blank"
+            class="underline hover:text-foreground">thegraph.com/studio</a>.
+          Required for Uniswap pool enrichment.
+        </p>
+      </div>
+
       <p class="text-sm text-muted-foreground">
         Base currency: <strong>{settings.currency}</strong>
         <a href="/settings" class="ml-1 underline hover:text-foreground">Change</a>
