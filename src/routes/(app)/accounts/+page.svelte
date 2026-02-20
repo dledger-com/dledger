@@ -7,6 +7,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import type { Account, AccountType } from "$lib/types/index.js";
@@ -137,7 +138,7 @@
             </select>
           </div>
           <div class="flex items-center gap-2">
-            <input id="postable" type="checkbox" bind:checked={formIsPostable} class="rounded" />
+            <Switch id="postable" bind:checked={formIsPostable} />
             <label for="postable" class="text-sm font-medium">Postable (can receive transactions)</label>
           </div>
           <Dialog.Footer>

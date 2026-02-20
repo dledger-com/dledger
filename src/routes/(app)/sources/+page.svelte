@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
@@ -1243,19 +1244,16 @@
               {@const enrichmentEnabled = settings.settings.handlers[handler.id]?.enrichment ?? false}
               <Table.Cell class="text-right">
                 {#if hasEnrichment && !isGeneric}
-                  <Button
-                    variant={enrichmentEnabled ? "default" : "outline"}
-                    size="sm"
+                  <Switch
+                    checked={enrichmentEnabled}
                     disabled={!isEnabled}
-                    onclick={() => {
+                    onCheckedChange={(v) => {
                       const current = { ...settings.settings.handlers };
                       const prev = current[handler.id] ?? { enabled: false };
-                      current[handler.id] = { ...prev, enrichment: !enrichmentEnabled };
+                      current[handler.id] = { ...prev, enrichment: v };
                       settings.update({ handlers: current });
                     }}
-                  >
-                    {enrichmentEnabled ? "On" : "Off"}
-                  </Button>
+                  />
                 {:else}
                   <span class="text-sm text-muted-foreground">--</span>
                 {/if}
@@ -1264,17 +1262,14 @@
                 {#if isGeneric}
                   <span class="text-sm text-muted-foreground">Always enabled</span>
                 {:else}
-                  <Button
-                    variant={isEnabled ? "default" : "outline"}
-                    size="sm"
-                    onclick={() => {
+                  <Switch
+                    checked={isEnabled ?? false}
+                    onCheckedChange={(v) => {
                       const current = { ...settings.settings.handlers };
-                      current[handler.id] = { ...current[handler.id], enabled: !isEnabled };
+                      current[handler.id] = { ...current[handler.id], enabled: v };
                       settings.update({ handlers: current });
                     }}
-                  >
-                    {isEnabled ? "On" : "Off"}
-                  </Button>
+                  />
                 {/if}
               </Table.Cell>
             </Table.Row>

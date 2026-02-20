@@ -4,6 +4,7 @@
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
@@ -69,8 +70,8 @@
     }
   }
 
-  async function handleToggleConvert() {
-    convertToBase = !convertToBase;
+  async function handleToggleConvert(value: boolean) {
+    convertToBase = value;
     if (convertToBase && store.incomeStatement) {
       await runConversion();
     } else {
@@ -155,9 +156,10 @@
         <Download class="mr-1 h-4 w-4" />
         CSV
       </Button>
-      <Button variant="outline" onclick={handleToggleConvert}>
-        {convertToBase ? `Show native currencies` : `Convert to ${settings.currency}`}
-      </Button>
+      <label class="flex items-center gap-2 text-sm">
+        <Switch checked={convertToBase} onCheckedChange={handleToggleConvert} />
+        Convert to {settings.currency}
+      </label>
     {/if}
   </div>
 

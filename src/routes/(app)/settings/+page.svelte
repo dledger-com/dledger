@@ -4,6 +4,7 @@
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
@@ -294,11 +295,9 @@
         </div>
         <div class="flex items-center gap-3">
           <label class="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+            <Switch
               checked={settings.showHidden}
-              onchange={() => settings.update({ showHidden: !settings.showHidden })}
-              class="h-4 w-4 rounded border-input"
+              onCheckedChange={(v) => settings.update({ showHidden: v })}
             />
             Show hidden
           </label>
@@ -331,7 +330,7 @@
           <Input id="curr-decimals" type="number" bind:value={currDecimals} class="w-20" />
         </div>
         <div class="space-y-1 flex items-center gap-2 pb-1">
-          <input id="curr-base" type="checkbox" bind:checked={currIsBase} class="h-4 w-4 rounded border-input" />
+          <Switch id="curr-base" bind:checked={currIsBase} />
           <label for="curr-base" class="text-xs text-muted-foreground">Base</label>
         </div>
         <Button type="submit" size="sm">Add</Button>
@@ -563,12 +562,13 @@
         <Card.Description>Debug tools (only visible in dev mode).</Card.Description>
       </Card.Header>
       <Card.Content>
-        <Button
-          variant={settings.debugMode ? "default" : "outline"}
-          onclick={() => settings.update({ debugMode: !settings.debugMode })}
-        >
-          {settings.debugMode ? "Debug Mode: ON" : "Debug Mode: OFF"}
-        </Button>
+        <label class="flex items-center gap-2 text-sm">
+          <Switch
+            checked={settings.debugMode}
+            onCheckedChange={(v) => settings.update({ debugMode: v })}
+          />
+          Debug Mode
+        </label>
       </Card.Content>
     </Card.Root>
   {/if}
