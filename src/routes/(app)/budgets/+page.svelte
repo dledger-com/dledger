@@ -61,7 +61,7 @@
   );
 
   async function handleAdd() {
-    if (!newPattern.trim() || !newAmount.trim()) {
+    if (!newPattern.trim() || !String(newAmount).trim()) {
       toast.error("Account pattern and amount are required");
       return;
     }
@@ -71,7 +71,7 @@
         id: uuidv7(),
         account_pattern: newPattern.trim(),
         period_type: newPeriod,
-        amount: newAmount.trim(),
+        amount: String(newAmount).trim(),
         currency: newCurrency || settings.currency,
         start_date: null,
         end_date: null,
@@ -137,8 +137,9 @@
       <Card.Title>Add Budget</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
+      <div class="space-y-1">
       <div class="flex items-end gap-3 flex-wrap">
-        <div class="space-y-1 flex-1 min-w-[200px]">
+        <div class="flex-1 min-w-[200px] space-y-1">
           <label for="budget-pattern" class="text-xs font-medium">Account Pattern</label>
           <Input
             id="budget-pattern"
@@ -151,14 +152,13 @@
               <option value={name}></option>
             {/each}
           </datalist>
-          <p class="text-xs text-muted-foreground">Exact match or prefix (e.g. "Expenses:Food" includes "Expenses:Food:Groceries")</p>
         </div>
         <div class="space-y-1 w-28">
           <label for="budget-period" class="text-xs font-medium">Period</label>
           <select
             id="budget-period"
             bind:value={newPeriod}
-            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm ring-offset-background"
+            class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           >
             <option value="monthly">Monthly</option>
             <option value="yearly">Yearly</option>
@@ -172,10 +172,12 @@
           <label for="budget-currency" class="text-xs font-medium">Currency</label>
           <Input id="budget-currency" placeholder="USD" bind:value={newCurrency} />
         </div>
-        <Button onclick={handleAdd} disabled={adding || !newPattern.trim() || !newAmount.trim()}>
+        <Button onclick={handleAdd} disabled={adding || !newPattern.trim() || !String(newAmount).trim()}>
           <Plus class="mr-1 h-4 w-4" />
           Add
         </Button>
+      </div>
+      <p class="text-xs text-muted-foreground">Exact match or prefix (e.g. "Expenses:Food" includes "Expenses:Food:Groceries")</p>
       </div>
     </Card.Content>
   </Card.Root>
@@ -205,7 +207,7 @@
                 <Table.Cell>
                   <select
                     bind:value={editPeriod}
-                    class="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                    class="flex h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-base shadow-xs outline-none transition-[color,box-shadow] md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   >
                     <option value="monthly">Monthly</option>
                     <option value="yearly">Yearly</option>
