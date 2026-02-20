@@ -238,9 +238,7 @@ class TauriBackend implements Backend {
     return this.invoke("query_journal_entries", { filter });
   }
   async countJournalEntries(filter: TransactionFilter): Promise<number> {
-    // Stub: fall back to querying all and counting
-    const entries = await this.queryJournalEntries(filter);
-    return entries.length;
+    return this.invoke("count_journal_entries", { filter });
   }
 
   // Balances
@@ -272,23 +270,47 @@ class TauriBackend implements Backend {
     return this.invoke("list_open_lots");
   }
 
-  // Budgets (not yet implemented in Rust backend)
-  async createBudget(_budget: Budget): Promise<void> {}
-  async listBudgets(): Promise<Budget[]> { return []; }
-  async updateBudget(_budget: Budget): Promise<void> {}
-  async deleteBudget(_id: string): Promise<void> {}
+  // Budgets
+  async createBudget(budget: Budget): Promise<void> {
+    return this.invoke("create_budget", { budget });
+  }
+  async listBudgets(): Promise<Budget[]> {
+    return this.invoke("list_budgets");
+  }
+  async updateBudget(budget: Budget): Promise<void> {
+    return this.invoke("update_budget", { budget });
+  }
+  async deleteBudget(id: string): Promise<void> {
+    return this.invoke("delete_budget", { id });
+  }
 
-  // Reconciliation (not yet implemented in Rust backend)
-  async getUnreconciledLineItems(_accountId: string, _currency: string, _upToDate?: string): Promise<UnreconciledLineItem[]> { return []; }
-  async markReconciled(_reconciliation: Reconciliation, _lineItemIds: string[]): Promise<void> {}
-  async listReconciliations(_accountId?: string): Promise<Reconciliation[]> { return []; }
-  async getReconciliationDetail(_id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null> { return null; }
+  // Reconciliation
+  async getUnreconciledLineItems(accountId: string, currency: string, upToDate?: string): Promise<UnreconciledLineItem[]> {
+    return this.invoke("get_unreconciled_line_items", { accountId, currency, upToDate: upToDate ?? null });
+  }
+  async markReconciled(reconciliation: Reconciliation, lineItemIds: string[]): Promise<void> {
+    return this.invoke("mark_reconciled", { reconciliation, lineItemIds });
+  }
+  async listReconciliations(accountId?: string): Promise<Reconciliation[]> {
+    return this.invoke("list_reconciliations", { accountId: accountId ?? null });
+  }
+  async getReconciliationDetail(id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null> {
+    return this.invoke("get_reconciliation_detail", { id });
+  }
 
-  // Recurring templates (not yet implemented in Rust backend)
-  async createRecurringTemplate(_template: RecurringTemplate): Promise<void> {}
-  async listRecurringTemplates(): Promise<RecurringTemplate[]> { return []; }
-  async updateRecurringTemplate(_template: RecurringTemplate): Promise<void> {}
-  async deleteRecurringTemplate(_id: string): Promise<void> {}
+  // Recurring templates
+  async createRecurringTemplate(template: RecurringTemplate): Promise<void> {
+    return this.invoke("create_recurring_template", { template });
+  }
+  async listRecurringTemplates(): Promise<RecurringTemplate[]> {
+    return this.invoke("list_recurring_templates");
+  }
+  async updateRecurringTemplate(template: RecurringTemplate): Promise<void> {
+    return this.invoke("update_recurring_template", { template });
+  }
+  async deleteRecurringTemplate(id: string): Promise<void> {
+    return this.invoke("delete_recurring_template", { id });
+  }
 
   // Exchange rates
   async recordExchangeRate(rate: ExchangeRate): Promise<void> {

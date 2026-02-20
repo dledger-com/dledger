@@ -729,7 +729,10 @@
       {/if}
     </Card.Content>
     <Card.Footer class="flex justify-between">
-      <Button variant="outline" href="/journal">Cancel</Button>
+      <div class="flex gap-2">
+        <Button variant="outline" href="/journal">Cancel</Button>
+        <Button variant="outline" href="/journal/csv-import">Import CSV</Button>
+      </div>
       <Button
         onclick={handleImport}
         disabled={submitting || !fileContent.trim()}

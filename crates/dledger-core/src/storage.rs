@@ -191,6 +191,46 @@ pub trait Storage: Send + Sync {
     fn clear_ledger_data(&self) -> StorageResult<()>;
     fn clear_all_data(&self) -> StorageResult<()>;
 
+    // -- Budgets --
+
+    fn create_budget(&self, budget: &Budget) -> StorageResult<()>;
+    fn list_budgets(&self) -> StorageResult<Vec<Budget>>;
+    fn update_budget(&self, budget: &Budget) -> StorageResult<()>;
+    fn delete_budget(&self, id: &Uuid) -> StorageResult<()>;
+
+    // -- Reconciliation --
+
+    fn get_unreconciled_line_items(
+        &self,
+        account_id: &Uuid,
+        currency: &str,
+        up_to_date: Option<NaiveDate>,
+    ) -> StorageResult<Vec<UnreconciledLineItem>>;
+    fn mark_reconciled(
+        &self,
+        reconciliation: &Reconciliation,
+        line_item_ids: &[Uuid],
+    ) -> StorageResult<()>;
+    fn list_reconciliations(
+        &self,
+        account_id: Option<&Uuid>,
+    ) -> StorageResult<Vec<Reconciliation>>;
+    fn get_reconciliation_detail(
+        &self,
+        id: &Uuid,
+    ) -> StorageResult<Option<(Reconciliation, Vec<Uuid>)>>;
+
+    // -- Recurring templates --
+
+    fn create_recurring_template(&self, template: &RecurringTemplate) -> StorageResult<()>;
+    fn list_recurring_templates(&self) -> StorageResult<Vec<RecurringTemplate>>;
+    fn update_recurring_template(&self, template: &RecurringTemplate) -> StorageResult<()>;
+    fn delete_recurring_template(&self, id: &Uuid) -> StorageResult<()>;
+
+    // -- Pagination --
+
+    fn count_journal_entries(&self, filter: &TransactionFilter) -> StorageResult<u64>;
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()>;

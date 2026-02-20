@@ -81,4 +81,31 @@ test.describe("App smoke tests", () => {
       page.locator("text=No data available").or(page.locator("table")),
     ).toBeVisible({ timeout: 10000 });
   });
+
+  test("portfolio page loads and has generate button", async ({ page }) => {
+    await page.goto("/reports/portfolio");
+    await expect(page.locator("h1")).toContainText("Portfolio Overview");
+    await expect(page.locator("button:has-text('Generate')")).toBeVisible();
+  });
+
+  test("recurring transactions page loads", async ({ page }) => {
+    await page.goto("/journal/recurring");
+    await expect(page.locator("h1")).toContainText("Recurring Transactions");
+  });
+
+  test("tax report page loads and has generate button", async ({ page }) => {
+    await page.goto("/reports/tax");
+    await expect(page.locator("h1")).toContainText("Tax Summary Report");
+    await expect(page.locator("button:has-text('Generate')")).toBeVisible();
+  });
+
+  test("csv import page loads", async ({ page }) => {
+    await page.goto("/journal/csv-import");
+    await expect(page.locator("h1")).toContainText("CSV Import");
+  });
+
+  test("budget report page loads", async ({ page }) => {
+    await page.goto("/reports/budget");
+    await expect(page.locator("h1")).toContainText("Budget Report");
+  });
 });

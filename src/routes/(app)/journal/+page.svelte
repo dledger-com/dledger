@@ -137,6 +137,7 @@
       <Button variant="outline" size="sm" onclick={handleExport} disabled={exporting}>
         {exporting ? "Exporting..." : "Export"}
       </Button>
+      <Button variant="outline" size="sm" href="/journal/csv-import">Import CSV</Button>
       <Button variant="outline" size="sm" href="/sources">Import</Button>
       <Button size="sm" href="/journal/new">New Entry</Button>
     </div>

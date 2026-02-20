@@ -90,6 +90,19 @@ pub fn run() {
             commands::check_balance_assertions,
             commands::query_entries_by_metadata,
             commands::list_open_lots,
+            commands::create_budget,
+            commands::list_budgets,
+            commands::update_budget,
+            commands::delete_budget,
+            commands::get_unreconciled_line_items,
+            commands::mark_reconciled,
+            commands::list_reconciliations,
+            commands::get_reconciliation_detail,
+            commands::create_recurring_template,
+            commands::list_recurring_templates,
+            commands::update_recurring_template,
+            commands::delete_recurring_template,
+            commands::count_journal_entries,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

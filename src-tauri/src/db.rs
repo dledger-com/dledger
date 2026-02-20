@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -1273,6 +1273,339 @@ impl Storage for SqliteStorage {
         }
     }
 
+    // -- Budgets --
+
+    fn create_budget(&self, budget: &Budget) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT INTO budget (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                budget.id.to_string(),
+                budget.account_pattern,
+                budget.period_type,
+                budget.amount.to_string(),
+                budget.currency,
+                budget.start_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                budget.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                budget.created_at.format("%Y-%m-%d").to_string(),
+            ],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn list_budgets(&self) -> StorageResult<Vec<Budget>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget ORDER BY created_at")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(row_to_budget(row))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.map(|r| r.map_err(|e| StorageError::Internal(e.to_string()))?)
+            .collect()
+    }
+
+    fn update_budget(&self, budget: &Budget) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute(
+                "UPDATE budget SET account_pattern = ?2, period_type = ?3, amount = ?4, currency = ?5, start_date = ?6, end_date = ?7 WHERE id = ?1",
+                params![
+                    budget.id.to_string(),
+                    budget.account_pattern,
+                    budget.period_type,
+                    budget.amount.to_string(),
+                    budget.currency,
+                    budget.start_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                    budget.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                ],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("budget {}", budget.id)));
+        }
+        Ok(())
+    }
+
+    fn delete_budget(&self, id: &Uuid) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute("DELETE FROM budget WHERE id = ?1", params![id.to_string()])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("budget {id}")));
+        }
+        Ok(())
+    }
+
+    // -- Reconciliation --
+
+    fn get_unreconciled_line_items(
+        &self,
+        account_id: &Uuid,
+        currency: &str,
+        up_to_date: Option<NaiveDate>,
+    ) -> StorageResult<Vec<UnreconciledLineItem>> {
+        let conn = self.conn.borrow();
+        let date_clause = if up_to_date.is_some() {
+            " AND je.date <= ?3"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT li.id, je.id, je.date, je.description, li.account_id, li.currency, li.amount, li.is_reconciled
+             FROM line_item li
+             JOIN journal_entry je ON je.id = li.journal_entry_id
+             WHERE li.account_id = ?1 AND li.currency = ?2 AND je.status != 'voided' AND li.is_reconciled = 0{}
+             ORDER BY je.date, je.id",
+            date_clause
+        );
+        let mut stmt = conn.prepare(&sql)
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+        let account_id_str = account_id.to_string();
+        let date_str = up_to_date.map(|d| d.format("%Y-%m-%d").to_string());
+
+        let rows: Vec<UnreconciledLineItem> = if let Some(ref ds) = date_str {
+            stmt.query_map(params![account_id_str, currency, ds], |row| {
+                Ok(row_to_unreconciled_line_item(row))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .map(|r| r.map_err(|e| StorageError::Internal(e.to_string()))?)
+            .collect::<StorageResult<Vec<_>>>()?
+        } else {
+            stmt.query_map(params![account_id_str, currency], |row| {
+                Ok(row_to_unreconciled_line_item(row))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .map(|r| r.map_err(|e| StorageError::Internal(e.to_string()))?)
+            .collect::<StorageResult<Vec<_>>>()?
+        };
+        Ok(rows)
+    }
+
+    fn mark_reconciled(
+        &self,
+        reconciliation: &Reconciliation,
+        line_item_ids: &[Uuid],
+    ) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT INTO reconciliation (id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                reconciliation.id.to_string(),
+                reconciliation.account_id.to_string(),
+                reconciliation.statement_date.format("%Y-%m-%d").to_string(),
+                reconciliation.statement_balance.to_string(),
+                reconciliation.currency,
+                reconciliation.reconciled_at.format("%Y-%m-%d").to_string(),
+                line_item_ids.len() as u32,
+            ],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+        for li_id in line_item_ids {
+            conn.execute(
+                "INSERT INTO reconciliation_line_item (reconciliation_id, line_item_id) VALUES (?1, ?2)",
+                params![reconciliation.id.to_string(), li_id.to_string()],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+            conn.execute(
+                "UPDATE line_item SET is_reconciled = 1 WHERE id = ?1",
+                params![li_id.to_string()],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    fn list_reconciliations(
+        &self,
+        account_id: Option<&Uuid>,
+    ) -> StorageResult<Vec<Reconciliation>> {
+        let conn = self.conn.borrow();
+        let (sql, param_val) = if let Some(aid) = account_id {
+            (
+                "SELECT id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count
+                 FROM reconciliation WHERE account_id = ?1 ORDER BY statement_date DESC",
+                Some(aid.to_string()),
+            )
+        } else {
+            (
+                "SELECT id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count
+                 FROM reconciliation ORDER BY statement_date DESC",
+                None,
+            )
+        };
+        let mut stmt = conn.prepare(sql)
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut results = Vec::new();
+        if let Some(ref pv) = param_val {
+            let rows = stmt.query_map(params![pv], |row| Ok(row_to_reconciliation(row)))
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            for row in rows {
+                results.push(row.map_err(|e| StorageError::Internal(e.to_string()))??);
+            }
+        } else {
+            let rows = stmt.query_map([], |row| Ok(row_to_reconciliation(row)))
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            for row in rows {
+                results.push(row.map_err(|e| StorageError::Internal(e.to_string()))??);
+            }
+        }
+        Ok(results)
+    }
+
+    fn get_reconciliation_detail(
+        &self,
+        id: &Uuid,
+    ) -> StorageResult<Option<(Reconciliation, Vec<Uuid>)>> {
+        let conn = self.conn.borrow();
+        let reconciliation = conn
+            .prepare("SELECT id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count FROM reconciliation WHERE id = ?1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .query_row(params![id.to_string()], |row| Ok(row_to_reconciliation(row)))
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+        match reconciliation {
+            None => Ok(None),
+            Some(rec) => {
+                let rec = rec?;
+                let mut stmt = conn
+                    .prepare("SELECT line_item_id FROM reconciliation_line_item WHERE reconciliation_id = ?1")
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+                let ids = stmt
+                    .query_map(params![id.to_string()], |row| row.get::<_, String>(0))
+                    .map_err(|e| StorageError::Internal(e.to_string()))?
+                    .map(|r| {
+                        let s = r.map_err(|e| StorageError::Internal(e.to_string()))?;
+                        parse_uuid(&s)
+                    })
+                    .collect::<StorageResult<Vec<_>>>()?;
+                Ok(Some((rec, ids)))
+            }
+        }
+    }
+
+    // -- Recurring templates --
+
+    fn create_recurring_template(&self, template: &RecurringTemplate) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT INTO recurring_template (id, description, frequency, interval_val, next_date, end_date, is_active, line_items_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                template.id.to_string(),
+                template.description,
+                template.frequency,
+                template.interval,
+                template.next_date.format("%Y-%m-%d").to_string(),
+                template.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                template.is_active as i32,
+                template.line_items_json,
+                template.created_at.format("%Y-%m-%d").to_string(),
+            ],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn list_recurring_templates(&self) -> StorageResult<Vec<RecurringTemplate>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT id, description, frequency, interval_val, next_date, end_date, is_active, line_items_json, created_at FROM recurring_template ORDER BY next_date")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| Ok(row_to_recurring_template(row)))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.map(|r| r.map_err(|e| StorageError::Internal(e.to_string()))?)
+            .collect()
+    }
+
+    fn update_recurring_template(&self, template: &RecurringTemplate) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute(
+                "UPDATE recurring_template SET description = ?2, frequency = ?3, interval_val = ?4, next_date = ?5, end_date = ?6, is_active = ?7, line_items_json = ?8 WHERE id = ?1",
+                params![
+                    template.id.to_string(),
+                    template.description,
+                    template.frequency,
+                    template.interval,
+                    template.next_date.format("%Y-%m-%d").to_string(),
+                    template.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                    template.is_active as i32,
+                    template.line_items_json,
+                ],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("recurring_template {}", template.id)));
+        }
+        Ok(())
+    }
+
+    fn delete_recurring_template(&self, id: &Uuid) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute("DELETE FROM recurring_template WHERE id = ?1", params![id.to_string()])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("recurring_template {id}")));
+        }
+        Ok(())
+    }
+
+    // -- Pagination --
+
+    fn count_journal_entries(&self, filter: &TransactionFilter) -> StorageResult<u64> {
+        let conn = self.conn.borrow();
+        let mut conditions = Vec::new();
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(ref account_id) = filter.account_id {
+            conditions.push("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id = ?)");
+            param_values.push(Box::new(account_id.to_string()));
+        }
+        if let Some(ref from_date) = filter.from_date {
+            conditions.push("je.date >= ?");
+            param_values.push(Box::new(from_date.format("%Y-%m-%d").to_string()));
+        }
+        if let Some(ref to_date) = filter.to_date {
+            conditions.push("je.date <= ?");
+            param_values.push(Box::new(to_date.format("%Y-%m-%d").to_string()));
+        }
+        if let Some(ref status) = filter.status {
+            conditions.push("je.status = ?");
+            param_values.push(Box::new(status.as_str().to_string()));
+        }
+        if let Some(ref source) = filter.source {
+            conditions.push("je.source = ?");
+            param_values.push(Box::new(source.clone()));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!("SELECT COUNT(*) FROM journal_entry je{}", where_clause);
+        let mut stmt = conn.prepare(&sql)
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let count: u64 = stmt
+            .query_row(params_ref.as_slice(), |row| row.get(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(count)
+    }
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()> {
@@ -1338,6 +1671,20 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 7 {
             storage.execute_sql(MIGRATION_V7)?;
             storage.set_schema_version(7)?;
+        }
+        if current < 8 {
+            storage.execute_sql(MIGRATION_V8)?;
+            storage.set_schema_version(8)?;
+        }
+        if current < 9 {
+            // Add is_reconciled column if it doesn't already exist (idempotent)
+            let _ = storage.execute_sql("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0");
+            storage.execute_sql(MIGRATION_V9)?;
+            storage.set_schema_version(9)?;
+        }
+        if current < 10 {
+            storage.execute_sql(MIGRATION_V10)?;
+            storage.set_schema_version(10)?;
         }
     }
     Ok(())
@@ -1620,6 +1967,94 @@ fn row_to_metadata(row: &rusqlite::Row<'_>) -> StorageResult<Metadata> {
         journal_entry_id: parse_uuid(&je_id_str)?,
         key,
         value,
+    })
+}
+
+fn row_to_budget(row: &rusqlite::Row<'_>) -> StorageResult<Budget> {
+    let id_str: String = row.get(0).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let account_pattern: String = row.get(1).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let period_type: String = row.get(2).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let amount_str: String = row.get(3).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let currency: String = row.get(4).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let start_date_str: Option<String> = row.get(5).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let end_date_str: Option<String> = row.get(6).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let created_at_str: String = row.get(7).map_err(|e| StorageError::Internal(e.to_string()))?;
+
+    Ok(Budget {
+        id: parse_uuid(&id_str)?,
+        account_pattern,
+        period_type,
+        amount: parse_decimal(&amount_str)?,
+        currency,
+        start_date: start_date_str.as_deref().map(parse_date).transpose()?,
+        end_date: end_date_str.as_deref().map(parse_date).transpose()?,
+        created_at: parse_date(&created_at_str)?,
+    })
+}
+
+fn row_to_reconciliation(row: &rusqlite::Row<'_>) -> StorageResult<Reconciliation> {
+    let id_str: String = row.get(0).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let account_id_str: String = row.get(1).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let statement_date_str: String = row.get(2).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let statement_balance_str: String = row.get(3).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let currency: String = row.get(4).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let reconciled_at_str: String = row.get(5).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let line_item_count: u32 = row.get(6).map_err(|e| StorageError::Internal(e.to_string()))?;
+
+    Ok(Reconciliation {
+        id: parse_uuid(&id_str)?,
+        account_id: parse_uuid(&account_id_str)?,
+        statement_date: parse_date(&statement_date_str)?,
+        statement_balance: parse_decimal(&statement_balance_str)?,
+        currency,
+        reconciled_at: parse_date(&reconciled_at_str)?,
+        line_item_count,
+    })
+}
+
+fn row_to_unreconciled_line_item(row: &rusqlite::Row<'_>) -> StorageResult<UnreconciledLineItem> {
+    let line_item_id_str: String = row.get(0).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let entry_id_str: String = row.get(1).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let entry_date_str: String = row.get(2).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let entry_description: String = row.get(3).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let account_id_str: String = row.get(4).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let currency: String = row.get(5).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let amount_str: String = row.get(6).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let is_reconciled: i32 = row.get(7).map_err(|e| StorageError::Internal(e.to_string()))?;
+
+    Ok(UnreconciledLineItem {
+        line_item_id: parse_uuid(&line_item_id_str)?,
+        entry_id: parse_uuid(&entry_id_str)?,
+        entry_date: parse_date(&entry_date_str)?,
+        entry_description,
+        account_id: parse_uuid(&account_id_str)?,
+        currency,
+        amount: parse_decimal(&amount_str)?,
+        is_reconciled: is_reconciled != 0,
+    })
+}
+
+fn row_to_recurring_template(row: &rusqlite::Row<'_>) -> StorageResult<RecurringTemplate> {
+    let id_str: String = row.get(0).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let description: String = row.get(1).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let frequency: String = row.get(2).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let interval: u32 = row.get(3).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let next_date_str: String = row.get(4).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let end_date_str: Option<String> = row.get(5).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let is_active: i32 = row.get(6).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let line_items_json: String = row.get(7).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let created_at_str: String = row.get(8).map_err(|e| StorageError::Internal(e.to_string()))?;
+
+    Ok(RecurringTemplate {
+        id: parse_uuid(&id_str)?,
+        description,
+        frequency,
+        interval,
+        next_date: parse_date(&next_date_str)?,
+        end_date: end_date_str.as_deref().map(parse_date).transpose()?,
+        is_active: is_active != 0,
+        line_items_json,
+        created_at: parse_date(&created_at_str)?,
     })
 }
 
@@ -2672,5 +3107,239 @@ mod tests {
 
         // Non-existent
         assert!(s.get_raw_transaction("nope").unwrap().is_none());
+    }
+
+    // ---------------------------------------------------------------
+    // 9. Budget CRUD
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_budget_crud() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+
+        let budget = Budget {
+            id: Uuid::now_v7(),
+            account_pattern: "Expenses:Food".to_string(),
+            period_type: "monthly".to_string(),
+            amount: dec!(500),
+            currency: "USD".to_string(),
+            start_date: Some(make_date(2024, 1, 1)),
+            end_date: None,
+            created_at: make_date(2024, 1, 1),
+        };
+        s.create_budget(&budget).unwrap();
+
+        let budgets = s.list_budgets().unwrap();
+        assert_eq!(budgets.len(), 1);
+        assert_eq!(budgets[0].account_pattern, "Expenses:Food");
+        assert_eq!(budgets[0].amount, dec!(500));
+
+        // Update
+        let mut updated = budget.clone();
+        updated.amount = dec!(600);
+        s.update_budget(&updated).unwrap();
+        let budgets = s.list_budgets().unwrap();
+        assert_eq!(budgets[0].amount, dec!(600));
+
+        // Delete
+        s.delete_budget(&budget.id).unwrap();
+        let budgets = s.list_budgets().unwrap();
+        assert!(budgets.is_empty());
+    }
+
+    // ---------------------------------------------------------------
+    // 10. Reconciliation flow
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_reconciliation_flow() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+
+        let bank = make_account(None, AccountType::Asset, "Bank", "Assets:Bank");
+        let equity = make_account(None, AccountType::Equity, "Opening", "Equity:Opening");
+        s.create_account(&bank).unwrap();
+        s.create_account(&equity).unwrap();
+
+        let entry = JournalEntry {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 6, 1),
+            description: "Deposit".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 6, 1),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: entry.id,
+                account_id: bank.id,
+                currency: "USD".to_string(),
+                amount: dec!(1000),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: entry.id,
+                account_id: equity.id,
+                currency: "USD".to_string(),
+                amount: dec!(-1000),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        // Get unreconciled
+        let unreconciled = s.get_unreconciled_line_items(&bank.id, "USD", None).unwrap();
+        assert_eq!(unreconciled.len(), 1);
+        assert_eq!(unreconciled[0].amount, dec!(1000));
+
+        // Mark reconciled
+        let rec = Reconciliation {
+            id: Uuid::now_v7(),
+            account_id: bank.id,
+            statement_date: make_date(2024, 6, 30),
+            statement_balance: dec!(1000),
+            currency: "USD".to_string(),
+            reconciled_at: make_date(2024, 7, 1),
+            line_item_count: 1,
+        };
+        s.mark_reconciled(&rec, &[items[0].id]).unwrap();
+
+        // Now unreconciled should be empty
+        let unreconciled = s.get_unreconciled_line_items(&bank.id, "USD", None).unwrap();
+        assert!(unreconciled.is_empty());
+
+        // List reconciliations
+        let recs = s.list_reconciliations(Some(&bank.id)).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].statement_balance, dec!(1000));
+
+        // Get detail
+        let detail = s.get_reconciliation_detail(&rec.id).unwrap().unwrap();
+        assert_eq!(detail.1.len(), 1);
+        assert_eq!(detail.1[0], items[0].id);
+    }
+
+    // ---------------------------------------------------------------
+    // 11. Recurring template CRUD
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_recurring_template_crud() {
+        let s = setup();
+
+        let template = RecurringTemplate {
+            id: Uuid::now_v7(),
+            description: "Monthly rent".to_string(),
+            frequency: "monthly".to_string(),
+            interval: 1,
+            next_date: make_date(2024, 2, 1),
+            end_date: None,
+            is_active: true,
+            line_items_json: r#"[{"account_id":"a","currency":"USD","amount":"1500"}]"#.to_string(),
+            created_at: make_date(2024, 1, 1),
+        };
+        s.create_recurring_template(&template).unwrap();
+
+        let templates = s.list_recurring_templates().unwrap();
+        assert_eq!(templates.len(), 1);
+        assert_eq!(templates[0].description, "Monthly rent");
+
+        // Update
+        let mut updated = template.clone();
+        updated.description = "Monthly rent (updated)".to_string();
+        updated.next_date = make_date(2024, 3, 1);
+        s.update_recurring_template(&updated).unwrap();
+        let templates = s.list_recurring_templates().unwrap();
+        assert_eq!(templates[0].description, "Monthly rent (updated)");
+
+        // Delete
+        s.delete_recurring_template(&template.id).unwrap();
+        let templates = s.list_recurring_templates().unwrap();
+        assert!(templates.is_empty());
+    }
+
+    // ---------------------------------------------------------------
+    // 12. Count journal entries
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_count_journal_entries() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        for i in 1..=3u32 {
+            let eid = Uuid::now_v7();
+            let entry = JournalEntry {
+                id: eid,
+                date: make_date(2024, 1, i),
+                description: format!("Entry {i}"),
+                status: JournalEntryStatus::Confirmed,
+                source: "manual".to_string(),
+                voided_by: None,
+                created_at: make_date(2024, 1, i),
+            };
+            let items = vec![
+                LineItem {
+                    id: Uuid::now_v7(),
+                    journal_entry_id: eid,
+                    account_id: expense_id,
+                    currency: "USD".to_string(),
+                    amount: dec!(100),
+                    lot_id: None,
+                },
+                LineItem {
+                    id: Uuid::now_v7(),
+                    journal_entry_id: eid,
+                    account_id: asset_id,
+                    currency: "USD".to_string(),
+                    amount: dec!(-100),
+                    lot_id: None,
+                },
+            ];
+            s.insert_journal_entry(&entry, &items).unwrap();
+        }
+
+        // Count all
+        let count = s.count_journal_entries(&TransactionFilter::default()).unwrap();
+        assert_eq!(count, 3);
+
+        // Count with date filter
+        let filtered = s.count_journal_entries(&TransactionFilter {
+            from_date: Some(make_date(2024, 1, 2)),
+            to_date: Some(make_date(2024, 1, 3)),
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(filtered, 2);
+    }
+
+    // ---------------------------------------------------------------
+    // 13. Schema migrations v7 → v10
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_migrations_v7_to_v10() {
+        let storage = SqliteStorage::new_in_memory().unwrap();
+        storage.execute_sql("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);").unwrap();
+        storage.execute_sql(SCHEMA_SQL).unwrap();
+        // Set version to 7 (simulating a pre-v8 database)
+        storage.execute_sql("DELETE FROM schema_version").unwrap();
+        storage.execute_sql("INSERT INTO schema_version (version) VALUES (7)").unwrap();
+
+        apply_migrations(&storage).unwrap();
+
+        assert_eq!(storage.get_schema_version().unwrap(), 10);
+
+        // Verify budget table exists
+        storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();
+
+        // Verify reconciliation tables exist
+        storage.execute_sql("INSERT INTO reconciliation (id, account_id, statement_date, statement_balance, currency, reconciled_at) VALUES ('test', 'acc', '2024-01-01', '100', 'USD', '2024-01-01')").unwrap();
+
+        // Verify recurring_template table exists
+        storage.execute_sql("INSERT INTO recurring_template (id, description, frequency, next_date, created_at) VALUES ('test', 'test', 'monthly', '2024-01-01', '2024-01-01')").unwrap();
     }
 }

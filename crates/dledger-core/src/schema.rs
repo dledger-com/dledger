@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 10;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS line_item (
     currency TEXT NOT NULL REFERENCES currency(code),
     amount TEXT NOT NULL,  -- rust_decimal as TEXT
     lot_id TEXT REFERENCES lot(id),
+    is_reconciled INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT fk_line_item_entry FOREIGN KEY (journal_entry_id) REFERENCES journal_entry(id)
 );
 CREATE INDEX IF NOT EXISTS idx_line_item_entry ON line_item(journal_entry_id);
@@ -158,12 +159,98 @@ CREATE TABLE IF NOT EXISTS currency_rate_source (
     PRIMARY KEY (currency)
 );
 
+-- Budgets (v8)
+CREATE TABLE IF NOT EXISTS budget (
+    id TEXT PRIMARY KEY,
+    account_pattern TEXT NOT NULL,
+    period_type TEXT NOT NULL DEFAULT 'monthly',
+    amount TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Reconciliation (v9)
+CREATE TABLE IF NOT EXISTS reconciliation (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    statement_date TEXT NOT NULL,
+    statement_balance TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    reconciled_at TEXT NOT NULL,
+    line_item_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS reconciliation_line_item (
+    reconciliation_id TEXT NOT NULL,
+    line_item_id TEXT NOT NULL,
+    PRIMARY KEY (reconciliation_id, line_item_id)
+);
+
+-- Recurring templates (v10)
+CREATE TABLE IF NOT EXISTS recurring_template (
+    id TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
+    interval_val INTEGER NOT NULL DEFAULT 1,
+    next_date TEXT NOT NULL,
+    end_date TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    line_items_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 "#;
 
 pub const MIGRATION_V7: &str = r#"
+CREATE TABLE IF NOT EXISTS budget (
+    id TEXT PRIMARY KEY,
+    account_pattern TEXT NOT NULL,
+    period_type TEXT NOT NULL DEFAULT 'monthly',
+    amount TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value);
+"#;
+
+pub const MIGRATION_V10: &str = r#"
+CREATE TABLE IF NOT EXISTS recurring_template (
+    id TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
+    interval_val INTEGER NOT NULL DEFAULT 1,
+    next_date TEXT NOT NULL,
+    end_date TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    line_items_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+"#;
+
+pub const MIGRATION_V9: &str = r#"
+CREATE TABLE IF NOT EXISTS reconciliation (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    statement_date TEXT NOT NULL,
+    statement_balance TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    reconciled_at TEXT NOT NULL,
+    line_item_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS reconciliation_line_item (
+    reconciliation_id TEXT NOT NULL,
+    line_item_id TEXT NOT NULL,
+    PRIMARY KEY (reconciliation_id, line_item_id)
+);
+"#;
+
+pub const MIGRATION_V8: &str = r#"
 CREATE TABLE IF NOT EXISTS budget (
     id TEXT PRIMARY KEY,
     account_pattern TEXT NOT NULL,

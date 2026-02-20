@@ -5,6 +5,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
@@ -68,6 +69,10 @@
         Export CSV
       </Button>
     {/if}
+    <div class="flex items-center gap-2">
+      <Switch checked={settings.showHidden} onCheckedChange={(v) => { settings.update({ showHidden: v }); generate(); }} />
+      <span class="text-sm text-muted-foreground">Show Hidden</span>
+    </div>
   </div>
 
   {#if loading}

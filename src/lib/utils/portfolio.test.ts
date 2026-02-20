@@ -285,4 +285,107 @@ describe("computePortfolioReport", () => {
     expect(report.wallets[0].totalBaseValue).toBeNull();
     expect(report.aggregate_total).toBeNull();
   });
+
+  it("excludes hidden currencies from holdings", async () => {
+    // Set up etherscan account
+    await backend.addEtherscanAccount("0xabc", 1, "MyWallet");
+
+    // Create hierarchy
+    const assets = await createAccountHierarchy("Assets", "asset", null);
+    assets.is_postable = false;
+    const ethAcc = await createAccountHierarchy(
+      "Assets:Crypto:MyWallet",
+      "asset",
+      assets.id,
+    );
+
+    const equity = await createAccountHierarchy("Equity", "equity", null);
+    const opening = await createAccountHierarchy(
+      "Equity:Opening",
+      "equity",
+      equity.id,
+    );
+
+    // Create a spam currency + holding
+    const SPAM: Currency = { code: "SPAM", name: "Spam Token", decimal_places: 18, is_base: false };
+    await backend.createCurrency(SPAM);
+    await backend.setCurrencyHidden("SPAM", true);
+
+    // Post SPAM holding
+    const entryId = uuidv7();
+    await backend.postJournalEntry(
+      {
+        id: entryId,
+        date: "2024-06-01",
+        description: "Airdrop spam",
+        status: "confirmed",
+        source: "manual",
+        voided_by: null,
+        created_at: "2024-06-01",
+      },
+      [
+        {
+          id: uuidv7(),
+          journal_entry_id: entryId,
+          account_id: ethAcc.id,
+          currency: "SPAM",
+          amount: "1000000",
+          lot_id: null,
+        },
+        {
+          id: uuidv7(),
+          journal_entry_id: entryId,
+          account_id: opening.id,
+          currency: "SPAM",
+          amount: "-1000000",
+          lot_id: null,
+        },
+      ],
+    );
+
+    // Also post a legit ETH holding
+    const ethEntryId = uuidv7();
+    await backend.postJournalEntry(
+      {
+        id: ethEntryId,
+        date: "2024-06-01",
+        description: "ETH deposit",
+        status: "confirmed",
+        source: "manual",
+        voided_by: null,
+        created_at: "2024-06-01",
+      },
+      [
+        {
+          id: uuidv7(),
+          journal_entry_id: ethEntryId,
+          account_id: ethAcc.id,
+          currency: "ETH",
+          amount: "2",
+          lot_id: null,
+        },
+        {
+          id: uuidv7(),
+          journal_entry_id: ethEntryId,
+          account_id: opening.id,
+          currency: "ETH",
+          amount: "-2",
+          lot_id: null,
+        },
+      ],
+    );
+
+    // Request portfolio with SPAM in hiddenCurrencies set
+    const report = await computePortfolioReport(
+      backend,
+      "USD",
+      "2024-12-31",
+      new Set(["SPAM"]),
+    );
+
+    expect(report.wallets).toHaveLength(1);
+    // Should only have ETH, not SPAM
+    expect(report.wallets[0].holdings).toHaveLength(1);
+    expect(report.wallets[0].holdings[0].currency).toBe("ETH");
+  });
 });

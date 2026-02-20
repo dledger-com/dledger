@@ -263,3 +263,55 @@ pub struct CurrencyRateSource {
     pub rate_source: String,
     pub set_by: String,
 }
+
+/// Budget definition for tracking spending against targets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Budget {
+    pub id: Uuid,
+    pub account_pattern: String,
+    pub period_type: String,
+    pub amount: Decimal,
+    pub currency: String,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub created_at: NaiveDate,
+}
+
+/// Reconciliation record for an account statement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reconciliation {
+    pub id: Uuid,
+    pub account_id: Uuid,
+    pub statement_date: NaiveDate,
+    pub statement_balance: Decimal,
+    pub currency: String,
+    pub reconciled_at: NaiveDate,
+    pub line_item_count: u32,
+}
+
+/// Unreconciled line item for reconciliation UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnreconciledLineItem {
+    pub line_item_id: Uuid,
+    pub entry_id: Uuid,
+    pub entry_date: NaiveDate,
+    pub entry_description: String,
+    pub account_id: Uuid,
+    pub currency: String,
+    pub amount: Decimal,
+    pub is_reconciled: bool,
+}
+
+/// Recurring transaction template.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecurringTemplate {
+    pub id: Uuid,
+    pub description: String,
+    pub frequency: String,
+    pub interval: u32,
+    pub next_date: NaiveDate,
+    pub end_date: Option<NaiveDate>,
+    pub is_active: bool,
+    pub line_items_json: String,
+    pub created_at: NaiveDate,
+}

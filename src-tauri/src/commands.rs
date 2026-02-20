@@ -513,6 +513,121 @@ pub fn check_balance_assertions(state: State<'_, AppState>) -> Result<Vec<Balanc
         .map_err(|e| e.to_string())
 }
 
+// -- Budget commands --
+
+#[tauri::command]
+pub fn create_budget(state: State<'_, AppState>, budget: Budget) -> Result<(), String> {
+    state.engine.create_budget(&budget).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_budgets(state: State<'_, AppState>) -> Result<Vec<Budget>, String> {
+    state.engine.list_budgets().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_budget(state: State<'_, AppState>, budget: Budget) -> Result<(), String> {
+    state.engine.update_budget(&budget).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_budget(state: State<'_, AppState>, id: Uuid) -> Result<(), String> {
+    state.engine.delete_budget(&id).map_err(|e| e.to_string())
+}
+
+// -- Reconciliation commands --
+
+#[tauri::command]
+pub fn get_unreconciled_line_items(
+    state: State<'_, AppState>,
+    account_id: Uuid,
+    currency: String,
+    up_to_date: Option<NaiveDate>,
+) -> Result<Vec<UnreconciledLineItem>, String> {
+    state.engine
+        .get_unreconciled_line_items(&account_id, &currency, up_to_date)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mark_reconciled(
+    state: State<'_, AppState>,
+    reconciliation: Reconciliation,
+    line_item_ids: Vec<Uuid>,
+) -> Result<(), String> {
+    state.engine
+        .mark_reconciled(&reconciliation, &line_item_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_reconciliations(
+    state: State<'_, AppState>,
+    account_id: Option<Uuid>,
+) -> Result<Vec<Reconciliation>, String> {
+    state.engine
+        .list_reconciliations(account_id.as_ref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_reconciliation_detail(
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> Result<Option<(Reconciliation, Vec<Uuid>)>, String> {
+    state.engine
+        .get_reconciliation_detail(&id)
+        .map_err(|e| e.to_string())
+}
+
+// -- Recurring template commands --
+
+#[tauri::command]
+pub fn create_recurring_template(
+    state: State<'_, AppState>,
+    template: RecurringTemplate,
+) -> Result<(), String> {
+    state.engine
+        .create_recurring_template(&template)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_recurring_templates(state: State<'_, AppState>) -> Result<Vec<RecurringTemplate>, String> {
+    state.engine
+        .list_recurring_templates()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_recurring_template(
+    state: State<'_, AppState>,
+    template: RecurringTemplate,
+) -> Result<(), String> {
+    state.engine
+        .update_recurring_template(&template)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_recurring_template(state: State<'_, AppState>, id: Uuid) -> Result<(), String> {
+    state.engine
+        .delete_recurring_template(&id)
+        .map_err(|e| e.to_string())
+}
+
+// -- Pagination command --
+
+#[tauri::command]
+pub fn count_journal_entries(
+    state: State<'_, AppState>,
+    filter: TransactionFilter,
+) -> Result<u64, String> {
+    state.engine
+        .count_journal_entries(&filter)
+        .map_err(|e| e.to_string())
+}
+
 // -- Etherscan commands --
 
 #[tauri::command]

@@ -961,6 +961,27 @@ impl Storage for TestStorage {
         }
         Ok(result)
     }
+
+    // -- Budgets (stub) --
+    fn create_budget(&self, _budget: &Budget) -> StorageResult<()> { Ok(()) }
+    fn list_budgets(&self) -> StorageResult<Vec<Budget>> { Ok(vec![]) }
+    fn update_budget(&self, _budget: &Budget) -> StorageResult<()> { Ok(()) }
+    fn delete_budget(&self, _id: &Uuid) -> StorageResult<()> { Ok(()) }
+
+    // -- Reconciliation (stub) --
+    fn get_unreconciled_line_items(&self, _account_id: &Uuid, _currency: &str, _up_to_date: Option<NaiveDate>) -> StorageResult<Vec<UnreconciledLineItem>> { Ok(vec![]) }
+    fn mark_reconciled(&self, _reconciliation: &Reconciliation, _line_item_ids: &[Uuid]) -> StorageResult<()> { Ok(()) }
+    fn list_reconciliations(&self, _account_id: Option<&Uuid>) -> StorageResult<Vec<Reconciliation>> { Ok(vec![]) }
+    fn get_reconciliation_detail(&self, _id: &Uuid) -> StorageResult<Option<(Reconciliation, Vec<Uuid>)>> { Ok(None) }
+
+    // -- Recurring templates (stub) --
+    fn create_recurring_template(&self, _template: &RecurringTemplate) -> StorageResult<()> { Ok(()) }
+    fn list_recurring_templates(&self) -> StorageResult<Vec<RecurringTemplate>> { Ok(vec![]) }
+    fn update_recurring_template(&self, _template: &RecurringTemplate) -> StorageResult<()> { Ok(()) }
+    fn delete_recurring_template(&self, _id: &Uuid) -> StorageResult<()> { Ok(()) }
+
+    // -- Pagination (stub) --
+    fn count_journal_entries(&self, _filter: &TransactionFilter) -> StorageResult<u64> { Ok(0) }
 }
 
 // ============================================================================

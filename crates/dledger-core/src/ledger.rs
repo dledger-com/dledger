@@ -506,6 +506,82 @@ impl LedgerEngine {
         Ok(())
     }
 
+    // --- Budgets ---
+
+    pub fn create_budget(&self, budget: &Budget) -> LedgerResult<()> {
+        self.storage.create_budget(budget)?;
+        Ok(())
+    }
+
+    pub fn list_budgets(&self) -> LedgerResult<Vec<Budget>> {
+        Ok(self.storage.list_budgets()?)
+    }
+
+    pub fn update_budget(&self, budget: &Budget) -> LedgerResult<()> {
+        self.storage.update_budget(budget)?;
+        Ok(())
+    }
+
+    pub fn delete_budget(&self, id: &Uuid) -> LedgerResult<()> {
+        self.storage.delete_budget(id)?;
+        Ok(())
+    }
+
+    // --- Reconciliation ---
+
+    pub fn get_unreconciled_line_items(
+        &self,
+        account_id: &Uuid,
+        currency: &str,
+        up_to_date: Option<NaiveDate>,
+    ) -> LedgerResult<Vec<UnreconciledLineItem>> {
+        Ok(self.storage.get_unreconciled_line_items(account_id, currency, up_to_date)?)
+    }
+
+    pub fn mark_reconciled(
+        &self,
+        reconciliation: &Reconciliation,
+        line_item_ids: &[Uuid],
+    ) -> LedgerResult<()> {
+        self.storage.mark_reconciled(reconciliation, line_item_ids)?;
+        Ok(())
+    }
+
+    pub fn list_reconciliations(&self, account_id: Option<&Uuid>) -> LedgerResult<Vec<Reconciliation>> {
+        Ok(self.storage.list_reconciliations(account_id)?)
+    }
+
+    pub fn get_reconciliation_detail(&self, id: &Uuid) -> LedgerResult<Option<(Reconciliation, Vec<Uuid>)>> {
+        Ok(self.storage.get_reconciliation_detail(id)?)
+    }
+
+    // --- Recurring templates ---
+
+    pub fn create_recurring_template(&self, template: &RecurringTemplate) -> LedgerResult<()> {
+        self.storage.create_recurring_template(template)?;
+        Ok(())
+    }
+
+    pub fn list_recurring_templates(&self) -> LedgerResult<Vec<RecurringTemplate>> {
+        Ok(self.storage.list_recurring_templates()?)
+    }
+
+    pub fn update_recurring_template(&self, template: &RecurringTemplate) -> LedgerResult<()> {
+        self.storage.update_recurring_template(template)?;
+        Ok(())
+    }
+
+    pub fn delete_recurring_template(&self, id: &Uuid) -> LedgerResult<()> {
+        self.storage.delete_recurring_template(id)?;
+        Ok(())
+    }
+
+    // --- Pagination ---
+
+    pub fn count_journal_entries(&self, filter: &TransactionFilter) -> LedgerResult<u64> {
+        Ok(self.storage.count_journal_entries(filter)?)
+    }
+
     // --- Internal helpers ---
 
     fn audit(&self, action: &str, entity_type: &str, entity_id: Uuid, details: &str) -> LedgerResult<()> {
