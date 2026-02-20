@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "dledger"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "dledger-core",
@@ -845,7 +845,7 @@ dependencies = [
 
 [[package]]
 name = "dledger-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "dledger-web"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dledger-core",
  "serde",
