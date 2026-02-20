@@ -362,6 +362,7 @@ export class SqlJsBackend implements Backend {
   private sql: SqlJsStatic;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private inTransaction = false;
+  private disposed = false;
 
   private constructor(db: Database, sql: SqlJsStatic) {
     this.db = db;
@@ -600,12 +601,33 @@ export class SqlJsBackend implements Backend {
   }
 
   private scheduleSave(): void {
+    if (this.disposed) return;
     if (this.inTransaction) return;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       const data = this.db.export();
       saveToIndexedDB(data).catch(console.error);
     }, 500);
+  }
+
+  close(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    try {
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
+      if (this.inTransaction) {
+        try { this.db.exec("ROLLBACK"); } catch (_) { /* ignore */ }
+        this.inTransaction = false;
+      }
+      const data = this.db.export();
+      saveToIndexedDB(data).catch(() => {});
+      this.db.close();
+    } catch (_) {
+      // Runs during page teardown — must not throw
+    }
   }
 
   beginTransaction(): void {

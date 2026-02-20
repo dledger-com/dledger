@@ -176,6 +176,9 @@ export interface Backend {
   clearExchangeRates(): Promise<void>;
   clearLedgerData(): Promise<void>;
   clearAllData(): Promise<void>;
+
+  // Lifecycle
+  close?(): void;
 }
 
 class TauriBackend implements Backend {
@@ -464,4 +467,11 @@ export function getBackend(): Backend {
     throw new Error("Backend not initialized. Await initBackend() first.");
   }
   return _g.__dledger_backend;
+}
+
+export function disposeBackend(): void {
+  const backend = _g.__dledger_backend;
+  if (backend?.close) backend.close();
+  _g.__dledger_backend = undefined;
+  _g.__dledger_initPromise = undefined;
 }
