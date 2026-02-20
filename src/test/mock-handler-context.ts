@@ -28,6 +28,13 @@ export function createMockHandlerContext(
     handlers: {
       "generic-etherscan": { enabled: true },
       "pendle": { enabled: true },
+      "uniswap": { enabled: true },
+      "aave": { enabled: true },
+      "lido": { enabled: true },
+      "dex-aggregator": { enabled: true },
+      "compound": { enabled: true },
+      "curve": { enabled: true },
+      "bridge": { enabled: true },
     },
   };
 

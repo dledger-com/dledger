@@ -1,0 +1,187 @@
+import type {
+  TransactionHandler,
+  HandlerContext,
+  HandlerResult,
+  TxHashGroup,
+} from "./types.js";
+import { timestampToDate } from "../browser-etherscan.js";
+import {
+  buildAllGroupItems,
+  mergeItemAccums,
+  resolveToLineItems,
+  buildHandlerEntry,
+  analyzeErc20Flows,
+  formatTokenAmount,
+  type TokenFlow,
+} from "./item-builder.js";
+import { CURVE, ZERO_ADDRESS } from "./addresses.js";
+
+// ---- Token detection ----
+
+function isCurveLP(symbol: string): boolean {
+  return /crv/i.test(symbol);
+}
+
+function isGaugeToken(symbol: string): boolean {
+  return symbol.endsWith("-gauge");
+}
+
+// ---- Action classification ----
+
+type CurveAction =
+  | "SWAP"
+  | "ADD_LIQUIDITY"
+  | "REMOVE_LIQUIDITY"
+  | "CLAIM_CRV"
+  | "STAKE_GAUGE"
+  | "UNSTAKE_GAUGE"
+  | "UNKNOWN";
+
+function classifyAction(flows: TokenFlow[], group: TxHashGroup): CurveAction {
+  const lpMinted = flows.some((f) => f.direction === "in" && f.isMint && isCurveLP(f.symbol));
+  const lpBurned = flows.some((f) => f.direction === "out" && f.isBurn && isCurveLP(f.symbol));
+  const gaugeMinted = flows.some((f) => f.direction === "in" && f.isMint && isGaugeToken(f.symbol));
+  const gaugeBurned = flows.some((f) => f.direction === "out" && f.isBurn && isGaugeToken(f.symbol));
+  const lpOutflow = flows.some((f) => f.direction === "out" && isCurveLP(f.symbol));
+  const lpInflow = flows.some((f) => f.direction === "in" && isCurveLP(f.symbol));
+
+  // CRV claim: inflow from Minter, no outflows from user
+  const crvFromMinter = flows.some(
+    (f) => f.direction === "in" && f.from === CURVE.CRV_MINTER,
+  );
+  const hasOutflows = flows.some((f) => f.direction === "out");
+  if (crvFromMinter && !hasOutflows) return "CLAIM_CRV";
+
+  // Stake gauge: LP outflow + gauge token minted from 0x0
+  if (lpOutflow && gaugeMinted) return "STAKE_GAUGE";
+
+  // Unstake gauge: gauge token burned + LP inflow
+  if (gaugeBurned && lpInflow) return "UNSTAKE_GAUGE";
+
+  // Add liquidity: LP minted from 0x0 + underlying outflows
+  if (lpMinted) return "ADD_LIQUIDITY";
+
+  // Remove liquidity: LP burned to 0x0 + underlying inflows
+  if (lpBurned) return "REMOVE_LIQUIDITY";
+
+  // Swap: token A out + token B in via router, no LP mint/burn
+  const inflows = flows.filter((f) => f.direction === "in");
+  const outflows = flows.filter((f) => f.direction === "out");
+  if (
+    outflows.length > 0 &&
+    inflows.length > 0 &&
+    !lpMinted &&
+    !lpBurned &&
+    group.normal?.to.toLowerCase() === CURVE.ROUTER_NG
+  ) {
+    return "SWAP";
+  }
+
+  return "UNKNOWN";
+}
+
+// ---- Description builder ----
+
+function buildDescription(
+  action: CurveAction,
+  flows: TokenFlow[],
+  hashShort: string,
+): string {
+  if (action === "SWAP") {
+    const outflow = flows.find((f) => f.direction === "out");
+    const inflow = flows.find((f) => f.direction === "in");
+    if (outflow && inflow) {
+      const outStr = formatTokenAmount(outflow.amount, outflow.symbol);
+      const inStr = formatTokenAmount(inflow.amount, inflow.symbol);
+      return `Curve: Swap ${outStr} for ${inStr} (${hashShort})`;
+    }
+  }
+
+  const ACTION_LABELS: Record<CurveAction, string> = {
+    SWAP: "Swap",
+    ADD_LIQUIDITY: "Add Liquidity",
+    REMOVE_LIQUIDITY: "Remove Liquidity",
+    CLAIM_CRV: "Claim CRV",
+    STAKE_GAUGE: "Stake Gauge",
+    UNSTAKE_GAUGE: "Unstake Gauge",
+    UNKNOWN: "Interact",
+  };
+
+  return `Curve: ${ACTION_LABELS[action]} (${hashShort})`;
+}
+
+// ---- Handler ----
+
+export const curveHandler: TransactionHandler = {
+  id: "curve",
+  name: "Curve Finance",
+  description: "Interprets Curve Finance swaps, liquidity, gauge staking, and CRV claims",
+  supportedChainIds: [1, 42161, 10, 137, 8453],
+
+  match(group: TxHashGroup, _ctx: HandlerContext): number {
+    // Check if normal tx is to Curve Router NG
+    if (group.normal) {
+      const to = group.normal.to.toLowerCase();
+      if (to === CURVE.ROUTER_NG) return 55;
+    }
+
+    // Check ERC20 tokens for Curve LP or gauge tokens, or CRV Minter
+    for (const erc20 of group.erc20s) {
+      if (isCurveLP(erc20.tokenSymbol)) return 55;
+      if (isGaugeToken(erc20.tokenSymbol)) return 55;
+      if (erc20.from.toLowerCase() === CURVE.CRV_MINTER) return 55;
+    }
+
+    return 0;
+  },
+
+  async process(
+    group: TxHashGroup,
+    ctx: HandlerContext,
+  ): Promise<HandlerResult> {
+    const addr = ctx.address.toLowerCase();
+    const date = timestampToDate(group.timestamp);
+    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
+
+    const flows = analyzeErc20Flows(group.erc20s, addr);
+    const action = classifyAction(flows, group);
+
+    // Ensure native currency for item building
+    await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
+
+    const allItems = await buildAllGroupItems(group, addr, ctx.chain, ctx.label, ctx);
+    const merged = mergeItemAccums(allItems);
+
+    if (merged.length === 0) {
+      return { type: "skip", reason: "no net movement" };
+    }
+
+    const lineItems = await resolveToLineItems(merged, date, ctx);
+
+    const description = buildDescription(action, flows, hashShort);
+
+    const metadata: Record<string, string> = {
+      handler: "curve",
+      "handler:action": action,
+    };
+
+    const handlerEntry = buildHandlerEntry({
+      date,
+      description,
+      chainId: ctx.chainId,
+      hash: group.hash,
+      items: lineItems,
+      metadata,
+    });
+
+    // Currency hints: Curve LP tokens and gauge tokens should not have exchange rates
+    const currencyHints: Record<string, null> = {};
+    for (const item of allItems) {
+      if (isCurveLP(item.currency) || isGaugeToken(item.currency)) {
+        currencyHints[item.currency] = null;
+      }
+    }
+
+    return { type: "entries", entries: [handlerEntry], currencyHints };
+  },
+};
