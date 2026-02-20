@@ -18,6 +18,7 @@
     fetchHistoricalRates,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
+  import { markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection, CurrencyBalance } from "$lib/types/index.js";
@@ -81,7 +82,7 @@
   async function handleFetchMissingRates() {
     fetchingRates = true;
     try {
-      await fetchHistoricalRates(
+      const result = await fetchHistoricalRates(
         getBackend(),
         missingRateRequests,
         {
@@ -91,9 +92,24 @@
         },
       );
       missingRateRequests = [];
+
+      // Auto-hide currencies that failed all sources
+      if (result.failedCurrencies.length > 0) {
+        const backend = getBackend();
+        for (const code of result.failedCurrencies) {
+          await backend.setCurrencyRateSource(code, "none", "auto");
+          await markCurrencyHidden(backend, code);
+        }
+        toast.info(`Auto-hid ${result.failedCurrencies.length} currency(ies) with no available rates`);
+      }
+
       // Re-run conversion with new rates
       await runConversion();
-      toast.success("Missing rates fetched");
+      if (result.failedCurrencies.length > 0) {
+        toast.success(`Fetched ${result.fetched} rate(s), auto-hid ${result.failedCurrencies.length} currency(ies)`);
+      } else {
+        toast.success("Missing rates fetched");
+      }
     } catch (err) {
       toast.error(String(err));
     } finally {

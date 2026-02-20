@@ -43,6 +43,7 @@ export interface HistoricalFetchResult {
   fetched: number;
   skipped: number;
   errors: string[];
+  failedCurrencies: string[];
 }
 
 // ---- Source classification ----
@@ -51,10 +52,11 @@ function classifySource(
   currency: string,
   baseCurrency: string,
   rateSourceMap: Map<string, CurrencyRateSource>,
-): SourceName {
+): SourceName | null {
   // 1. DB-stored source always wins
   const stored = rateSourceMap.get(currency);
-  if (stored?.rate_source && stored.rate_source !== "none") {
+  if (stored?.rate_source === "none") return null;
+  if (stored?.rate_source) {
     return stored.rate_source as SourceName;
   }
   // 2. Static heuristic fallback
@@ -98,6 +100,7 @@ export async function findMissingRates(
       if (existenceMap.get(key)) continue;
 
       const source = classifySource(currency, baseCurrency, rateSourceMap);
+      if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -110,6 +113,7 @@ export async function findMissingRates(
       if (rate !== null) continue;
 
       const source = classifySource(currency, baseCurrency, rateSourceMap);
+      if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -132,9 +136,13 @@ export async function fetchHistoricalRates(
   requests: HistoricalRateRequest[],
   config: HistoricalFetchConfig,
 ): Promise<HistoricalFetchResult> {
-  const result: HistoricalFetchResult = { fetched: 0, skipped: 0, errors: [] };
+  const result: HistoricalFetchResult = { fetched: 0, skipped: 0, errors: [], failedCurrencies: [] };
   const totalDates = requests.reduce((sum, r) => sum + r.dates.length, 0);
   let progress = 0;
+
+  // Track which currencies got at least one rate
+  const successCurrencies = new Set<string>();
+  const allCurrencies = new Set(requests.map((r) => r.currency));
 
   // Group requests by source
   const frankfurterReqs = requests.filter((r) => r.source === "frankfurter");
@@ -143,7 +151,7 @@ export async function fetchHistoricalRates(
 
   // ---- Frankfurter: full timeseries, multi-symbol ----
   if (frankfurterReqs.length > 0) {
-    await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, () => {
+    await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, successCurrencies, () => {
       progress++;
       config.onProgress?.(progress, totalDates);
     });
@@ -154,7 +162,7 @@ export async function fetchHistoricalRates(
     if (!config.coingeckoApiKey) {
       result.errors.push(`CoinGecko: no API key; skipping ${coingeckoReqs.length} currency(ies)`);
     } else {
-      await fetchCoinGeckoHistorical(backend, coingeckoReqs, config, result, () => {
+      await fetchCoinGeckoHistorical(backend, coingeckoReqs, config, result, successCurrencies, () => {
         progress++;
         config.onProgress?.(progress, totalDates);
       });
@@ -166,10 +174,17 @@ export async function fetchHistoricalRates(
     if (!config.finnhubApiKey) {
       result.errors.push(`Finnhub: no API key; skipping ${finnhubReqs.length} currency(ies)`);
     } else {
-      await fetchFinnhubHistorical(backend, finnhubReqs, config, result, () => {
+      await fetchFinnhubHistorical(backend, finnhubReqs, config, result, successCurrencies, () => {
         progress++;
         config.onProgress?.(progress, totalDates);
       });
+    }
+  }
+
+  // Compute failed currencies: requested but never succeeded
+  for (const currency of allCurrencies) {
+    if (!successCurrencies.has(currency)) {
+      result.failedCurrencies.push(currency);
     }
   }
 
@@ -189,6 +204,7 @@ async function fetchFrankfurterHistorical(
   requests: HistoricalRateRequest[],
   config: HistoricalFetchConfig,
   result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
   onDateDone: () => void,
 ): Promise<void> {
   // Collect all dates and currencies
@@ -228,6 +244,7 @@ async function fetchFrankfurterHistorical(
 
       for (const [date, rates] of Object.entries(data.rates)) {
         for (const [code, rateValue] of Object.entries(rates)) {
+          successCurrencies.add(code);
           await ensureCurrency(backend, code);
           await ensureCurrency(backend, config.baseCurrency);
           const invertedRate = 1 / rateValue;
@@ -275,6 +292,7 @@ async function fetchCoinGeckoHistorical(
   requests: HistoricalRateRequest[],
   config: HistoricalFetchConfig,
   result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
   onDateDone: () => void,
 ): Promise<void> {
   const geckoFetch = new RateLimitedFetcher({ maxRequests: 25, intervalMs: 60_000 });
@@ -311,6 +329,7 @@ async function fetchCoinGeckoHistorical(
         for (const date of neededDates) {
           const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 1);
           if (price != null) {
+            successCurrencies.add(req.currency);
             rateBatch.push({
               id: uuidv7(),
               date,
@@ -359,6 +378,7 @@ async function fetchFinnhubHistorical(
   requests: HistoricalRateRequest[],
   config: HistoricalFetchConfig,
   result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
   onDateDone: () => void,
 ): Promise<void> {
   const finnhubFetch = new RateLimitedFetcher({ maxRequests: 50, intervalMs: 60_000 });
@@ -399,6 +419,7 @@ async function fetchFinnhubHistorical(
         for (const date of neededDates) {
           const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 3);
           if (price != null) {
+            successCurrencies.add(req.currency);
             rateBatch.push({
               id: uuidv7(),
               date,
@@ -457,7 +478,7 @@ export async function ensurePeriodicRates(
   }
 
   const missing = await findMissingRates(backend, config.baseCurrency, targets);
-  if (missing.length === 0) return { fetched: 0, skipped: 0, errors: [] };
+  if (missing.length === 0) return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [] };
 
   return fetchHistoricalRates(backend, missing, config);
 }

@@ -145,6 +145,10 @@ export async function syncExchangeRates(
   const autoDetectSuccess = new Set<string>();
   const autoDetectFailed = new Set<string>();
 
+  // Track ALL currencies (not just auto-detect) for auto-hide
+  const allSucceeded = new Set<string>();
+  const allFailed = new Set<string>();
+
   // ---- Fiat rates via Frankfurter ----
   if (frankfurterCodes.length > 0) {
     try {
@@ -160,10 +164,12 @@ export async function syncExchangeRates(
           if (rateValue == null) {
             result.errors.push(`Frankfurter: no rate for ${code}`);
             if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
             continue;
           }
 
           if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+          allSucceeded.add(code);
 
           const existing = await backend.getExchangeRate(code, baseCurrency, today);
           if (existing !== null) {
@@ -197,6 +203,7 @@ export async function syncExchangeRates(
       // Mark all as failed for auto-detect
       for (const code of coingeckoCodes) {
         if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+        allFailed.add(code);
       }
     } else {
       const geckoFetch = new RateLimitedFetcher({ maxRequests: 30, intervalMs: 60_000 });
@@ -218,6 +225,7 @@ export async function syncExchangeRates(
           result.errors.push(`CoinGecko HTTP ${resp.status}: ${resp.statusText}`);
           for (const code of coingeckoCodes) {
             if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
           }
         } else {
           const data: CoinGeckoResponse = await resp.json();
@@ -226,10 +234,12 @@ export async function syncExchangeRates(
             if (!priceData || priceData[vsBase] == null) {
               result.errors.push(`CoinGecko: no rate for ${ticker} (id: ${geckoId})`);
               if (autoDetectCodes.includes(ticker)) autoDetectFailed.add(ticker);
+              allFailed.add(ticker);
               continue;
             }
 
             if (autoDetectCodes.includes(ticker)) autoDetectSuccess.add(ticker);
+            allSucceeded.add(ticker);
 
             const existing = await backend.getExchangeRate(ticker, baseCurrency, today);
             if (existing !== null) {
@@ -265,6 +275,7 @@ export async function syncExchangeRates(
       );
       for (const code of finnhubCodes) {
         if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+        allFailed.add(code);
       }
     } else {
       const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
@@ -274,6 +285,7 @@ export async function syncExchangeRates(
           if (existing !== null) {
             result.rates_skipped++;
             if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+            allSucceeded.add(code);
             continue;
           }
 
@@ -283,6 +295,7 @@ export async function syncExchangeRates(
           if (!resp.ok) {
             result.errors.push(`Finnhub HTTP ${resp.status} for ${code}`);
             if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
             continue;
           }
 
@@ -290,10 +303,12 @@ export async function syncExchangeRates(
           if (!data.c || data.c === 0) {
             result.errors.push(`Finnhub: no price for ${code}`);
             if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
             continue;
           }
 
           if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+          allSucceeded.add(code);
 
           await backend.recordExchangeRate({
             id: uuidv7(),
@@ -320,12 +335,14 @@ export async function syncExchangeRates(
     result.newlyDetected.push(code);
   }
 
-  // Auto-hide: currencies that failed all sources and have no stored config
-  // (likely spam tokens from etherscan)
-  for (const code of autoDetectFailed) {
-    if (autoDetectSuccess.has(code)) continue; // succeeded on fallback
-    await backend.setCurrencyRateSource(code, "none", "auto");
-    result.autoHidden.push(code);
+  // Auto-hide: ALL currencies that failed, not just auto-detect ones.
+  // setCurrencyRateSource priority system prevents overriding user/handler settings.
+  for (const code of allFailed) {
+    if (allSucceeded.has(code)) continue; // succeeded on another source
+    const changed = await backend.setCurrencyRateSource(code, "none", "auto");
+    if (changed) {
+      result.autoHidden.push(code);
+    }
   }
 
   return result;

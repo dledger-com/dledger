@@ -176,6 +176,17 @@
         },
       );
 
+      // Auto-hide currencies that failed all sources
+      if (backfillResult.failedCurrencies.length > 0) {
+        const backend = getBackend();
+        for (const code of backfillResult.failedCurrencies) {
+          await backend.setCurrencyRateSource(code, "none", "auto");
+          await markCurrencyHidden(backend, code);
+        }
+        toast.info(`Auto-hid ${backfillResult.failedCurrencies.length} currency(ies) with no available rates`);
+        loadAvailableCurrencies();
+      }
+
       if (backfillResult.errors.length > 0) {
         toast.warning(`Fetched ${backfillResult.fetched} rate(s) with ${backfillResult.errors.length} warning(s)`);
       } else {
@@ -318,6 +329,18 @@
         },
       );
       missingRateRequests = [];
+
+      // Auto-hide currencies that failed all sources
+      if (missingRateResult.failedCurrencies.length > 0) {
+        const backend = getBackend();
+        for (const code of missingRateResult.failedCurrencies) {
+          await backend.setCurrencyRateSource(code, "none", "auto");
+          await markCurrencyHidden(backend, code);
+        }
+        toast.info(`Auto-hid ${missingRateResult.failedCurrencies.length} currency(ies) with no available rates`);
+        loadAvailableCurrencies();
+      }
+
       if (missingRateResult.errors.length > 0) {
         toast.warning(`Fetched ${missingRateResult.fetched} rate(s) with ${missingRateResult.errors.length} warning(s)`);
       } else {

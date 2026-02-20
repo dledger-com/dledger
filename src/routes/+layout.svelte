@@ -4,7 +4,7 @@
   import { Toaster } from "$lib/components/ui/sonner/index.js";
   import { initBackend, getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { loadHiddenCurrencies, getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
+  import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
   import { onMount } from "svelte";
 
@@ -28,8 +28,11 @@
           settings.coingeckoApiKey,
           settings.finnhubApiKey,
           getHiddenCurrencySet(),
-        ).then(() => {
+        ).then(async (syncResult) => {
           settings.update({ lastRateSync: today });
+          for (const code of syncResult.autoHidden) {
+            await markCurrencyHidden(backend, code);
+          }
         }).catch(() => {
           // Swallow errors — don't block the app
         });
