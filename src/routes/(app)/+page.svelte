@@ -9,7 +9,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
-  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
@@ -23,7 +23,7 @@
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
 
-  const hidden = $derived(settings.showSpam ? new Set<string>() : getSpamCurrencySet());
+  const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   let ready = $state(false);
   let assetsSummary = $state<ConvertedSummary | null>(null);
   let liabilitiesSummary = $state<ConvertedSummary | null>(null);
@@ -120,7 +120,7 @@
     // Shared exchange rate cache for all conversions + charts
     const date = today();
     const base = settings.currency;
-    const hiddenSet = settings.showSpam ? new Set<string>() : getSpamCurrencySet();
+    const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
     const sharedCache = getOrCreateRateCache();
 
     try {

@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS currency (
     name TEXT NOT NULL,
     decimal_places INTEGER NOT NULL DEFAULT 2,
     is_base INTEGER NOT NULL DEFAULT 0,
-    is_spam INTEGER NOT NULL DEFAULT 0
+    is_hidden INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS account (
@@ -238,7 +238,7 @@ function mapCurrency(row: Row): Currency {
     name: row.name,
     decimal_places: row.decimal_places,
     is_base: row.is_base !== 0,
-    is_spam: row.is_spam !== 0,
+    is_hidden: row.is_hidden !== 0,
   };
 }
 
@@ -359,7 +359,7 @@ export class SqlJsBackend implements Backend {
     const backend = new SqlJsBackend(db);
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
-    db.exec("INSERT INTO schema_version (version) VALUES (5)");
+    db.exec("INSERT INTO schema_version (version) VALUES (6)");
     return backend;
   }
 
@@ -373,7 +373,7 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
-      db.exec("INSERT INTO schema_version (version) VALUES (5)");
+      db.exec("INSERT INTO schema_version (version) VALUES (6)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -460,9 +460,13 @@ export class SqlJsBackend implements Backend {
             // localStorage may not be available
           }
         }
-        if (currentVersion < 5) {
+        if (currentVersion < 6) {
+          // Migrate v5 → v6: rename is_spam → is_hidden
+          db.exec("ALTER TABLE currency RENAME COLUMN is_spam TO is_hidden");
+        }
+        if (currentVersion < 6) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (5)");
+          db.exec("INSERT INTO schema_version (version) VALUES (6)");
         }
       }
     }
@@ -568,7 +572,7 @@ export class SqlJsBackend implements Backend {
 
   private getCurrencyByCode(code: string): Currency | null {
     return this.queryOne(
-      "SELECT code, name, decimal_places, is_base, is_spam FROM currency WHERE code = ?",
+      "SELECT code, name, decimal_places, is_base, is_hidden FROM currency WHERE code = ?",
       [code],
       mapCurrency,
     );
@@ -797,7 +801,7 @@ export class SqlJsBackend implements Backend {
 
   async listCurrencies(): Promise<Currency[]> {
     return this.query(
-      "SELECT code, name, decimal_places, is_base, is_spam FROM currency ORDER BY code",
+      "SELECT code, name, decimal_places, is_base, is_hidden FROM currency ORDER BY code",
       [],
       mapCurrency,
     );
@@ -806,13 +810,13 @@ export class SqlJsBackend implements Backend {
   async createCurrency(currency: Currency): Promise<void> {
     try {
       this.run(
-        "INSERT INTO currency (code, name, decimal_places, is_base, is_spam) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO currency (code, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?)",
         [
           currency.code,
           currency.name,
           currency.decimal_places,
           currency.is_base ? 1 : 0,
-          currency.is_spam ? 1 : 0,
+          currency.is_hidden ? 1 : 0,
         ],
       );
     } catch (e: unknown) {
@@ -826,14 +830,14 @@ export class SqlJsBackend implements Backend {
     this.scheduleSave();
   }
 
-  async setCurrencySpam(code: string, isSpam: boolean): Promise<void> {
-    this.run("UPDATE currency SET is_spam = ? WHERE code = ?", [isSpam ? 1 : 0, code]);
+  async setCurrencyHidden(code: string, isHidden: boolean): Promise<void> {
+    this.run("UPDATE currency SET is_hidden = ? WHERE code = ?", [isHidden ? 1 : 0, code]);
     this.scheduleSave();
   }
 
-  async listSpamCurrencies(): Promise<string[]> {
+  async listHiddenCurrencies(): Promise<string[]> {
     return this.query(
-      "SELECT code FROM currency WHERE is_spam = 1 ORDER BY code",
+      "SELECT code FROM currency WHERE is_hidden = 1 ORDER BY code",
       [],
       (row) => row.code as string,
     );

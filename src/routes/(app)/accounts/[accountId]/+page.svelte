@@ -12,7 +12,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
-  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { getBackend } from "$lib/backend.js";
   import { LineChart } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
@@ -36,7 +36,7 @@
   let assertionDate = $state(new Date().toISOString().slice(0, 10));
   let assertionCurrency = $state("");
   let assertionAmount = $state("");
-  const hidden = $derived(settings.showSpam ? new Set<string>() : getSpamCurrencySet());
+  const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(journalStore.entries, hidden));
   const filteredBalances = $derived(filterHiddenBalances(balances, hidden));
 

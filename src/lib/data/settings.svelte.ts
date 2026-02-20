@@ -5,7 +5,7 @@ export interface AppSettings {
   etherscanApiKey: string;
   coingeckoApiKey: string;
   finnhubApiKey: string;
-  showSpam: boolean;
+  showHidden: boolean;
   lastRateSync: string;
   debugMode: boolean;
   handlers: Record<string, { enabled: boolean }>;
@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   etherscanApiKey: "",
   coingeckoApiKey: "",
   finnhubApiKey: "",
-  showSpam: false,
+  showHidden: false,
   lastRateSync: "",
   debugMode: false,
   handlers: { "generic-etherscan": { enabled: true } },
@@ -35,6 +35,11 @@ function loadFromStorage(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Migrate old showSpam → showHidden
+      if ("showSpam" in parsed && !("showHidden" in parsed)) {
+        parsed.showHidden = parsed.showSpam;
+      }
+      delete parsed.showSpam;
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch {
@@ -79,8 +84,8 @@ export class SettingsStore {
     return this.settings.finnhubApiKey;
   }
 
-  get showSpam(): boolean {
-    return this.settings.showSpam;
+  get showHidden(): boolean {
+    return this.settings.showHidden;
   }
 
   get lastRateSync(): string {

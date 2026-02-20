@@ -35,46 +35,46 @@ describe("SqlJsBackend", () => {
     });
   });
 
-  // ---- Currency spam ----
+  // ---- Currency hidden ----
 
-  describe("currency spam", () => {
-    it("marks and lists spam currencies", async () => {
+  describe("currency hidden", () => {
+    it("marks and lists hidden currencies", async () => {
       await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
       await backend.createCurrency({ code: "SPAM1", name: "Spam Token", decimal_places: 18, is_base: false });
       await backend.createCurrency({ code: "SPAM2", name: "Another Spam", decimal_places: 18, is_base: false });
 
-      // Initially no spam
-      let spam = await backend.listSpamCurrencies();
-      expect(spam).toHaveLength(0);
+      // Initially none hidden
+      let hidden = await backend.listHiddenCurrencies();
+      expect(hidden).toHaveLength(0);
 
-      // Mark as spam
-      await backend.setCurrencySpam("SPAM1", true);
-      await backend.setCurrencySpam("SPAM2", true);
-      spam = await backend.listSpamCurrencies();
-      expect(spam).toEqual(["SPAM1", "SPAM2"]);
+      // Mark as hidden
+      await backend.setCurrencyHidden("SPAM1", true);
+      await backend.setCurrencyHidden("SPAM2", true);
+      hidden = await backend.listHiddenCurrencies();
+      expect(hidden).toEqual(["SPAM1", "SPAM2"]);
 
-      // Unmark one
-      await backend.setCurrencySpam("SPAM1", false);
-      spam = await backend.listSpamCurrencies();
-      expect(spam).toEqual(["SPAM2"]);
+      // Unhide one
+      await backend.setCurrencyHidden("SPAM1", false);
+      hidden = await backend.listHiddenCurrencies();
+      expect(hidden).toEqual(["SPAM2"]);
 
-      // is_spam reflected in listCurrencies
+      // is_hidden reflected in listCurrencies
       const currencies = await backend.listCurrencies();
       const spam2 = currencies.find((c) => c.code === "SPAM2");
-      expect(spam2?.is_spam).toBe(true);
+      expect(spam2?.is_hidden).toBe(true);
       const usd = currencies.find((c) => c.code === "USD");
-      expect(usd?.is_spam).toBe(false);
+      expect(usd?.is_hidden).toBe(false);
     });
 
-    it("clearLedgerData clears spam currencies", async () => {
+    it("clearLedgerData clears hidden currencies", async () => {
       await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
       await backend.createCurrency({ code: "JUNK", name: "Junk Token", decimal_places: 18, is_base: false });
-      await backend.setCurrencySpam("JUNK", true);
+      await backend.setCurrencyHidden("JUNK", true);
 
       await backend.clearLedgerData();
 
-      const spam = await backend.listSpamCurrencies();
-      expect(spam).toHaveLength(0);
+      const hidden = await backend.listHiddenCurrencies();
+      expect(hidden).toHaveLength(0);
       const currencies = await backend.listCurrencies();
       expect(currencies).toHaveLength(0);
     });

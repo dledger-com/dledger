@@ -10,7 +10,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
-  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -54,7 +54,7 @@
       </Card.Content>
     </Card.Root>
   {:else if store.trialBalance && store.trialBalance.lines.length > 0}
-    {@const hidden = settings.showSpam ? new Set<string>() : getSpamCurrencySet()}
+    {@const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet()}
     {@const filteredLines = filterHiddenTrialLines(store.trialBalance.lines, hidden)}
     {@const filteredDebits = filterHiddenBalances(store.trialBalance.total_debits, hidden)}
     {@const filteredCredits = filterHiddenBalances(store.trialBalance.total_credits, hidden)}

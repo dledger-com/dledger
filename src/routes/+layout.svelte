@@ -4,7 +4,7 @@
   import { Toaster } from "$lib/components/ui/sonner/index.js";
   import { initBackend, getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { loadSpamCurrencies, getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
+  import { loadHiddenCurrencies, getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
   import { onMount } from "svelte";
 
@@ -15,7 +15,7 @@
   onMount(async () => {
     try {
       const backend = await initBackend();
-      await loadSpamCurrencies(backend);
+      await loadHiddenCurrencies(backend);
       ready = true;
 
       // Daily auto-sync: fire-and-forget
@@ -27,7 +27,7 @@
           settings.currency,
           settings.coingeckoApiKey,
           settings.finnhubApiKey,
-          getSpamCurrencySet(),
+          getHiddenCurrencySet(),
         ).then(() => {
           settings.update({ lastRateSync: today });
         }).catch(() => {

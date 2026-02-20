@@ -12,7 +12,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { entryInvolvesHidden } from "$lib/utils/currency-filter.js";
-  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
 
@@ -24,7 +24,7 @@
   let entry = $state<JournalEntry | null>(null);
   let items = $state<LineItem[]>([]);
   let metadata = $state<Record<string, string>>({});
-  const hidden = $derived(settings.showSpam ? new Set<string>() : getSpamCurrencySet());
+  const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const isHidden = $derived(entryInvolvesHidden(items, hidden));
   let loading = $state(true);
 

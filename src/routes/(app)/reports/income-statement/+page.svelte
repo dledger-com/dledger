@@ -9,7 +9,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
-  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { getBackend } from "$lib/backend.js";
   import {
@@ -44,7 +44,7 @@
   async function runConversion() {
     if (!store.incomeStatement) return;
     const baseCurrency = settings.currency;
-    const hidden = settings.showSpam ? new Set<string>() : getSpamCurrencySet();
+    const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
     revenueSummary = await convertBalances(filterHiddenBalances(store.incomeStatement.revenue.totals, hidden), baseCurrency, toDate);
     expensesSummary = await convertBalances(filterHiddenBalances(store.incomeStatement.expenses.totals, hidden), baseCurrency, toDate);
     netIncomeSummary = await convertBalances(filterHiddenBalances(store.incomeStatement.net_income, hidden), baseCurrency, toDate);
@@ -100,7 +100,7 @@
   }
 
   function renderTotals(section: ReportSection): string {
-    const totals = filterHiddenBalances(section.totals, settings.showSpam ? new Set<string>() : getSpamCurrencySet());
+    const totals = filterHiddenBalances(section.totals, settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
     if (totals.length === 0) return formatCurrency(0);
     return totals.map((b) => formatCurrency(Math.abs(parseFloat(b.amount)), b.currency)).join(", ");
   }
@@ -157,7 +157,7 @@
     </Card.Content></Card.Root>
   {:else if store.incomeStatement}
     {@const report = store.incomeStatement}
-    {@const hidden = settings.showSpam ? new Set<string>() : getSpamCurrencySet()}
+    {@const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet()}
     <Card.Root>
       <Card.Header><Card.Title>Revenue</Card.Title></Card.Header>
       <Table.Root>

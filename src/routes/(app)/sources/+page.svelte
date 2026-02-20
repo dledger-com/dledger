@@ -6,7 +6,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { getSpamCurrencySet, markCurrencySpam } from "$lib/data/spam-currencies.svelte.js";
+  import { getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
   import * as Command from "$lib/components/ui/command/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
@@ -103,11 +103,15 @@
 
   async function loadAvailableCurrencies() {
     try {
-      const currencies = await getBackend().listCurrencies();
+      const backend = getBackend();
+      const currencies = await backend.listCurrencies();
       const baseCurrency = settings.currency;
+      const rateSources = await backend.getCurrencyRateSources();
+      const rateSourceMap = new Map(rateSources.map((rs) => [rs.currency, rs]));
       availableCurrencies = currencies
         .map((c) => c.code)
-        .filter((c) => c !== baseCurrency && !getSpamCurrencySet().has(c))
+        .filter((c) => c !== baseCurrency && !getHiddenCurrencySet().has(c))
+        .filter((c) => rateSourceMap.get(c)?.rate_source !== "none")
         .sort();
     } catch {
       // ignore
@@ -195,18 +199,18 @@
         settings.currency,
         settings.coingeckoApiKey,
         settings.finnhubApiKey,
-        getSpamCurrencySet(),
+        getHiddenCurrencySet(),
       );
 
       // Update last sync time
       settings.update({ lastRateSync: new Date().toISOString().slice(0, 10) });
 
-      // Auto-mark unrecognized currencies as spam
+      // Auto-hide unrecognized currencies
       if (rateResult.autoHidden.length > 0) {
         for (const code of rateResult.autoHidden) {
-          await markCurrencySpam(getBackend(), code);
+          await markCurrencyHidden(getBackend(), code);
         }
-        toast.info(`Auto-marked ${rateResult.autoHidden.length} unrecognized currency(ies) as spam`);
+        toast.info(`Auto-hid ${rateResult.autoHidden.length} unrecognized currency(ies)`);
         loadAvailableCurrencies();
       }
 
