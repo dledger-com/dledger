@@ -427,6 +427,18 @@ impl LedgerEngine {
         Ok(is_passing)
     }
 
+    // --- Metadata query ---
+
+    pub fn query_entries_by_metadata(&self, key: &str, value: &str) -> LedgerResult<Vec<Uuid>> {
+        Ok(self.storage.query_entries_by_metadata(key, value)?)
+    }
+
+    // --- Open lots ---
+
+    pub fn list_all_open_lots(&self) -> LedgerResult<Vec<Lot>> {
+        Ok(self.storage.list_all_open_lots()?)
+    }
+
     // --- Metadata ---
 
     pub fn add_metadata(

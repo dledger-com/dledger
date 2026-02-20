@@ -21,11 +21,24 @@
   let fromDate = $state(`${now.getFullYear()}-01-01`);
   let toDate = $state(now.toISOString().slice(0, 10));
   let generated = $state(false);
+  let filterProtocol = $state("");
 
-  const filteredLines = $derived(
+  const hiddenFiltered = $derived(
     reportStore.gainLossReport
       ? filterHiddenGainLoss(reportStore.gainLossReport.lines, settings.showHidden ? new Set<string>() : getHiddenCurrencySet())
       : [],
+  );
+
+  const uniqueProtocols = $derived(
+    [...new Set(hiddenFiltered.map((l) => l.source_handler).filter((h): h is string => !!h))].sort(),
+  );
+
+  const hasProtocols = $derived(uniqueProtocols.length > 0);
+
+  const filteredLines = $derived(
+    filterProtocol
+      ? hiddenFiltered.filter((l) => l.source_handler === filterProtocol)
+      : hiddenFiltered,
   );
 
   async function generate() {
@@ -68,6 +81,21 @@
             CSV
           </Button>
         {/if}
+        {#if hasProtocols}
+          <div class="space-y-1">
+            <label for="protocol" class="text-sm font-medium">Protocol</label>
+            <select
+              id="protocol"
+              bind:value={filterProtocol}
+              class="flex h-9 w-40 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">All</option>
+              {#each uniqueProtocols as protocol}
+                <option value={protocol}>{protocol}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
       </div>
     </Card.Content>
   </Card.Root>
@@ -109,6 +137,9 @@
           <Table.Header>
             <Table.Row>
               <Table.Head>Currency</Table.Head>
+              {#if hasProtocols}
+                <Table.Head>Protocol</Table.Head>
+              {/if}
               <Table.Head>Acquired</Table.Head>
               <Table.Head>Disposed</Table.Head>
               <Table.Head class="text-right">Quantity</Table.Head>
@@ -124,6 +155,9 @@
                 <Table.Cell>
                   <Badge variant="outline">{line.currency}</Badge>
                 </Table.Cell>
+                {#if hasProtocols}
+                  <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>
+                {/if}
                 <Table.Cell class="text-muted-foreground">{line.acquired_date}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{line.disposed_date}</Table.Cell>
                 <Table.Cell class="text-right font-mono">{line.quantity}</Table.Cell>
@@ -137,7 +171,7 @@
           </Table.Body>
           <Table.Footer>
             <Table.Row>
-              <Table.Cell colspan={6} class="font-medium">Total</Table.Cell>
+              <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">Total</Table.Cell>
               {@const total = totalGainLoss()}
               <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
                 {total >= 0 ? "+" : ""}{formatCurrency(total, settings.currency)}

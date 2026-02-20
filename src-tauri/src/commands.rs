@@ -290,6 +290,64 @@ pub fn clear_all_data(state: State<'_, AppState>) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// -- Metadata query commands --
+
+#[tauri::command]
+pub fn query_entries_by_metadata(
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<Vec<Uuid>, String> {
+    state
+        .engine
+        .query_entries_by_metadata(&key, &value)
+        .map_err(|e| e.to_string())
+}
+
+// -- Open lots command --
+
+#[derive(serde::Serialize)]
+pub struct OpenLotResult {
+    pub id: String,
+    pub account_id: String,
+    pub account_name: String,
+    pub currency: String,
+    pub acquired_date: String,
+    pub remaining_quantity: String,
+    pub cost_basis_per_unit: String,
+    pub cost_basis_currency: String,
+}
+
+#[tauri::command]
+pub fn list_open_lots(
+    state: State<'_, AppState>,
+) -> Result<Vec<OpenLotResult>, String> {
+    let lots = state
+        .engine
+        .list_all_open_lots()
+        .map_err(|e| e.to_string())?;
+    let mut results = Vec::new();
+    for lot in lots {
+        let account_name = state
+            .engine
+            .get_account(&lot.account_id)
+            .map_err(|e| e.to_string())?
+            .map(|a| a.full_name)
+            .unwrap_or_default();
+        results.push(OpenLotResult {
+            id: lot.id.to_string(),
+            account_id: lot.account_id.to_string(),
+            account_name,
+            currency: lot.currency,
+            acquired_date: lot.acquired_date.format("%Y-%m-%d").to_string(),
+            remaining_quantity: lot.remaining_quantity.to_string(),
+            cost_basis_per_unit: lot.cost_basis_per_unit.to_string(),
+            cost_basis_currency: lot.cost_basis_currency,
+        });
+    }
+    Ok(results)
+}
+
 // -- Metadata commands --
 
 #[tauri::command]

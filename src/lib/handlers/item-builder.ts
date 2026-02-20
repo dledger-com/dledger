@@ -249,6 +249,41 @@ export async function buildAllGroupItems(
   return allItems;
 }
 
+// ---- Account reclassification ----
+
+export interface AccountRemap {
+  from: string;
+  to: string;
+}
+
+/**
+ * Remap counterparty account names based on classified DeFi actions.
+ * Matching: if `from` is an exact string, match exactly.
+ * Special pattern: accounts starting with `Equity:` and containing `:External:` match any
+ * `Equity:*:External:*` counterparty account.
+ */
+export function remapCounterpartyAccounts(
+  items: ItemAccum[],
+  remaps: AccountRemap[],
+): ItemAccum[] {
+  return items.map((item) => {
+    for (const remap of remaps) {
+      if (matchesEquityExternal(item.account, remap.from)) {
+        return { ...item, account: remap.to };
+      }
+    }
+    return item;
+  });
+}
+
+function matchesEquityExternal(account: string, pattern: string): boolean {
+  // Wildcard pattern like "Equity:*:External:*"
+  if (pattern === "Equity:*:External:*") {
+    return account.startsWith("Equity:") && account.includes(":External:");
+  }
+  return account === pattern;
+}
+
 // ---- Merge items sharing (account, currency), drop zeros ----
 
 export function mergeItemAccums(items: ItemAccum[]): ItemAccum[] {

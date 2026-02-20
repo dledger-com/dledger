@@ -93,6 +93,7 @@ export async function computeUnrealizedGainLoss(
         cost_basis_currency: lot.cost_basis_currency,
         current_value: currentValueInBase.toFixed(2),
         unrealized_gain_loss: unrealizedGL.toFixed(2),
+        source_handler: lot.source_handler ?? null,
       });
     }
   }

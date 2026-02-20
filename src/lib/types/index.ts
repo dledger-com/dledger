@@ -125,6 +125,7 @@ export interface OpenLot {
   remaining_quantity: string;
   cost_basis_per_unit: string;
   cost_basis_currency: string;
+  source_handler?: string | null;
 }
 
 export interface UnrealizedGainLossLine {
@@ -136,6 +137,7 @@ export interface UnrealizedGainLossLine {
   cost_basis_currency: string;
   current_value: string;
   unrealized_gain_loss: string;
+  source_handler?: string | null;
 }
 
 export interface UnrealizedGainLossReport {

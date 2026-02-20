@@ -372,7 +372,8 @@ export class SqlJsBackend implements Backend {
     const backend = new SqlJsBackend(db);
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
-    db.exec("INSERT INTO schema_version (version) VALUES (6)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
+    db.exec("INSERT INTO schema_version (version) VALUES (8)");
     return backend;
   }
 
@@ -386,7 +387,8 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
-      db.exec("INSERT INTO schema_version (version) VALUES (6)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
+      db.exec("INSERT INTO schema_version (version) VALUES (8)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -490,9 +492,13 @@ export class SqlJsBackend implements Backend {
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
           )`);
         }
-        if (currentVersion < 7) {
+        if (currentVersion < 8) {
+          // Migrate v7 → v8: add metadata index for handler/action queries
+          db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
+        }
+        if (currentVersion < 8) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (7)");
+          db.exec("INSERT INTO schema_version (version) VALUES (8)");
         }
       }
     }
@@ -1556,17 +1562,21 @@ export class SqlJsBackend implements Backend {
 
     // Batch: fetch all lots at once
     const uniqueLotIds = [...new Set(disposals.map((d) => d.lot_id))];
-    const lotMap = new Map<string, { currency: string; acquired_date: string; cost_basis_per_unit: string }>();
+    const lotMap = new Map<string, { currency: string; acquired_date: string; cost_basis_per_unit: string; source_handler: string | null }>();
     if (uniqueLotIds.length > 0) {
       const ph = uniqueLotIds.map(() => "?").join(", ");
       const lots = this.query(
-        `SELECT id, currency, acquired_date, cost_basis_per_unit FROM lot WHERE id IN (${ph})`,
+        `SELECT id, currency, acquired_date, cost_basis_per_unit,
+                (SELECT m.value FROM journal_entry_metadata m
+                 WHERE m.journal_entry_id = lot.journal_entry_id AND m.key = 'handler') as source_handler
+         FROM lot WHERE id IN (${ph})`,
         uniqueLotIds,
         (row) => ({
           id: row.id as string,
           currency: row.currency as string,
           acquired_date: row.acquired_date as string,
           cost_basis_per_unit: row.cost_basis_per_unit as string,
+          source_handler: (row.source_handler as string) || null,
         }),
       );
       for (const lot of lots) {
@@ -1591,6 +1601,7 @@ export class SqlJsBackend implements Backend {
         cost_basis: costBasis.toString(),
         proceeds: proceeds.toString(),
         gain_loss: disposal.realized_gain_loss,
+        source_handler: lot.source_handler,
       });
 
       totalGainLoss = totalGainLoss.plus(
@@ -1609,7 +1620,9 @@ export class SqlJsBackend implements Backend {
   async listOpenLots(): Promise<OpenLot[]> {
     return this.query(
       `SELECT l.id, l.account_id, a.full_name as account_name, l.currency,
-              l.acquired_date, l.remaining_quantity, l.cost_basis_per_unit, l.cost_basis_currency
+              l.acquired_date, l.remaining_quantity, l.cost_basis_per_unit, l.cost_basis_currency,
+              (SELECT m.value FROM journal_entry_metadata m
+               WHERE m.journal_entry_id = l.journal_entry_id AND m.key = 'handler') as source_handler
        FROM lot l
        JOIN account a ON a.id = l.account_id
        WHERE l.is_closed = 0 AND CAST(l.remaining_quantity AS REAL) > 0
@@ -1624,6 +1637,7 @@ export class SqlJsBackend implements Backend {
         remaining_quantity: row.remaining_quantity as string,
         cost_basis_per_unit: row.cost_basis_per_unit as string,
         cost_basis_currency: row.cost_basis_currency as string,
+        source_handler: (row.source_handler as string) || null,
       }),
     );
   }
@@ -1919,6 +1933,20 @@ export class SqlJsBackend implements Backend {
       result[key] = value;
     }
     return result;
+  }
+
+  // ---- Backend: Metadata query ----
+
+  async queryEntriesByMetadata(key: string, value: string): Promise<string[]> {
+    return this.query(
+      `SELECT DISTINCT m.journal_entry_id
+       FROM journal_entry_metadata m
+       JOIN journal_entry je ON je.id = m.journal_entry_id
+       WHERE m.key = ? AND m.value = ? AND je.status != 'voided'
+       ORDER BY je.date DESC`,
+      [key, value],
+      (row) => row.journal_entry_id as string,
+    );
   }
 
   // ---- Backend: Raw transactions ----

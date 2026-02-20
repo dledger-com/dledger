@@ -887,6 +887,80 @@ impl Storage for TestStorage {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| StorageError::Internal(e.to_string()))
     }
+
+    fn query_entries_by_metadata(&self, key: &str, value: &str) -> StorageResult<Vec<Uuid>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT m.journal_entry_id
+                 FROM journal_entry_metadata m
+                 JOIN journal_entry je ON je.id = m.journal_entry_id
+                 WHERE m.key = ?1 AND m.value = ?2 AND je.status != 'voided'
+                 ORDER BY je.date DESC",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params![key, value], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.map(|r| {
+            let s = r.map_err(|e| StorageError::Internal(e.to_string()))?;
+            parse_uuid(&s)
+        })
+        .collect()
+    }
+
+    fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, account_id, currency, acquired_date, original_quantity,
+                        remaining_quantity, cost_basis_per_unit, cost_basis_currency,
+                        journal_entry_id, is_closed
+                 FROM lot
+                 WHERE is_closed = 0 AND CAST(remaining_quantity AS REAL) > 0
+                 ORDER BY currency, acquired_date",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                let id_str: String = row.get(0)?;
+                let acc_str: String = row.get(1)?;
+                let cur: String = row.get(2)?;
+                let ad_str: String = row.get(3)?;
+                let oq_str: String = row.get(4)?;
+                let rq_str: String = row.get(5)?;
+                let cb_str: String = row.get(6)?;
+                let cbc: String = row.get(7)?;
+                let je_str: String = row.get(8)?;
+                let ic: i32 = row.get(9)?;
+                Ok((id_str, acc_str, cur, ad_str, oq_str, rq_str, cb_str, cbc, je_str, ic))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut result = Vec::new();
+        for r in rows {
+            let (id_str, acc_str, cur, ad_str, oq_str, rq_str, cb_str, cbc, je_str, ic) =
+                r.map_err(|e| StorageError::Internal(e.to_string()))?;
+            result.push(Lot {
+                id: parse_uuid(&id_str)?,
+                account_id: parse_uuid(&acc_str)?,
+                currency: cur,
+                acquired_date: NaiveDate::parse_from_str(&ad_str, "%Y-%m-%d")
+                    .map_err(|e| StorageError::Internal(e.to_string()))?,
+                original_quantity: Decimal::from_str(&oq_str)
+                    .map_err(|e| StorageError::Internal(e.to_string()))?,
+                remaining_quantity: Decimal::from_str(&rq_str)
+                    .map_err(|e| StorageError::Internal(e.to_string()))?,
+                cost_basis_per_unit: Decimal::from_str(&cb_str)
+                    .map_err(|e| StorageError::Internal(e.to_string()))?,
+                cost_basis_currency: cbc,
+                journal_entry_id: parse_uuid(&je_str)?,
+                is_closed: ic != 0,
+            });
+        }
+        Ok(result)
+    }
 }
 
 // ============================================================================

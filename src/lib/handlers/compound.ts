@@ -9,6 +9,7 @@ import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
+  remapCounterpartyAccounts,
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
@@ -119,7 +120,18 @@ export const compoundHandler: TransactionHandler = {
       ctx.label,
       ctx,
     );
-    const merged = mergeItemAccums(allItems);
+    let merged = mergeItemAccums(allItems);
+
+    // Reclassify counterparty accounts based on action
+    if (action === "BORROW") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Liabilities:Compound:Borrow" },
+      ]);
+    } else if (action === "CLAIM_COMP") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Income:Compound:Rewards" },
+      ]);
+    }
 
     if (merged.length === 0) {
       return { type: "skip", reason: "no net movement" };

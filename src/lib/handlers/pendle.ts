@@ -9,6 +9,7 @@ import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
+  remapCounterpartyAccounts,
   resolveToLineItems,
   buildHandlerEntry,
 } from "./item-builder.js";
@@ -222,11 +223,13 @@ export const pendleHandler: TransactionHandler = {
 
     let enrichment: PendleEnrichment | null = null;
     const warnings: string[] = [];
-    try {
-      enrichment = await fetchPendleEnrichment(ctx.chainId, ctx.address, group.hash);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      warnings.push(`Pendle API enrichment failed: ${msg}`);
+    if (ctx.enrichment) {
+      try {
+        enrichment = await fetchPendleEnrichment(ctx.chainId, ctx.address, group.hash);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        warnings.push(`Pendle API enrichment failed: ${msg}`);
+      }
     }
 
     const { marketName, underlying } = extractMarketInfo(group.erc20s);
@@ -235,7 +238,14 @@ export const pendleHandler: TransactionHandler = {
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
     const allItems = await buildAllGroupItems(group, addr, ctx.chain, ctx.label, ctx);
-    const merged = mergeItemAccums(allItems);
+    let merged = mergeItemAccums(allItems);
+
+    // Reclassify counterparty accounts for reward claims
+    if (action === "CLAIM_REWARDS") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Income:Pendle:Rewards" },
+      ]);
+    }
 
     if (merged.length === 0) {
       return { type: "skip", reason: "no net movement" };

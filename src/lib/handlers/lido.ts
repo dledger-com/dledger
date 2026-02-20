@@ -120,6 +120,19 @@ function buildDescription(
   return `Lido: ${label} (${hashShort})`;
 }
 
+// ---- Enrichment via Lido API ----
+
+async function fetchLidoStakingApr(): Promise<string | null> {
+  const resp = await fetch("https://eth-api.lido.fi/v1/protocol/steth/apr/sma");
+  if (!resp.ok) return null;
+
+  const data = await resp.json();
+  const apr = data?.data?.smaApr ?? data?.data?.apr;
+  if (apr == null) return null;
+
+  return String(apr);
+}
+
 // ---- Handler ----
 
 export const lidoHandler: TransactionHandler = {
@@ -190,6 +203,19 @@ export const lidoHandler: TransactionHandler = {
       handler: "lido",
       "handler:action": action,
     };
+
+    // Enrichment: fetch staking APR from Lido API (opt-in)
+    if (ctx.enrichment && (action === "STAKE_ETH" || action === "WRAP")) {
+      try {
+        const stakingApr = await fetchLidoStakingApr();
+        if (stakingApr) {
+          metadata["handler:staking_apr"] = stakingApr;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Lido enrichment failed: ${msg}`;
+      }
+    }
 
     const handlerEntry = buildHandlerEntry({
       date,

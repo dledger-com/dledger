@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -952,6 +952,49 @@ impl Storage for SqliteStorage {
             .collect()
     }
 
+    fn query_entries_by_metadata(&self, key: &str, value: &str) -> StorageResult<Vec<Uuid>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT m.journal_entry_id
+                 FROM journal_entry_metadata m
+                 JOIN journal_entry je ON je.id = m.journal_entry_id
+                 WHERE m.key = ?1 AND m.value = ?2 AND je.status != 'voided'
+                 ORDER BY je.date DESC",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![key, value], |row| {
+                let id_str: String = row.get(0)?;
+                Ok(id_str)
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.map(|r| {
+            let id_str = r.map_err(|e| StorageError::Internal(e.to_string()))?;
+            parse_uuid(&id_str)
+        })
+        .collect()
+    }
+
+    fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, account_id, currency, acquired_date, original_quantity,
+                        remaining_quantity, cost_basis_per_unit, cost_basis_currency,
+                        journal_entry_id, is_closed
+                 FROM lot
+                 WHERE is_closed = 0 AND CAST(remaining_quantity AS REAL) > 0
+                 ORDER BY currency, acquired_date",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| Ok(row_to_lot(row)))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.map(|r| r.map_err(|e| StorageError::Internal(e.to_string()))?)
+            .collect()
+    }
+
     // -- Raw transactions --
 
     fn store_raw_transaction(&self, source: &str, data: &str) -> StorageResult<()> {
@@ -1291,6 +1334,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 6 {
             storage.execute_sql(MIGRATION_V6)?;
             storage.set_schema_version(6)?;
+        }
+        if current < 7 {
+            storage.execute_sql(MIGRATION_V7)?;
+            storage.set_schema_version(7)?;
         }
     }
     Ok(())

@@ -8,7 +8,7 @@ export interface AppSettings {
   showHidden: boolean;
   lastRateSync: string;
   debugMode: boolean;
-  handlers: Record<string, { enabled: boolean }>;
+  handlers: Record<string, { enabled: boolean; enrichment?: boolean }>;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

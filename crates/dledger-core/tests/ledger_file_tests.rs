@@ -1152,6 +1152,14 @@ impl Storage for TestStorage {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| StorageError::Internal(e.to_string()))
     }
+
+    fn query_entries_by_metadata(&self, _key: &str, _value: &str) -> StorageResult<Vec<Uuid>> {
+        Ok(vec![])
+    }
+
+    fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>> {
+        Ok(vec![])
+    }
 }
 
 // ============================================================================

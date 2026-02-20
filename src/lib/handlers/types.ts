@@ -33,6 +33,8 @@ export interface HandlerContext {
   chain: ChainInfo;
   backend: Backend;
   settings: AppSettings;
+  /** Whether API enrichment is enabled for the current handler */
+  enrichment?: boolean;
   ensureAccount(fullName: string, date: string): Promise<string>;
   ensureCurrency(code: string, decimals: number): Promise<void>;
 }

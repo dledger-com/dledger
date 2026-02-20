@@ -8,6 +8,7 @@ import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
+  remapCounterpartyAccounts,
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
@@ -110,6 +111,42 @@ function buildDescription(
   return `Curve: ${ACTION_LABELS[action]} (${hashShort})`;
 }
 
+// ---- Enrichment via Curve API ----
+
+interface CurveEnrichment {
+  pool_base_apy: string;
+  pool_reward_apy: string;
+}
+
+async function fetchCurveEnrichment(
+  flows: TokenFlow[],
+): Promise<CurveEnrichment | null> {
+  // Identify the Curve LP token to find the pool
+  const lpFlow = flows.find((f) => isCurveLP(f.symbol));
+  if (!lpFlow) return null;
+
+  const resp = await fetch("https://api.curve.fi/api/getPools/ethereum/main");
+  if (!resp.ok) return null;
+
+  const data = await resp.json();
+  const pools = data?.data?.poolData;
+  if (!Array.isArray(pools)) return null;
+
+  // Match pool by LP token address or name containing the LP symbol
+  const lpAddr = lpFlow.contractAddress.toLowerCase();
+  const match = pools.find(
+    (p: { lpTokenAddress?: string; name?: string }) =>
+      p.lpTokenAddress?.toLowerCase() === lpAddr ||
+      (p.name && lpFlow.symbol && p.name.toLowerCase().includes(lpFlow.symbol.toLowerCase())),
+  );
+  if (!match) return null;
+
+  return {
+    pool_base_apy: match.gaugeRewards?.[0]?.apy?.toString() ?? match.apy?.toString() ?? "",
+    pool_reward_apy: match.gaugeCrvApy?.[0]?.toString() ?? "",
+  };
+}
+
 // ---- Handler ----
 
 export const curveHandler: TransactionHandler = {
@@ -150,7 +187,14 @@ export const curveHandler: TransactionHandler = {
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
     const allItems = await buildAllGroupItems(group, addr, ctx.chain, ctx.label, ctx);
-    const merged = mergeItemAccums(allItems);
+    let merged = mergeItemAccums(allItems);
+
+    // Reclassify counterparty accounts for CRV claims
+    if (action === "CLAIM_CRV") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Income:Curve:Rewards" },
+      ]);
+    }
 
     if (merged.length === 0) {
       return { type: "skip", reason: "no net movement" };
@@ -164,6 +208,20 @@ export const curveHandler: TransactionHandler = {
       handler: "curve",
       "handler:action": action,
     };
+
+    // Enrichment: fetch pool APY data from Curve API (opt-in)
+    if (ctx.enrichment && (action === "ADD_LIQUIDITY" || action === "STAKE_GAUGE")) {
+      try {
+        const enrichment = await fetchCurveEnrichment(flows);
+        if (enrichment) {
+          metadata["handler:pool_base_apy"] = enrichment.pool_base_apy;
+          metadata["handler:pool_reward_apy"] = enrichment.pool_reward_apy;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Curve enrichment failed: ${msg}`;
+      }
+    }
 
     const handlerEntry = buildHandlerEntry({
       date,

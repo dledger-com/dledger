@@ -88,6 +88,8 @@ pub fn run() {
             commands::create_balance_assertion,
             commands::list_balance_assertions,
             commands::check_balance_assertions,
+            commands::query_entries_by_metadata,
+            commands::list_open_lots,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

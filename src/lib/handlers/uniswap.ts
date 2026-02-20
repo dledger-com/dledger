@@ -8,6 +8,7 @@ import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
+  remapCounterpartyAccounts,
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
@@ -111,6 +112,59 @@ function buildSwapDescription(flows: TokenFlow[], hashShort: string): string {
   return `Uniswap: Swap (${hashShort})`;
 }
 
+// ---- Enrichment via The Graph ----
+
+interface UniswapEnrichment {
+  fee_tier: string;
+  pool_tvl_usd: string;
+}
+
+async function fetchUniswapEnrichment(
+  flows: TokenFlow[],
+): Promise<UniswapEnrichment | null> {
+  // Identify token pair from flows
+  const outFlow = flows.find((f) => f.direction === "out");
+  const inFlow = flows.find((f) => f.direction === "in");
+  if (!outFlow || !inFlow) return null;
+
+  const token0 = outFlow.contractAddress.toLowerCase();
+  const token1 = inFlow.contractAddress.toLowerCase();
+
+  const query = `{
+    pools(
+      first: 1,
+      where: {
+        token0_in: ["${token0}", "${token1}"],
+        token1_in: ["${token0}", "${token1}"]
+      },
+      orderBy: totalValueLockedUSD,
+      orderDirection: desc
+    ) {
+      feeTier
+      totalValueLockedUSD
+    }
+  }`;
+
+  const resp = await fetch(
+    "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    },
+  );
+  if (!resp.ok) return null;
+
+  const data = await resp.json();
+  const pool = data?.data?.pools?.[0];
+  if (!pool) return null;
+
+  return {
+    fee_tier: pool.feeTier ?? "",
+    pool_tvl_usd: pool.totalValueLockedUSD ?? "",
+  };
+}
+
 // ---- Handler ----
 
 export const uniswapHandler: TransactionHandler = {
@@ -152,7 +206,14 @@ export const uniswapHandler: TransactionHandler = {
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
     const allItems = await buildAllGroupItems(group, addr, ctx.chain, ctx.label, ctx);
-    const merged = mergeItemAccums(allItems);
+    let merged = mergeItemAccums(allItems);
+
+    // Reclassify counterparty accounts for fee collection
+    if (action === "COLLECT_FEES_V3") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Income:Uniswap:Fees" },
+      ]);
+    }
 
     if (merged.length === 0) {
       return { type: "skip", reason: "no net movement" };
@@ -173,6 +234,20 @@ export const uniswapHandler: TransactionHandler = {
       "handler:action": action,
       "handler:version": version,
     };
+
+    // Enrichment: fetch pool info from The Graph (opt-in)
+    if (ctx.enrichment && action === "SWAP") {
+      try {
+        const enrichment = await fetchUniswapEnrichment(flows);
+        if (enrichment) {
+          metadata["handler:fee_tier"] = enrichment.fee_tier;
+          metadata["handler:pool_tvl_usd"] = enrichment.pool_tvl_usd;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Uniswap enrichment failed: ${msg}`;
+      }
+    }
 
     const handlerEntry = buildHandlerEntry({
       date,

@@ -92,7 +92,7 @@ export function exportBalanceSheetCsv(report: BalanceSheet): void {
 
 export function exportGainLossCsv(report: GainLossReport): void {
   const rows: string[] = [
-    toCsvRow(["Currency", "Acquired", "Disposed", "Quantity", "Cost Basis", "Proceeds", "Gain/Loss"]),
+    toCsvRow(["Currency", "Acquired", "Disposed", "Quantity", "Cost Basis", "Proceeds", "Gain/Loss", "Protocol"]),
   ];
 
   for (const line of report.lines) {
@@ -105,6 +105,7 @@ export function exportGainLossCsv(report: GainLossReport): void {
         line.cost_basis,
         line.proceeds,
         line.gain_loss,
+        line.source_handler || "",
       ]),
     );
   }
@@ -123,6 +124,7 @@ export function exportUnrealizedGainLossCsv(report: UnrealizedGainLossReport): v
       "Cost Currency",
       "Current Value",
       "Unrealized Gain/Loss",
+      "Protocol",
     ]),
   ];
 
@@ -137,6 +139,7 @@ export function exportUnrealizedGainLossCsv(report: UnrealizedGainLossReport): v
         line.cost_basis_currency,
         line.current_value,
         line.unrealized_gain_loss,
+        line.source_handler || "",
       ]),
     );
   }

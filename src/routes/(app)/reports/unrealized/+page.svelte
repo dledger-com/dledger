@@ -20,12 +20,30 @@
   let report = $state<UnrealizedGainLossReport | null>(null);
   let missingRates = $state<string[]>([]);
   let error = $state<string | null>(null);
+  let filterProtocol = $state("");
+
+  const uniqueProtocols = $derived(
+    report
+      ? [...new Set(report.lines.map((l) => l.source_handler).filter((h): h is string => !!h))].sort()
+      : [],
+  );
+
+  const hasProtocols = $derived(uniqueProtocols.length > 0);
+
+  const filteredLines = $derived(
+    report
+      ? filterProtocol
+        ? report.lines.filter((l) => l.source_handler === filterProtocol)
+        : report.lines
+      : [],
+  );
 
   async function generate() {
     loading = true;
     error = null;
     report = null;
     missingRates = [];
+    filterProtocol = "";
     try {
       const result = await computeUnrealizedGainLoss(getBackend(), {
         baseCurrency: settings.currency,
@@ -62,6 +80,21 @@
         <Download class="mr-1 h-4 w-4" />
         CSV
       </Button>
+    {/if}
+    {#if hasProtocols}
+      <div class="space-y-2">
+        <label for="protocol" class="text-sm font-medium">Protocol</label>
+        <select
+          id="protocol"
+          bind:value={filterProtocol}
+          class="flex h-9 w-40 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <option value="">All</option>
+          {#each uniqueProtocols as protocol}
+            <option value={protocol}>{protocol}</option>
+          {/each}
+        </select>
+      </div>
     {/if}
   </div>
 
@@ -100,7 +133,7 @@
       </Card.Header>
     </Card.Root>
 
-    {#if report.lines.length === 0}
+    {#if filteredLines.length === 0}
       <Card.Root>
         <Card.Content class="py-8">
           <p class="text-sm text-muted-foreground text-center">
@@ -114,6 +147,9 @@
           <Table.Header>
             <Table.Row>
               <Table.Head>Currency</Table.Head>
+              {#if hasProtocols}
+                <Table.Head>Protocol</Table.Head>
+              {/if}
               <Table.Head>Account</Table.Head>
               <Table.Head>Acquired</Table.Head>
               <Table.Head class="text-right">Quantity</Table.Head>
@@ -123,12 +159,15 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each report.lines as line}
+            {#each filteredLines as line}
               {@const gl = parseFloat(line.unrealized_gain_loss)}
               <Table.Row>
                 <Table.Cell>
                   <Badge variant="outline">{line.currency}</Badge>
                 </Table.Cell>
+                {#if hasProtocols}
+                  <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>
+                {/if}
                 <Table.Cell class="text-sm">{line.account_name}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{line.acquired_date}</Table.Cell>
                 <Table.Cell class="text-right font-mono">{line.quantity}</Table.Cell>
@@ -146,7 +185,7 @@
           </Table.Body>
           <Table.Footer>
             <Table.Row>
-              <Table.Cell colspan={6} class="font-medium">Total</Table.Cell>
+              <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">Total</Table.Cell>
               <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
                 {total >= 0 ? "+" : ""}{formatCurrency(total, report.base_currency)}
               </Table.Cell>

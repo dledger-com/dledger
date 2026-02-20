@@ -57,6 +57,22 @@
         </Card.Header>
       </Card.Root>
     </a>
+    <a href="/reports/defi" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>DeFi Positions</Card.Title>
+          <Card.Description>Overview of DeFi protocol positions across lending, borrowing, and rewards.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
+    <a href="/reports/protocol-pnl" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>Protocol P&L</Card.Title>
+          <Card.Description>Revenue and expenses broken down by DeFi protocol.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
     <a href="/reports/integrity" class="block">
       <Card.Root class="transition-colors hover:bg-accent">
         <Card.Header>

@@ -8,6 +8,7 @@ import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
+  remapCounterpartyAccounts,
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
@@ -129,6 +130,35 @@ function findUnderlyingFlow(flows: TokenFlow[]): TokenFlow | undefined {
   );
 }
 
+// ---- Enrichment via Aave API ----
+
+interface AaveEnrichment {
+  supply_apy: string;
+  borrow_apy: string;
+}
+
+async function fetchAaveEnrichment(
+  underlyingSymbol: string,
+): Promise<AaveEnrichment | null> {
+  const resp = await fetch("https://aave-api-v2.aave.com/data/markets-data");
+  if (!resp.ok) return null;
+
+  const data = await resp.json();
+  const reserves = data?.reserves ?? data;
+  if (!Array.isArray(reserves)) return null;
+
+  const target = underlyingSymbol.toUpperCase();
+  const match = reserves.find(
+    (r: { symbol?: string }) => r.symbol?.toUpperCase() === target,
+  );
+  if (!match) return null;
+
+  return {
+    supply_apy: match.liquidityRate?.toString() ?? match.supplyAPY?.toString() ?? "",
+    borrow_apy: match.variableBorrowRate?.toString() ?? match.borrowAPY?.toString() ?? "",
+  };
+}
+
 // ---- Handler ----
 
 export const aaveHandler: TransactionHandler = {
@@ -168,7 +198,18 @@ export const aaveHandler: TransactionHandler = {
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
     const allItems = await buildAllGroupItems(group, addr, ctx.chain, ctx.label, ctx);
-    const merged = mergeItemAccums(allItems);
+    let merged = mergeItemAccums(allItems);
+
+    // Reclassify counterparty accounts based on action
+    if (action === "BORROW") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Liabilities:Aave:Borrow" },
+      ]);
+    } else if (action === "CLAIM_REWARDS") {
+      merged = remapCounterpartyAccounts(merged, [
+        { from: "Equity:*:External:*", to: "Income:Aave:Rewards" },
+      ]);
+    }
 
     if (merged.length === 0) {
       return { type: "skip", reason: "no net movement" };
@@ -194,6 +235,20 @@ export const aaveHandler: TransactionHandler = {
       "handler:action": action,
       "handler:version": version,
     };
+
+    // Enrichment: fetch APY data from Aave API (opt-in)
+    if (ctx.enrichment && underlying) {
+      try {
+        const enrichment = await fetchAaveEnrichment(underlying.symbol);
+        if (enrichment) {
+          metadata["handler:supply_apy"] = enrichment.supply_apy;
+          metadata["handler:borrow_apy"] = enrichment.borrow_apy;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Aave enrichment failed: ${msg}`;
+      }
+    }
 
     const handlerEntry = buildHandlerEntry({
       date,

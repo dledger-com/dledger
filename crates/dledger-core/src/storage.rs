@@ -146,6 +146,11 @@ pub trait Storage: Send + Sync {
         value: &str,
     ) -> StorageResult<()>;
     fn get_metadata(&self, journal_entry_id: &Uuid) -> StorageResult<Vec<Metadata>>;
+    fn query_entries_by_metadata(&self, key: &str, value: &str) -> StorageResult<Vec<Uuid>>;
+
+    // -- Open lots --
+
+    fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>>;
 
     // -- Audit --
 

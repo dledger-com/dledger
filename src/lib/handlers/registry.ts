@@ -58,8 +58,15 @@ export class HandlerRegistry {
     const handler = this.findBest(group, ctx);
     const warnings: string[] = [];
 
+    // Resolve enrichment flag from handler-specific settings
+    const handlerConfig = ctx.settings.handlers[handler.id];
+    const enrichedCtx: HandlerContext = {
+      ...ctx,
+      enrichment: handlerConfig?.enrichment ?? false,
+    };
+
     try {
-      const result = await handler.process(group, ctx);
+      const result = await handler.process(group, enrichedCtx);
       return { ...result, handlerId: handler.id, warnings };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -69,7 +76,7 @@ export class HandlerRegistry {
       if (handler.id !== "generic-etherscan") {
         const generic = this.handlers.find((h) => h.id === "generic-etherscan");
         if (generic) {
-          const result = await generic.process(group, ctx);
+          const result = await generic.process(group, { ...ctx, enrichment: false });
           return { ...result, handlerId: "generic-etherscan", warnings };
         }
       }

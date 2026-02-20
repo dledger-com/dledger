@@ -1217,6 +1217,7 @@
             <Table.Head>Handler</Table.Head>
             <Table.Head>Description</Table.Head>
             <Table.Head>Chains</Table.Head>
+            <Table.Head class="text-right">Enrichment</Table.Head>
             <Table.Head class="text-right">Enabled</Table.Head>
           </Table.Row>
         </Table.Header>
@@ -1238,6 +1239,27 @@
                   </div>
                 {/if}
               </Table.Cell>
+              {@const hasEnrichment = ["uniswap", "aave", "lido", "curve", "pendle"].includes(handler.id)}
+              {@const enrichmentEnabled = settings.settings.handlers[handler.id]?.enrichment ?? false}
+              <Table.Cell class="text-right">
+                {#if hasEnrichment && !isGeneric}
+                  <Button
+                    variant={enrichmentEnabled ? "default" : "outline"}
+                    size="sm"
+                    disabled={!isEnabled}
+                    onclick={() => {
+                      const current = { ...settings.settings.handlers };
+                      const prev = current[handler.id] ?? { enabled: false };
+                      current[handler.id] = { ...prev, enrichment: !enrichmentEnabled };
+                      settings.update({ handlers: current });
+                    }}
+                  >
+                    {enrichmentEnabled ? "On" : "Off"}
+                  </Button>
+                {:else}
+                  <span class="text-sm text-muted-foreground">--</span>
+                {/if}
+              </Table.Cell>
               <Table.Cell class="text-right">
                 {#if isGeneric}
                   <span class="text-sm text-muted-foreground">Always enabled</span>
@@ -1247,7 +1269,7 @@
                     size="sm"
                     onclick={() => {
                       const current = { ...settings.settings.handlers };
-                      current[handler.id] = { enabled: !isEnabled };
+                      current[handler.id] = { ...current[handler.id], enabled: !isEnabled };
                       settings.update({ handlers: current });
                     }}
                   >

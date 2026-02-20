@@ -82,6 +82,7 @@ export interface Backend {
   // Metadata
   setMetadata(entryId: string, entries: Record<string, string>): Promise<void>;
   getMetadata(entryId: string): Promise<Record<string, string>>;
+  queryEntriesByMetadata(key: string, value: string): Promise<string[]>;
 
   // Raw transactions
   storeRawTransaction(source: string, data: string): Promise<void>;
@@ -207,8 +208,7 @@ class TauriBackend implements Backend {
     return this.invoke("gain_loss_report", { fromDate, toDate });
   }
   async listOpenLots(): Promise<OpenLot[]> {
-    // Not yet implemented in Rust backend
-    return [];
+    return this.invoke("list_open_lots");
   }
 
   // Budgets (not yet implemented in Rust backend)
@@ -242,6 +242,10 @@ class TauriBackend implements Backend {
   }
   async getMetadata(entryId: string): Promise<Record<string, string>> {
     return this.invoke("get_metadata", { entryId });
+  }
+
+  async queryEntriesByMetadata(key: string, value: string): Promise<string[]> {
+    return this.invoke("query_entries_by_metadata", { key, value });
   }
 
   // Raw transactions

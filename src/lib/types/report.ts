@@ -50,6 +50,7 @@ export interface GainLossLine {
   cost_basis: string;
   proceeds: string;
   gain_loss: string;
+  source_handler?: string | null;
 }
 
 export interface GainLossReport {

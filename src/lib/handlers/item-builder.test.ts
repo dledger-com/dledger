@@ -12,6 +12,7 @@ import {
   buildGroupDescription,
   buildHandlerEntry,
   formatTokenAmount,
+  remapCounterpartyAccounts,
   type ItemAccum,
 } from "./item-builder.js";
 
@@ -273,5 +274,79 @@ describe("formatTokenAmount", () => {
     expect(formatTokenAmount(new Decimal("1.5"), "ETH")).toBe("1.5 ETH");
     expect(formatTokenAmount(new Decimal("100"), "USDC")).toBe("100 USDC");
     expect(formatTokenAmount(new Decimal("0.00000001"), "WBTC")).toBe("0.00000001 WBTC");
+  });
+});
+
+describe("remapCounterpartyAccounts", () => {
+  it("remaps Equity:*:External:* wildcard pattern", () => {
+    const items: ItemAccum[] = [
+      { account: "Assets:Wallet", currency: "ETH", amount: new Decimal("1") },
+      { account: "Equity:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("-1") },
+    ];
+    const result = remapCounterpartyAccounts(items, [
+      { from: "Equity:*:External:*", to: "Income:Aave:Rewards" },
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result[0].account).toBe("Assets:Wallet");
+    expect(result[1].account).toBe("Income:Aave:Rewards");
+  });
+
+  it("does not remap non-matching accounts", () => {
+    const items: ItemAccum[] = [
+      { account: "Assets:Wallet", currency: "ETH", amount: new Decimal("1") },
+      { account: "Expenses:Gas", currency: "ETH", amount: new Decimal("-0.01") },
+    ];
+    const result = remapCounterpartyAccounts(items, [
+      { from: "Equity:*:External:*", to: "Liabilities:Aave:Borrow" },
+    ]);
+    expect(result[0].account).toBe("Assets:Wallet");
+    expect(result[1].account).toBe("Expenses:Gas");
+  });
+
+  it("supports exact match pattern", () => {
+    const items: ItemAccum[] = [
+      { account: "Equity:Trading:ETH", currency: "ETH", amount: new Decimal("1") },
+    ];
+    const result = remapCounterpartyAccounts(items, [
+      { from: "Equity:Trading:ETH", to: "Income:Trading:ETH" },
+    ]);
+    expect(result[0].account).toBe("Income:Trading:ETH");
+  });
+
+  it("applies first matching remap only", () => {
+    const items: ItemAccum[] = [
+      { account: "Equity:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("-1") },
+    ];
+    const result = remapCounterpartyAccounts(items, [
+      { from: "Equity:*:External:*", to: "Income:First" },
+      { from: "Equity:*:External:*", to: "Income:Second" },
+    ]);
+    expect(result[0].account).toBe("Income:First");
+  });
+
+  it("preserves amount and currency", () => {
+    const items: ItemAccum[] = [
+      { account: "Equity:Ethereum:External:0xabc", currency: "USDC", amount: new Decimal("42.5") },
+    ];
+    const result = remapCounterpartyAccounts(items, [
+      { from: "Equity:*:External:*", to: "Liabilities:Compound:Borrow" },
+    ]);
+    expect(result[0].currency).toBe("USDC");
+    expect(result[0].amount.toString()).toBe("42.5");
+  });
+
+  it("handles empty items", () => {
+    const result = remapCounterpartyAccounts([], [
+      { from: "Equity:*:External:*", to: "Income:Test" },
+    ]);
+    expect(result).toHaveLength(0);
+  });
+
+  it("handles empty remaps", () => {
+    const items: ItemAccum[] = [
+      { account: "Equity:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("1") },
+    ];
+    const result = remapCounterpartyAccounts(items, []);
+    expect(result[0].account).toBe("Equity:Ethereum:External:0xabc");
   });
 });
