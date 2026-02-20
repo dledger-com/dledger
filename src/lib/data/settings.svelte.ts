@@ -5,7 +5,7 @@ export interface AppSettings {
   etherscanApiKey: string;
   coingeckoApiKey: string;
   finnhubApiKey: string;
-  hiddenCurrencies: string[];
+  showSpam: boolean;
   lastRateSync: string;
   debugMode: boolean;
   handlers: Record<string, { enabled: boolean }>;
@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   etherscanApiKey: "",
   coingeckoApiKey: "",
   finnhubApiKey: "",
-  hiddenCurrencies: [],
+  showSpam: false,
   lastRateSync: "",
   debugMode: false,
   handlers: { "generic-etherscan": { enabled: true } },
@@ -79,8 +79,8 @@ export class SettingsStore {
     return this.settings.finnhubApiKey;
   }
 
-  get hiddenCurrencySet(): Set<string> {
-    return new Set(this.settings.hiddenCurrencies);
+  get showSpam(): boolean {
+    return this.settings.showSpam;
   }
 
   get lastRateSync(): string {
@@ -89,22 +89,6 @@ export class SettingsStore {
 
   get debugMode(): boolean {
     return this.settings.debugMode;
-  }
-
-  hideCurrency(code: string) {
-    const set = new Set(this.settings.hiddenCurrencies);
-    set.add(code);
-    this.update({ hiddenCurrencies: [...set] });
-  }
-
-  unhideCurrency(code: string) {
-    this.update({
-      hiddenCurrencies: this.settings.hiddenCurrencies.filter((c) => c !== code),
-    });
-  }
-
-  resetHiddenCurrencies() {
-    this.update({ hiddenCurrencies: [] });
   }
 
   update(partial: Partial<AppSettings>) {

@@ -17,4 +17,5 @@ export interface Currency {
   name: string;
   decimal_places: number;
   is_base: boolean;
+  is_spam?: boolean;
 }

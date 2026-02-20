@@ -10,6 +10,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenGainLoss } from "$lib/utils/currency-filter.js";
+  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
 
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
@@ -21,7 +22,7 @@
 
   const filteredLines = $derived(
     reportStore.gainLossReport
-      ? filterHiddenGainLoss(reportStore.gainLossReport.lines, settings.hiddenCurrencySet)
+      ? filterHiddenGainLoss(reportStore.gainLossReport.lines, settings.showSpam ? new Set<string>() : getSpamCurrencySet())
       : [],
   );
 

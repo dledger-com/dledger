@@ -88,6 +88,10 @@ export interface Backend {
   clearAutoRateSources(): Promise<void>;
   clearNonUserRateSources(): Promise<void>;
 
+  // Currency spam management
+  setCurrencySpam(code: string, isSpam: boolean): Promise<void>;
+  listSpamCurrencies(): Promise<string[]>;
+
   // Balance assertions
   createBalanceAssertion(assertion: BalanceAssertion): Promise<void>;
   listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]>;
@@ -265,6 +269,14 @@ class TauriBackend implements Backend {
   }
   async clearNonUserRateSources(): Promise<void> {
     // Not yet implemented in Rust backend
+  }
+
+  // Currency spam management (not yet implemented in Rust backend)
+  async setCurrencySpam(_code: string, _isSpam: boolean): Promise<void> {
+    // Not yet implemented in Rust backend
+  }
+  async listSpamCurrencies(): Promise<string[]> {
+    return [];
   }
 
   // Balance assertions (not yet implemented in Rust backend)

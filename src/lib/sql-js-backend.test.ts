@@ -35,6 +35,51 @@ describe("SqlJsBackend", () => {
     });
   });
 
+  // ---- Currency spam ----
+
+  describe("currency spam", () => {
+    it("marks and lists spam currencies", async () => {
+      await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
+      await backend.createCurrency({ code: "SPAM1", name: "Spam Token", decimal_places: 18, is_base: false });
+      await backend.createCurrency({ code: "SPAM2", name: "Another Spam", decimal_places: 18, is_base: false });
+
+      // Initially no spam
+      let spam = await backend.listSpamCurrencies();
+      expect(spam).toHaveLength(0);
+
+      // Mark as spam
+      await backend.setCurrencySpam("SPAM1", true);
+      await backend.setCurrencySpam("SPAM2", true);
+      spam = await backend.listSpamCurrencies();
+      expect(spam).toEqual(["SPAM1", "SPAM2"]);
+
+      // Unmark one
+      await backend.setCurrencySpam("SPAM1", false);
+      spam = await backend.listSpamCurrencies();
+      expect(spam).toEqual(["SPAM2"]);
+
+      // is_spam reflected in listCurrencies
+      const currencies = await backend.listCurrencies();
+      const spam2 = currencies.find((c) => c.code === "SPAM2");
+      expect(spam2?.is_spam).toBe(true);
+      const usd = currencies.find((c) => c.code === "USD");
+      expect(usd?.is_spam).toBe(false);
+    });
+
+    it("clearLedgerData clears spam currencies", async () => {
+      await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
+      await backend.createCurrency({ code: "JUNK", name: "Junk Token", decimal_places: 18, is_base: false });
+      await backend.setCurrencySpam("JUNK", true);
+
+      await backend.clearLedgerData();
+
+      const spam = await backend.listSpamCurrencies();
+      expect(spam).toHaveLength(0);
+      const currencies = await backend.listCurrencies();
+      expect(currencies).toHaveLength(0);
+    });
+  });
+
   // ---- Account ops ----
 
   describe("accounts", () => {

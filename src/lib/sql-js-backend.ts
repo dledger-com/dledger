@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS currency (
     code TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     decimal_places INTEGER NOT NULL DEFAULT 2,
-    is_base INTEGER NOT NULL DEFAULT 0
+    is_base INTEGER NOT NULL DEFAULT 0,
+    is_spam INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS account (
@@ -237,6 +238,7 @@ function mapCurrency(row: Row): Currency {
     name: row.name,
     decimal_places: row.decimal_places,
     is_base: row.is_base !== 0,
+    is_spam: row.is_spam !== 0,
   };
 }
 
@@ -357,7 +359,7 @@ export class SqlJsBackend implements Backend {
     const backend = new SqlJsBackend(db);
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
-    db.exec("INSERT INTO schema_version (version) VALUES (4)");
+    db.exec("INSERT INTO schema_version (version) VALUES (5)");
     return backend;
   }
 
@@ -371,12 +373,12 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
-      db.exec("INSERT INTO schema_version (version) VALUES (4)");
+      db.exec("INSERT INTO schema_version (version) VALUES (5)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
       if (versionRows.length === 0 || versionRows[0].values.length === 0) {
-        db.exec("INSERT INTO schema_version (version) VALUES (4)");
+        db.exec("INSERT INTO schema_version (version) VALUES (5)");
       } else {
         const currentVersion = versionRows[0].values[0][0] as number;
         if (currentVersion < 2) {
@@ -434,8 +436,33 @@ export class SqlJsBackend implements Backend {
           } catch {
             // ignore
           }
+        }
+        if (currentVersion < 5) {
+          // Migrate v4 → v5: add is_spam column to currency table
+          db.exec("ALTER TABLE currency ADD COLUMN is_spam INTEGER NOT NULL DEFAULT 0");
+          // Migrate existing hiddenCurrencies from localStorage → set is_spam = 1
+          try {
+            const raw = localStorage.getItem("dledger-settings");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              const hidden = parsed.hiddenCurrencies as string[] | undefined;
+              if (hidden && hidden.length > 0) {
+                const updateStmt = db.prepare("UPDATE currency SET is_spam = 1 WHERE code = ?");
+                for (const code of hidden) {
+                  updateStmt.bind([code]);
+                  updateStmt.step();
+                  updateStmt.reset();
+                }
+                updateStmt.free();
+              }
+            }
+          } catch {
+            // localStorage may not be available
+          }
+        }
+        if (currentVersion < 5) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (4)");
+          db.exec("INSERT INTO schema_version (version) VALUES (5)");
         }
       }
     }
@@ -541,7 +568,7 @@ export class SqlJsBackend implements Backend {
 
   private getCurrencyByCode(code: string): Currency | null {
     return this.queryOne(
-      "SELECT code, name, decimal_places, is_base FROM currency WHERE code = ?",
+      "SELECT code, name, decimal_places, is_base, is_spam FROM currency WHERE code = ?",
       [code],
       mapCurrency,
     );
@@ -770,7 +797,7 @@ export class SqlJsBackend implements Backend {
 
   async listCurrencies(): Promise<Currency[]> {
     return this.query(
-      "SELECT code, name, decimal_places, is_base FROM currency ORDER BY code",
+      "SELECT code, name, decimal_places, is_base, is_spam FROM currency ORDER BY code",
       [],
       mapCurrency,
     );
@@ -779,12 +806,13 @@ export class SqlJsBackend implements Backend {
   async createCurrency(currency: Currency): Promise<void> {
     try {
       this.run(
-        "INSERT INTO currency (code, name, decimal_places, is_base) VALUES (?, ?, ?, ?)",
+        "INSERT INTO currency (code, name, decimal_places, is_base, is_spam) VALUES (?, ?, ?, ?, ?)",
         [
           currency.code,
           currency.name,
           currency.decimal_places,
           currency.is_base ? 1 : 0,
+          currency.is_spam ? 1 : 0,
         ],
       );
     } catch (e: unknown) {
@@ -796,6 +824,19 @@ export class SqlJsBackend implements Backend {
     }
     this.audit("create", "currency", "", currency.code);
     this.scheduleSave();
+  }
+
+  async setCurrencySpam(code: string, isSpam: boolean): Promise<void> {
+    this.run("UPDATE currency SET is_spam = ? WHERE code = ?", [isSpam ? 1 : 0, code]);
+    this.scheduleSave();
+  }
+
+  async listSpamCurrencies(): Promise<string[]> {
+    return this.query(
+      "SELECT code FROM currency WHERE is_spam = 1 ORDER BY code",
+      [],
+      (row) => row.code as string,
+    );
   }
 
   // ---- Backend: Accounts ----

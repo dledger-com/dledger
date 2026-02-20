@@ -9,6 +9,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries } from "$lib/utils/currency-filter.js";
+  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
@@ -19,7 +20,8 @@
 
   const store = new JournalStore();
   const settings = new SettingsStore();
-  const filteredEntries = $derived(filterHiddenEntries(store.entries, settings.hiddenCurrencySet));
+  const hidden = $derived(settings.showSpam ? new Set<string>() : getSpamCurrencySet());
+  const filteredEntries = $derived(filterHiddenEntries(store.entries, hidden));
   let exporting = $state(false);
   let searchTerm = $state("");
   let showDuplicates = $state(false);

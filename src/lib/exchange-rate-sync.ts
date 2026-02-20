@@ -92,7 +92,7 @@ export async function syncExchangeRates(
   baseCurrency: string,
   coingeckoApiKey: string,
   finnhubApiKey: string,
-  hiddenCurrencies: Set<string>,
+  spamCurrencies: Set<string>,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -106,7 +106,7 @@ export async function syncExchangeRates(
   const currencies = await backend.listCurrencies();
   const codes = currencies
     .map((c) => c.code)
-    .filter((c) => c !== baseCurrency && !hiddenCurrencies.has(c));
+    .filter((c) => c !== baseCurrency && !spamCurrencies.has(c));
 
   if (codes.length === 0) return result;
 

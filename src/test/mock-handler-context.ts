@@ -22,7 +22,7 @@ export function createMockHandlerContext(
     etherscanApiKey: "",
     coingeckoApiKey: "",
     finnhubApiKey: "",
-    hiddenCurrencies: [],
+    showSpam: false,
     lastRateSync: "",
     debugMode: false,
     handlers: {

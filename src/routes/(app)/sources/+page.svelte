@@ -6,6 +6,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { getSpamCurrencySet, markCurrencySpam } from "$lib/data/spam-currencies.svelte.js";
   import { toast } from "svelte-sonner";
   import * as Command from "$lib/components/ui/command/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
@@ -106,7 +107,7 @@
       const baseCurrency = settings.currency;
       availableCurrencies = currencies
         .map((c) => c.code)
-        .filter((c) => c !== baseCurrency && !settings.hiddenCurrencySet.has(c))
+        .filter((c) => c !== baseCurrency && !getSpamCurrencySet().has(c))
         .sort();
     } catch {
       // ignore
@@ -194,18 +195,18 @@
         settings.currency,
         settings.coingeckoApiKey,
         settings.finnhubApiKey,
-        settings.hiddenCurrencySet,
+        getSpamCurrencySet(),
       );
 
       // Update last sync time
       settings.update({ lastRateSync: new Date().toISOString().slice(0, 10) });
 
-      // Auto-hide unrecognized currencies
+      // Auto-mark unrecognized currencies as spam
       if (rateResult.autoHidden.length > 0) {
         for (const code of rateResult.autoHidden) {
-          settings.hideCurrency(code);
+          await markCurrencySpam(getBackend(), code);
         }
-        toast.info(`Auto-hidden ${rateResult.autoHidden.length} unrecognized currency(ies)`);
+        toast.info(`Auto-marked ${rateResult.autoHidden.length} unrecognized currency(ies) as spam`);
         loadAvailableCurrencies();
       }
 

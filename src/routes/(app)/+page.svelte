@@ -9,6 +9,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
+  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
@@ -22,6 +23,7 @@
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
 
+  const hidden = $derived(settings.showSpam ? new Set<string>() : getSpamCurrencySet());
   let ready = $state(false);
   let assetsSummary = $state<ConvertedSummary | null>(null);
   let liabilitiesSummary = $state<ConvertedSummary | null>(null);
@@ -118,24 +120,24 @@
     // Shared exchange rate cache for all conversions + charts
     const date = today();
     const base = settings.currency;
-    const hidden = settings.hiddenCurrencySet;
+    const hiddenSet = settings.showSpam ? new Set<string>() : getSpamCurrencySet();
     const sharedCache = getOrCreateRateCache();
 
     try {
       const promises: Promise<void>[] = [];
       if (reportStore.balanceSheet) {
         promises.push(
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden), base, date, sharedCache)
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet), base, date, sharedCache)
             .then(s => { assetsSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden), base, date, sharedCache)
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet), base, date, sharedCache)
             .then(s => { liabilitiesSummary = s; }),
         );
       }
       if (reportStore.incomeStatement) {
         promises.push(
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden), base, date, sharedCache)
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet), base, date, sharedCache)
             .then(s => { revenueSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden), base, date, sharedCache)
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet), base, date, sharedCache)
             .then(s => { netIncomeSummary = s; }),
         );
       }
@@ -221,28 +223,28 @@
     {@render summaryCard(
       "Total Assets",
       assetsSummary,
-      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.assets.totals, settings.hiddenCurrencySet) : undefined,
+      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden) : undefined,
       showAssets,
       () => { showAssets = !showAssets },
     )}
     {@render summaryCard(
       "Total Liabilities",
       liabilitiesSummary,
-      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, settings.hiddenCurrencySet) : undefined,
+      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden) : undefined,
       showLiabilities,
       () => { showLiabilities = !showLiabilities },
     )}
     {@render summaryCard(
       "Revenue ({rangePreset.toUpperCase()})",
       revenueSummary,
-      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, settings.hiddenCurrencySet) : undefined,
+      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden) : undefined,
       showRevenue,
       () => { showRevenue = !showRevenue },
     )}
     {@render summaryCard(
       "Net Income ({rangePreset.toUpperCase()})",
       netIncomeSummary,
-      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, settings.hiddenCurrencySet) : undefined,
+      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, hidden) : undefined,
       showNetIncome,
       () => { showNetIncome = !showNetIncome },
     )}
@@ -331,13 +333,13 @@
             <Skeleton class="h-10 w-full" />
           {/each}
         </div>
-      {:else if filterHiddenEntries(journalStore.entries, settings.hiddenCurrencySet).length === 0}
+      {:else if filterHiddenEntries(journalStore.entries, hidden).length === 0}
         <p class="text-sm text-muted-foreground py-8 text-center">
           No journal entries yet. Create your first entry to get started.
         </p>
       {:else}
         <div class="space-y-2">
-          {#each filterHiddenEntries(journalStore.entries, settings.hiddenCurrencySet) as [entry, items]}
+          {#each filterHiddenEntries(journalStore.entries, hidden) as [entry, items]}
             <a href="/journal/{entry.id}" class="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors">
               <div class="flex items-center gap-3">
                 <span class="text-sm text-muted-foreground w-24">{entry.date}</span>

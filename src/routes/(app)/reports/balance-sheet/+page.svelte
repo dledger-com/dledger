@@ -10,6 +10,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
+  import { getSpamCurrencySet } from "$lib/data/spam-currencies.svelte.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { getBackend } from "$lib/backend.js";
   import {
@@ -43,7 +44,7 @@
   async function runConversion() {
     if (!store.balanceSheet) return;
     const baseCurrency = settings.currency;
-    const hidden = settings.hiddenCurrencySet;
+    const hidden = settings.showSpam ? new Set<string>() : getSpamCurrencySet();
     assetsSummary = await convertBalances(filterHiddenBalances(store.balanceSheet.assets.totals, hidden), baseCurrency, asOf);
     liabilitiesSummary = await convertBalances(filterHiddenBalances(store.balanceSheet.liabilities.totals, hidden), baseCurrency, asOf);
     equitySummary = await convertBalances(filterHiddenBalances(store.balanceSheet.equity.totals, hidden), baseCurrency, asOf);
@@ -101,7 +102,7 @@
   }
 
   function renderTotals(section: ReportSection): string {
-    const totals = filterHiddenBalances(section.totals, settings.hiddenCurrencySet);
+    const totals = filterHiddenBalances(section.totals, settings.showSpam ? new Set<string>() : getSpamCurrencySet());
     if (totals.length === 0) return formatCurrency(0);
     return totals.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
@@ -176,7 +177,7 @@
       { section: report.liabilities, summary: liabilitiesSummary },
       { section: report.equity, summary: equitySummary },
     ] as { section, summary } (section.title)}
-      {@const filteredLines = filterHiddenTrialLines(section.lines, settings.hiddenCurrencySet)}
+      {@const filteredLines = filterHiddenTrialLines(section.lines, settings.showSpam ? new Set<string>() : getSpamCurrencySet())}
       <Card.Root>
         <Card.Header>
           <Card.Title>{section.title}</Card.Title>

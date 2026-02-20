@@ -7,6 +7,7 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
+  import { getSpamCurrencySet, markCurrencySpam, unmarkCurrencySpam, reloadSpamCurrencies } from "$lib/data/spam-currencies.svelte.js";
   import type { Currency, ExchangeRate } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
@@ -157,7 +158,7 @@
     if (!window.confirm("Are you sure you want to clear all ledger data? This will remove all accounts, transactions, and currencies. Exchange rates, sources, and settings will be preserved. This cannot be undone.")) return;
     try {
       await getBackend().clearLedgerData();
-      settings.resetHiddenCurrencies();
+      await reloadSpamCurrencies(getBackend());
       currencies = [];
       toast.success("Ledger data cleared");
     } catch (e) {
@@ -291,17 +292,28 @@
           <Card.Title>Currencies</Card.Title>
           <Card.Description>Add currencies and manage rate sources.</Card.Description>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onclick={async () => {
-            await getBackend().clearAutoRateSources();
-            await loadRateSources();
-            toast.success("Auto-detected rate sources cleared. They will be re-detected on next sync.");
-          }}
-        >
-          Re-detect Sources
-        </Button>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.showSpam}
+              onchange={() => settings.update({ showSpam: !settings.showSpam })}
+              class="h-4 w-4 rounded border-input"
+            />
+            Show spam
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            onclick={async () => {
+              await getBackend().clearAutoRateSources();
+              await loadRateSources();
+              toast.success("Auto-detected rate sources cleared. They will be re-detected on next sync.");
+            }}
+          >
+            Re-detect Sources
+          </Button>
+        </div>
       </div>
     </Card.Header>
     <Card.Content class="space-y-4">
@@ -342,10 +354,15 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each currencies.filter((c) => !settings.hiddenCurrencySet.has(c.code)) as c}
+            {#each currencies.filter((c) => !c.is_spam || settings.showSpam) as c}
               {@const rs = rateSources.get(c.code)}
               <Table.Row>
-                <Table.Cell class="font-mono">{c.code}</Table.Cell>
+                <Table.Cell class="font-mono">
+                  {c.code}
+                  {#if c.is_spam}
+                    <span class="ml-1 text-xs text-muted-foreground">(spam)</span>
+                  {/if}
+                </Table.Cell>
                 <Table.Cell>{c.name}</Table.Cell>
                 <Table.Cell class="text-right">{c.decimal_places}</Table.Cell>
                 <Table.Cell>
@@ -379,7 +396,11 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   {#if !c.is_base}
-                    <Button variant="ghost" size="sm" onclick={() => settings.hideCurrency(c.code)}>Hide</Button>
+                    {#if c.is_spam}
+                      <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencySpam(getBackend(), c.code); await loadCurrencies(); }}>Unmark Spam</Button>
+                    {:else}
+                      <Button variant="ghost" size="sm" onclick={async () => { await markCurrencySpam(getBackend(), c.code); await loadCurrencies(); }}>Mark Spam</Button>
+                    {/if}
                   {/if}
                 </Table.Cell>
               </Table.Row>
@@ -388,12 +409,18 @@
         </Table.Root>
       {/if}
 
-      {#if settings.settings.hiddenCurrencies.length > 0}
+      {@const spamCurrencies = currencies.filter((c) => c.is_spam)}
+      {#if spamCurrencies.length > 0 && !settings.showSpam}
         <Separator />
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-medium">Hidden Currencies ({settings.settings.hiddenCurrencies.length})</h3>
-            <Button variant="outline" size="sm" onclick={() => settings.resetHiddenCurrencies()}>Reset All</Button>
+            <h3 class="text-sm font-medium">Spam Currencies ({spamCurrencies.length})</h3>
+            <Button variant="outline" size="sm" onclick={async () => {
+              for (const c of spamCurrencies) {
+                await unmarkCurrencySpam(getBackend(), c.code);
+              }
+              await loadCurrencies();
+            }}>Unmark All</Button>
           </div>
           <Table.Root>
             <Table.Header>
@@ -404,13 +431,12 @@
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {#each settings.settings.hiddenCurrencies as code}
-                {@const curr = currencies.find((c) => c.code === code)}
+              {#each spamCurrencies as c}
                 <Table.Row>
-                  <Table.Cell class="font-mono">{code}</Table.Cell>
-                  <Table.Cell>{curr?.name ?? ""}</Table.Cell>
+                  <Table.Cell class="font-mono">{c.code}</Table.Cell>
+                  <Table.Cell>{c.name}</Table.Cell>
                   <Table.Cell class="text-right">
-                    <Button variant="ghost" size="sm" onclick={() => settings.unhideCurrency(code)}>Unhide</Button>
+                    <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencySpam(getBackend(), c.code); await loadCurrencies(); }}>Unmark Spam</Button>
                   </Table.Cell>
                 </Table.Row>
               {/each}
