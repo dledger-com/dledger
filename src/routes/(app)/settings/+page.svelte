@@ -157,6 +157,7 @@
     if (!window.confirm("Are you sure you want to clear all ledger data? This will remove all accounts, transactions, and currencies. Exchange rates, sources, and settings will be preserved. This cannot be undone.")) return;
     try {
       await getBackend().clearLedgerData();
+      settings.resetHiddenCurrencies();
       currencies = [];
       toast.success("Ledger data cleared");
     } catch (e) {
