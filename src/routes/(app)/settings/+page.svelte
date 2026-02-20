@@ -13,7 +13,12 @@
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
   import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
+  import { exportDatabaseBackup, readFileAsUint8Array, downloadDatabase } from "$lib/utils/database-export.js";
   const settings = new SettingsStore();
+
+  // Backup/restore state
+  let exporting = $state(false);
+  let importing = $state(false);
 
   // Currency list from backend
   let currencies = $state<Currency[]>([]);
@@ -346,9 +351,9 @@
             <Table.Row>
               <Table.Head>Code</Table.Head>
               <Table.Head>Name</Table.Head>
-              <Table.Head class="text-right">Decimals</Table.Head>
-              <Table.Head>Base</Table.Head>
-              <Table.Head>Rate Source</Table.Head>
+              <Table.Head class="text-right hidden md:table-cell">Decimals</Table.Head>
+              <Table.Head class="hidden sm:table-cell">Base</Table.Head>
+              <Table.Head class="hidden lg:table-cell">Rate Source</Table.Head>
               <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
           </Table.Header>
@@ -363,13 +368,13 @@
                   {/if}
                 </Table.Cell>
                 <Table.Cell>{c.name}</Table.Cell>
-                <Table.Cell class="text-right">{c.decimal_places}</Table.Cell>
-                <Table.Cell>
+                <Table.Cell class="text-right hidden md:table-cell">{c.decimal_places}</Table.Cell>
+                <Table.Cell class="hidden sm:table-cell">
                   {#if c.is_base}
                     <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Base</span>
                   {/if}
                 </Table.Cell>
-                <Table.Cell>
+                <Table.Cell class="hidden lg:table-cell">
                   {#if !c.is_base}
                     <div class="flex items-center gap-2">
                       <select
@@ -519,6 +524,81 @@
       <p class="text-sm text-muted-foreground">
         Use the theme toggle in the top bar to switch between light and dark mode.
       </p>
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Backup & Restore -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Backup & Restore</Card.Title>
+      <Card.Description>Export or import your database file.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Export Database</p>
+          <p class="text-sm text-muted-foreground">Download a .db backup file containing all your data.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={exporting}
+          onclick={async () => {
+            exporting = true;
+            try {
+              const data = await exportDatabaseBackup(getBackend());
+              downloadDatabase(data);
+              toast.success("Database exported");
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : String(e));
+            } finally {
+              exporting = false;
+            }
+          }}
+        >
+          {exporting ? "Exporting..." : "Export .db"}
+        </Button>
+      </div>
+      <Separator />
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Import Database</p>
+          <p class="text-sm text-muted-foreground">Restore from a .db backup file. This replaces all current data.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={importing}
+          onclick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".db,.sqlite,.sqlite3";
+            input.onchange = async () => {
+              const file = input.files?.[0];
+              if (!file) return;
+              if (!window.confirm(`Import "${file.name}"? This will replace ALL current data. This cannot be undone.`)) return;
+              importing = true;
+              try {
+                const data = await readFileAsUint8Array(file);
+                const backend = getBackend();
+                if (!backend.importDatabase) {
+                  throw new Error("Import not supported by this backend");
+                }
+                await backend.importDatabase(data);
+                toast.success("Database imported. Reloading...");
+                setTimeout(() => window.location.reload(), 500);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : String(e));
+              } finally {
+                importing = false;
+              }
+            };
+            input.click();
+          }}
+        >
+          {importing ? "Importing..." : "Import .db"}
+        </Button>
+      </div>
     </Card.Content>
   </Card.Root>
 

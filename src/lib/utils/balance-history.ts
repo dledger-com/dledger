@@ -30,7 +30,27 @@ async function convertBalancesToNumber(
   return total;
 }
 
-function monthEndDates(from: Date, to: Date): string[] {
+/**
+ * Adaptive chart sampling:
+ * - <=60 months: monthly end dates
+ * - 61-120 months: quarterly end dates
+ * - >120 months: yearly end dates
+ */
+export function monthEndDates(from: Date, to: Date): string[] {
+  const totalMonths =
+    (to.getFullYear() - from.getFullYear()) * 12 +
+    (to.getMonth() - from.getMonth());
+
+  // Determine sampling interval
+  let step: number;
+  if (totalMonths <= 60) {
+    step = 1; // monthly
+  } else if (totalMonths <= 120) {
+    step = 3; // quarterly
+  } else {
+    step = 12; // yearly
+  }
+
   const dates: string[] = [];
   let year = from.getFullYear();
   let month = from.getMonth(); // 0-indexed
@@ -40,10 +60,10 @@ function monthEndDates(from: Date, to: Date): string[] {
     const lastDay = new Date(year, month + 1, 0);
     if (lastDay > to) break;
     dates.push(lastDay.toISOString().slice(0, 10));
-    month++;
+    month += step;
     if (month > 11) {
-      month = 0;
-      year++;
+      year += Math.floor(month / 12);
+      month = month % 12;
     }
   }
 

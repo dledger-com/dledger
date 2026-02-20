@@ -57,6 +57,14 @@
         </Card.Header>
       </Card.Root>
     </a>
+    <a href="/reports/portfolio" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>Portfolio Overview</Card.Title>
+          <Card.Description>Multi-account portfolio view across all tracked wallets.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
     <a href="/reports/defi" class="block">
       <Card.Root class="transition-colors hover:bg-accent">
         <Card.Header>

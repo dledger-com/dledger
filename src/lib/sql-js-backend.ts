@@ -1,4 +1,4 @@
-import initSqlJs, { type Database } from "sql.js";
+import initSqlJs, { type Database, type SqlJsStatic } from "sql.js";
 import Decimal from "decimal.js-light";
 import { v7 as uuidv7 } from "uuid";
 import type {
@@ -26,7 +26,7 @@ import type {
   BalanceAssertion,
   BalanceAssertionResult,
 } from "./types/index.js";
-import type { Backend, CurrencyRateSource } from "./backend.js";
+import type { Backend, CurrencyRateSource, Reconciliation, RecurringTemplate, UnreconciledLineItem } from "./backend.js";
 
 // ---- IndexedDB persistence ----
 
@@ -359,21 +359,40 @@ function subtractBalances(
 
 export class SqlJsBackend implements Backend {
   private db: Database;
+  private sql: SqlJsStatic;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private inTransaction = false;
 
-  private constructor(db: Database) {
+  private constructor(db: Database, sql: SqlJsStatic) {
     this.db = db;
+    this.sql = sql;
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
     const SQL = await initSqlJs();
     const db = new SQL.Database();
-    const backend = new SqlJsBackend(db);
+    const backend = new SqlJsBackend(db, SQL);
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
     db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
-    db.exec("INSERT INTO schema_version (version) VALUES (8)");
+    // Reconciliation tables (v9)
+    db.exec("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0");
+    db.exec(`CREATE TABLE IF NOT EXISTS reconciliation (
+      id TEXT PRIMARY KEY, account_id TEXT NOT NULL, statement_date TEXT NOT NULL,
+      statement_balance TEXT NOT NULL, currency TEXT NOT NULL, reconciled_at TEXT NOT NULL,
+      line_item_count INTEGER NOT NULL DEFAULT 0
+    )`);
+    db.exec(`CREATE TABLE IF NOT EXISTS reconciliation_line_item (
+      reconciliation_id TEXT NOT NULL, line_item_id TEXT NOT NULL,
+      PRIMARY KEY (reconciliation_id, line_item_id)
+    )`);
+    // Recurring templates (v10)
+    db.exec(`CREATE TABLE IF NOT EXISTS recurring_template (
+      id TEXT PRIMARY KEY, description TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
+      interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
+    )`);
+    db.exec("INSERT INTO schema_version (version) VALUES (10)");
     return backend;
   }
 
@@ -383,7 +402,7 @@ export class SqlJsBackend implements Backend {
     });
     const saved = await loadFromIndexedDB();
     const db = saved ? new SQL.Database(saved) : new SQL.Database();
-    const backend = new SqlJsBackend(db);
+    const backend = new SqlJsBackend(db, SQL);
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
       db.exec(SCHEMA_SQL);
@@ -496,9 +515,30 @@ export class SqlJsBackend implements Backend {
           // Migrate v7 → v8: add metadata index for handler/action queries
           db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
         }
-        if (currentVersion < 8) {
+        if (currentVersion < 9) {
+          // Migrate v8 → v9: reconciliation support
+          db.exec("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0");
+          db.exec(`CREATE TABLE IF NOT EXISTS reconciliation (
+            id TEXT PRIMARY KEY, account_id TEXT NOT NULL, statement_date TEXT NOT NULL,
+            statement_balance TEXT NOT NULL, currency TEXT NOT NULL, reconciled_at TEXT NOT NULL,
+            line_item_count INTEGER NOT NULL DEFAULT 0
+          )`);
+          db.exec(`CREATE TABLE IF NOT EXISTS reconciliation_line_item (
+            reconciliation_id TEXT NOT NULL, line_item_id TEXT NOT NULL,
+            PRIMARY KEY (reconciliation_id, line_item_id)
+          )`);
+        }
+        if (currentVersion < 10) {
+          // Migrate v9 → v10: recurring templates
+          db.exec(`CREATE TABLE IF NOT EXISTS recurring_template (
+            id TEXT PRIMARY KEY, description TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
+            interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
+          )`);
+        }
+        if (currentVersion < 10) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (8)");
+          db.exec("INSERT INTO schema_version (version) VALUES (10)");
         }
       }
     }
@@ -1097,6 +1137,43 @@ export class SqlJsBackend implements Backend {
       list.push(item);
     }
     return entries.map((e) => [e, itemsByEntry.get(e.id) ?? []] as [JournalEntry, LineItem[]]);
+  }
+
+  async countJournalEntries(
+    filter: TransactionFilter,
+  ): Promise<number> {
+    let sql =
+      "SELECT COUNT(DISTINCT je.id) as cnt FROM journal_entry je";
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (filter.account_id) {
+      sql += " JOIN line_item li ON li.journal_entry_id = je.id";
+      conditions.push("li.account_id = ?");
+      params.push(filter.account_id);
+    }
+    if (filter.from_date) {
+      conditions.push("je.date >= ?");
+      params.push(filter.from_date);
+    }
+    if (filter.to_date) {
+      conditions.push("je.date <= ?");
+      params.push(filter.to_date);
+    }
+    if (filter.status) {
+      conditions.push("je.status = ?");
+      params.push(filter.status);
+    }
+    if (filter.source) {
+      conditions.push("je.source = ?");
+      params.push(filter.source);
+    }
+    if (conditions.length > 0) {
+      sql += " WHERE " + conditions.join(" AND ");
+    }
+
+    const result = this.queryOne(sql, params, (row) => row.cnt as number);
+    return result ?? 0;
   }
 
   // ---- Backend: Balances ----
@@ -2206,6 +2283,177 @@ export class SqlJsBackend implements Backend {
     return result ?? 0;
   }
 
+  // ---- Reconciliation ----
+
+  async getUnreconciledLineItems(accountId: string, currency: string, upToDate?: string): Promise<UnreconciledLineItem[]> {
+    let sql = `SELECT li.id as line_item_id, li.journal_entry_id as entry_id, je.date as entry_date,
+                      je.description as entry_description, li.account_id, li.currency, li.amount,
+                      li.is_reconciled
+               FROM line_item li
+               JOIN journal_entry je ON je.id = li.journal_entry_id
+               WHERE li.account_id = ? AND li.currency = ? AND li.is_reconciled = 0
+                 AND je.status != 'voided'`;
+    const params: unknown[] = [accountId, currency];
+    if (upToDate) {
+      sql += " AND je.date <= ?";
+      params.push(upToDate);
+    }
+    sql += " ORDER BY je.date ASC, je.created_at ASC";
+    return this.query(sql, params, (row) => ({
+      line_item_id: row.line_item_id as string,
+      entry_id: row.entry_id as string,
+      entry_date: row.entry_date as string,
+      entry_description: row.entry_description as string,
+      account_id: row.account_id as string,
+      currency: row.currency as string,
+      amount: row.amount as string,
+      is_reconciled: (row.is_reconciled as number) !== 0,
+    }));
+  }
+
+  async markReconciled(reconciliation: Reconciliation, lineItemIds: string[]): Promise<void> {
+    const wasInTransaction = this.inTransaction;
+    if (!wasInTransaction) this.beginTransaction();
+    try {
+      // Insert reconciliation record
+      this.run(
+        `INSERT INTO reconciliation (id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [reconciliation.id, reconciliation.account_id, reconciliation.statement_date,
+         reconciliation.statement_balance, reconciliation.currency, reconciliation.reconciled_at,
+         lineItemIds.length],
+      );
+      // Mark line items as reconciled and insert junction rows
+      for (const liId of lineItemIds) {
+        this.run("UPDATE line_item SET is_reconciled = 1 WHERE id = ?", [liId]);
+        this.run("INSERT INTO reconciliation_line_item (reconciliation_id, line_item_id) VALUES (?, ?)",
+          [reconciliation.id, liId]);
+      }
+      if (!wasInTransaction) this.commitTransaction();
+    } catch (e) {
+      if (!wasInTransaction) this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  async listReconciliations(accountId?: string): Promise<Reconciliation[]> {
+    let sql = "SELECT id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count FROM reconciliation";
+    const params: unknown[] = [];
+    if (accountId) {
+      sql += " WHERE account_id = ?";
+      params.push(accountId);
+    }
+    sql += " ORDER BY reconciled_at DESC";
+    return this.query(sql, params, (row) => ({
+      id: row.id as string,
+      account_id: row.account_id as string,
+      statement_date: row.statement_date as string,
+      statement_balance: row.statement_balance as string,
+      currency: row.currency as string,
+      reconciled_at: row.reconciled_at as string,
+      line_item_count: row.line_item_count as number,
+    }));
+  }
+
+  async getReconciliationDetail(id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null> {
+    const rec = this.queryOne(
+      "SELECT id, account_id, statement_date, statement_balance, currency, reconciled_at, line_item_count FROM reconciliation WHERE id = ?",
+      [id],
+      (row) => ({
+        id: row.id as string,
+        account_id: row.account_id as string,
+        statement_date: row.statement_date as string,
+        statement_balance: row.statement_balance as string,
+        currency: row.currency as string,
+        reconciled_at: row.reconciled_at as string,
+        line_item_count: row.line_item_count as number,
+      }),
+    );
+    if (!rec) return null;
+    const lineItemIds = this.query(
+      "SELECT line_item_id FROM reconciliation_line_item WHERE reconciliation_id = ?",
+      [id],
+      (row) => row.line_item_id as string,
+    );
+    return { reconciliation: rec, lineItemIds };
+  }
+
+  // ---- Recurring templates ----
+
+  async createRecurringTemplate(template: RecurringTemplate): Promise<void> {
+    this.run(
+      `INSERT INTO recurring_template (id, description, frequency, interval_val, next_date, end_date, is_active, line_items_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [template.id, template.description, template.frequency, template.interval,
+       template.next_date, template.end_date, template.is_active ? 1 : 0,
+       JSON.stringify(template.line_items), template.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async listRecurringTemplates(): Promise<RecurringTemplate[]> {
+    return this.query(
+      "SELECT id, description, frequency, interval_val, next_date, end_date, is_active, line_items_json, created_at FROM recurring_template ORDER BY next_date ASC",
+      [],
+      (row) => ({
+        id: row.id as string,
+        description: row.description as string,
+        frequency: row.frequency as RecurringTemplate["frequency"],
+        interval: row.interval_val as number,
+        next_date: row.next_date as string,
+        end_date: (row.end_date as string) || null,
+        is_active: (row.is_active as number) !== 0,
+        line_items: JSON.parse((row.line_items_json as string) || "[]"),
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async updateRecurringTemplate(template: RecurringTemplate): Promise<void> {
+    this.run(
+      `UPDATE recurring_template SET description = ?, frequency = ?, interval_val = ?,
+       next_date = ?, end_date = ?, is_active = ?, line_items_json = ?
+       WHERE id = ?`,
+      [template.description, template.frequency, template.interval,
+       template.next_date, template.end_date, template.is_active ? 1 : 0,
+       JSON.stringify(template.line_items), template.id],
+    );
+    this.scheduleSave();
+  }
+
+  async deleteRecurringTemplate(id: string): Promise<void> {
+    this.run("DELETE FROM recurring_template WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  // ---- Database export/import ----
+
+  async exportDatabase(): Promise<Uint8Array> {
+    return this.db.export();
+  }
+
+  async importDatabase(data: Uint8Array): Promise<void> {
+    // Validate by opening the data and checking schema version
+    const testDb = new this.sql.Database(data);
+    try {
+      const versionRows = testDb.exec("SELECT version FROM schema_version");
+      if (versionRows.length === 0 || versionRows[0].values.length === 0) {
+        throw new Error("Invalid database: missing schema_version");
+      }
+    } catch (e) {
+      testDb.close();
+      if (e instanceof Error && e.message.includes("Invalid database")) throw e;
+      throw new Error("Invalid database file");
+    }
+    testDb.close();
+
+    // Replace current database
+    this.db.close();
+    this.db = new this.sql.Database(data);
+    this.db.exec("PRAGMA foreign_keys=ON");
+    this.scheduleSave();
+  }
+
   // ---- Data management ----
 
   async clearExchangeRates(): Promise<void> {
@@ -2216,6 +2464,8 @@ export class SqlJsBackend implements Backend {
   async clearLedgerData(): Promise<void> {
     this.db.exec(`
       PRAGMA foreign_keys=OFF;
+      DELETE FROM reconciliation_line_item;
+      DELETE FROM reconciliation;
       DELETE FROM lot_disposal;
       DELETE FROM lot;
       DELETE FROM line_item;
@@ -2226,6 +2476,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM raw_transaction;
       DELETE FROM currency_rate_source;
       DELETE FROM budget;
+      DELETE FROM recurring_template;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -2236,6 +2487,8 @@ export class SqlJsBackend implements Backend {
 
   async clearAllData(): Promise<void> {
     this.db.exec(`
+      DELETE FROM reconciliation_line_item;
+      DELETE FROM reconciliation;
       DELETE FROM lot_disposal;
       DELETE FROM lot;
       DELETE FROM line_item;
@@ -2247,6 +2500,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM raw_transaction;
       DELETE FROM currency_rate_source;
       DELETE FROM budget;
+      DELETE FROM recurring_template;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM etherscan_account;

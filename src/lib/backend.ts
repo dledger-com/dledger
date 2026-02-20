@@ -20,6 +20,45 @@ import type {
   Budget,
 } from "./types/index.js";
 
+export interface Reconciliation {
+  id: string;
+  account_id: string;
+  statement_date: string;
+  statement_balance: string;
+  currency: string;
+  reconciled_at: string;
+  line_item_count: number;
+}
+
+export interface UnreconciledLineItem {
+  line_item_id: string;
+  entry_id: string;
+  entry_date: string;
+  entry_description: string;
+  account_id: string;
+  currency: string;
+  amount: string;
+  is_reconciled: boolean;
+}
+
+export interface RecurringTemplate {
+  id: string;
+  description: string;
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  interval: number;
+  next_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  line_items: TemplateLineItem[];
+  created_at: string;
+}
+
+export interface TemplateLineItem {
+  account_id: string;
+  currency: string;
+  amount: string;
+}
+
 export interface CurrencyRateSource {
   currency: string;
   rate_source: string | null; // null = auto-detect needed
@@ -43,6 +82,7 @@ export interface Backend {
   voidJournalEntry(id: string): Promise<JournalEntry>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
   queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]>;
+  countJournalEntries(filter: TransactionFilter): Promise<number>;
 
   // Balances
   getAccountBalance(accountId: string, asOf?: string): Promise<CurrencyBalance[]>;
@@ -110,6 +150,22 @@ export interface Backend {
   // Integrity checks
   countOrphanedLineItems(): Promise<number>;
   countDuplicateSources(): Promise<number>;
+
+  // Reconciliation
+  getUnreconciledLineItems(accountId: string, currency: string, upToDate?: string): Promise<UnreconciledLineItem[]>;
+  markReconciled(reconciliation: Reconciliation, lineItemIds: string[]): Promise<void>;
+  listReconciliations(accountId?: string): Promise<Reconciliation[]>;
+  getReconciliationDetail(id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null>;
+
+  // Recurring templates
+  createRecurringTemplate(template: RecurringTemplate): Promise<void>;
+  listRecurringTemplates(): Promise<RecurringTemplate[]>;
+  updateRecurringTemplate(template: RecurringTemplate): Promise<void>;
+  deleteRecurringTemplate(id: string): Promise<void>;
+
+  // Database export/import (optional)
+  exportDatabase?(): Promise<Uint8Array>;
+  importDatabase?(data: Uint8Array): Promise<void>;
 
   // Transaction control (optional, SqlJsBackend only)
   beginTransaction?(): void;
@@ -181,6 +237,11 @@ class TauriBackend implements Backend {
   async queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]> {
     return this.invoke("query_journal_entries", { filter });
   }
+  async countJournalEntries(filter: TransactionFilter): Promise<number> {
+    // Stub: fall back to querying all and counting
+    const entries = await this.queryJournalEntries(filter);
+    return entries.length;
+  }
 
   // Balances
   async getAccountBalance(accountId: string, asOf?: string): Promise<CurrencyBalance[]> {
@@ -216,6 +277,18 @@ class TauriBackend implements Backend {
   async listBudgets(): Promise<Budget[]> { return []; }
   async updateBudget(_budget: Budget): Promise<void> {}
   async deleteBudget(_id: string): Promise<void> {}
+
+  // Reconciliation (not yet implemented in Rust backend)
+  async getUnreconciledLineItems(_accountId: string, _currency: string, _upToDate?: string): Promise<UnreconciledLineItem[]> { return []; }
+  async markReconciled(_reconciliation: Reconciliation, _lineItemIds: string[]): Promise<void> {}
+  async listReconciliations(_accountId?: string): Promise<Reconciliation[]> { return []; }
+  async getReconciliationDetail(_id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null> { return null; }
+
+  // Recurring templates (not yet implemented in Rust backend)
+  async createRecurringTemplate(_template: RecurringTemplate): Promise<void> {}
+  async listRecurringTemplates(): Promise<RecurringTemplate[]> { return []; }
+  async updateRecurringTemplate(_template: RecurringTemplate): Promise<void> {}
+  async deleteRecurringTemplate(_id: string): Promise<void> {}
 
   // Exchange rates
   async recordExchangeRate(rate: ExchangeRate): Promise<void> {
@@ -340,23 +413,33 @@ class TauriBackend implements Backend {
   }
 }
 
-let backend: Backend | null = null;
+// Store backend on globalThis so it survives Vite HMR module replacement.
+// Without this, each HMR cycle creates a new WASM instance (~16MB) without
+// freeing the old one, eventually causing WebAssembly OOM.
+const _g = globalThis as unknown as {
+  __dledger_backend?: Backend;
+  __dledger_initPromise?: Promise<Backend>;
+};
 
 export async function initBackend(): Promise<Backend> {
-  if (backend) return backend;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((window as any).__TAURI_INTERNALS__) {
-    backend = new TauriBackend();
-  } else {
-    const { SqlJsBackend } = await import("./sql-js-backend.js");
-    backend = await SqlJsBackend.create();
-  }
-  return backend;
+  if (_g.__dledger_backend) return _g.__dledger_backend;
+  if (_g.__dledger_initPromise) return _g.__dledger_initPromise;
+  _g.__dledger_initPromise = (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).__TAURI_INTERNALS__) {
+      _g.__dledger_backend = new TauriBackend();
+    } else {
+      const { SqlJsBackend } = await import("./sql-js-backend.js");
+      _g.__dledger_backend = await SqlJsBackend.create();
+    }
+    return _g.__dledger_backend;
+  })();
+  return _g.__dledger_initPromise;
 }
 
 export function getBackend(): Backend {
-  if (!backend) {
+  if (!_g.__dledger_backend) {
     throw new Error("Backend not initialized. Await initBackend() first.");
   }
-  return backend;
+  return _g.__dledger_backend;
 }

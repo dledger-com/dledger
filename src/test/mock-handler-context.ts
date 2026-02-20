@@ -25,6 +25,7 @@ export function createMockHandlerContext(
     showHidden: false,
     lastRateSync: "",
     debugMode: false,
+    holdingPeriodDays: 365,
     handlers: {
       "generic-etherscan": { enabled: true },
       "pendle": { enabled: true },
@@ -35,6 +36,10 @@ export function createMockHandlerContext(
       "compound": { enabled: true },
       "curve": { enabled: true },
       "bridge": { enabled: true },
+      "yearn": { enabled: true },
+      "balancer": { enabled: true },
+      "maker": { enabled: true },
+      "eigenlayer": { enabled: true },
     },
   };
 

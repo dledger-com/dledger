@@ -14,6 +14,8 @@
   import { entryInvolvesHidden } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
+  import { goto } from "$app/navigation";
+  import { templateFromEntry } from "$lib/utils/recurring.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
 
   const journalStore = new JournalStore();
@@ -86,9 +88,18 @@
         <p class="text-muted-foreground">{entry.description}</p>
       {/if}
     </div>
-    {#if entry && entry.status === "confirmed"}
-      <Button variant="destructive" onclick={handleVoid}>Void Entry</Button>
-    {/if}
+    <div class="flex gap-2">
+      {#if entry && entry.status === "confirmed"}
+        <Button variant="outline" onclick={async () => {
+          if (!entry) return;
+          const template = templateFromEntry(entry, items);
+          await getBackend().createRecurringTemplate(template);
+          toast.success("Recurring template created");
+          goto("/journal/recurring");
+        }}>Make Recurring</Button>
+        <Button variant="destructive" onclick={handleVoid}>Void Entry</Button>
+      {/if}
+    </div>
   </div>
 
   {#if loading}

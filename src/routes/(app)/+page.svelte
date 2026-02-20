@@ -14,6 +14,8 @@
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
   import { getBackend } from "$lib/backend.js";
+  import { countDueTemplates } from "$lib/utils/recurring.js";
+  import { toast } from "svelte-sonner";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import { AreaChart, PieChart } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
@@ -148,6 +150,15 @@
 
     // Load charts (non-blocking), reusing the shared cache
     loadCharts(sharedCache);
+
+    // Check for due recurring templates
+    countDueTemplates(getBackend()).then((count) => {
+      if (count > 0) {
+        toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
+          action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
+        });
+      }
+    }).catch(() => {});
   });
 
   async function selectRange(preset: RangePreset) {

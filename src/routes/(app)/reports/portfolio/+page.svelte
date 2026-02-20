@@ -1,0 +1,161 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import * as Table from "$lib/components/ui/table/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { formatCurrency } from "$lib/utils/format.js";
+  import { getBackend } from "$lib/backend.js";
+  import { computePortfolioReport, type PortfolioReport } from "$lib/utils/portfolio.js";
+  import { exportPortfolioCsv } from "$lib/utils/csv-export.js";
+  import { SUPPORTED_CHAINS } from "$lib/types/index.js";
+
+  const settings = new SettingsStore();
+  let asOf = $state(new Date().toISOString().slice(0, 10));
+  let loading = $state(false);
+  let report = $state<PortfolioReport | null>(null);
+  let error = $state<string | null>(null);
+
+  function chainName(chainId: number): string {
+    const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
+    return chain ? chain.name : `Chain ${chainId}`;
+  }
+
+  async function generate() {
+    loading = true;
+    error = null;
+    report = null;
+    try {
+      report = await computePortfolioReport(
+        getBackend(),
+        settings.currency,
+        asOf,
+      );
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(generate);
+
+  let hasWallets = $derived(report !== null && report.wallets.length > 0);
+</script>
+
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Portfolio Overview</h1>
+    <p class="text-muted-foreground">Multi-account portfolio view across all tracked wallets.</p>
+  </div>
+
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="space-y-2">
+      <label for="asOf" class="text-sm font-medium">As of Date</label>
+      <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
+    </div>
+    <Button onclick={generate} disabled={loading}>
+      {loading ? "Loading..." : "Generate"}
+    </Button>
+    {#if hasWallets && report}
+      <Button variant="outline" onclick={() => exportPortfolioCsv(report!)}>
+        Export CSV
+      </Button>
+    {/if}
+  </div>
+
+  {#if loading}
+    <Card.Root><Card.Content class="py-4">
+      {#each [1, 2, 3] as _}<Skeleton class="h-10 w-full mb-2" />{/each}
+    </Card.Content></Card.Root>
+  {:else if error}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-destructive text-center">{error}</p>
+      </Card.Content>
+    </Card.Root>
+  {:else if !hasWallets}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          No wallet holdings found. Add etherscan accounts and sync transactions to see your portfolio here.
+        </p>
+      </Card.Content>
+    </Card.Root>
+  {:else if report}
+    {#if report.aggregate_total !== null}
+      <Card.Root>
+        <Card.Header>
+          <div class="flex items-center justify-between">
+            <Card.Title>Aggregate Total</Card.Title>
+            <span class="text-xl font-bold">
+              {formatCurrency(parseFloat(report.aggregate_total), settings.currency)}
+            </span>
+          </div>
+          <Card.Description>
+            Combined value across {report.wallets.length} wallet{report.wallets.length !== 1 ? "s" : ""} as of {report.as_of}
+          </Card.Description>
+        </Card.Header>
+      </Card.Root>
+    {/if}
+
+    {#each report.wallets as wallet}
+      <Card.Root>
+        <Card.Header>
+          <div class="flex items-center justify-between">
+            <div>
+              <Card.Title>{wallet.label}</Card.Title>
+              <Card.Description class="font-mono text-xs mt-1">
+                {wallet.address}
+                <Badge variant="outline" class="ml-2">{chainName(wallet.chainId)}</Badge>
+              </Card.Description>
+            </div>
+            {#if wallet.totalBaseValue !== null}
+              <span class="text-lg font-semibold">
+                {formatCurrency(parseFloat(wallet.totalBaseValue), settings.currency)}
+              </span>
+            {/if}
+          </div>
+        </Card.Header>
+        <Card.Content>
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Currency</Table.Head>
+                <Table.Head class="text-right">Amount</Table.Head>
+                <Table.Head class="text-right">Value ({settings.currency})</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#each wallet.holdings as holding}
+                <Table.Row>
+                  <Table.Cell>
+                    <Badge variant="outline">{holding.currency}</Badge>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono">{holding.amount}</Table.Cell>
+                  <Table.Cell class="text-right font-mono">
+                    {holding.baseValue !== null
+                      ? formatCurrency(parseFloat(holding.baseValue), settings.currency)
+                      : "-"}
+                  </Table.Cell>
+                </Table.Row>
+              {/each}
+              {#if wallet.totalBaseValue !== null}
+                <Table.Row class="font-semibold border-t-2">
+                  <Table.Cell>Total</Table.Cell>
+                  <Table.Cell></Table.Cell>
+                  <Table.Cell class="text-right font-mono">
+                    {formatCurrency(parseFloat(wallet.totalBaseValue), settings.currency)}
+                  </Table.Cell>
+                </Table.Row>
+              {/if}
+            </Table.Body>
+          </Table.Root>
+        </Card.Content>
+      </Card.Root>
+    {/each}
+  {/if}
+</div>

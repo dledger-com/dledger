@@ -20,6 +20,7 @@
   import { toast } from "svelte-sonner";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
   import type { Account, CurrencyBalance, JournalEntry, LineItem, BalanceAssertion } from "$lib/types/index.js";
+  import Pagination from "$lib/components/Pagination.svelte";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -153,14 +154,17 @@
       </Card.Content>
     </Card.Root>
   {:else}
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">{account.full_name}</h1>
-      <p class="text-muted-foreground flex items-center gap-2">
-        <Badge variant="outline">{account.account_type}</Badge>
-        {#if account.is_archived}
-          <Badge variant="destructive">Archived</Badge>
-        {/if}
-      </p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">{account.full_name}</h1>
+        <p class="text-muted-foreground flex items-center gap-2">
+          <Badge variant="outline">{account.account_type}</Badge>
+          {#if account.is_archived}
+            <Badge variant="destructive">Archived</Badge>
+          {/if}
+        </p>
+      </div>
+      <Button variant="outline" href="/accounts/{accountId}/reconcile">Reconcile</Button>
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2">
@@ -312,9 +316,9 @@
             <Table.Row>
               <Table.Head>Date</Table.Head>
               <Table.Head>Description</Table.Head>
-              <Table.Head>Status</Table.Head>
+              <Table.Head class="hidden md:table-cell">Status</Table.Head>
               <Table.Head class="text-right">Amount</Table.Head>
-              <Table.Head class="text-right">Running Balance</Table.Head>
+              <Table.Head class="text-right hidden lg:table-cell">Running Balance</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -325,7 +329,7 @@
                 <Table.Cell>
                   <a href="/journal/{entry.id}" class="hover:underline">{entry.description}</a>
                 </Table.Cell>
-                <Table.Cell>
+                <Table.Cell class="hidden md:table-cell">
                   <Badge variant={entry.status === "confirmed" ? "default" : "secondary"}>
                     {entry.status}
                   </Badge>
@@ -338,7 +342,7 @@
                     </span>
                   {/each}
                 </Table.Cell>
-                <Table.Cell class="text-right font-mono text-muted-foreground">
+                <Table.Cell class="text-right font-mono text-muted-foreground hidden lg:table-cell">
                   {#each [...running.entries()] as [currency, amount]}
                     <span>{formatCurrency(amount, currency)}</span>
                   {/each}
@@ -347,6 +351,18 @@
             {/each}
           </Table.Body>
         </Table.Root>
+        <div class="p-4">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-muted-foreground">
+              {journalStore.totalCount} total {journalStore.totalCount === 1 ? "transaction" : "transactions"}
+            </span>
+            <Pagination
+              currentPage={journalStore.currentPage}
+              totalPages={journalStore.totalPages}
+              onPageChange={(p) => journalStore.loadPage(p)}
+            />
+          </div>
+        </div>
       {/if}
     </Card.Root>
   {/if}

@@ -57,6 +57,7 @@ describe("aaveHandler", () => {
         showHidden: false,
         lastRateSync: "",
         debugMode: false,
+        holdingPeriodDays: 365,
         handlers: {
           "generic-etherscan": { enabled: true },
           "pendle": { enabled: true },

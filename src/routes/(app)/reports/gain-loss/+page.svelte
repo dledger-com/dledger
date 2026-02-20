@@ -63,14 +63,14 @@
       <Card.Title>Report Period</Card.Title>
     </Card.Header>
     <Card.Content>
-      <div class="flex items-end gap-4">
+      <div class="flex flex-wrap items-end gap-3">
         <div class="space-y-1">
           <label for="from" class="text-sm font-medium">From</label>
-          <Input id="from" type="date" bind:value={fromDate} class="w-40" />
+          <Input id="from" type="date" bind:value={fromDate} class="w-full sm:w-40" />
         </div>
         <div class="space-y-1">
           <label for="to" class="text-sm font-medium">To</label>
-          <Input id="to" type="date" bind:value={toDate} class="w-40" />
+          <Input id="to" type="date" bind:value={toDate} class="w-full sm:w-40" />
         </div>
         <Button onclick={generate} disabled={reportStore.loading}>
           {reportStore.loading ? "Generating..." : "Generate"}
@@ -140,11 +140,11 @@
               {#if hasProtocols}
                 <Table.Head>Protocol</Table.Head>
               {/if}
-              <Table.Head>Acquired</Table.Head>
-              <Table.Head>Disposed</Table.Head>
-              <Table.Head class="text-right">Quantity</Table.Head>
-              <Table.Head class="text-right">Cost Basis</Table.Head>
-              <Table.Head class="text-right">Proceeds</Table.Head>
+              <Table.Head class="hidden lg:table-cell">Acquired</Table.Head>
+              <Table.Head class="hidden lg:table-cell">Disposed</Table.Head>
+              <Table.Head class="text-right hidden md:table-cell">Quantity</Table.Head>
+              <Table.Head class="text-right hidden sm:table-cell">Cost Basis</Table.Head>
+              <Table.Head class="text-right hidden sm:table-cell">Proceeds</Table.Head>
               <Table.Head class="text-right">Gain/Loss</Table.Head>
             </Table.Row>
           </Table.Header>
@@ -158,11 +158,11 @@
                 {#if hasProtocols}
                   <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>
                 {/if}
-                <Table.Cell class="text-muted-foreground">{line.acquired_date}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{line.disposed_date}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{line.quantity}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{formatCurrency(line.cost_basis, settings.currency)}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{formatCurrency(line.proceeds, settings.currency)}</Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.acquired_date}</Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.disposed_date}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden md:table-cell">{line.quantity}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden sm:table-cell">{formatCurrency(line.cost_basis, settings.currency)}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden sm:table-cell">{formatCurrency(line.proceeds, settings.currency)}</Table.Cell>
                 <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
                   {gl >= 0 ? "+" : ""}{formatCurrency(gl, settings.currency)}
                 </Table.Cell>

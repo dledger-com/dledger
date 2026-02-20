@@ -67,10 +67,10 @@
     <p class="text-muted-foreground">Open positions valued at current exchange rates.</p>
   </div>
 
-  <div class="flex items-end gap-4">
+  <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
       <label for="asOf" class="text-sm font-medium">As of Date</label>
-      <Input id="asOf" type="date" bind:value={asOf} class="w-48" />
+      <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
       {loading ? "Loading..." : "Generate"}
@@ -150,11 +150,11 @@
               {#if hasProtocols}
                 <Table.Head>Protocol</Table.Head>
               {/if}
-              <Table.Head>Account</Table.Head>
-              <Table.Head>Acquired</Table.Head>
-              <Table.Head class="text-right">Quantity</Table.Head>
-              <Table.Head class="text-right">Cost/Unit</Table.Head>
-              <Table.Head class="text-right">Current Value</Table.Head>
+              <Table.Head class="hidden md:table-cell">Account</Table.Head>
+              <Table.Head class="hidden lg:table-cell">Acquired</Table.Head>
+              <Table.Head class="text-right hidden md:table-cell">Quantity</Table.Head>
+              <Table.Head class="text-right hidden sm:table-cell">Cost/Unit</Table.Head>
+              <Table.Head class="text-right hidden sm:table-cell">Current Value</Table.Head>
               <Table.Head class="text-right">Unrealized G/L</Table.Head>
             </Table.Row>
           </Table.Header>
@@ -168,13 +168,13 @@
                 {#if hasProtocols}
                   <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>
                 {/if}
-                <Table.Cell class="text-sm">{line.account_name}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{line.acquired_date}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{line.quantity}</Table.Cell>
-                <Table.Cell class="text-right font-mono">
+                <Table.Cell class="text-sm hidden md:table-cell">{line.account_name}</Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.acquired_date}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden md:table-cell">{line.quantity}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden sm:table-cell">
                   {formatCurrency(parseFloat(line.cost_basis_per_unit), line.cost_basis_currency)}
                 </Table.Cell>
-                <Table.Cell class="text-right font-mono">
+                <Table.Cell class="text-right font-mono hidden sm:table-cell">
                   {formatCurrency(parseFloat(line.current_value), report.base_currency)}
                 </Table.Cell>
                 <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">

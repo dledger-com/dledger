@@ -74,6 +74,34 @@ const PROTOCOL_MAP: Record<string, ProtocolDef> = {
       { currency: /^(PT-|YT-|SY-)/, category: "supplies" },
     ],
   },
+  yearn: {
+    displayName: "Yearn",
+    patterns: [
+      { account: /^Income:Yearn:Rewards$/, category: "rewards" },
+      { currency: /^yv[A-Z]/, category: "supplies" },
+    ],
+  },
+  balancer: {
+    displayName: "Balancer",
+    patterns: [
+      { account: /^Income:Balancer:Rewards$/, category: "rewards" },
+      { currency: /^B-/, category: "supplies" },
+    ],
+  },
+  maker: {
+    displayName: "MakerDAO/Spark",
+    patterns: [
+      { account: /^Liabilities:Spark:Borrow$/, category: "borrows" },
+      { account: /^Income:Spark:Rewards$/, category: "rewards" },
+      { currency: /^(sDAI|sp[A-Z])/, category: "supplies" },
+    ],
+  },
+  eigenlayer: {
+    displayName: "EigenLayer",
+    patterns: [
+      { account: /^Income:EigenLayer:Rewards$/, category: "rewards" },
+    ],
+  },
 };
 
 /**

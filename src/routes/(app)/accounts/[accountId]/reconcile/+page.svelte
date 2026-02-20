@@ -1,0 +1,287 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import * as Table from "$lib/components/ui/table/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import { Separator } from "$lib/components/ui/separator/index.js";
+  import { getBackend, type Reconciliation, type UnreconciledLineItem } from "$lib/backend.js";
+  import { formatCurrency } from "$lib/utils/format.js";
+  import { computeDifference, isDifferenceZero } from "$lib/utils/reconciliation.js";
+  import { toast } from "svelte-sonner";
+  import { v7 as uuidv7 } from "uuid";
+  import type { Account, CurrencyBalance } from "$lib/types/index.js";
+
+  const accountId = $derived(page.params.accountId);
+  let account = $state<Account | null>(null);
+  let balances = $state<CurrencyBalance[]>([]);
+  let loading = $state(true);
+
+  // Reconciliation form
+  let currency = $state("");
+  let statementDate = $state(new Date().toISOString().slice(0, 10));
+  let statementBalance = $state("");
+  let items = $state<UnreconciledLineItem[]>([]);
+  let selectedIds = $state<Set<string>>(new Set());
+  let itemsLoaded = $state(false);
+  let reconciling = $state(false);
+
+  // History
+  let reconciliations = $state<Reconciliation[]>([]);
+
+  // Existing reconciled balance for this account+currency
+  let existingBalance = $state("0");
+
+  const difference = $derived(
+    statementBalance && items.length > 0
+      ? computeDifference(statementBalance, items, selectedIds, existingBalance)
+      : ""
+  );
+  const canReconcile = $derived(
+    statementBalance && items.length > 0 && selectedIds.size > 0 &&
+    isDifferenceZero(statementBalance, items, selectedIds, existingBalance)
+  );
+
+  function toggleItem(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    selectedIds = next;
+  }
+
+  function selectAll() {
+    selectedIds = new Set(items.map(i => i.line_item_id));
+  }
+
+  function selectNone() {
+    selectedIds = new Set();
+  }
+
+  async function loadItems() {
+    if (!currency || !accountId) return;
+    itemsLoaded = false;
+    try {
+      items = await getBackend().getUnreconciledLineItems(accountId, currency, statementDate || undefined);
+      selectedIds = new Set();
+
+      // Compute existing reconciled balance
+      const allBalance = await getBackend().getAccountBalance(accountId, statementDate || undefined);
+      const bal = allBalance.find(b => b.currency === currency);
+      const totalBal = bal ? parseFloat(bal.amount) : 0;
+      const unreconciledTotal = items.reduce((sum, i) => sum + parseFloat(i.amount), 0);
+      existingBalance = (totalBal - unreconciledTotal).toString();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      itemsLoaded = true;
+    }
+  }
+
+  async function handleReconcile() {
+    if (!canReconcile || !accountId) return;
+    reconciling = true;
+    try {
+      const rec: Reconciliation = {
+        id: uuidv7(),
+        account_id: accountId!,
+        statement_date: statementDate,
+        statement_balance: statementBalance,
+        currency,
+        reconciled_at: new Date().toISOString().slice(0, 10),
+        line_item_count: selectedIds.size,
+      };
+      await getBackend().markReconciled(rec, [...selectedIds]);
+      toast.success(`${selectedIds.size} items reconciled`);
+      await loadItems();
+      reconciliations = await getBackend().listReconciliations(accountId!);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      reconciling = false;
+    }
+  }
+
+  onMount(async () => {
+    if (!accountId) { loading = false; return; }
+    try {
+      account = await getBackend().getAccount(accountId);
+      balances = await getBackend().getAccountBalance(accountId);
+      reconciliations = await getBackend().listReconciliations(accountId);
+      // Default currency to first balance currency
+      if (balances.length > 0) {
+        currency = balances[0].currency;
+      }
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      loading = false;
+    }
+  });
+</script>
+
+<div class="space-y-6">
+  {#if loading}
+    <Skeleton class="h-10 w-64" />
+  {:else if !account}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">Account not found.</p>
+      </Card.Content>
+    </Card.Root>
+  {:else}
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Reconcile: {account.full_name}</h1>
+        <p class="text-muted-foreground">Match transactions against a bank statement.</p>
+      </div>
+      <Button variant="outline" href="/accounts/{accountId}">Back to Account</Button>
+    </div>
+
+    <!-- Setup -->
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Statement Details</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="space-y-1">
+            <label for="rec-currency" class="text-xs font-medium">Currency</label>
+            <select
+              id="rec-currency"
+              bind:value={currency}
+              class="flex h-9 w-28 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+            >
+              {#each balances as b}
+                <option value={b.currency}>{b.currency}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="rec-date" class="text-xs font-medium">Statement Date</label>
+            <Input id="rec-date" type="date" bind:value={statementDate} class="w-40" />
+          </div>
+          <div class="space-y-1">
+            <label for="rec-balance" class="text-xs font-medium">Statement Balance</label>
+            <Input id="rec-balance" type="text" placeholder="0.00" bind:value={statementBalance} class="w-36" />
+          </div>
+          <Button size="sm" onclick={loadItems}>Load Items</Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
+
+    <!-- Unreconciled Items -->
+    {#if itemsLoaded}
+      <Card.Root>
+        <Card.Header>
+          <div class="flex items-center justify-between">
+            <div>
+              <Card.Title>Unreconciled Items ({items.length})</Card.Title>
+              <Card.Description>Check items that match your statement.</Card.Description>
+            </div>
+            <div class="flex gap-2">
+              <Button variant="outline" size="sm" onclick={selectAll}>Select All</Button>
+              <Button variant="outline" size="sm" onclick={selectNone}>Clear</Button>
+            </div>
+          </div>
+        </Card.Header>
+        {#if items.length === 0}
+          <Card.Content>
+            <p class="text-sm text-muted-foreground text-center py-4">All items are reconciled.</p>
+          </Card.Content>
+        {:else}
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.Head class="w-10"></Table.Head>
+                <Table.Head>Date</Table.Head>
+                <Table.Head>Description</Table.Head>
+                <Table.Head class="text-right">Amount</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#each items as item (item.line_item_id)}
+                {@const checked = selectedIds.has(item.line_item_id)}
+                <Table.Row class={checked ? "bg-primary/5" : ""}>
+                  <Table.Cell>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onchange={() => toggleItem(item.line_item_id)}
+                      class="rounded border-input"
+                    />
+                  </Table.Cell>
+                  <Table.Cell class="text-muted-foreground">{item.entry_date}</Table.Cell>
+                  <Table.Cell>
+                    <a href="/journal/{item.entry_id}" class="hover:underline">{item.entry_description}</a>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono">
+                    {@const amt = parseFloat(item.amount)}
+                    <span class={amt < 0 ? "text-red-600 dark:text-red-400" : ""}>
+                      {formatCurrency(amt, item.currency)}
+                    </span>
+                  </Table.Cell>
+                </Table.Row>
+              {/each}
+            </Table.Body>
+          </Table.Root>
+
+          <Card.Content>
+            <div class="flex items-center justify-between">
+              <div class="space-y-1">
+                <p class="text-sm">
+                  Selected: <span class="font-mono font-medium">{selectedIds.size}</span> items
+                </p>
+                {#if difference}
+                  <p class="text-sm">
+                    Difference: <span class="font-mono font-medium {parseFloat(difference) === 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}">
+                      {formatCurrency(difference, currency)}
+                    </span>
+                  </p>
+                {/if}
+              </div>
+              <Button
+                disabled={!canReconcile || reconciling}
+                onclick={handleReconcile}
+              >
+                {reconciling ? "Reconciling..." : "Mark Reconciled"}
+              </Button>
+            </div>
+          </Card.Content>
+        {/if}
+      </Card.Root>
+    {/if}
+
+    <!-- Reconciliation History -->
+    {#if reconciliations.length > 0}
+      <Card.Root>
+        <Card.Header>
+          <Card.Title>Reconciliation History</Card.Title>
+        </Card.Header>
+        <Table.Root>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Statement Date</Table.Head>
+              <Table.Head>Currency</Table.Head>
+              <Table.Head class="text-right">Balance</Table.Head>
+              <Table.Head class="text-right">Items</Table.Head>
+              <Table.Head>Reconciled</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each reconciliations as rec (rec.id)}
+              <Table.Row>
+                <Table.Cell>{rec.statement_date}</Table.Cell>
+                <Table.Cell>{rec.currency}</Table.Cell>
+                <Table.Cell class="text-right font-mono">{formatCurrency(rec.statement_balance, rec.currency)}</Table.Cell>
+                <Table.Cell class="text-right">{rec.line_item_count}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{rec.reconciled_at}</Table.Cell>
+              </Table.Row>
+            {/each}
+          </Table.Body>
+        </Table.Root>
+      </Card.Root>
+    {/if}
+  {/if}
+</div>

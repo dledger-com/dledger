@@ -45,14 +45,14 @@
     <p class="text-muted-foreground">Revenue and expenses broken down by DeFi protocol.</p>
   </div>
 
-  <div class="flex items-end gap-4">
+  <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
       <label for="from" class="text-sm font-medium">From</label>
-      <Input id="from" type="date" bind:value={fromDate} class="w-48" />
+      <Input id="from" type="date" bind:value={fromDate} class="w-full sm:w-48" />
     </div>
     <div class="space-y-2">
       <label for="to" class="text-sm font-medium">To</label>
-      <Input id="to" type="date" bind:value={toDate} class="w-48" />
+      <Input id="to" type="date" bind:value={toDate} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
       {loading ? "Loading..." : "Generate"}

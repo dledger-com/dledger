@@ -34,6 +34,14 @@ const PROTOCOL_PATTERNS: {
   { prefix: "Expenses:Curve:", protocol: "curve", displayName: "Curve", type: "expense" },
   { prefix: "Expenses:Pendle:", protocol: "pendle", displayName: "Pendle", type: "expense" },
   { prefix: "Expenses:Lido:", protocol: "lido", displayName: "Lido", type: "expense" },
+  { prefix: "Income:Yearn:", protocol: "yearn", displayName: "Yearn", type: "revenue" },
+  { prefix: "Expenses:Yearn:", protocol: "yearn", displayName: "Yearn", type: "expense" },
+  { prefix: "Income:Balancer:", protocol: "balancer", displayName: "Balancer", type: "revenue" },
+  { prefix: "Expenses:Balancer:", protocol: "balancer", displayName: "Balancer", type: "expense" },
+  { prefix: "Income:Spark:", protocol: "maker", displayName: "MakerDAO/Spark", type: "revenue" },
+  { prefix: "Expenses:Spark:", protocol: "maker", displayName: "MakerDAO/Spark", type: "expense" },
+  { prefix: "Income:EigenLayer:", protocol: "eigenlayer", displayName: "EigenLayer", type: "revenue" },
+  { prefix: "Expenses:EigenLayer:", protocol: "eigenlayer", displayName: "EigenLayer", type: "expense" },
 ];
 
 interface ProtocolAccountMatch {

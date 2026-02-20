@@ -1216,9 +1216,9 @@
         <Table.Header>
           <Table.Row>
             <Table.Head>Handler</Table.Head>
-            <Table.Head>Description</Table.Head>
-            <Table.Head>Chains</Table.Head>
-            <Table.Head class="text-right">Enrichment</Table.Head>
+            <Table.Head class="hidden md:table-cell">Description</Table.Head>
+            <Table.Head class="hidden lg:table-cell">Chains</Table.Head>
+            <Table.Head class="text-right hidden sm:table-cell">Enrichment</Table.Head>
             <Table.Head class="text-right">Enabled</Table.Head>
           </Table.Row>
         </Table.Header>
@@ -1228,8 +1228,8 @@
             {@const isEnabled = isGeneric || settings.settings.handlers[handler.id]?.enabled}
             <Table.Row>
               <Table.Cell class="font-medium">{handler.name}</Table.Cell>
-              <Table.Cell class="text-muted-foreground">{handler.description}</Table.Cell>
-              <Table.Cell>
+              <Table.Cell class="text-muted-foreground hidden md:table-cell">{handler.description}</Table.Cell>
+              <Table.Cell class="hidden lg:table-cell">
                 {#if handler.supportedChainIds.length === 0}
                   <Badge variant="secondary">All chains</Badge>
                 {:else}
@@ -1242,7 +1242,7 @@
               </Table.Cell>
               {@const hasEnrichment = ["uniswap", "aave", "lido", "curve", "pendle"].includes(handler.id)}
               {@const enrichmentEnabled = settings.settings.handlers[handler.id]?.enrichment ?? false}
-              <Table.Cell class="text-right">
+              <Table.Cell class="text-right hidden sm:table-cell">
                 {#if hasEnrichment && !isGeneric}
                   <Switch
                     checked={enrichmentEnabled}

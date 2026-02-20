@@ -4,13 +4,11 @@ import { createTestBackend } from "../../test/helpers.js";
 import { createMockHandlerContext } from "../../test/mock-handler-context.js";
 import type { HandlerContext, TxHashGroup, Erc20Tx } from "./types.js";
 import type { SqlJsBackend } from "../sql-js-backend.js";
-import { dexAggregatorHandler } from "./dex-aggregator.js";
-import { AGGREGATORS } from "./addresses.js";
+import { eigenLayerHandler } from "./eigenlayer.js";
+import { EIGENLAYER } from "./addresses.js";
 
 const USER_ADDR = "0x1234567890abcdef1234567890abcdef12345678";
 const OTHER_ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const ONEINCH_ROUTER = "0x1111111254eeb25477b68fb85ed929f73a960582";
-const COW_SETTLEMENT = AGGREGATORS.COW_PROTOCOL;
 
 function makeEmptyGroup(overrides: Partial<TxHashGroup> = {}): TxHashGroup {
   return {
@@ -40,7 +38,7 @@ function makeErc20(overrides: Partial<Erc20Tx> = {}): Erc20Tx {
   };
 }
 
-describe("dexAggregatorHandler", () => {
+describe("eigenLayerHandler", () => {
   let backend: SqlJsBackend;
   let ctx: HandlerContext;
 
@@ -60,131 +58,121 @@ describe("dexAggregatorHandler", () => {
         holdingPeriodDays: 365,
         handlers: {
           "generic-etherscan": { enabled: true },
-          "pendle": { enabled: true },
-          "dex-aggregator": { enabled: true },
+          "eigenlayer": { enabled: true },
         },
       },
     });
   });
 
   describe("match", () => {
-    it("returns 50 when normal.to starts with 0x111111 (1inch)", () => {
+    it("returns 55 when normal.to is StrategyManager", () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
           timeStamp: "1704067200",
           from: USER_ADDR,
-          to: ONEINCH_ROUTER,
+          to: EIGENLAYER.STRATEGY_MANAGER,
           value: "0",
           isError: "0",
           gasUsed: "200000",
           gasPrice: "20000000000",
         },
       });
-      expect(dexAggregatorHandler.match(group, ctx)).toBe(50);
+      expect(eigenLayerHandler.match(group, ctx)).toBe(55);
     });
 
-    it("returns 50 when normal.to is 0x ExchangeProxy", () => {
+    it("returns 55 when normal.to is DelegationManager", () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
           timeStamp: "1704067200",
           from: USER_ADDR,
-          to: AGGREGATORS.ZEROX_PROXY,
+          to: EIGENLAYER.DELEGATION_MANAGER,
           value: "0",
           isError: "0",
           gasUsed: "200000",
           gasPrice: "20000000000",
         },
       });
-      expect(dexAggregatorHandler.match(group, ctx)).toBe(50);
+      expect(eigenLayerHandler.match(group, ctx)).toBe(55);
     });
 
-    it("returns 50 when normal.to is CoW settlement", () => {
+    it("returns 55 when ERC20 is EIGEN token", () => {
       const group = makeEmptyGroup({
-        normal: {
-          hash: "0x1234567890abcdef",
-          timeStamp: "1704067200",
-          from: USER_ADDR,
-          to: COW_SETTLEMENT,
-          value: "0",
-          isError: "0",
-          gasUsed: "200000",
-          gasPrice: "20000000000",
-        },
+        erc20s: [
+          makeErc20({
+            tokenSymbol: "EIGEN",
+            contractAddress: EIGENLAYER.EIGEN_TOKEN,
+          }),
+        ],
       });
-      expect(dexAggregatorHandler.match(group, ctx)).toBe(50);
+      expect(eigenLayerHandler.match(group, ctx)).toBe(55);
+    });
+
+    it("returns 55 when ERC20 to is StrategyManager", () => {
+      const group = makeEmptyGroup({
+        erc20s: [
+          makeErc20({
+            from: USER_ADDR,
+            to: EIGENLAYER.STRATEGY_MANAGER,
+            tokenSymbol: "stETH",
+          }),
+        ],
+      });
+      expect(eigenLayerHandler.match(group, ctx)).toBe(55);
     });
 
     it("returns 0 for unrelated tx", () => {
       const group = makeEmptyGroup({
-        normal: {
-          hash: "0x1234567890abcdef",
-          timeStamp: "1704067200",
-          from: USER_ADDR,
-          to: OTHER_ADDR,
-          value: "1000000000000000000",
-          isError: "0",
-          gasUsed: "21000",
-          gasPrice: "20000000000",
-        },
+        erc20s: [makeErc20({ tokenSymbol: "USDC" })],
       });
-      expect(dexAggregatorHandler.match(group, ctx)).toBe(0);
+      expect(eigenLayerHandler.match(group, ctx)).toBe(0);
+    });
+
+    it("returns 0 for empty group", () => {
+      const group = makeEmptyGroup();
+      expect(eigenLayerHandler.match(group, ctx)).toBe(0);
     });
   });
 
   describe("process", () => {
-    it("produces a SWAP entry via 1inch with correct description and metadata", async () => {
+    it("classifies DEPOSIT when stETH sent to StrategyManager", async () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
           timeStamp: "1704067200",
           from: USER_ADDR,
-          to: ONEINCH_ROUTER,
+          to: EIGENLAYER.STRATEGY_MANAGER,
           value: "0",
           isError: "0",
-          gasUsed: "200000",
+          gasUsed: "300000",
           gasPrice: "20000000000",
         },
         erc20s: [
+          // stETH outflow to strategy
           makeErc20({
             from: USER_ADDR,
-            to: OTHER_ADDR,
-            value: "100000000", // 100 USDC (6 decimals)
-            tokenSymbol: "USDC",
-            tokenDecimal: "6",
-            contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-          }),
-          makeErc20({
-            from: OTHER_ADDR,
-            to: USER_ADDR,
-            value: "50000000000000000", // 0.05 WETH
-            tokenSymbol: "WETH",
+            to: EIGENLAYER.STRATEGY_MANAGER,
+            tokenSymbol: "stETH",
             tokenDecimal: "18",
-            contractAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            value: "10000000000000000000", // 10 stETH
           }),
         ],
       });
 
-      const result = await dexAggregatorHandler.process(group, ctx);
+      const result = await eigenLayerHandler.process(group, ctx);
       expect(result.type).toBe("entries");
       if (result.type !== "entries") return;
 
       expect(result.entries).toHaveLength(1);
       const entry = result.entries[0];
 
-      // Description contains protocol name and swap info
-      expect(entry.entry.description).toContain("1inch");
-      expect(entry.entry.description).toContain("Swap");
-      expect(entry.entry.description).toContain("USDC");
-      expect(entry.entry.description).toContain("WETH");
+      expect(entry.entry.description).toContain("Deposit");
+      expect(entry.entry.description).toContain("stETH");
+      expect(entry.metadata.handler).toBe("eigenlayer");
+      expect(entry.metadata["handler:action"]).toBe("DEPOSIT");
 
-      // Metadata
-      expect(entry.metadata.handler).toBe("dex-aggregator");
-      expect(entry.metadata["handler:action"]).toBe("SWAP");
-      expect(entry.metadata["handler:protocol"]).toBe("1inch");
-
-      // Items balance per currency
+      // Items should balance per currency
       const sums = new Map<string, Decimal>();
       for (const item of entry.items) {
         const existing = sums.get(item.currency) ?? new Decimal(0);
@@ -195,49 +183,72 @@ describe("dexAggregatorHandler", () => {
       }
     });
 
-    it("produces a SWAP entry via CoW Protocol with correct protocol metadata", async () => {
+    it("classifies CLAIM_REWARDS when EIGEN inflow with no outflows", async () => {
       const group = makeEmptyGroup({
-        normal: {
-          hash: "0xabcdef1234567890",
-          timeStamp: "1704067200",
-          from: USER_ADDR,
-          to: COW_SETTLEMENT,
-          value: "0",
-          isError: "0",
-          gasUsed: "150000",
-          gasPrice: "15000000000",
-        },
         erc20s: [
-          makeErc20({
-            from: USER_ADDR,
-            to: OTHER_ADDR,
-            value: "1000000000000000000", // 1 DAI
-            tokenSymbol: "DAI",
-            tokenDecimal: "18",
-            contractAddress: "0x6b175474e89094c44da98b954eedeac495271d0f",
-          }),
           makeErc20({
             from: OTHER_ADDR,
             to: USER_ADDR,
-            value: "1000000", // 1 USDC
-            tokenSymbol: "USDC",
-            tokenDecimal: "6",
-            contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            tokenSymbol: "EIGEN",
+            tokenDecimal: "18",
+            value: "50000000000000000000", // 50 EIGEN
+            contractAddress: EIGENLAYER.EIGEN_TOKEN,
           }),
         ],
       });
 
-      const result = await dexAggregatorHandler.process(group, ctx);
+      const result = await eigenLayerHandler.process(group, ctx);
       expect(result.type).toBe("entries");
       if (result.type !== "entries") return;
 
       expect(result.entries).toHaveLength(1);
       const entry = result.entries[0];
 
-      expect(entry.entry.description).toContain("CoW Protocol");
-      expect(entry.entry.description).toContain("Swap");
-      expect(entry.metadata["handler:protocol"]).toBe("cow");
-      expect(entry.metadata["handler:action"]).toBe("SWAP");
+      expect(entry.entry.description).toContain("Claim Rewards");
+      expect(entry.metadata["handler:action"]).toBe("CLAIM_REWARDS");
+    });
+
+    it("classifies WITHDRAW when inflow from EigenLayer contracts", async () => {
+      const group = makeEmptyGroup({
+        erc20s: [
+          // stETH received from DelegationManager
+          makeErc20({
+            from: EIGENLAYER.DELEGATION_MANAGER,
+            to: USER_ADDR,
+            tokenSymbol: "stETH",
+            tokenDecimal: "18",
+            value: "10000000000000000000", // 10 stETH
+          }),
+        ],
+      });
+
+      const result = await eigenLayerHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      expect(result.entries).toHaveLength(1);
+      const entry = result.entries[0];
+
+      expect(entry.entry.description).toContain("Withdraw");
+      expect(entry.metadata["handler:action"]).toBe("WITHDRAW");
+    });
+
+    it("returns skip when no net movement", async () => {
+      const group = makeEmptyGroup({
+        erc20s: [
+          makeErc20({
+            from: USER_ADDR,
+            to: USER_ADDR,
+            tokenSymbol: "EIGEN",
+            tokenDecimal: "18",
+            value: "1000000000000000000",
+            contractAddress: EIGENLAYER.EIGEN_TOKEN,
+          }),
+        ],
+      });
+
+      const result = await eigenLayerHandler.process(group, ctx);
+      expect(result.type).toBe("skip");
     });
   });
 });

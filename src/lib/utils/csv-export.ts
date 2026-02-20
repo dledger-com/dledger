@@ -6,6 +6,9 @@ import type {
   UnrealizedGainLossReport,
   UnrealizedGainLossLine,
 } from "$lib/types/index.js";
+import type { TaxSummary } from "./tax-summary.js";
+import type { PortfolioReport } from "./portfolio.js";
+import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 
 function escapeCsv(value: string | number): string {
   const str = String(value);
@@ -145,4 +148,88 @@ export function exportUnrealizedGainLossCsv(report: UnrealizedGainLossReport): v
   }
 
   downloadCsv(`unrealized-gain-loss-${report.as_of}.csv`, rows.join("\n"));
+}
+
+export function exportTaxSummaryCsv(summary: TaxSummary): void {
+  const rows: string[] = [];
+
+  // Summary section
+  rows.push(toCsvRow(["Tax Summary", `${summary.from_date} to ${summary.to_date}`]));
+  rows.push(toCsvRow(["Holding Period (days)", summary.holding_period_days]));
+  rows.push("");
+  rows.push(toCsvRow(["Category", "Amount"]));
+  rows.push(toCsvRow(["Short-Term Gains", summary.short_term_gains]));
+  rows.push(toCsvRow(["Short-Term Losses", summary.short_term_losses]));
+  rows.push(toCsvRow(["Long-Term Gains", summary.long_term_gains]));
+  rows.push(toCsvRow(["Long-Term Losses", summary.long_term_losses]));
+  rows.push(toCsvRow(["Total Realized", summary.total_realized]));
+  rows.push(toCsvRow(["Total Unrealized", summary.total_unrealized]));
+  rows.push("");
+
+  // Gain/Loss detail lines
+  rows.push(toCsvRow(["Gain/Loss Details"]));
+  rows.push(
+    toCsvRow(["Classification", "Currency", "Acquired", "Disposed", "Quantity", "Cost Basis", "Proceeds", "Gain/Loss", "Protocol"]),
+  );
+  for (const line of summary.gain_loss_lines) {
+    rows.push(
+      toCsvRow([
+        line.is_long_term ? "Long-Term" : "Short-Term",
+        line.currency,
+        line.acquired_date,
+        line.disposed_date,
+        line.quantity,
+        line.cost_basis,
+        line.proceeds,
+        line.gain_loss,
+        line.source_handler || "",
+      ]),
+    );
+  }
+  rows.push("");
+
+  // Income by account
+  rows.push(toCsvRow(["Income by Account"]));
+  rows.push(toCsvRow(["Account", "Currency", "Amount"]));
+  for (const inc of summary.income_by_account) {
+    rows.push(toCsvRow([inc.account_name, inc.currency, inc.amount]));
+  }
+
+  downloadCsv(`tax-summary-${summary.from_date}-to-${summary.to_date}.csv`, rows.join("\n"));
+}
+
+export function exportPortfolioCsv(report: PortfolioReport): void {
+  const rows: string[] = [toCsvRow(["Wallet", "Address", "Chain", "Currency", "Amount", "Base Value"])];
+
+  for (const wallet of report.wallets) {
+    const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === wallet.chainId);
+    const chainLabel = chain ? chain.name : `Chain ${wallet.chainId}`;
+
+    for (const holding of wallet.holdings) {
+      rows.push(
+        toCsvRow([
+          wallet.label,
+          wallet.address,
+          chainLabel,
+          holding.currency,
+          holding.amount,
+          holding.baseValue ?? "",
+        ]),
+      );
+    }
+
+    // Total row per wallet
+    rows.push(
+      toCsvRow([
+        wallet.label,
+        wallet.address,
+        chainLabel,
+        "TOTAL",
+        "",
+        wallet.totalBaseValue ?? "",
+      ]),
+    );
+  }
+
+  downloadCsv(`portfolio-${report.as_of}.csv`, rows.join("\n"));
 }

@@ -8,6 +8,7 @@ export interface AppSettings {
   showHidden: boolean;
   lastRateSync: string;
   debugMode: boolean;
+  holdingPeriodDays: number;
   handlers: Record<string, { enabled: boolean; enrichment?: boolean }>;
 }
 
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   showHidden: false,
   lastRateSync: "",
   debugMode: false,
+  holdingPeriodDays: 365,
   handlers: { "generic-etherscan": { enabled: true } },
 };
 
@@ -94,6 +96,10 @@ export class SettingsStore {
 
   get debugMode(): boolean {
     return this.settings.debugMode;
+  }
+
+  get holdingPeriodDays(): number {
+    return this.settings.holdingPeriodDays;
   }
 
   update(partial: Partial<AppSettings>) {

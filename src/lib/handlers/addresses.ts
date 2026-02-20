@@ -127,3 +127,65 @@ export function isBridgeContract(addr: string, chainId: number): "across" | "sta
   if ((BRIDGES.STARGATE_POOLS_ETH as readonly string[]).includes(lower)) return "stargate";
   return null;
 }
+
+export const YEARN = {
+  V2_REGISTRY: "0x50c1a2ea0a861a967d9d0ffe2ae4012c2e053804",
+  V3_REGISTRY: "0xff31a1b020c868f6ea3f61eb953344920eeca3af",
+} as const;
+
+const YEARN_ALL_CONTRACTS: Set<string> = new Set([
+  YEARN.V2_REGISTRY,
+  YEARN.V3_REGISTRY,
+]);
+
+export function isYearnContract(addr: string): boolean {
+  return YEARN_ALL_CONTRACTS.has(addr.toLowerCase());
+}
+
+export const BALANCER = {
+  VAULT: "0xba12222222228d8ba445958a75a0704d566bf2c8",
+  GAUGE_CONTROLLER: "0xc128468b7ce63ea702c1f104d55a2566b13d3abd",
+  BAL_TOKEN: "0xba100000625a3754423978a60c9317c58a424e3d",
+} as const;
+
+const BALANCER_ALL_CONTRACTS: Set<string> = new Set([
+  BALANCER.VAULT,
+  BALANCER.GAUGE_CONTROLLER,
+]);
+
+export function isBalancerContract(addr: string): boolean {
+  return BALANCER_ALL_CONTRACTS.has(addr.toLowerCase());
+}
+
+export const MAKER = {
+  SDAI: "0x83f20f44975d03b1b09e64809b757c47f942beea",
+  SPARK_POOL: "0xc13e21b648a5ee794902342038ff3adab66be987",
+  SPARK_GATEWAY: "0xbd7d6a9ad7865463de44b05f04559f65e3b11704",
+} as const;
+
+const MAKER_ALL_CONTRACTS: Set<string> = new Set([
+  MAKER.SDAI,
+  MAKER.SPARK_POOL,
+  MAKER.SPARK_GATEWAY,
+]);
+
+export function isMakerContract(addr: string): boolean {
+  return MAKER_ALL_CONTRACTS.has(addr.toLowerCase());
+}
+
+export const EIGENLAYER = {
+  STRATEGY_MANAGER: "0x858646372cc42e1a627fce94aa7a7033e7cf075a",
+  DELEGATION_MANAGER: "0x39053d51b77dc0d36036fc1fcc8cb819df8ef37a",
+  EIGEN_TOKEN: "0xec53bf9167f50cdeb3ae105f56099aaab9061f83",
+  EIGENPOD_MANAGER: "0x91e677b07f7af907ec9a428aafa9fc14a0d3a338",
+} as const;
+
+const EIGENLAYER_ALL_CONTRACTS: Set<string> = new Set([
+  EIGENLAYER.STRATEGY_MANAGER,
+  EIGENLAYER.DELEGATION_MANAGER,
+  EIGENLAYER.EIGENPOD_MANAGER,
+]);
+
+export function isEigenLayerContract(addr: string): boolean {
+  return EIGENLAYER_ALL_CONTRACTS.has(addr.toLowerCase());
+}

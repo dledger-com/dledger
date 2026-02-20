@@ -31,10 +31,10 @@
     <p class="text-muted-foreground">All account balances verifying that total debits equal total credits.</p>
   </div>
 
-  <div class="flex items-end gap-4">
+  <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
       <label for="asOf" class="text-sm font-medium">As of Date</label>
-      <Input id="asOf" type="date" bind:value={asOf} class="w-48" />
+      <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={store.loading}>
       {store.loading ? "Loading..." : "Generate"}

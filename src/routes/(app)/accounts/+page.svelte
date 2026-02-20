@@ -84,12 +84,12 @@
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between gap-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <div class="shrink-0">
       <h1 class="text-2xl font-bold tracking-tight">Chart of Accounts</h1>
-      <p class="text-muted-foreground">Manage your account structure and hierarchy.</p>
+      <p class="text-muted-foreground hidden sm:block">Manage your account structure and hierarchy.</p>
     </div>
-    <div class="relative w-full max-w-sm">
+    <div class="relative w-full sm:w-auto sm:max-w-sm order-last sm:order-none">
       <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
       <Input type="text" placeholder="Filter accounts..." bind:value={searchTerm} class="pl-9 pr-9"
         onkeydown={(e) => { if (e.key === 'Escape') searchTerm = ''; }} />
@@ -185,8 +185,8 @@
           <Table.Row>
             <Table.Head>Full Name</Table.Head>
             <Table.Head>Type</Table.Head>
-            <Table.Head>Postable</Table.Head>
-            <Table.Head class="text-right">Actions</Table.Head>
+            <Table.Head class="hidden md:table-cell">Postable</Table.Head>
+            <Table.Head class="text-right hidden sm:table-cell">Actions</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -198,8 +198,8 @@
               <Table.Cell>
                 <Badge variant="outline">{account.account_type}</Badge>
               </Table.Cell>
-              <Table.Cell>{account.is_postable ? "Yes" : "No"}</Table.Cell>
-              <Table.Cell class="text-right">
+              <Table.Cell class="hidden md:table-cell">{account.is_postable ? "Yes" : "No"}</Table.Cell>
+              <Table.Cell class="text-right hidden sm:table-cell">
                 <Button variant="ghost" size="sm" onclick={() => handleArchive(account.id, account.full_name)}>
                   Archive
                 </Button>

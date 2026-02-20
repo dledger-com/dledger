@@ -17,6 +17,7 @@
   import X from "lucide-svelte/icons/x";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import Pagination from "$lib/components/Pagination.svelte";
 
   const store = new JournalStore();
   const settings = new SettingsStore();
@@ -113,12 +114,12 @@
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between gap-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <div class="shrink-0">
       <h1 class="text-2xl font-bold tracking-tight">Journal</h1>
-      <p class="text-muted-foreground">View and manage all journal entries.</p>
+      <p class="text-muted-foreground hidden sm:block">View and manage all journal entries.</p>
     </div>
-    <div class="relative w-full max-w-sm">
+    <div class="relative w-full sm:w-auto sm:max-w-sm order-last sm:order-none">
       <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
       <Input type="text" placeholder="Filter entries..." bind:value={searchTerm} class="pl-9 pr-9"
         onkeydown={(e) => { if (e.key === 'Escape') searchTerm = ''; }} />
@@ -129,15 +130,15 @@
         </button>
       {/if}
     </div>
-    <div class="flex gap-2 shrink-0">
-      <Button variant="outline" size="sm" onclick={() => { showDuplicates = true; }}>
+    <div class="flex flex-wrap gap-2 shrink-0">
+      <Button variant="outline" size="sm" class="hidden sm:inline-flex" onclick={async () => { await store.loadAll(); showDuplicates = true; }}>
         Detect Duplicates
       </Button>
-      <Button variant="outline" onclick={handleExport} disabled={exporting}>
+      <Button variant="outline" size="sm" onclick={handleExport} disabled={exporting}>
         {exporting ? "Exporting..." : "Export"}
       </Button>
-      <Button variant="outline" href="/sources">Import</Button>
-      <Button href="/journal/new">New Entry</Button>
+      <Button variant="outline" size="sm" href="/sources">Import</Button>
+      <Button size="sm" href="/journal/new">New Entry</Button>
     </div>
   </div>
 
@@ -177,8 +178,8 @@
           <Table.Row>
             <Table.Head>Date</Table.Head>
             <Table.Head>Description</Table.Head>
-            <Table.Head>Status</Table.Head>
-            <Table.Head class="text-right">Debit Total</Table.Head>
+            <Table.Head class="hidden md:table-cell">Status</Table.Head>
+            <Table.Head class="text-right">Amount</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -188,7 +189,7 @@
               <Table.Cell>
                 <a href="/journal/{entry.id}" class="font-medium hover:underline">{entry.description}</a>
               </Table.Cell>
-              <Table.Cell>
+              <Table.Cell class="hidden md:table-cell">
                 <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
                   {entry.status}
                 </Badge>
@@ -201,6 +202,17 @@
         </Table.Body>
       </Table.Root>
     </Card.Root>
+
+    <div class="flex items-center justify-between">
+      <span class="text-sm text-muted-foreground">
+        {store.totalCount} total {store.totalCount === 1 ? "entry" : "entries"}
+      </span>
+      <Pagination
+        currentPage={store.currentPage}
+        totalPages={store.totalPages}
+        onPageChange={(page) => store.loadPage(page)}
+      />
+    </div>
   {/if}
 </div>
 
