@@ -83,7 +83,7 @@ function autoDetectSource(code: string, baseCurrency: string): SourceName {
  *
  * For each non-base, non-hidden currency:
  * - Has stored rate_source → use that (skip "none")
- * - No stored source → auto-detect: fiat → frankfurter, else → coingecko then finnhub
+ * - No stored source → auto-detect: fiat → frankfurter, else → coingecko
  * - Write auto-detection results to DB inline
  * - Etherscan-only currencies where all sources fail → auto-hide
  */
@@ -318,51 +318,6 @@ export async function syncExchangeRates(
     const detected = autoDetectSource(code, baseCurrency);
     await backend.setCurrencyRateSource(code, detected, "auto");
     result.newlyDetected.push(code);
-  }
-
-  // Auto-detect failures for CoinGecko: try Finnhub as fallback
-  const coingeckoFailedAutoDetect = [...autoDetectFailed].filter(
-    (code) => autoDetectSource(code, baseCurrency) === "coingecko" && !autoDetectSuccess.has(code),
-  );
-
-  if (coingeckoFailedAutoDetect.length > 0 && finnhubApiKey) {
-    const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
-    try {
-      for (const code of coingeckoFailedAutoDetect) {
-        const existing = await backend.getExchangeRate(code, "USD", today);
-        if (existing !== null) {
-          result.rates_skipped++;
-          autoDetectFailed.delete(code);
-          await backend.setCurrencyRateSource(code, "finnhub", "auto");
-          result.newlyDetected.push(code);
-          continue;
-        }
-
-        const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
-        const resp = await finnhubFetch.fetch(url);
-        if (!resp.ok) continue;
-
-        const data = await resp.json();
-        if (!data.c || data.c === 0) continue;
-
-        autoDetectFailed.delete(code);
-        await backend.recordExchangeRate({
-          id: uuidv7(),
-          date: today,
-          from_currency: code,
-          to_currency: "USD",
-          rate: data.c.toString(),
-          source: "finnhub",
-        });
-        result.rates_fetched++;
-        await backend.setCurrencyRateSource(code, "finnhub", "auto");
-        result.newlyDetected.push(code);
-      }
-    } catch {
-      // Swallow — this is a best-effort fallback
-    } finally {
-      finnhubFetch.dispose();
-    }
   }
 
   // Auto-hide: currencies that failed all sources and have no stored config

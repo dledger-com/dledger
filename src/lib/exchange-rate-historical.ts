@@ -60,7 +60,7 @@ function classifySource(
   // 2. Static heuristic fallback
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (COINGECKO_IDS[currency]) return "coingecko";
-  return "finnhub";
+  return "coingecko";
 }
 
 // ---- Find missing rates ----
