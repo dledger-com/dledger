@@ -235,14 +235,14 @@
       () => { showLiabilities = !showLiabilities },
     )}
     {@render summaryCard(
-      "Revenue ({rangePreset.toUpperCase()})",
+      `Revenue (${rangePreset.toUpperCase()})`,
       revenueSummary,
       reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden) : undefined,
       showRevenue,
       () => { showRevenue = !showRevenue },
     )}
     {@render summaryCard(
-      "Net Income ({rangePreset.toUpperCase()})",
+      `Net Income (${rangePreset.toUpperCase()})`,
       netIncomeSummary,
       reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, hidden) : undefined,
       showNetIncome,
