@@ -11,6 +11,8 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenGainLoss } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
+  import { exportGainLossCsv } from "$lib/utils/csv-export.js";
+  import Download from "lucide-svelte/icons/download";
 
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
@@ -60,6 +62,12 @@
         <Button onclick={generate} disabled={reportStore.loading}>
           {reportStore.loading ? "Generating..." : "Generate"}
         </Button>
+        {#if reportStore.gainLossReport}
+          <Button variant="outline" onclick={() => exportGainLossCsv(reportStore.gainLossReport!)}>
+            <Download class="mr-1 h-4 w-4" />
+            CSV
+          </Button>
+        {/if}
       </div>
     </Card.Content>
   </Card.Root>

@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -149,9 +149,28 @@ CREATE TABLE IF NOT EXISTS raw_transaction (
     data TEXT NOT NULL
 );
 
+-- Currency rate source configuration
+CREATE TABLE IF NOT EXISTS currency_rate_source (
+    currency TEXT NOT NULL,
+    rate_source TEXT NOT NULL,
+    set_by TEXT NOT NULL DEFAULT 'auto',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (currency)
+);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+"#;
+
+pub const MIGRATION_V6: &str = r#"
+CREATE TABLE IF NOT EXISTS currency_rate_source (
+    currency TEXT NOT NULL,
+    rate_source TEXT NOT NULL,
+    set_by TEXT NOT NULL DEFAULT 'auto',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (currency)
+);
 "#;
 
 pub const MIGRATION_V5: &str = r#"

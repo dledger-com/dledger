@@ -77,6 +77,17 @@ pub fn run() {
             commands::store_raw_transaction,
             commands::get_raw_transaction,
             commands::query_raw_transactions,
+            commands::set_currency_hidden,
+            commands::list_hidden_currencies,
+            commands::get_currency_rate_sources,
+            commands::set_currency_rate_source,
+            commands::clear_auto_rate_sources,
+            commands::clear_non_user_rate_sources,
+            commands::count_orphaned_line_items,
+            commands::count_duplicate_sources,
+            commands::create_balance_assertion,
+            commands::list_balance_assertions,
+            commands::check_balance_assertions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

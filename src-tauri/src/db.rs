@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -98,6 +98,17 @@ fn source_priority(source: &str) -> u8 {
         "manual" => 3,
         "ledger-file" => 2,
         _ => 1,
+    }
+}
+
+/// Rate source set_by priority: "user" (3) > "handler:*" (2) > "auto" (1).
+fn set_by_priority(set_by: &str) -> u8 {
+    if set_by == "user" {
+        3
+    } else if set_by.starts_with("handler:") {
+        2
+    } else {
+        1
     }
 }
 
@@ -999,6 +1010,110 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
+    // -- Hidden currencies --
+
+    fn set_currency_hidden(&self, code: &str, is_hidden: bool) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute(
+                "UPDATE currency SET is_hidden = ?1 WHERE code = ?2",
+                params![is_hidden as i32, code],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("currency {code}")));
+        }
+        Ok(())
+    }
+
+    fn list_hidden_currencies(&self) -> StorageResult<Vec<String>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT code FROM currency WHERE is_hidden = 1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    // -- Currency rate sources --
+
+    fn get_currency_rate_sources(&self) -> StorageResult<Vec<CurrencyRateSource>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT currency, rate_source, set_by FROM currency_rate_source")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(CurrencyRateSource {
+                    currency: row.get(0)?,
+                    rate_source: row.get(1)?,
+                    set_by: row.get(2)?,
+                })
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn set_currency_rate_source(&self, currency: &str, rate_source: &str, set_by: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let priority = set_by_priority(set_by) as i32;
+        conn.execute(
+            "INSERT INTO currency_rate_source (currency, rate_source, set_by, updated_at)
+             VALUES (?1, ?2, ?3, datetime('now'))
+             ON CONFLICT(currency) DO UPDATE SET
+               rate_source = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN ?2 ELSE rate_source END,
+               set_by = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN ?3 ELSE set_by END,
+               updated_at = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN datetime('now') ELSE updated_at END",
+            params![currency, rate_source, set_by, priority],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn clear_auto_rate_sources(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute("DELETE FROM currency_rate_source WHERE set_by = 'auto'", [])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn clear_non_user_rate_sources(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute("DELETE FROM currency_rate_source WHERE set_by != 'user'", [])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    // -- Integrity checks --
+
+    fn count_orphaned_line_items(&self) -> StorageResult<u64> {
+        let conn = self.conn.borrow();
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM line_item WHERE journal_entry_id NOT IN (SELECT id FROM journal_entry)",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(count)
+    }
+
+    fn count_duplicate_sources(&self) -> StorageResult<u64> {
+        let conn = self.conn.borrow();
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM (SELECT source, COUNT(*) as cnt FROM journal_entry WHERE source IS NOT NULL AND source != '' AND status = 'posted' GROUP BY source HAVING cnt > 1)",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(count)
+    }
+
     // -- Currency origins --
 
     fn get_currency_origins(&self) -> StorageResult<Vec<CurrencyOrigin>> {
@@ -1052,6 +1167,7 @@ impl Storage for SqliteStorage {
              DELETE FROM account_closure;
              DELETE FROM account;
              DELETE FROM currency;
+             DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;
              PRAGMA foreign_keys=ON;",
         )
@@ -1073,6 +1189,7 @@ impl Storage for SqliteStorage {
              DELETE FROM account_closure;
              DELETE FROM account;
              DELETE FROM currency;
+             DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1162,6 +1279,18 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 3 {
             storage.execute_sql(MIGRATION_V3)?;
             storage.set_schema_version(3)?;
+        }
+        if current < 4 {
+            storage.execute_sql(MIGRATION_V4)?;
+            storage.set_schema_version(4)?;
+        }
+        if current < 5 {
+            storage.execute_sql(MIGRATION_V5)?;
+            storage.set_schema_version(5)?;
+        }
+        if current < 6 {
+            storage.execute_sql(MIGRATION_V6)?;
+            storage.set_schema_version(6)?;
         }
     }
     Ok(())
@@ -1468,3 +1597,1033 @@ fn fetch_line_items_for_entry(
 
 // rusqlite helper extension
 use rusqlite::OptionalExtension;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use dledger_core::storage::Storage;
+    use rust_decimal_macros::dec;
+    use uuid::Uuid;
+
+    /// Create a fresh in-memory SqliteStorage with schema applied.
+    fn setup() -> SqliteStorage {
+        let storage = SqliteStorage::new_in_memory().unwrap();
+        // Bootstrap schema_version table so apply_migrations can query it
+        storage
+            .execute_sql("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);")
+            .unwrap();
+        apply_migrations(&storage).unwrap();
+        storage
+    }
+
+    fn make_date(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    fn make_currency(code: &str, name: &str, decimal_places: u8, is_base: bool) -> Currency {
+        Currency {
+            code: code.to_string(),
+            name: name.to_string(),
+            decimal_places,
+            is_base,
+        }
+    }
+
+    fn make_account(
+        parent_id: Option<Uuid>,
+        account_type: AccountType,
+        name: &str,
+        full_name: &str,
+    ) -> Account {
+        Account {
+            id: Uuid::now_v7(),
+            parent_id,
+            account_type,
+            name: name.to_string(),
+            full_name: full_name.to_string(),
+            allowed_currencies: vec![],
+            is_postable: true,
+            is_archived: false,
+            created_at: make_date(2024, 1, 1),
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // 1. Currency CRUD + hidden currencies
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_create_and_get_currency() {
+        let s = setup();
+        let c = make_currency("USD", "US Dollar", 2, true);
+        s.create_currency(&c).unwrap();
+
+        let fetched = s.get_currency("USD").unwrap().unwrap();
+        assert_eq!(fetched.code, "USD");
+        assert_eq!(fetched.name, "US Dollar");
+        assert_eq!(fetched.decimal_places, 2);
+        assert!(fetched.is_base);
+    }
+
+    #[test]
+    fn test_list_currencies_ordered() {
+        let s = setup();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("BTC", "Bitcoin", 8, false)).unwrap();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+
+        let list = s.list_currencies().unwrap();
+        assert_eq!(list.len(), 3);
+        // Should be alphabetical
+        assert_eq!(list[0].code, "BTC");
+        assert_eq!(list[1].code, "EUR");
+        assert_eq!(list[2].code, "USD");
+    }
+
+    #[test]
+    fn test_duplicate_currency_returns_error() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        let result = s.create_currency(&make_currency("USD", "Dollar", 2, false));
+        assert!(matches!(result, Err(StorageError::Duplicate(_))));
+    }
+
+    #[test]
+    fn test_set_currency_hidden_and_list_hidden() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("SCAM", "Scam Token", 0, false)).unwrap();
+
+        assert!(s.list_hidden_currencies().unwrap().is_empty());
+
+        s.set_currency_hidden("SCAM", true).unwrap();
+        let hidden = s.list_hidden_currencies().unwrap();
+        assert_eq!(hidden, vec!["SCAM"]);
+
+        // Unhide it
+        s.set_currency_hidden("SCAM", false).unwrap();
+        assert!(s.list_hidden_currencies().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_set_currency_hidden_nonexistent_returns_not_found() {
+        let s = setup();
+        let result = s.set_currency_hidden("NOPE", true);
+        assert!(matches!(result, Err(StorageError::NotFound(_))));
+    }
+
+    // ---------------------------------------------------------------
+    // 2. Account CRUD + closure table
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_create_and_get_account() {
+        let s = setup();
+        let acct = make_account(None, AccountType::Asset, "Assets", "Assets");
+        s.create_account(&acct).unwrap();
+
+        let fetched = s.get_account(&acct.id).unwrap().unwrap();
+        assert_eq!(fetched.name, "Assets");
+        assert_eq!(fetched.full_name, "Assets");
+        assert_eq!(fetched.account_type, AccountType::Asset);
+        assert!(fetched.is_postable);
+        assert!(!fetched.is_archived);
+    }
+
+    #[test]
+    fn test_account_closure_table_parent_child() {
+        let s = setup();
+        let parent = make_account(None, AccountType::Asset, "Assets", "Assets");
+        s.create_account(&parent).unwrap();
+
+        let child = make_account(Some(parent.id), AccountType::Asset, "Bank", "Assets:Bank");
+        s.create_account(&child).unwrap();
+
+        let grandchild = make_account(Some(child.id), AccountType::Asset, "Checking", "Assets:Bank:Checking");
+        s.create_account(&grandchild).unwrap();
+
+        // Parent subtree should include self + child + grandchild
+        let subtree = s.get_account_subtree_ids(&parent.id).unwrap();
+        assert_eq!(subtree.len(), 3);
+        assert_eq!(subtree[0], parent.id); // depth 0
+        assert!(subtree.contains(&child.id));
+        assert!(subtree.contains(&grandchild.id));
+
+        // Child subtree should include self + grandchild
+        let child_subtree = s.get_account_subtree_ids(&child.id).unwrap();
+        assert_eq!(child_subtree.len(), 2);
+        assert!(child_subtree.contains(&child.id));
+        assert!(child_subtree.contains(&grandchild.id));
+
+        // Grandchild subtree should include only itself
+        let gc_subtree = s.get_account_subtree_ids(&grandchild.id).unwrap();
+        assert_eq!(gc_subtree.len(), 1);
+        assert_eq!(gc_subtree[0], grandchild.id);
+    }
+
+    #[test]
+    fn test_archive_account() {
+        let s = setup();
+        let acct = make_account(None, AccountType::Expense, "Expenses", "Expenses");
+        s.create_account(&acct).unwrap();
+
+        s.update_account_archived(&acct.id, true).unwrap();
+        let fetched = s.get_account(&acct.id).unwrap().unwrap();
+        assert!(fetched.is_archived);
+
+        // Unarchive
+        s.update_account_archived(&acct.id, false).unwrap();
+        let fetched = s.get_account(&acct.id).unwrap().unwrap();
+        assert!(!fetched.is_archived);
+    }
+
+    #[test]
+    fn test_get_account_by_full_name() {
+        let s = setup();
+        let acct = make_account(None, AccountType::Revenue, "Income", "Income");
+        s.create_account(&acct).unwrap();
+
+        let fetched = s.get_account_by_full_name("Income").unwrap().unwrap();
+        assert_eq!(fetched.id, acct.id);
+
+        assert!(s.get_account_by_full_name("NonExistent").unwrap().is_none());
+    }
+
+    // ---------------------------------------------------------------
+    // 3. Journal entry + line item insert/query
+    // ---------------------------------------------------------------
+
+    /// Helper to set up two accounts and a currency, returning (asset_id, expense_id).
+    fn seed_accounts_and_currency(s: &SqliteStorage) -> (Uuid, Uuid) {
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+
+        let asset = make_account(None, AccountType::Asset, "Assets", "Assets");
+        s.create_account(&asset).unwrap();
+        let expense = make_account(None, AccountType::Expense, "Expenses", "Expenses");
+        s.create_account(&expense).unwrap();
+        (asset.id, expense.id)
+    }
+
+    #[test]
+    fn test_insert_and_get_journal_entry() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        let entry_id = Uuid::now_v7();
+        let entry = JournalEntry {
+            id: entry_id,
+            date: make_date(2024, 3, 15),
+            description: "Lunch".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 3, 15),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: entry_id,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(12.50),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: entry_id,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(-12.50),
+                lot_id: None,
+            },
+        ];
+
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        let (fetched_entry, fetched_items) = s.get_journal_entry(&entry_id).unwrap().unwrap();
+        assert_eq!(fetched_entry.description, "Lunch");
+        assert_eq!(fetched_entry.status, JournalEntryStatus::Confirmed);
+        assert_eq!(fetched_items.len(), 2);
+
+        // Verify amounts sum to zero
+        let total: Decimal = fetched_items.iter().map(|i| i.amount).sum();
+        assert_eq!(total, dec!(0));
+    }
+
+    #[test]
+    fn test_query_journal_entries_with_filter() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        // Insert two entries on different dates
+        for (i, date) in [(1, make_date(2024, 1, 10)), (2, make_date(2024, 6, 20))] {
+            let eid = Uuid::now_v7();
+            let entry = JournalEntry {
+                id: eid,
+                date,
+                description: format!("Entry {i}"),
+                status: JournalEntryStatus::Confirmed,
+                source: "manual".to_string(),
+                voided_by: None,
+                created_at: date,
+            };
+            let items = vec![
+                LineItem {
+                    id: Uuid::now_v7(),
+                    journal_entry_id: eid,
+                    account_id: expense_id,
+                    currency: "USD".to_string(),
+                    amount: dec!(10),
+                    lot_id: None,
+                },
+                LineItem {
+                    id: Uuid::now_v7(),
+                    journal_entry_id: eid,
+                    account_id: asset_id,
+                    currency: "USD".to_string(),
+                    amount: dec!(-10),
+                    lot_id: None,
+                },
+            ];
+            s.insert_journal_entry(&entry, &items).unwrap();
+        }
+
+        // Filter by date range that includes only the first entry
+        let filter = TransactionFilter {
+            from_date: Some(make_date(2024, 1, 1)),
+            to_date: Some(make_date(2024, 3, 1)),
+            ..Default::default()
+        };
+        let results = s.query_journal_entries(&filter).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0.description, "Entry 1");
+
+        // Filter by account
+        let filter_acct = TransactionFilter {
+            account_id: Some(expense_id),
+            ..Default::default()
+        };
+        let results = s.query_journal_entries(&filter_acct).unwrap();
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_sum_line_items() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        let eid = Uuid::now_v7();
+        let entry = JournalEntry {
+            id: eid,
+            date: make_date(2024, 5, 1),
+            description: "Test sum".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 5, 1),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(100),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(-100),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        let balances = s.sum_line_items(&[expense_id], None).unwrap();
+        assert_eq!(balances.len(), 1);
+        assert_eq!(balances[0].currency, "USD");
+        assert_eq!(balances[0].amount, dec!(100));
+
+        // With before_date that excludes the entry
+        let balances_before = s.sum_line_items(&[expense_id], Some(make_date(2024, 4, 1))).unwrap();
+        assert!(balances_before.is_empty());
+    }
+
+    // ---------------------------------------------------------------
+    // 4. Exchange rate insert + source priority
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_insert_and_get_exchange_rate() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+
+        let rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 6, 1),
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.08),
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&rate).unwrap();
+
+        let fetched = s.get_exchange_rate("EUR", "USD", make_date(2024, 6, 1)).unwrap();
+        assert_eq!(fetched, Some(dec!(1.08)));
+    }
+
+    #[test]
+    fn test_exchange_rate_inverse_fallback() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+
+        let rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 6, 1),
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(2), // 1 EUR = 2 USD
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&rate).unwrap();
+
+        // Query inverse: USD -> EUR should return 1/2 = 0.5
+        let inverse = s.get_exchange_rate("USD", "EUR", make_date(2024, 6, 1)).unwrap().unwrap();
+        assert_eq!(inverse, dec!(0.5));
+    }
+
+    #[test]
+    fn test_exchange_rate_source_priority() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+
+        let date = make_date(2024, 6, 1);
+
+        // Insert API rate (priority 1)
+        let api_rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.05),
+            source: "coingecko".to_string(),
+        };
+        s.insert_exchange_rate(&api_rate).unwrap();
+        assert_eq!(s.get_exchange_rate("EUR", "USD", date).unwrap(), Some(dec!(1.05)));
+
+        // Insert ledger-file rate (priority 2) — should overwrite API
+        let ledger_rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.08),
+            source: "ledger-file".to_string(),
+        };
+        s.insert_exchange_rate(&ledger_rate).unwrap();
+        assert_eq!(s.get_exchange_rate("EUR", "USD", date).unwrap(), Some(dec!(1.08)));
+
+        // Insert manual rate (priority 3) — should overwrite ledger-file
+        let manual_rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.10),
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&manual_rate).unwrap();
+        assert_eq!(s.get_exchange_rate("EUR", "USD", date).unwrap(), Some(dec!(1.10)));
+
+        // Try to overwrite manual with API — should NOT overwrite
+        let api_rate2 = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(0.99),
+            source: "frankfurter".to_string(),
+        };
+        s.insert_exchange_rate(&api_rate2).unwrap();
+        // Should still be the manual rate
+        assert_eq!(s.get_exchange_rate("EUR", "USD", date).unwrap(), Some(dec!(1.10)));
+    }
+
+    #[test]
+    fn test_get_exchange_rate_source() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("BTC", "Bitcoin", 8, false)).unwrap();
+
+        let date = make_date(2024, 7, 1);
+        let rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "BTC".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(60000),
+            source: "coingecko".to_string(),
+        };
+        s.insert_exchange_rate(&rate).unwrap();
+
+        let source = s.get_exchange_rate_source("BTC", "USD", date).unwrap();
+        assert_eq!(source, Some("coingecko".to_string()));
+
+        // Non-existent pair
+        let none = s.get_exchange_rate_source("USD", "BTC", date).unwrap();
+        assert!(none.is_none());
+    }
+
+    // ---------------------------------------------------------------
+    // 5. Currency rate source priority system
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_set_currency_rate_source_auto() {
+        let s = setup();
+        s.set_currency_rate_source("BTC", "coingecko", "auto").unwrap();
+
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].currency, "BTC");
+        assert_eq!(sources[0].rate_source, "coingecko");
+        assert_eq!(sources[0].set_by, "auto");
+    }
+
+    #[test]
+    fn test_currency_rate_source_priority_override() {
+        let s = setup();
+
+        // Set auto first
+        s.set_currency_rate_source("ETH", "coingecko", "auto").unwrap();
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources[0].rate_source, "coingecko");
+
+        // Handler should override auto
+        s.set_currency_rate_source("ETH", "finnhub", "handler:etherscan").unwrap();
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].rate_source, "finnhub");
+        assert_eq!(sources[0].set_by, "handler:etherscan");
+
+        // User should override handler
+        s.set_currency_rate_source("ETH", "frankfurter", "user").unwrap();
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].rate_source, "frankfurter");
+        assert_eq!(sources[0].set_by, "user");
+
+        // Auto should NOT override user
+        s.set_currency_rate_source("ETH", "coingecko", "auto").unwrap();
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources[0].rate_source, "frankfurter");
+        assert_eq!(sources[0].set_by, "user");
+    }
+
+    #[test]
+    fn test_clear_auto_rate_sources() {
+        let s = setup();
+        s.set_currency_rate_source("BTC", "coingecko", "auto").unwrap();
+        s.set_currency_rate_source("ETH", "finnhub", "user").unwrap();
+
+        s.clear_auto_rate_sources().unwrap();
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].currency, "ETH");
+    }
+
+    #[test]
+    fn test_clear_non_user_rate_sources() {
+        let s = setup();
+        s.set_currency_rate_source("BTC", "coingecko", "auto").unwrap();
+        s.set_currency_rate_source("ETH", "finnhub", "handler:etherscan").unwrap();
+        s.set_currency_rate_source("SOL", "frankfurter", "user").unwrap();
+
+        s.clear_non_user_rate_sources().unwrap();
+        let sources = s.get_currency_rate_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].currency, "SOL");
+        assert_eq!(sources[0].set_by, "user");
+    }
+
+    // ---------------------------------------------------------------
+    // 6. Balance assertions
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_insert_and_get_balance_assertion() {
+        let s = setup();
+        let (asset_id, _) = seed_accounts_and_currency(&s);
+
+        let assertion = BalanceAssertion {
+            id: Uuid::now_v7(),
+            account_id: asset_id,
+            date: make_date(2024, 6, 30),
+            currency: "USD".to_string(),
+            expected_balance: dec!(1000),
+            is_passing: true,
+            actual_balance: Some(dec!(1000)),
+        };
+        s.insert_balance_assertion(&assertion).unwrap();
+
+        let assertions = s.get_balance_assertions(Some(&asset_id)).unwrap();
+        assert_eq!(assertions.len(), 1);
+        assert_eq!(assertions[0].expected_balance, dec!(1000));
+        assert!(assertions[0].is_passing);
+        assert_eq!(assertions[0].actual_balance, Some(dec!(1000)));
+    }
+
+    #[test]
+    fn test_update_balance_assertion_result_failing() {
+        let s = setup();
+        let (asset_id, _) = seed_accounts_and_currency(&s);
+
+        let assertion = BalanceAssertion {
+            id: Uuid::now_v7(),
+            account_id: asset_id,
+            date: make_date(2024, 6, 30),
+            currency: "USD".to_string(),
+            expected_balance: dec!(1000),
+            is_passing: true,
+            actual_balance: None,
+        };
+        s.insert_balance_assertion(&assertion).unwrap();
+
+        // Update to failing
+        s.update_balance_assertion_result(&assertion.id, false, dec!(500)).unwrap();
+
+        let assertions = s.get_balance_assertions(Some(&asset_id)).unwrap();
+        assert_eq!(assertions.len(), 1);
+        assert!(!assertions[0].is_passing);
+        assert_eq!(assertions[0].actual_balance, Some(dec!(500)));
+    }
+
+    #[test]
+    fn test_get_balance_assertions_all() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+
+        let acct1 = make_account(None, AccountType::Asset, "A1", "Assets:A1");
+        let acct2 = make_account(None, AccountType::Asset, "A2", "Assets:A2");
+        s.create_account(&acct1).unwrap();
+        s.create_account(&acct2).unwrap();
+
+        for acct_id in [acct1.id, acct2.id] {
+            let assertion = BalanceAssertion {
+                id: Uuid::now_v7(),
+                account_id: acct_id,
+                date: make_date(2024, 12, 31),
+                currency: "USD".to_string(),
+                expected_balance: dec!(0),
+                is_passing: true,
+                actual_balance: Some(dec!(0)),
+            };
+            s.insert_balance_assertion(&assertion).unwrap();
+        }
+
+        // Get all (no account filter)
+        let all = s.get_balance_assertions(None).unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    // ---------------------------------------------------------------
+    // 7. Integrity checks
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_count_orphaned_line_items_clean() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        let eid = Uuid::now_v7();
+        let entry = JournalEntry {
+            id: eid,
+            date: make_date(2024, 1, 1),
+            description: "Normal entry".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 1, 1),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(50),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(-50),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        assert_eq!(s.count_orphaned_line_items().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_count_duplicate_sources_clean() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        // Insert two entries with different sources
+        for (i, source) in [(1, "etherscan:0x123:tx1"), (2, "etherscan:0x123:tx2")] {
+            let eid = Uuid::now_v7();
+            let entry = JournalEntry {
+                id: eid,
+                date: make_date(2024, 1, i),
+                description: format!("Tx {i}"),
+                status: JournalEntryStatus::Confirmed,
+                source: source.to_string(),
+                voided_by: None,
+                created_at: make_date(2024, 1, i),
+            };
+            let items = vec![
+                LineItem {
+                    id: Uuid::now_v7(),
+                    journal_entry_id: eid,
+                    account_id: expense_id,
+                    currency: "USD".to_string(),
+                    amount: dec!(10),
+                    lot_id: None,
+                },
+                LineItem {
+                    id: Uuid::now_v7(),
+                    journal_entry_id: eid,
+                    account_id: asset_id,
+                    currency: "USD".to_string(),
+                    amount: dec!(-10),
+                    lot_id: None,
+                },
+            ];
+            s.insert_journal_entry(&entry, &items).unwrap();
+        }
+
+        // No duplicates since each source is unique
+        assert_eq!(s.count_duplicate_sources().unwrap(), 0);
+    }
+
+    // ---------------------------------------------------------------
+    // 8. Clear data methods
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_clear_ledger_data() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        // Add exchange rate
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        let rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 1, 1),
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.10),
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&rate).unwrap();
+
+        // Add a journal entry
+        let eid = Uuid::now_v7();
+        let entry = JournalEntry {
+            id: eid,
+            date: make_date(2024, 1, 1),
+            description: "Test".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 1, 1),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(25),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(-25),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        // Clear ledger data (accounts, currencies, entries — NOT exchange rates)
+        s.clear_ledger_data().unwrap();
+
+        assert!(s.list_currencies().unwrap().is_empty());
+        assert!(s.list_accounts().unwrap().is_empty());
+        let filter = TransactionFilter::default();
+        assert!(s.query_journal_entries(&filter).unwrap().is_empty());
+
+        // Exchange rates are also cleared by clear_ledger_data
+        // (the implementation deletes exchange_rate via clear_all_data but not in clear_ledger_data)
+        // Actually, looking at the implementation, clear_ledger_data does NOT delete exchange_rate.
+        let rates = s.list_exchange_rates(None, None).unwrap();
+        // Exchange rates should still exist
+        assert_eq!(rates.len(), 1);
+    }
+
+    #[test]
+    fn test_clear_all_data() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+
+        let rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 1, 1),
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.10),
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&rate).unwrap();
+
+        let acct = make_account(None, AccountType::Asset, "Assets", "Assets");
+        s.create_account(&acct).unwrap();
+
+        s.clear_all_data().unwrap();
+
+        assert!(s.list_currencies().unwrap().is_empty());
+        assert!(s.list_accounts().unwrap().is_empty());
+        assert!(s.list_exchange_rates(None, None).unwrap().is_empty());
+    }
+
+    // ---------------------------------------------------------------
+    // Additional coverage
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_metadata_insert_and_get() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        let eid = Uuid::now_v7();
+        let entry = JournalEntry {
+            id: eid,
+            date: make_date(2024, 1, 1),
+            description: "Metadata test".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 1, 1),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(10),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(-10),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        s.insert_metadata(&eid, "tx_hash", "0xabc123").unwrap();
+        s.insert_metadata(&eid, "note", "test note").unwrap();
+
+        let metadata = s.get_metadata(&eid).unwrap();
+        assert_eq!(metadata.len(), 2);
+        // Ordered by key
+        assert_eq!(metadata[0].key, "note");
+        assert_eq!(metadata[0].value, "test note");
+        assert_eq!(metadata[1].key, "tx_hash");
+        assert_eq!(metadata[1].value, "0xabc123");
+    }
+
+    #[test]
+    fn test_update_journal_entry_status_void() {
+        let s = setup();
+        let (asset_id, expense_id) = seed_accounts_and_currency(&s);
+
+        let eid = Uuid::now_v7();
+        let entry = JournalEntry {
+            id: eid,
+            date: make_date(2024, 2, 1),
+            description: "To be voided".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 2, 1),
+        };
+        let items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(50),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: eid,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(-50),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&entry, &items).unwrap();
+
+        // Create the reversing entry that will be referenced by voided_by
+        let reversal_id = Uuid::now_v7();
+        let reversal_entry = JournalEntry {
+            id: reversal_id,
+            date: make_date(2024, 2, 2),
+            description: "Reversal".to_string(),
+            status: JournalEntryStatus::Confirmed,
+            source: "manual".to_string(),
+            voided_by: None,
+            created_at: make_date(2024, 2, 2),
+        };
+        let reversal_items = vec![
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: reversal_id,
+                account_id: asset_id,
+                currency: "USD".to_string(),
+                amount: dec!(50),
+                lot_id: None,
+            },
+            LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: reversal_id,
+                account_id: expense_id,
+                currency: "USD".to_string(),
+                amount: dec!(-50),
+                lot_id: None,
+            },
+        ];
+        s.insert_journal_entry(&reversal_entry, &reversal_items).unwrap();
+
+        s.update_journal_entry_status(&eid, JournalEntryStatus::Voided, Some(reversal_id)).unwrap();
+
+        let (fetched, _) = s.get_journal_entry(&eid).unwrap().unwrap();
+        assert_eq!(fetched.status, JournalEntryStatus::Voided);
+        assert_eq!(fetched.voided_by, Some(reversal_id));
+    }
+
+    #[test]
+    fn test_list_exchange_rates_with_filter() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GBP", "British Pound", 2, false)).unwrap();
+
+        let rate1 = ExchangeRate {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 1, 1),
+            from_currency: "EUR".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.10),
+            source: "manual".to_string(),
+        };
+        let rate2 = ExchangeRate {
+            id: Uuid::now_v7(),
+            date: make_date(2024, 1, 1),
+            from_currency: "GBP".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(1.27),
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&rate1).unwrap();
+        s.insert_exchange_rate(&rate2).unwrap();
+
+        // All rates
+        let all = s.list_exchange_rates(None, None).unwrap();
+        assert_eq!(all.len(), 2);
+
+        // Filter by from_currency
+        let eur_rates = s.list_exchange_rates(Some("EUR"), None).unwrap();
+        assert_eq!(eur_rates.len(), 1);
+        assert_eq!(eur_rates[0].from_currency, "EUR");
+
+        // Filter by to_currency
+        let to_usd = s.list_exchange_rates(None, Some("USD")).unwrap();
+        assert_eq!(to_usd.len(), 2);
+    }
+
+    #[test]
+    fn test_schema_version() {
+        let s = setup();
+        let version = s.get_schema_version().unwrap();
+        assert_eq!(version, dledger_core::schema::SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn test_in_transaction_commit() {
+        let s = setup();
+        s.in_transaction(&mut |storage| {
+            storage.create_currency(&make_currency("USD", "US Dollar", 2, true))?;
+            Ok(())
+        }).unwrap();
+
+        // Currency should exist after successful transaction
+        assert!(s.get_currency("USD").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_in_transaction_rollback() {
+        let s = setup();
+        let result = s.in_transaction(&mut |storage| {
+            storage.create_currency(&make_currency("USD", "US Dollar", 2, true))?;
+            // Force an error to trigger rollback
+            Err(StorageError::Internal("deliberate error".to_string()))
+        });
+        assert!(result.is_err());
+
+        // Currency should NOT exist after rolled-back transaction
+        assert!(s.get_currency("USD").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_raw_transaction_store_and_query() {
+        let s = setup();
+        s.store_raw_transaction("etherscan:0x123:page1", r#"{"txs":[]}"#).unwrap();
+        s.store_raw_transaction("etherscan:0x123:page2", r#"{"txs":[1]}"#).unwrap();
+        s.store_raw_transaction("other:xyz", r#"data"#).unwrap();
+
+        // Get single
+        let data = s.get_raw_transaction("etherscan:0x123:page1").unwrap().unwrap();
+        assert_eq!(data, r#"{"txs":[]}"#);
+
+        // Query by prefix
+        let results = s.query_raw_transactions("etherscan:0x123:").unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Non-existent
+        assert!(s.get_raw_transaction("nope").unwrap().is_none());
+    }
+}

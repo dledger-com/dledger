@@ -41,6 +41,22 @@
         </Card.Header>
       </Card.Root>
     </a>
+    <a href="/reports/unrealized" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>Unrealized Gains/Losses</Card.Title>
+          <Card.Description>Unrealized gains on open positions valued at current rates.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
+    <a href="/reports/budget" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>Budget Report</Card.Title>
+          <Card.Description>Compare spending against budget targets.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
     <a href="/reports/integrity" class="block">
       <Card.Root class="transition-colors hover:bg-accent">
         <Card.Header>

@@ -20,6 +20,9 @@
   } from "$lib/exchange-rate-historical.js";
   import { markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
+  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
+  import { exportBalanceSheetCsv } from "$lib/utils/csv-export.js";
+  import Download from "lucide-svelte/icons/download";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection, CurrencyBalance } from "$lib/types/index.js";
 
@@ -100,7 +103,7 @@
           await backend.setCurrencyRateSource(code, "none", "auto");
           await markCurrencyHidden(backend, code);
         }
-        toast.info(`Auto-hid ${result.failedCurrencies.length} currency(ies) with no available rates`);
+        showAutoHideToast(result.failedCurrencies);
       }
 
       // Re-run conversion with new rates
@@ -146,6 +149,10 @@
       {store.loading ? "Loading..." : "Generate"}
     </Button>
     {#if store.balanceSheet}
+      <Button variant="outline" onclick={() => exportBalanceSheetCsv(store.balanceSheet!)}>
+        <Download class="mr-1 h-4 w-4" />
+        CSV
+      </Button>
       <Button variant="outline" onclick={handleToggleConvert}>
         {convertToBase ? `Show native currencies` : `Convert to ${settings.currency}`}
       </Button>

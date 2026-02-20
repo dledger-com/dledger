@@ -968,6 +968,102 @@ impl Storage for TestStorage {
         Ok(())
     }
 
+    // -- Hidden currencies --
+
+    fn set_currency_hidden(&self, code: &str, is_hidden: bool) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn.execute(
+            "UPDATE currency SET is_hidden = ?1 WHERE code = ?2",
+            params![is_hidden as i32, code],
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("currency {code}")));
+        }
+        Ok(())
+    }
+
+    fn list_hidden_currencies(&self) -> StorageResult<Vec<String>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn.prepare("SELECT code FROM currency WHERE is_hidden = 1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    // -- Currency rate sources --
+
+    fn get_currency_rate_sources(&self) -> StorageResult<Vec<CurrencyRateSource>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn.prepare("SELECT currency, rate_source, set_by FROM currency_rate_source")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt.query_map([], |row| {
+            Ok(CurrencyRateSource {
+                currency: row.get(0)?,
+                rate_source: row.get(1)?,
+                set_by: row.get(2)?,
+            })
+        }).map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn set_currency_rate_source(&self, currency: &str, rate_source: &str, set_by: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let priority = match set_by {
+            "user" => 3i32,
+            s if s.starts_with("handler:") => 2,
+            _ => 1,
+        };
+        conn.execute(
+            "INSERT INTO currency_rate_source (currency, rate_source, set_by, updated_at)
+             VALUES (?1, ?2, ?3, datetime('now'))
+             ON CONFLICT(currency) DO UPDATE SET
+               rate_source = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN ?2 ELSE rate_source END,
+               set_by = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN ?3 ELSE set_by END,
+               updated_at = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN datetime('now') ELSE updated_at END",
+            params![currency, rate_source, set_by, priority],
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn clear_auto_rate_sources(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute("DELETE FROM currency_rate_source WHERE set_by = 'auto'", [])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn clear_non_user_rate_sources(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute("DELETE FROM currency_rate_source WHERE set_by != 'user'", [])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    // -- Integrity checks --
+
+    fn count_orphaned_line_items(&self) -> StorageResult<u64> {
+        let conn = self.conn.borrow();
+        let count: u64 = conn.query_row(
+            "SELECT COUNT(*) FROM line_item WHERE journal_entry_id NOT IN (SELECT id FROM journal_entry)",
+            [],
+            |row| row.get(0),
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(count)
+    }
+
+    fn count_duplicate_sources(&self) -> StorageResult<u64> {
+        let conn = self.conn.borrow();
+        let count: u64 = conn.query_row(
+            "SELECT COUNT(*) FROM (SELECT source, COUNT(*) as cnt FROM journal_entry WHERE source IS NOT NULL AND source != '' AND status = 'posted' GROUP BY source HAVING cnt > 1)",
+            [],
+            |row| row.get(0),
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(count)
+    }
+
     fn clear_exchange_rates(&self) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute_batch("DELETE FROM exchange_rate")
@@ -1002,6 +1098,7 @@ impl Storage for TestStorage {
              DELETE FROM journal_entry_metadata; DELETE FROM balance_assertion;
              DELETE FROM audit_log; DELETE FROM journal_entry;
              DELETE FROM account_closure; DELETE FROM account; DELETE FROM currency;
+             DELETE FROM currency_rate_source;
              PRAGMA foreign_keys=ON;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1014,7 +1111,8 @@ impl Storage for TestStorage {
             "DELETE FROM lot_disposal; DELETE FROM lot; DELETE FROM line_item;
              DELETE FROM journal_entry_metadata; DELETE FROM balance_assertion;
              DELETE FROM audit_log; DELETE FROM journal_entry; DELETE FROM exchange_rate;
-             DELETE FROM account_closure; DELETE FROM account; DELETE FROM currency;",
+             DELETE FROM account_closure; DELETE FROM account; DELETE FROM currency;
+             DELETE FROM currency_rate_source;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
         Ok(())

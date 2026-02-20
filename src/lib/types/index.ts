@@ -115,3 +115,56 @@ export interface EtherscanSyncResult {
   accounts_created: number;
   warnings: string[];
 }
+
+export interface OpenLot {
+  id: string;
+  account_id: string;
+  account_name: string;
+  currency: string;
+  acquired_date: string;
+  remaining_quantity: string;
+  cost_basis_per_unit: string;
+  cost_basis_currency: string;
+}
+
+export interface UnrealizedGainLossLine {
+  currency: string;
+  account_name: string;
+  acquired_date: string;
+  quantity: string;
+  cost_basis_per_unit: string;
+  cost_basis_currency: string;
+  current_value: string;
+  unrealized_gain_loss: string;
+}
+
+export interface UnrealizedGainLossReport {
+  as_of: string;
+  lines: UnrealizedGainLossLine[];
+  total_unrealized: string;
+  base_currency: string;
+}
+
+export interface Budget {
+  id: string;
+  account_pattern: string;
+  period_type: "monthly" | "yearly";
+  amount: string;
+  currency: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+}
+
+export interface BudgetComparison {
+  budget: Budget;
+  actual: number;
+  remaining: number;
+  percent_used: number;
+}
+
+export interface BudgetReport {
+  from_date: string;
+  to_date: string;
+  comparisons: BudgetComparison[];
+}

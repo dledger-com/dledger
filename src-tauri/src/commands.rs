@@ -359,6 +359,102 @@ pub fn query_raw_transactions(
         .map_err(|e| e.to_string())
 }
 
+// -- Hidden currency commands --
+
+#[tauri::command]
+pub fn set_currency_hidden(state: State<'_, AppState>, code: String, is_hidden: bool) -> Result<(), String> {
+    state
+        .engine
+        .set_currency_hidden(&code, is_hidden)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_hidden_currencies(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state
+        .engine
+        .list_hidden_currencies()
+        .map_err(|e| e.to_string())
+}
+
+// -- Currency rate source commands --
+
+#[tauri::command]
+pub fn get_currency_rate_sources(state: State<'_, AppState>) -> Result<Vec<CurrencyRateSource>, String> {
+    state
+        .engine
+        .get_currency_rate_sources()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_currency_rate_source(state: State<'_, AppState>, currency: String, rate_source: String, set_by: String) -> Result<(), String> {
+    state
+        .engine
+        .set_currency_rate_source(&currency, &rate_source, &set_by)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_auto_rate_sources(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .engine
+        .clear_auto_rate_sources()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_non_user_rate_sources(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .engine
+        .clear_non_user_rate_sources()
+        .map_err(|e| e.to_string())
+}
+
+// -- Integrity check commands --
+
+#[tauri::command]
+pub fn count_orphaned_line_items(state: State<'_, AppState>) -> Result<u64, String> {
+    state
+        .engine
+        .count_orphaned_line_items()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn count_duplicate_sources(state: State<'_, AppState>) -> Result<u64, String> {
+    state
+        .engine
+        .count_duplicate_sources()
+        .map_err(|e| e.to_string())
+}
+
+// -- Balance assertion commands --
+
+#[tauri::command]
+pub fn create_balance_assertion(state: State<'_, AppState>, assertion: BalanceAssertion) -> Result<(), String> {
+    state
+        .engine
+        .create_balance_assertion(&assertion)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_balance_assertions(state: State<'_, AppState>, account_id: Option<Uuid>) -> Result<Vec<BalanceAssertion>, String> {
+    state
+        .engine
+        .list_balance_assertions(account_id.as_ref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn check_balance_assertions(state: State<'_, AppState>) -> Result<Vec<BalanceAssertion>, String> {
+    state
+        .engine
+        .check_all_balance_assertions()
+        .map_err(|e| e.to_string())
+}
+
 // -- Etherscan commands --
 
 #[tauri::command]

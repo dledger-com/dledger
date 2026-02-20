@@ -8,6 +8,8 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
+  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
+  import { aggregateErrors } from "$lib/utils/aggregate-errors.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import { cn } from "$lib/utils.js";
@@ -183,7 +185,7 @@
           await backend.setCurrencyRateSource(code, "none", "auto");
           await markCurrencyHidden(backend, code);
         }
-        toast.info(`Auto-hid ${backfillResult.failedCurrencies.length} currency(ies) with no available rates`);
+        showAutoHideToast(backfillResult.failedCurrencies);
         loadAvailableCurrencies();
       }
 
@@ -221,7 +223,7 @@
         for (const code of rateResult.autoHidden) {
           await markCurrencyHidden(getBackend(), code);
         }
-        toast.info(`Auto-hid ${rateResult.autoHidden.length} unrecognized currency(ies)`);
+        showAutoHideToast(rateResult.autoHidden);
         loadAvailableCurrencies();
       }
 
@@ -337,7 +339,7 @@
           await backend.setCurrencyRateSource(code, "none", "auto");
           await markCurrencyHidden(backend, code);
         }
-        toast.info(`Auto-hid ${missingRateResult.failedCurrencies.length} currency(ies) with no available rates`);
+        showAutoHideToast(missingRateResult.failedCurrencies);
         loadAvailableCurrencies();
       }
 
@@ -845,9 +847,10 @@
           {/if}
         </div>
         {#if missingRateResult.errors.length > 0}
+          {@const aggregated = aggregateErrors(missingRateResult.errors)}
           <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-            {#each missingRateResult.errors as error}
-              <li class="py-0.5">{error}</li>
+            {#each aggregated as error}
+              <li class="py-0.5">{error.message}</li>
             {/each}
           </ul>
         {/if}
@@ -1341,13 +1344,14 @@
         </div>
 
         {#if rateResult.errors.length > 0}
+          {@const aggregated = aggregateErrors(rateResult.errors)}
           <div class="mt-4">
             <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
               Warnings ({rateResult.errors.length})
             </p>
             <ul class="mt-1 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-              {#each rateResult.errors as error}
-                <li class="py-0.5">{error}</li>
+              {#each aggregated as error}
+                <li class="py-0.5">{error.message}</li>
               {/each}
             </ul>
           </div>
@@ -1448,9 +1452,10 @@
           {/if}
         </div>
         {#if backfillResult.errors.length > 0}
+          {@const aggregated = aggregateErrors(backfillResult.errors)}
           <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-            {#each backfillResult.errors as error}
-              <li class="py-0.5">{error}</li>
+            {#each aggregated as error}
+              <li class="py-0.5">{error.message}</li>
             {/each}
           </ul>
         {/if}

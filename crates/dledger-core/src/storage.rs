@@ -158,6 +158,23 @@ pub trait Storage: Send + Sync {
         f: &mut dyn FnMut(&dyn Storage) -> StorageResult<()>,
     ) -> StorageResult<()>;
 
+    // -- Hidden currencies --
+
+    fn set_currency_hidden(&self, code: &str, is_hidden: bool) -> StorageResult<()>;
+    fn list_hidden_currencies(&self) -> StorageResult<Vec<String>>;
+
+    // -- Currency rate sources --
+
+    fn get_currency_rate_sources(&self) -> StorageResult<Vec<CurrencyRateSource>>;
+    fn set_currency_rate_source(&self, currency: &str, rate_source: &str, set_by: &str) -> StorageResult<()>;
+    fn clear_auto_rate_sources(&self) -> StorageResult<()>;
+    fn clear_non_user_rate_sources(&self) -> StorageResult<()>;
+
+    // -- Integrity checks --
+
+    fn count_orphaned_line_items(&self) -> StorageResult<u64>;
+    fn count_duplicate_sources(&self) -> StorageResult<u64>;
+
     // -- Currency origins --
 
     /// Get distinct (currency, normalized_source) pairs from non-voided journal entries.

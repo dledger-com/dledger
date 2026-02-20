@@ -16,6 +16,8 @@ import type {
   CurrencyOrigin,
   BalanceAssertion,
   BalanceAssertionResult,
+  OpenLot,
+  Budget,
 } from "./types/index.js";
 
 export interface CurrencyRateSource {
@@ -52,6 +54,13 @@ export interface Backend {
   balanceSheet(asOf: string): Promise<BalanceSheet>;
   balanceSheetBatch(dates: string[]): Promise<Map<string, BalanceSheet>>;
   gainLossReport(fromDate: string, toDate: string): Promise<GainLossReport>;
+  listOpenLots(): Promise<OpenLot[]>;
+
+  // Budgets
+  createBudget(budget: Budget): Promise<void>;
+  listBudgets(): Promise<Budget[]>;
+  updateBudget(budget: Budget): Promise<void>;
+  deleteBudget(id: string): Promise<void>;
 
   // Exchange rates
   recordExchangeRate(rate: ExchangeRate): Promise<void>;
@@ -197,6 +206,16 @@ class TauriBackend implements Backend {
   async gainLossReport(fromDate: string, toDate: string): Promise<GainLossReport> {
     return this.invoke("gain_loss_report", { fromDate, toDate });
   }
+  async listOpenLots(): Promise<OpenLot[]> {
+    // Not yet implemented in Rust backend
+    return [];
+  }
+
+  // Budgets (not yet implemented in Rust backend)
+  async createBudget(_budget: Budget): Promise<void> {}
+  async listBudgets(): Promise<Budget[]> { return []; }
+  async updateBudget(_budget: Budget): Promise<void> {}
+  async deleteBudget(_id: string): Promise<void> {}
 
   // Exchange rates
   async recordExchangeRate(rate: ExchangeRate): Promise<void> {
@@ -257,45 +276,52 @@ class TauriBackend implements Backend {
     return this.invoke("get_currency_origins");
   }
 
-  // Currency rate source management (not yet implemented in Rust backend)
+  // Currency rate source management
   async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
-    return [];
+    return this.invoke("get_currency_rate_sources");
   }
-  async setCurrencyRateSource(_currency: string, _rateSource: string | null, _setBy: string): Promise<boolean> {
+  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean> {
+    await this.invoke("set_currency_rate_source", { currency, rateSource: rateSource ?? "", setBy });
     return true;
   }
   async clearAutoRateSources(): Promise<void> {
-    // Not yet implemented in Rust backend
+    return this.invoke("clear_auto_rate_sources");
   }
   async clearNonUserRateSources(): Promise<void> {
-    // Not yet implemented in Rust backend
+    return this.invoke("clear_non_user_rate_sources");
   }
 
-  // Currency hidden management (not yet implemented in Rust backend)
-  async setCurrencyHidden(_code: string, _isHidden: boolean): Promise<void> {
-    // Not yet implemented in Rust backend
+  // Currency hidden management
+  async setCurrencyHidden(code: string, isHidden: boolean): Promise<void> {
+    return this.invoke("set_currency_hidden", { code, isHidden });
   }
   async listHiddenCurrencies(): Promise<string[]> {
-    return [];
+    return this.invoke("list_hidden_currencies");
   }
 
-  // Balance assertions (not yet implemented in Rust backend)
-  async createBalanceAssertion(_assertion: BalanceAssertion): Promise<void> {
-    throw new Error("Balance assertions not yet supported in Tauri backend");
+  // Balance assertions
+  async createBalanceAssertion(assertion: BalanceAssertion): Promise<void> {
+    return this.invoke("create_balance_assertion", { assertion });
   }
-  async listBalanceAssertions(_accountId?: string): Promise<BalanceAssertion[]> {
-    return [];
+  async listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]> {
+    return this.invoke("list_balance_assertions", { accountId: accountId ?? null });
   }
   async checkBalanceAssertions(): Promise<BalanceAssertionResult[]> {
-    return [];
+    const assertions: BalanceAssertion[] = await this.invoke("check_balance_assertions");
+    return assertions.map(a => ({
+      assertion: a,
+      actual_balance: a.actual_balance ?? "0",
+      is_passing: a.is_passing,
+      difference: "0", // Computed client-side if needed
+    }));
   }
 
-  // Integrity checks (not yet implemented in Rust backend)
+  // Integrity checks
   async countOrphanedLineItems(): Promise<number> {
-    return 0;
+    return this.invoke("count_orphaned_line_items");
   }
   async countDuplicateSources(): Promise<number> {
-    return 0;
+    return this.invoke("count_duplicate_sources");
   }
 
   // Data management

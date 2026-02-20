@@ -323,7 +323,82 @@ impl LedgerEngine {
         Ok(reports::gain_loss_report(&*self.storage, from_date, to_date)?)
     }
 
+    // --- Hidden currencies ---
+
+    pub fn set_currency_hidden(&self, code: &str, is_hidden: bool) -> LedgerResult<()> {
+        Ok(self.storage.set_currency_hidden(code, is_hidden)?)
+    }
+
+    pub fn list_hidden_currencies(&self) -> LedgerResult<Vec<String>> {
+        Ok(self.storage.list_hidden_currencies()?)
+    }
+
+    // --- Currency rate sources ---
+
+    pub fn get_currency_rate_sources(&self) -> LedgerResult<Vec<CurrencyRateSource>> {
+        Ok(self.storage.get_currency_rate_sources()?)
+    }
+
+    pub fn set_currency_rate_source(&self, currency: &str, rate_source: &str, set_by: &str) -> LedgerResult<()> {
+        Ok(self.storage.set_currency_rate_source(currency, rate_source, set_by)?)
+    }
+
+    pub fn clear_auto_rate_sources(&self) -> LedgerResult<()> {
+        Ok(self.storage.clear_auto_rate_sources()?)
+    }
+
+    pub fn clear_non_user_rate_sources(&self) -> LedgerResult<()> {
+        Ok(self.storage.clear_non_user_rate_sources()?)
+    }
+
+    // --- Integrity checks ---
+
+    pub fn count_orphaned_line_items(&self) -> LedgerResult<u64> {
+        Ok(self.storage.count_orphaned_line_items()?)
+    }
+
+    pub fn count_duplicate_sources(&self) -> LedgerResult<u64> {
+        Ok(self.storage.count_duplicate_sources()?)
+    }
+
     // --- Balance assertions ---
+
+    pub fn create_balance_assertion(&self, assertion: &BalanceAssertion) -> LedgerResult<()> {
+        self.storage.insert_balance_assertion(assertion)?;
+        Ok(())
+    }
+
+    pub fn list_balance_assertions(&self, account_id: Option<&Uuid>) -> LedgerResult<Vec<BalanceAssertion>> {
+        Ok(self.storage.get_balance_assertions(account_id)?)
+    }
+
+    pub fn check_all_balance_assertions(&self) -> LedgerResult<Vec<BalanceAssertion>> {
+        let assertions = self.storage.get_balance_assertions(None)?;
+        let mut results = Vec::new();
+        for assertion in assertions {
+            let balances = self.storage.sum_line_items(
+                &[assertion.account_id],
+                Some(assertion.date),
+            )?;
+            let actual = balances
+                .iter()
+                .find(|b| b.currency == assertion.currency)
+                .map(|b| b.amount)
+                .unwrap_or_default();
+            let is_passing = actual == assertion.expected_balance;
+            self.storage.update_balance_assertion_result(
+                &assertion.id,
+                is_passing,
+                actual,
+            )?;
+            results.push(BalanceAssertion {
+                is_passing,
+                actual_balance: Some(actual),
+                ..assertion
+            });
+        }
+        Ok(results)
+    }
 
     pub fn check_balance_assertion(
         &self,

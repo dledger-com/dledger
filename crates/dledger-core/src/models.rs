@@ -255,3 +255,11 @@ pub struct CurrencyOrigin {
     pub currency: String,
     pub origin: String,
 }
+
+/// Currency rate source configuration (which API/handler to use for exchange rates).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrencyRateSource {
+    pub currency: String,
+    pub rate_source: String,
+    pub set_by: String,
+}

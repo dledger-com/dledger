@@ -17,6 +17,8 @@ import type {
   GainLossReport,
   GainLossLine,
   ExchangeRate,
+  OpenLot,
+  Budget,
   LedgerImportResult,
   EtherscanAccount,
   EtherscanSyncResult,
@@ -224,6 +226,17 @@ CREATE TABLE IF NOT EXISTS currency_rate_source (
     rate_source TEXT,
     set_by TEXT NOT NULL DEFAULT 'auto',
     updated_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS budget (
+    id TEXT PRIMARY KEY,
+    account_pattern TEXT NOT NULL,
+    period_type TEXT NOT NULL DEFAULT 'monthly',
+    amount TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
 
@@ -464,9 +477,22 @@ export class SqlJsBackend implements Backend {
           // Migrate v5 → v6: rename is_spam → is_hidden
           db.exec("ALTER TABLE currency RENAME COLUMN is_spam TO is_hidden");
         }
-        if (currentVersion < 6) {
+        if (currentVersion < 7) {
+          // Migrate v6 → v7: add budget table
+          db.exec(`CREATE TABLE IF NOT EXISTS budget (
+            id TEXT PRIMARY KEY,
+            account_pattern TEXT NOT NULL,
+            period_type TEXT NOT NULL DEFAULT 'monthly',
+            amount TEXT NOT NULL,
+            currency TEXT NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          )`);
+        }
+        if (currentVersion < 7) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (6)");
+          db.exec("INSERT INTO schema_version (version) VALUES (7)");
         }
       }
     }
@@ -1580,6 +1606,69 @@ export class SqlJsBackend implements Backend {
     };
   }
 
+  async listOpenLots(): Promise<OpenLot[]> {
+    return this.query(
+      `SELECT l.id, l.account_id, a.full_name as account_name, l.currency,
+              l.acquired_date, l.remaining_quantity, l.cost_basis_per_unit, l.cost_basis_currency
+       FROM lot l
+       JOIN account a ON a.id = l.account_id
+       WHERE l.is_closed = 0 AND CAST(l.remaining_quantity AS REAL) > 0
+       ORDER BY l.currency, l.acquired_date`,
+      [],
+      (row) => ({
+        id: row.id as string,
+        account_id: row.account_id as string,
+        account_name: row.account_name as string,
+        currency: row.currency as string,
+        acquired_date: row.acquired_date as string,
+        remaining_quantity: row.remaining_quantity as string,
+        cost_basis_per_unit: row.cost_basis_per_unit as string,
+        cost_basis_currency: row.cost_basis_currency as string,
+      }),
+    );
+  }
+
+  // ---- Backend: Budgets ----
+
+  async createBudget(budget: Budget): Promise<void> {
+    this.run(
+      `INSERT INTO budget (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [budget.id, budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.start_date, budget.end_date],
+    );
+    this.scheduleSave();
+  }
+
+  async listBudgets(): Promise<Budget[]> {
+    return this.query(
+      "SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget ORDER BY account_pattern",
+      [],
+      (row) => ({
+        id: row.id as string,
+        account_pattern: row.account_pattern as string,
+        period_type: row.period_type as "monthly" | "yearly",
+        amount: row.amount as string,
+        currency: row.currency as string,
+        start_date: (row.start_date as string) || null,
+        end_date: (row.end_date as string) || null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async updateBudget(budget: Budget): Promise<void> {
+    this.run(
+      `UPDATE budget SET account_pattern = ?, period_type = ?, amount = ?, currency = ?, start_date = ?, end_date = ? WHERE id = ?`,
+      [budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.start_date, budget.end_date, budget.id],
+    );
+    this.scheduleSave();
+  }
+
+  async deleteBudget(id: string): Promise<void> {
+    this.run("DELETE FROM budget WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
   // ---- Backend: Exchange rates ----
 
   async recordExchangeRate(rate: ExchangeRate): Promise<void> {
@@ -2108,6 +2197,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM journal_entry;
       DELETE FROM raw_transaction;
       DELETE FROM currency_rate_source;
+      DELETE FROM budget;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -2128,6 +2218,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM exchange_rate;
       DELETE FROM raw_transaction;
       DELETE FROM currency_rate_source;
+      DELETE FROM budget;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM etherscan_account;

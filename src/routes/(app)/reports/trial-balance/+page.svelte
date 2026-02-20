@@ -11,6 +11,8 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
+  import { exportTrialBalanceCsv } from "$lib/utils/csv-export.js";
+  import Download from "lucide-svelte/icons/download";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -37,6 +39,12 @@
     <Button onclick={generate} disabled={store.loading}>
       {store.loading ? "Loading..." : "Generate"}
     </Button>
+    {#if store.trialBalance}
+      <Button variant="outline" onclick={() => exportTrialBalanceCsv(store.trialBalance!)}>
+        <Download class="mr-1 h-4 w-4" />
+        CSV
+      </Button>
+    {/if}
   </div>
 
   {#if store.loading}

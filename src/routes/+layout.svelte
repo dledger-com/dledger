@@ -6,6 +6,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
+  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
   import { onMount } from "svelte";
 
   let { children } = $props();
@@ -32,6 +33,9 @@
           settings.update({ lastRateSync: today });
           for (const code of syncResult.autoHidden) {
             await markCurrencyHidden(backend, code);
+          }
+          if (syncResult.autoHidden.length > 0) {
+            showAutoHideToast(syncResult.autoHidden);
           }
         }).catch(() => {
           // Swallow errors — don't block the app

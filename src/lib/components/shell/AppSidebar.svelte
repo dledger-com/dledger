@@ -8,6 +8,7 @@
   import BarChart3 from "lucide-svelte/icons/bar-chart-3";
   import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Settings from "lucide-svelte/icons/settings";
+  import PiggyBank from "lucide-svelte/icons/piggy-bank";
 
   const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
 
@@ -16,6 +17,7 @@
     { title: "Accounts", href: "/accounts", icon: BookOpen },
     { title: "Journal", href: "/journal", icon: FileText },
     { title: "Reports", href: "/reports", icon: BarChart3 },
+    { title: "Budgets", href: "/budgets", icon: PiggyBank },
     { title: "Sources", href: "/sources", icon: ArrowUpDown },
     { title: "Settings", href: "/settings", icon: Settings },
   ];
