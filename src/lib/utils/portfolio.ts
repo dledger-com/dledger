@@ -27,6 +27,7 @@ export async function computePortfolioReport(
   backend: Backend,
   baseCurrency: string,
   asOf: string,
+  hiddenCurrencies?: Set<string>,
 ): Promise<PortfolioReport> {
   const ethAccounts = await backend.listEtherscanAccounts();
   const accounts = await backend.listAccounts();
@@ -62,6 +63,7 @@ export async function computePortfolioReport(
         );
         for (const bal of balances) {
           if (seenCurrencies.has(bal.currency)) continue;
+          if (hiddenCurrencies?.has(bal.currency)) continue;
           seenCurrencies.add(bal.currency);
 
           const amount = parseFloat(bal.amount);

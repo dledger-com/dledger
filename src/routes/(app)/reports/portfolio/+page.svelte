@@ -12,6 +12,7 @@
   import { computePortfolioReport, type PortfolioReport } from "$lib/utils/portfolio.js";
   import { exportPortfolioCsv } from "$lib/utils/csv-export.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -29,10 +30,12 @@
     error = null;
     report = null;
     try {
+      const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
       report = await computePortfolioReport(
         getBackend(),
         settings.currency,
         asOf,
+        hidden,
       );
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
