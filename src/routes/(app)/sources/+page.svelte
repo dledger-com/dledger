@@ -1282,11 +1282,11 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Exchange Rates -->
+  <!-- External Services -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Exchange Rates</Card.Title>
-      <Card.Description>Fetch latest rates for currencies in your ledger. Fiat from ECB via Frankfurter. Crypto from CoinGecko. Stocks from Finnhub.</Card.Description>
+      <Card.Title>External Services</Card.Title>
+      <Card.Description>API keys for external data providers. Rates: ECB (fiat), CoinGecko (crypto), Finnhub (stocks). Enrichment: The Graph (Uniswap pools).</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <div class="space-y-2">
