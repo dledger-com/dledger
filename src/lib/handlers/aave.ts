@@ -72,20 +72,41 @@ interface ProtocolAction {
   action: AaveAction;
   amount: Decimal;
   currency: string;
+  interest?: Decimal;
+}
+
+/**
+ * Query the current balance of a specific currency in an account.
+ * Returns 0 if the account has no balance in that currency.
+ */
+async function queryAccountCurrencyBalance(
+  ctx: HandlerContext,
+  accountName: string,
+  date: string,
+  currency: string,
+): Promise<Decimal> {
+  const accountId = await ctx.ensureAccount(accountName, date);
+  const balances = await ctx.backend.getAccountBalance(accountId);
+  const entry = balances.find((b) => b.currency === currency);
+  return entry ? new Decimal(entry.amount) : new Decimal(0);
 }
 
 /**
  * Build protocol-side ItemAccums from aToken/debtToken ERC20 transfers.
  * Returns the protocol items and any transfers that couldn't be processed
  * (pushed back to regular transfers).
+ *
+ * When a withdrawal/repay amount exceeds the recorded balance, the excess
+ * is recognized as interest (income for supply, expense for borrow).
  */
-function buildProtocolItems(
+async function buildProtocolItems(
   protocolTransfers: Erc20Tx[],
   regularTransfers: Erc20Tx[],
   addr: string,
   chain: { name: string; native_currency: string },
   hasNativeEthFlow: boolean,
-): { items: ItemAccum[]; actions: ProtocolAction[]; unprocessed: Erc20Tx[] } {
+  ctx: HandlerContext,
+): Promise<{ items: ItemAccum[]; actions: ProtocolAction[]; unprocessed: Erc20Tx[] }> {
   const items: ItemAccum[] = [];
   const actions: ProtocolAction[] = [];
   const unprocessed: Erc20Tx[] = [];
@@ -136,9 +157,25 @@ function buildProtocolItems(
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
         actions.push({ action: "SUPPLY", amount, currency: underlying });
       } else if (isBurn) {
-        // aToken burned → WITHDRAW
-        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
-        actions.push({ action: "WITHDRAW", amount, currency: underlying });
+        // aToken burned → WITHDRAW with interest detection
+        const supplyBalance = await queryAccountCurrencyBalance(
+          ctx, "Assets:Aave:Supply", timestampToDate(tx.timeStamp), underlying,
+        );
+        // If we have a recorded supply balance and the withdrawal exceeds it,
+        // the excess is interest income. If balance is zero (cold start),
+        // treat entire amount as principal — we can't distinguish interest.
+        const interest = supplyBalance.isPositive()
+          ? amount.minus(supplyBalance).gt(0) ? amount.minus(supplyBalance) : new Decimal(0)
+          : new Decimal(0);
+        const principalPart = amount.minus(interest);
+
+        if (!principalPart.isZero()) {
+          items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: principalPart.neg() });
+        }
+        if (interest.isPositive()) {
+          items.push({ account: "Income:Aave:Interest", currency: underlying, amount: interest.neg() });
+        }
+        actions.push({ action: "WITHDRAW", amount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
       } else if (from === addr) {
         // aToken transferred out (e.g. send aTokens to another address)
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
@@ -158,9 +195,26 @@ function buildProtocolItems(
         items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: amount.neg() });
         actions.push({ action: "BORROW", amount, currency: underlying });
       } else if (isBurn) {
-        // debtToken burned → REPAY (liability decreases = positive)
-        items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount });
-        actions.push({ action: "REPAY", amount, currency: underlying });
+        // debtToken burned → REPAY with interest detection
+        const borrowBalance = await queryAccountCurrencyBalance(
+          ctx, "Liabilities:Aave:Borrow", timestampToDate(tx.timeStamp), underlying,
+        );
+        // Borrow balance is negative (liability). If repay exceeds outstanding debt,
+        // the excess is interest expense. Cold start guard: if balance is zero,
+        // treat entire amount as principal.
+        const absBorrowBalance = borrowBalance.abs();
+        const interest = absBorrowBalance.isPositive()
+          ? amount.minus(absBorrowBalance).gt(0) ? amount.minus(absBorrowBalance) : new Decimal(0)
+          : new Decimal(0);
+        const principalPart = amount.minus(interest);
+
+        if (!principalPart.isZero()) {
+          items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: principalPart });
+        }
+        if (interest.isPositive()) {
+          items.push({ account: "Expenses:Aave:Interest", currency: underlying, amount: interest });
+        }
+        actions.push({ action: "REPAY", amount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
       }
       // Non-mint/burn debt token transfers are unusual — ignore
     }
@@ -219,7 +273,7 @@ export const aaveHandler: TransactionHandler = {
     // Detect native ETH flow for wrapped native override
     const hasNativeEthFlow = (group.normal != null && group.normal.value !== "0")
       || group.internals.some((itx) => itx.value !== "0");
-    const protocol = buildProtocolItems(protocolTransfers, regularTransfers, addr, ctx.chain, hasNativeEthFlow);
+    const protocol = await buildProtocolItems(protocolTransfers, regularTransfers, addr, ctx.chain, hasNativeEthFlow, ctx);
 
     // Ensure currencies for protocol items
     for (const item of protocol.items) {
@@ -295,7 +349,11 @@ export const aaveHandler: TransactionHandler = {
           : a.action === "BORROW" ? "Borrow"
           : a.action === "REPAY" ? "Repay"
           : "Interact";
-        return `${label} ${formatTokenAmount(a.amount, a.currency)}`;
+        let part = `${label} ${formatTokenAmount(a.amount, a.currency)}`;
+        if (a.interest) {
+          part += ` (+${formatTokenAmount(a.interest, a.currency)} interest)`;
+        }
+        return part;
       });
       description = `Aave: ${actionParts.join(" + ")} (${hashShort})`;
     } else {
@@ -332,6 +390,16 @@ export const aaveHandler: TransactionHandler = {
       "handler:action": actionSet,
       "handler:version": version,
     };
+
+    // Add interest metadata when detected
+    for (const a of protocol.actions) {
+      if (a.interest) {
+        const key = a.action === "WITHDRAW"
+          ? `handler:interest_earned_${a.currency.toLowerCase()}`
+          : `handler:interest_paid_${a.currency.toLowerCase()}`;
+        metadata[key] = a.interest.toString();
+      }
+    }
 
     // Enrichment: fetch historical data from Aave protocol subgraphs (opt-in)
     if (ctx.enrichment && protocol.actions.length > 0) {

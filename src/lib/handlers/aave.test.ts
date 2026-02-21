@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Decimal from "decimal.js-light";
+import { v7 as uuidv7 } from "uuid";
 import { createTestBackend } from "../../test/helpers.js";
 import { createMockHandlerContext } from "../../test/mock-handler-context.js";
 import type { HandlerContext, TxHashGroup, Erc20Tx } from "./types.js";
 import type { SqlJsBackend } from "../sql-js-backend.js";
+import type { JournalEntry, LineItem } from "../types/index.js";
 import {
   aaveHandler,
   isAToken,
@@ -18,6 +20,35 @@ import {
   prefetchAaveSubgraphBatch,
   clearAaveSubgraphCache,
 } from "./aave-subgraph.js";
+
+/** Post a handler entry result to the backend so balances accumulate for subsequent tests */
+async function postHandlerEntry(
+  backend: SqlJsBackend,
+  result: { type: string; entries?: { entry: Record<string, unknown>; items: Record<string, unknown>[] }[] },
+): Promise<void> {
+  if (result.type !== "entries" || !result.entries) return;
+  for (const he of result.entries) {
+    const entryId = uuidv7();
+    const entry: JournalEntry = {
+      id: entryId,
+      date: he.entry.date as string,
+      description: he.entry.description as string,
+      status: (he.entry.status as "confirmed" | "pending" | "voided") || "confirmed",
+      source: (he.entry.source as string) || "",
+      voided_by: null,
+      created_at: he.entry.date as string,
+    };
+    const items: LineItem[] = (he.items as { account_id: string; currency: string; amount: string; lot_id: string | null }[]).map((item, idx) => ({
+      id: `${entryId}-li-${idx}`,
+      journal_entry_id: entryId,
+      account_id: item.account_id,
+      currency: item.currency,
+      amount: item.amount,
+      lot_id: item.lot_id ?? null,
+    }));
+    await backend.postJournalEntry(entry, items);
+  }
+}
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const USER_ADDR = "0x1234567890abcdef1234567890abcdef12345678";
@@ -866,6 +897,389 @@ describe("aaveHandler", () => {
       for (const [, sum] of sums) {
         expect(sum.isZero()).toBe(true);
       }
+    });
+
+    it("recognizes supply interest on withdrawal when prior supply exists", async () => {
+      // Step 1: Process and post a SUPPLY of 1000 USDC
+      const supplyGroup = makeEmptyGroup({
+        hash: "0xaaaa000000000001",
+        timestamp: "1704067200",
+        normal: {
+          hash: "0xaaaa000000000001",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xaaaa000000000001",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aUSDC",
+            value: "1000000000", // 1000 USDC
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            hash: "0xaaaa000000000001",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: AAVE_POOL,
+            tokenSymbol: "USDC",
+            value: "1000000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+
+      const supplyResult = await aaveHandler.process(supplyGroup, ctx);
+      expect(supplyResult.type).toBe("entries");
+      await postHandlerEntry(backend, supplyResult);
+
+      // Step 2: Process WITHDRAW of 1050 USDC (1000 principal + 50 interest)
+      const withdrawGroup = makeEmptyGroup({
+        hash: "0xbbbb000000000002",
+        timestamp: "1704153600",
+        normal: {
+          hash: "0xbbbb000000000002",
+          timeStamp: "1704153600",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xbbbb000000000002",
+            timeStamp: "1704153600",
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "aUSDC",
+            value: "1050000000", // 1050 USDC (principal + interest)
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            hash: "0xbbbb000000000002",
+            timeStamp: "1704153600",
+            from: AAVE_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            value: "1050000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+
+      const withdrawResult = await aaveHandler.process(withdrawGroup, ctx);
+      expect(withdrawResult.type).toBe("entries");
+      if (withdrawResult.type !== "entries") return;
+
+      const entry = withdrawResult.entries[0];
+      const accounts = await backend.listAccounts();
+
+      // Income:Aave:Interest account should exist with -50 USDC (credit)
+      const interestAcct = accounts.find((a) => a.full_name === "Income:Aave:Interest");
+      expect(interestAcct).toBeDefined();
+      const interestItem = entry.items.find((i) => i.account_id === interestAcct!.id);
+      expect(interestItem).toBeDefined();
+      expect(interestItem!.currency).toBe("USDC");
+      expect(new Decimal(interestItem!.amount).toFixed(6)).toBe("-50.000000");
+
+      // Assets:Aave:Supply should be -1000 (not -1050)
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(new Decimal(supplyItem!.amount).toFixed(6)).toBe("-1000.000000");
+
+      // Description mentions interest
+      expect(entry.entry.description).toContain("interest");
+
+      // Metadata records interest earned
+      expect(entry.metadata["handler:interest_earned_usdc"]).toBe("50");
+
+      // Items still balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
+    it("recognizes borrow interest on repay when prior borrow exists", async () => {
+      // Step 1: Process and post a BORROW of 500 DAI
+      const borrowGroup = makeEmptyGroup({
+        hash: "0xcccc000000000001",
+        timestamp: "1704067200",
+        normal: {
+          hash: "0xcccc000000000001",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "250000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xcccc000000000001",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "variableDebtDAI",
+            value: "500000000000000000000", // 500 DAI
+            tokenDecimal: "18",
+            contractAddress: "0xdddddddddddddddddddddddddddddddddddddd",
+          }),
+          makeErc20({
+            hash: "0xcccc000000000001",
+            timeStamp: "1704067200",
+            from: AAVE_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "DAI",
+            value: "500000000000000000000",
+            tokenDecimal: "18",
+            contractAddress: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          }),
+        ],
+      });
+
+      const borrowResult = await aaveHandler.process(borrowGroup, ctx);
+      expect(borrowResult.type).toBe("entries");
+      await postHandlerEntry(backend, borrowResult);
+
+      // Step 2: Process REPAY of 515 DAI (500 principal + 15 interest)
+      const repayGroup = makeEmptyGroup({
+        hash: "0xdddd000000000002",
+        timestamp: "1704153600",
+        normal: {
+          hash: "0xdddd000000000002",
+          timeStamp: "1704153600",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xdddd000000000002",
+            timeStamp: "1704153600",
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "variableDebtDAI",
+            value: "515000000000000000000", // 515 DAI
+            tokenDecimal: "18",
+            contractAddress: "0xdddddddddddddddddddddddddddddddddddddd",
+          }),
+          makeErc20({
+            hash: "0xdddd000000000002",
+            timeStamp: "1704153600",
+            from: USER_ADDR,
+            to: AAVE_POOL,
+            tokenSymbol: "DAI",
+            value: "515000000000000000000",
+            tokenDecimal: "18",
+            contractAddress: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          }),
+        ],
+      });
+
+      const repayResult = await aaveHandler.process(repayGroup, ctx);
+      expect(repayResult.type).toBe("entries");
+      if (repayResult.type !== "entries") return;
+
+      const entry = repayResult.entries[0];
+      const accounts = await backend.listAccounts();
+
+      // Expenses:Aave:Interest should exist with +15 DAI (debit = expense)
+      const interestAcct = accounts.find((a) => a.full_name === "Expenses:Aave:Interest");
+      expect(interestAcct).toBeDefined();
+      const interestItem = entry.items.find((i) => i.account_id === interestAcct!.id);
+      expect(interestItem).toBeDefined();
+      expect(interestItem!.currency).toBe("DAI");
+      expect(new Decimal(interestItem!.amount).toFixed(0)).toBe("15");
+
+      // Liabilities:Aave:Borrow should be +500 (not +515)
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
+      expect(borrowItem).toBeDefined();
+      expect(new Decimal(borrowItem!.amount).toFixed(0)).toBe("500");
+
+      // Description mentions interest
+      expect(entry.entry.description).toContain("interest");
+
+      // Metadata records interest paid
+      expect(entry.metadata["handler:interest_paid_dai"]).toBe("15");
+
+      // Items balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
+    it("cold start: no interest recognized when no prior supply exists", async () => {
+      // Withdraw without any prior supply in the backend
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "aUSDC",
+            value: "1050000000", // 1050 USDC
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            from: AAVE_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            value: "1050000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+      const accounts = await backend.listAccounts();
+
+      // No Income:Aave:Interest account should exist (cold start guard)
+      const interestAcct = accounts.find((a) => a.full_name === "Income:Aave:Interest");
+      expect(interestAcct).toBeUndefined();
+
+      // Full amount goes to Assets:Aave:Supply
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(new Decimal(supplyItem!.amount).toFixed(6)).toBe("-1050.000000");
+
+      // No interest metadata
+      expect(entry.metadata["handler:interest_earned_usdc"]).toBeUndefined();
+    });
+
+    it("partial withdrawal: no interest when amount <= supply balance", async () => {
+      // Supply 2000 USDC first
+      const supplyGroup = makeEmptyGroup({
+        hash: "0xeeee000000000001",
+        timestamp: "1704067200",
+        normal: {
+          hash: "0xeeee000000000001",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xeeee000000000001",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aUSDC",
+            value: "2000000000", // 2000 USDC
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            hash: "0xeeee000000000001",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: AAVE_POOL,
+            tokenSymbol: "USDC",
+            value: "2000000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+      const supplyResult = await aaveHandler.process(supplyGroup, ctx);
+      await postHandlerEntry(backend, supplyResult);
+
+      // Withdraw 1000 USDC (less than 2000 balance → no interest)
+      const withdrawGroup = makeEmptyGroup({
+        hash: "0xffff000000000002",
+        timestamp: "1704153600",
+        normal: {
+          hash: "0xffff000000000002",
+          timeStamp: "1704153600",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xffff000000000002",
+            timeStamp: "1704153600",
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "aUSDC",
+            value: "1000000000", // 1000 USDC
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            hash: "0xffff000000000002",
+            timeStamp: "1704153600",
+            from: AAVE_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            value: "1000000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(withdrawGroup, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+      const accounts = await backend.listAccounts();
+
+      // No Income:Aave:Interest account (no interest detected)
+      const interestAcct = accounts.find((a) => a.full_name === "Income:Aave:Interest");
+      expect(interestAcct).toBeUndefined();
+
+      // Full withdrawal amount goes to Assets:Aave:Supply
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(new Decimal(supplyItem!.amount).toFixed(6)).toBe("-1000.000000");
+
+      // Description does NOT mention interest
+      expect(entry.entry.description).not.toContain("interest");
     });
 
     it("classifies LIQUIDATION via subgraph enrichment", async () => {

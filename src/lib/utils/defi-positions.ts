@@ -36,6 +36,8 @@ const PROTOCOL_MAP: Record<string, ProtocolDef> = {
     patterns: [
       { account: /^Liabilities:Aave:Borrow$/, category: "borrows" },
       { account: /^Income:Aave:Rewards$/, category: "rewards" },
+      { account: /^Income:Aave:Interest$/, category: "rewards" },
+      { account: /^Expenses:Aave:Interest$/, category: "borrows" },
       { account: /^Assets:Aave:Supply$/, category: "supplies" },
     ],
   },
