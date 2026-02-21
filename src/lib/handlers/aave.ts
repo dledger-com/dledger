@@ -154,20 +154,34 @@ async function buildProtocolItems(
 
       if (isMint) {
         // aToken minted → SUPPLY
-        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
-        actions.push({ action: "SUPPLY", amount, currency: underlying });
+        // Use the actual underlying transfer amount (not scaled aToken amount)
+        // to ensure the entry balances with the wallet-side transfer.
+        const underlyingTx = regularTransfers.find((t) =>
+          t.tokenSymbol === underlying &&
+          t.from.toLowerCase() === addr,
+        );
+        const supplyAmount = underlyingTx
+          ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
+          : amount;
+        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: supplyAmount });
+        actions.push({ action: "SUPPLY", amount: supplyAmount, currency: underlying });
       } else if (isBurn) {
         // aToken burned → WITHDRAW with interest detection
+        // Use actual underlying transfer amount for balance accuracy
+        const underlyingTx = regularTransfers.find((t) =>
+          t.tokenSymbol === underlying &&
+          t.to.toLowerCase() === addr,
+        );
+        const withdrawAmount = underlyingTx
+          ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
+          : amount;
         const supplyBalance = await queryAccountCurrencyBalance(
           ctx, "Assets:Aave:Supply", timestampToDate(tx.timeStamp), underlying,
         );
-        // If we have a recorded supply balance and the withdrawal exceeds it,
-        // the excess is interest income. If balance is zero (cold start),
-        // treat entire amount as principal — we can't distinguish interest.
         const interest = supplyBalance.isPositive()
-          ? amount.minus(supplyBalance).gt(0) ? amount.minus(supplyBalance) : new Decimal(0)
+          ? withdrawAmount.minus(supplyBalance).gt(0) ? withdrawAmount.minus(supplyBalance) : new Decimal(0)
           : new Decimal(0);
-        const principalPart = amount.minus(interest);
+        const principalPart = withdrawAmount.minus(interest);
 
         if (!principalPart.isZero()) {
           items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: principalPart.neg() });
@@ -175,7 +189,7 @@ async function buildProtocolItems(
         if (interest.isPositive()) {
           items.push({ account: "Income:Aave:Interest", currency: underlying, amount: interest.neg() });
         }
-        actions.push({ action: "WITHDRAW", amount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
+        actions.push({ action: "WITHDRAW", amount: withdrawAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
       } else if (from === addr) {
         // aToken transferred out (e.g. send aTokens to another address)
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
@@ -192,21 +206,34 @@ async function buildProtocolItems(
 
       if (isMint) {
         // debtToken minted → BORROW (liability increases = negative)
-        items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: amount.neg() });
-        actions.push({ action: "BORROW", amount, currency: underlying });
+        // Use actual underlying transfer amount for balance accuracy
+        const underlyingTx = regularTransfers.find((t) =>
+          t.tokenSymbol === underlying &&
+          t.to.toLowerCase() === addr,
+        );
+        const borrowAmount = underlyingTx
+          ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
+          : amount;
+        items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: borrowAmount.neg() });
+        actions.push({ action: "BORROW", amount: borrowAmount, currency: underlying });
       } else if (isBurn) {
         // debtToken burned → REPAY with interest detection
+        // Use actual underlying transfer amount for balance accuracy
+        const underlyingTx = regularTransfers.find((t) =>
+          t.tokenSymbol === underlying &&
+          t.from.toLowerCase() === addr,
+        );
+        const repayAmount = underlyingTx
+          ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
+          : amount;
         const borrowBalance = await queryAccountCurrencyBalance(
           ctx, "Liabilities:Aave:Borrow", timestampToDate(tx.timeStamp), underlying,
         );
-        // Borrow balance is negative (liability). If repay exceeds outstanding debt,
-        // the excess is interest expense. Cold start guard: if balance is zero,
-        // treat entire amount as principal.
         const absBorrowBalance = borrowBalance.abs();
         const interest = absBorrowBalance.isPositive()
-          ? amount.minus(absBorrowBalance).gt(0) ? amount.minus(absBorrowBalance) : new Decimal(0)
+          ? repayAmount.minus(absBorrowBalance).gt(0) ? repayAmount.minus(absBorrowBalance) : new Decimal(0)
           : new Decimal(0);
-        const principalPart = amount.minus(interest);
+        const principalPart = repayAmount.minus(interest);
 
         if (!principalPart.isZero()) {
           items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: principalPart });
@@ -214,7 +241,7 @@ async function buildProtocolItems(
         if (interest.isPositive()) {
           items.push({ account: "Expenses:Aave:Interest", currency: underlying, amount: interest });
         }
-        actions.push({ action: "REPAY", amount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
+        actions.push({ action: "REPAY", amount: repayAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
       }
       // Non-mint/burn debt token transfers are unusual — ignore
     }

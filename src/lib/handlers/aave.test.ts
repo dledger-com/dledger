@@ -1282,6 +1282,89 @@ describe("aaveHandler", () => {
       expect(entry.entry.description).not.toContain("interest");
     });
 
+    it("uses underlying transfer amount when aToken amount differs (liquidity index scaling)", async () => {
+      // Reproduces the tBTC scenario: aEthtBTC mint amount (10.097) differs from
+      // the actual tBTC transfer amount (10.092) due to Aave's liquidity index.
+      // The handler should use the underlying transfer amount to ensure balance.
+      const ATOKEN_CONTRACT = "0xa5ba6e5ec19a1bf23c857991c857db62b2aa187b"; // aEthtBTC
+      const TBTC_CONTRACT = "0x18084fba666a33d37592fa2633fd49a74dd93a88";
+
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0xae791cc000000000",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "300000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // aEthtBTC minted: 10.097 (scaled by liquidity index)
+          makeErc20({
+            hash: "0xae791cc000000000",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthtBTC",
+            tokenName: "Aave Ethereum tBTC",
+            value: "10097000000000000000", // 10.097 tBTC (18 decimals)
+            tokenDecimal: "18",
+            contractAddress: ATOKEN_CONTRACT,
+          }),
+          // tBTC transferred: 10.092 (actual underlying amount)
+          makeErc20({
+            hash: "0xae791cc000000000",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: ATOKEN_CONTRACT,
+            tokenSymbol: "tBTC",
+            tokenName: "tBTC v2",
+            value: "10092000000000000000", // 10.092 tBTC (18 decimals)
+            tokenDecimal: "18",
+            contractAddress: TBTC_CONTRACT,
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      expect(result.entries).toHaveLength(1);
+      const entry = result.entries[0];
+
+      // Description should mention Supply and tBTC
+      expect(entry.entry.description).toContain("Supply");
+      expect(entry.entry.description).toContain("tBTC");
+
+      // No aEthtBTC in items — only real tBTC
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthtBTC");
+      expect(currencies).toContain("tBTC");
+
+      // Assets:Aave:Supply should use the underlying amount (10.092), not aToken amount (10.097)
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(supplyItem!.currency).toBe("tBTC");
+      expect(new Decimal(supplyItem!.amount).toFixed(3)).toBe("10.092");
+
+      // Items must balance to zero per currency (this is the key assertion —
+      // using the aToken amount would leave a +0.005 tBTC imbalance)
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
     it("classifies LIQUIDATION via subgraph enrichment", async () => {
       // Mock fetch to return subgraph response with liquidation
       const mockFetch = vi.fn().mockResolvedValue({
