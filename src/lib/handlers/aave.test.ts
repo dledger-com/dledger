@@ -721,6 +721,86 @@ describe("aaveHandler", () => {
       }
     });
 
+    it("handles swap+supply: receive WETH from DEX then supply to Aave in one tx", async () => {
+      const DEX_ADDR = "0xdef1c0ded9bec7f1a1670819833240f027b25eff";
+      const ATOKEN_ADDR = "0x4d5f47fa6a74757f35c14fd3a6ef8e3c9bc514e8"; // aEthWETH contract
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "400000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // Step 1: WETH received from DEX to user (swap output)
+          makeErc20({
+            from: DEX_ADDR,
+            to: USER_ADDR,
+            tokenSymbol: "WETH",
+            tokenName: "Wrapped Ether",
+            value: "1000000000000000000", // 1 WETH
+            tokenDecimal: "18",
+          }),
+          // Step 2: WETH sent from user to aToken contract (supply input)
+          makeErc20({
+            from: USER_ADDR,
+            to: ATOKEN_ADDR,
+            tokenSymbol: "WETH",
+            tokenName: "Wrapped Ether",
+            value: "1000000000000000000", // 1 WETH
+            tokenDecimal: "18",
+          }),
+          // Step 3: aEthWETH minted (protocol receipt)
+          makeErc20({
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthWETH",
+            tokenName: "Aave Ethereum WETH",
+            value: "1000000000000000000", // 1 WETH equivalent
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Should have Supply action
+      expect(entry.entry.description).toContain("Supply");
+      expect(entry.entry.description).toContain("WETH");
+      expect(entry.metadata["handler:action"]).toBe("SUPPLY");
+
+      // No aEthWETH in items
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthWETH");
+
+      // Should preserve the DEX counterparty (Equity:*:External:* with negative WETH)
+      const accounts = await backend.listAccounts();
+      const externalItems = entry.items.filter((i) => {
+        const acct = accounts.find((a) => a.id === i.account_id);
+        return acct?.full_name.startsWith("Equity:") && acct.full_name.includes(":External:");
+      });
+      // DEX counterparty should still be present
+      expect(externalItems.length).toBeGreaterThanOrEqual(1);
+
+      // Items balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
     it("handles DEPOSIT_ETH: native ETH via WrappedTokenGateway → Supply +ETH", async () => {
       const group = makeEmptyGroup({
         normal: {

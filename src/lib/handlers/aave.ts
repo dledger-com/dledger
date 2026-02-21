@@ -83,7 +83,7 @@ function buildProtocolItems(
   protocolTransfers: Erc20Tx[],
   regularTransfers: Erc20Tx[],
   addr: string,
-  chain: { native_currency: string },
+  chain: { name: string; native_currency: string },
   hasNativeEthFlow: boolean,
 ): { items: ItemAccum[]; actions: ProtocolAction[]; unprocessed: Erc20Tx[] } {
   const items: ItemAccum[] = [];
@@ -142,11 +142,11 @@ function buildProtocolItems(
       } else if (from === addr) {
         // aToken transferred out (e.g. send aTokens to another address)
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
-        items.push({ account: `Equity:${chain.native_currency}:External:${shortAddr(to)}`, currency: underlying, amount });
+        items.push({ account: `Equity:${chain.name}:External:${shortAddr(to)}`, currency: underlying, amount });
       } else if (to === addr) {
         // aToken transferred in (received aTokens)
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
-        items.push({ account: `Equity:${chain.native_currency}:External:${shortAddr(from)}`, currency: underlying, amount: amount.neg() });
+        items.push({ account: `Equity:${chain.name}:External:${shortAddr(from)}`, currency: underlying, amount: amount.neg() });
       }
     } else {
       // Debt token transfers (only mint/burn are meaningful)
@@ -265,17 +265,22 @@ export const aaveHandler: TransactionHandler = {
     const allWalletItems = await buildAllGroupItems(filteredGroup, addr, ctx.chain, ctx.label, ctx);
     let walletItems = mergeItemAccums(allWalletItems);
 
-    // Step 4: Remove redundant counterparties
-    // Protocol items already represent the protocol-side of supply/borrow/etc.
-    // The wallet-side will have Equity:*:External:* items for the same currencies
-    // that are now handled by protocol items — remove those
-    const protocolCurrencies = new Set(protocol.items.map((i) => i.currency));
-    walletItems = walletItems.filter((item) => {
-      if (item.account.startsWith("Equity:") && item.account.includes(":External:")) {
-        return !protocolCurrencies.has(item.currency);
+    // Step 4: Consume one matching Equity:External counterparty per protocol item
+    // For each protocol item, find and remove ONE wallet Equity:*:External:* item
+    // with the same currency AND same sign. Sign matching correctly identifies the
+    // counterparty for the Aave interaction (e.g. Supply +1 WETH matches
+    // Equity:aToken +1 WETH, but NOT Equity:DEX -1 WETH which is a fund source).
+    for (const protocolItem of protocol.items) {
+      const idx = walletItems.findIndex((item) =>
+        item.account.startsWith("Equity:") &&
+        item.account.includes(":External:") &&
+        item.currency === protocolItem.currency &&
+        item.amount.isPositive() === protocolItem.amount.isPositive(),
+      );
+      if (idx !== -1) {
+        walletItems.splice(idx, 1);
       }
-      return true;
-    });
+    }
 
     // Step 5: Reclassify remaining Equity:External:* items
     // If no protocol actions detected (pure rewards), reclassify as income
