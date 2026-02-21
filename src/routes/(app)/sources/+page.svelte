@@ -527,7 +527,9 @@
           reprocessProgress = { processed, total };
         },
       });
-      if (reprocessPreview.changed === 0) {
+      if (reprocessPreview.total === 0) {
+        toast.info("No raw transaction data found — re-sync this account first to enable reprocessing");
+      } else if (reprocessPreview.changed === 0) {
         toast.success("All transactions unchanged — nothing to reprocess");
       }
     } catch (err) {
@@ -576,7 +578,9 @@
         combined.currencyHints = { ...combined.currencyHints, ...r.currencyHints };
       }
       reprocessPreview = combined;
-      if (combined.changed === 0) {
+      if (combined.total === 0) {
+        toast.info("No raw transaction data found — re-sync your accounts first to enable reprocessing");
+      } else if (combined.changed === 0) {
         toast.success("All transactions unchanged — nothing to reprocess");
       }
     } catch (err) {

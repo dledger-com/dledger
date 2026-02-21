@@ -261,18 +261,18 @@ export async function syncEtherscanWithHandlers(
   for (const group of sortedGroups) {
     const source = `etherscan:${chainId}:${group.hash}`;
 
-    // Dedup check
-    if (existingSources.has(source)) {
-      result.transactions_skipped++;
-      continue;
-    }
-
-    // Store raw transaction data for future re-processing
+    // Store raw transaction data for (re-)processing — always, even if entry exists
     try {
       await backend.storeRawTransaction(source, JSON.stringify(group));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       result.warnings.push(`store raw tx ${group.hash}: ${msg}`);
+    }
+
+    // Dedup check
+    if (existingSources.has(source)) {
+      result.transactions_skipped++;
+      continue;
     }
 
     // Process through handler registry
