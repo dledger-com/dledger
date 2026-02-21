@@ -4,6 +4,13 @@
  * from Aave's indexed subgraphs via The Graph Network.
  */
 
+/** Module-level cache: tx hash → result (null = queried but no events) */
+const cache = new Map<string, AaveSubgraphResult | null>();
+
+export function clearAaveSubgraphCache(): void {
+  cache.clear();
+}
+
 /** Subgraph deployment IDs per chain (v2 and v3) */
 export const AAVE_SUBGRAPHS: Record<number, { v2?: string; v3?: string }> = {
   1: {
@@ -81,7 +88,7 @@ function buildV2Query(txHash: string): string {
   }
   liquidationCalls(where: { id_contains: "${txHash}" }, first: 5) {
     collateralAmount
-    debtToCover
+    principalAmount
     liquidator
     collateralAssetPriceUSD: collateralAssetPriceUSD
     borrowAssetPriceUSD: borrowAssetPriceUSD
@@ -115,7 +122,7 @@ function buildV3Query(txHash: string): string {
   }
   liquidationCalls(where: { id_contains: "${txHash}" }, first: 5) {
     collateralAmount
-    debtToCover
+    principalAmount
     liquidator
     collateralAssetPriceUSD: collateralAssetPriceUSD
     borrowAssetPriceUSD: borrowAssetPriceUSD
@@ -144,7 +151,7 @@ function extractFromEvents(data: Record<string, unknown[]>): AaveSubgraphResult 
   // Check liquidations first
   const liquidations = (data.liquidationCalls ?? []) as Array<{
     collateralAmount: string;
-    debtToCover: string;
+    principalAmount: string;
     liquidator: string;
     collateralAssetPriceUSD: string;
     borrowAssetPriceUSD: string;
@@ -165,7 +172,7 @@ function extractFromEvents(data: Record<string, unknown[]>): AaveSubgraphResult 
         collateral_amount: liq.collateralAmount,
         collateral_price_usd: liq.collateralAssetPriceUSD ?? "0",
         debt_asset: liq.principalReserve.symbol,
-        debt_amount: liq.debtToCover,
+        debt_amount: liq.principalAmount,
         debt_price_usd: liq.borrowAssetPriceUSD ?? "0",
       },
     };
@@ -204,6 +211,9 @@ export async function fetchAaveSubgraphData(
   txHash: string,
   isV2: boolean,
 ): Promise<AaveSubgraphResult | null> {
+  const cacheKey = txHash.toLowerCase();
+  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
+
   if (!apiKey) return null;
 
   const chain = AAVE_SUBGRAPHS[chainId];
@@ -214,10 +224,14 @@ export async function fetchAaveSubgraphData(
     // Fall back to the other version if available
     const fallbackId = isV2 ? chain.v3 : chain.v2;
     if (!fallbackId) return null;
-    return fetchFromSubgraph(apiKey, fallbackId, txHash, !isV2);
+    const result = await fetchFromSubgraph(apiKey, fallbackId, txHash, !isV2);
+    cache.set(cacheKey, result);
+    return result;
   }
 
-  return fetchFromSubgraph(apiKey, subgraphId, txHash, isV2);
+  const result = await fetchFromSubgraph(apiKey, subgraphId, txHash, isV2);
+  cache.set(cacheKey, result);
+  return result;
 }
 
 async function fetchFromSubgraph(
@@ -243,4 +257,131 @@ async function fetchFromSubgraph(
   if (!data) return null;
 
   return extractFromEvents(data);
+}
+
+/** Event type names used in V2 vs V3 queries */
+const V2_EVENT_TYPES = ["deposits", "borrows", "redeemUnderlyings", "repays", "liquidationCalls"] as const;
+const V3_EVENT_TYPES = ["supplies", "borrows", "redeemUnderlyings", "repays", "liquidationCalls"] as const;
+
+function buildBatchFields(prefix: string, txHash: string, isV2: boolean): string {
+  const eventTypes = isV2 ? V2_EVENT_TYPES : V3_EVENT_TYPES;
+  const supplyType = isV2 ? "deposits" : "supplies";
+  const lines: string[] = [];
+
+  for (const eventType of eventTypes) {
+    const alias = `${prefix}_${eventType}`;
+    if (eventType === "liquidationCalls") {
+      lines.push(`  ${alias}: ${eventType}(where: { id_contains: "${txHash}" }, first: 5) {
+    collateralAmount
+    principalAmount
+    liquidator
+    collateralAssetPriceUSD: collateralAssetPriceUSD
+    borrowAssetPriceUSD: borrowAssetPriceUSD
+    collateralReserve { symbol liquidityRate variableBorrowRate totalATokenSupply availableLiquidity }
+    principalReserve { symbol liquidityRate variableBorrowRate totalATokenSupply availableLiquidity }
+  }`);
+    } else {
+      lines.push(`  ${alias}: ${eventType}(where: { id_contains: "${txHash}" }, first: 5) {
+    amount
+    assetPriceUSD
+    ${RESERVE_FIELDS}
+  }`);
+    }
+  }
+  return lines.join("\n");
+}
+
+const BATCH_SIZE = 20;
+
+/**
+ * Pre-fetch enrichment data for multiple Aave transactions in batched
+ * GraphQL requests. Results are stored in the module cache so that
+ * subsequent `fetchAaveSubgraphData()` calls return instantly.
+ */
+export async function prefetchAaveSubgraphBatch(
+  apiKey: string,
+  chainId: number,
+  entries: { hash: string; isV2: boolean }[],
+): Promise<void> {
+  if (!apiKey) return;
+  const chain = AAVE_SUBGRAPHS[chainId];
+  if (!chain) return;
+
+  // Filter out already-cached entries
+  const uncached = entries.filter((e) => !cache.has(e.hash.toLowerCase()));
+  if (uncached.length === 0) return;
+
+  // Group by version
+  const v2Entries = uncached.filter((e) => e.isV2);
+  const v3Entries = uncached.filter((e) => !e.isV2);
+
+  for (const [isV2, group] of [[true, v2Entries], [false, v3Entries]] as const) {
+    if (group.length === 0) continue;
+
+    const subgraphId = isV2 ? chain.v2 : chain.v3;
+    // Fall back to the other version if primary not available
+    const effectiveId = subgraphId ?? (isV2 ? chain.v3 : chain.v2);
+    if (!effectiveId) {
+      // No subgraph for this chain+version — mark all as null
+      for (const entry of group) {
+        cache.set(entry.hash.toLowerCase(), null);
+      }
+      continue;
+    }
+    const effectiveIsV2 = subgraphId ? isV2 : !isV2;
+
+    // Process in batches
+    for (let i = 0; i < group.length; i += BATCH_SIZE) {
+      const batch = group.slice(i, i + BATCH_SIZE);
+      const queryParts: string[] = [];
+      for (let j = 0; j < batch.length; j++) {
+        queryParts.push(buildBatchFields(`tx${j}`, batch[j].hash, effectiveIsV2));
+      }
+      const query = `{\n${queryParts.join("\n")}\n}`;
+
+      try {
+        const resp = await fetch(
+          `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${effectiveId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+          },
+        );
+        if (!resp.ok) {
+          // Mark batch as null so we don't retry
+          for (const entry of batch) {
+            cache.set(entry.hash.toLowerCase(), null);
+          }
+          continue;
+        }
+
+        const json = await resp.json();
+        const data = json?.data;
+        if (!data) {
+          for (const entry of batch) {
+            cache.set(entry.hash.toLowerCase(), null);
+          }
+          continue;
+        }
+
+        // Parse aliased response back into per-tx event maps
+        const eventTypes = effectiveIsV2 ? V2_EVENT_TYPES : V3_EVENT_TYPES;
+        for (let j = 0; j < batch.length; j++) {
+          const prefix = `tx${j}`;
+          const txData: Record<string, unknown[]> = {};
+          for (const eventType of eventTypes) {
+            txData[eventType] = data[`${prefix}_${eventType}`] ?? [];
+          }
+          const result = extractFromEvents(txData);
+          cache.set(batch[j].hash.toLowerCase(), result);
+        }
+      } catch {
+        // Network error — mark batch as null
+        for (const entry of batch) {
+          cache.set(entry.hash.toLowerCase(), null);
+        }
+      }
+    }
+  }
 }

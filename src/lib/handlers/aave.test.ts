@@ -12,7 +12,12 @@ import {
   extractDebtTokenUnderlying,
 } from "./aave.js";
 import { AAVE } from "./addresses.js";
-import { rayToApy } from "./aave-subgraph.js";
+import {
+  rayToApy,
+  fetchAaveSubgraphData,
+  prefetchAaveSubgraphBatch,
+  clearAaveSubgraphCache,
+} from "./aave-subgraph.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const USER_ADDR = "0x1234567890abcdef1234567890abcdef12345678";
@@ -875,7 +880,7 @@ describe("aaveHandler", () => {
             repays: [],
             liquidationCalls: [{
               collateralAmount: "500000000000000000", // 0.5 WETH
-              debtToCover: "800000000", // 800 USDC
+              principalAmount: "800000000", // 800 USDC
               liquidator: "0x9999999999999999999999999999999999999999",
               collateralAssetPriceUSD: "2000.00",
               borrowAssetPriceUSD: "1.00",
@@ -1014,5 +1019,138 @@ describe("rayToApy", () => {
     // ~10.5% APY (compounded)
     expect(apyNum).toBeGreaterThan(0.1);
     expect(apyNum).toBeLessThan(0.12);
+  });
+});
+
+describe("prefetchAaveSubgraphBatch", () => {
+  const MOCK_RESERVE = {
+    symbol: "USDC",
+    liquidityRate: "32847293847293847293847293",
+    variableBorrowRate: "52847293847293847293847293",
+    totalATokenSupply: "1000000000000",
+    availableLiquidity: "500000000000",
+  };
+
+  beforeEach(() => {
+    clearAaveSubgraphCache();
+  });
+
+  it("populates cache so fetchAaveSubgraphData returns without extra fetch", async () => {
+    let fetchCount = 0;
+    const originalFetch = globalThis.fetch;
+
+    // Build response with aliased fields for 2 tx hashes
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          data: {
+            tx0_supplies: [{ amount: "1000", assetPriceUSD: "1.00", reserve: MOCK_RESERVE }],
+            tx0_borrows: [],
+            tx0_redeemUnderlyings: [],
+            tx0_repays: [],
+            tx0_liquidationCalls: [],
+            tx1_supplies: [],
+            tx1_borrows: [{ amount: "500", assetPriceUSD: "1.00", reserve: MOCK_RESERVE }],
+            tx1_redeemUnderlyings: [],
+            tx1_repays: [],
+            tx1_liquidationCalls: [],
+          },
+        }),
+      };
+    });
+
+    try {
+      await prefetchAaveSubgraphBatch("test-key", 1, [
+        { hash: "0xaaa", isV2: false },
+        { hash: "0xbbb", isV2: false },
+      ]);
+
+      // Should have made exactly 1 batch request
+      expect(fetchCount).toBe(1);
+
+      // Now fetching individually should NOT make additional requests
+      const resultA = await fetchAaveSubgraphData("test-key", 1, "0xaaa", false);
+      const resultB = await fetchAaveSubgraphData("test-key", 1, "0xbbb", false);
+
+      expect(fetchCount).toBe(1); // still 1 — cache hit
+      expect(resultA).not.toBeNull();
+      expect(resultA!.supply_apy).toBeDefined();
+      expect(resultB).not.toBeNull();
+      expect(resultB!.borrow_apy).toBeDefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("caches null for hashes with no events", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCount = 0;
+
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          data: {
+            tx0_supplies: [],
+            tx0_borrows: [],
+            tx0_redeemUnderlyings: [],
+            tx0_repays: [],
+            tx0_liquidationCalls: [],
+          },
+        }),
+      };
+    });
+
+    try {
+      await prefetchAaveSubgraphBatch("test-key", 1, [
+        { hash: "0xccc", isV2: false },
+      ]);
+
+      const result = await fetchAaveSubgraphData("test-key", 1, "0xccc", false);
+      expect(result).toBeNull();
+      expect(fetchCount).toBe(1); // no extra fetch for cached null
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("skips already-cached entries", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCount = 0;
+
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          data: {
+            tx0_supplies: [{ amount: "1000", assetPriceUSD: "1.00", reserve: MOCK_RESERVE }],
+            tx0_borrows: [],
+            tx0_redeemUnderlyings: [],
+            tx0_repays: [],
+            tx0_liquidationCalls: [],
+          },
+        }),
+      };
+    });
+
+    try {
+      // First batch
+      await prefetchAaveSubgraphBatch("test-key", 1, [
+        { hash: "0xddd", isV2: false },
+      ]);
+      expect(fetchCount).toBe(1);
+
+      // Second batch with same hash — should skip
+      await prefetchAaveSubgraphBatch("test-key", 1, [
+        { hash: "0xddd", isV2: false },
+      ]);
+      expect(fetchCount).toBe(1); // no additional fetch
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

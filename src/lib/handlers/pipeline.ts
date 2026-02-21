@@ -20,6 +20,9 @@ import {
   type Erc721Tx,
   type Erc1155Tx,
 } from "../browser-etherscan.js";
+import { isAToken, isDebtToken } from "./aave.js";
+import { isAavePool, AAVE } from "./addresses.js";
+import { prefetchAaveSubgraphBatch, clearAaveSubgraphCache } from "./aave-subgraph.js";
 
 // --- Reprocess types ---
 
@@ -258,6 +261,23 @@ export async function syncEtherscanWithHandlers(
     return aTs - bTs;
   });
 
+  // Pre-scan for Aave groups and batch-prefetch enrichment data
+  if (settings.handlers?.aave?.enrichment && settings.theGraphApiKey) {
+    const aaveEntries: { hash: string; isV2: boolean }[] = [];
+    for (const group of sortedGroups) {
+      const source = `etherscan:${chainId}:${group.hash}`;
+      if (existingSources.has(source)) continue;
+      const isAave = group.erc20s.some(t => isAToken(t.tokenSymbol) || isDebtToken(t.tokenSymbol))
+        || (group.normal && isAavePool(group.normal.to, chainId));
+      if (!isAave) continue;
+      const isV2 = group.normal ? group.normal.to.toLowerCase() === AAVE.V2_POOL : false;
+      aaveEntries.push({ hash: group.hash, isV2 });
+    }
+    if (aaveEntries.length > 0) {
+      await prefetchAaveSubgraphBatch(settings.theGraphApiKey, chainId, aaveEntries);
+    }
+  }
+
   for (const group of sortedGroups) {
     const source = `etherscan:${chainId}:${group.hash}`;
 
@@ -329,6 +349,8 @@ export async function syncEtherscanWithHandlers(
       }
     }
   }
+
+  clearAaveSubgraphCache();
 
   return result;
 }
