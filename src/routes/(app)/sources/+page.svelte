@@ -117,6 +117,20 @@
   let syncingRates = $state(false);
   let rateResult = $state<ExchangeRateSyncResult | null>(null);
 
+  // -- Handler change suggestion state --
+  let reprocessSuggested = $state(false);
+
+  function suggestReprocess() {
+    if (reprocessSuggested) return;
+    reprocessSuggested = true;
+    toast.info("Handler config changed — reprocess existing transactions to apply new handlers.", {
+      action: {
+        label: "Reprocess All",
+        onClick: () => handleReprocessAll(),
+      },
+    });
+  }
+
   // -- Reprocess state --
   let reprocessing = $state(false);
   let reprocessPreview = $state<ReprocessResult | null>(null);
@@ -1496,6 +1510,7 @@
                       const prev = current[handler.id] ?? { enabled: false };
                       current[handler.id] = { ...prev, enrichment: v };
                       settings.update({ handlers: current });
+                      suggestReprocess();
                     }}
                   />
                 {:else}
@@ -1512,6 +1527,7 @@
                       const current = { ...settings.settings.handlers };
                       current[handler.id] = { ...current[handler.id], enabled: v };
                       settings.update({ handlers: current });
+                      suggestReprocess();
                     }}
                   />
                 {/if}
