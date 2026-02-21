@@ -631,18 +631,25 @@ export class SqlJsBackend implements Backend {
   }
 
   beginTransaction(): void {
+    if (this.inTransaction) return;
     this.db.exec("BEGIN");
     this.inTransaction = true;
   }
 
   commitTransaction(): void {
+    if (!this.inTransaction) return;
     this.db.exec("COMMIT");
     this.inTransaction = false;
     this.scheduleSave();
   }
 
   rollbackTransaction(): void {
-    this.db.exec("ROLLBACK");
+    if (!this.inTransaction) return;
+    try {
+      this.db.exec("ROLLBACK");
+    } catch (_) {
+      // Transaction may have been auto-rolled-back by SQLite on error
+    }
     this.inTransaction = false;
   }
 
