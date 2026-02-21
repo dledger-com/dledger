@@ -22,6 +22,7 @@
   import Check from "lucide-svelte/icons/check";
   import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
   import X from "lucide-svelte/icons/x";
+  import Pencil from "lucide-svelte/icons/pencil";
   import {
     syncExchangeRates,
     fetchSingleRate,
@@ -76,6 +77,35 @@
   let syncingKey = $state<string | null>(null);
   let syncingAll = $state(false);
   let ethResult = $state<EtherscanSyncResult | null>(null);
+
+  // -- Inline edit state --
+  let editingAddress = $state<string | null>(null);
+  let editLabel = $state("");
+  let editChainIds = $state<Set<number>>(new Set());
+  let editChainPopoverOpen = $state(false);
+  let savingEdit = $state(false);
+  let editError = $state<string | null>(null);
+
+  // Group ethAccounts by address
+  interface GroupedAddress {
+    address: string;
+    label: string;
+    chainIds: number[];
+  }
+
+  const groupedAddresses = $derived.by(() => {
+    const map = new Map<string, GroupedAddress>();
+    for (const acc of ethAccounts) {
+      const existing = map.get(acc.address);
+      if (existing) {
+        existing.chainIds.push(acc.chain_id);
+      } else {
+        map.set(acc.address, { address: acc.address, label: acc.label, chainIds: [acc.chain_id] });
+      }
+    }
+    for (const g of map.values()) g.chainIds.sort((a, b) => a - b);
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  });
 
   // -- Post-import missing rate backfill state --
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
@@ -659,6 +689,110 @@
     }
   }
 
+  // -- Inline edit handlers --
+  function startEditAddress(group: GroupedAddress) {
+    editingAddress = group.address;
+    editLabel = group.label;
+    editChainIds = new Set(group.chainIds);
+    editError = null;
+  }
+
+  function cancelEdit() {
+    editingAddress = null;
+    editLabel = "";
+    editChainIds = new Set();
+    editError = null;
+  }
+
+  function toggleEditChain(chainId: number) {
+    const next = new Set(editChainIds);
+    if (next.has(chainId)) {
+      next.delete(chainId);
+    } else {
+      next.add(chainId);
+    }
+    editChainIds = next;
+  }
+
+  async function saveEdit() {
+    if (!editingAddress) return;
+    const label = editLabel.trim();
+    if (!label) {
+      editError = "Label is required";
+      return;
+    }
+    if (editChainIds.size === 0) {
+      editError = "At least one chain is required";
+      return;
+    }
+
+    savingEdit = true;
+    editError = null;
+    const address = editingAddress;
+
+    try {
+      const backend = getBackend();
+      // Find current chains for this address
+      const currentChains = new Set(
+        ethAccounts
+          .filter((a) => a.address === address)
+          .map((a) => a.chain_id)
+      );
+
+      // Remove chains that were deselected
+      for (const chainId of currentChains) {
+        if (!editChainIds.has(chainId)) {
+          await backend.removeEtherscanAccount(address, chainId);
+        }
+      }
+
+      // Upsert all desired chains (propagates label to all)
+      for (const chainId of editChainIds) {
+        await backend.addEtherscanAccount(address, chainId, label);
+      }
+
+      await loadEthAccounts();
+      cancelEdit();
+      toast.success("Address updated");
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      savingEdit = false;
+    }
+  }
+
+  async function handleSyncGroup(group: GroupedAddress) {
+    const apiKey = settings.etherscanApiKey;
+    if (!apiKey) {
+      toast.error("Etherscan API key is required");
+      return;
+    }
+    for (const chainId of group.chainIds) {
+      const account: EtherscanAccount = { address: group.address, chain_id: chainId, label: group.label };
+      await handleSyncOne(account);
+    }
+  }
+
+  async function handleReprocessGroup(group: GroupedAddress) {
+    for (const chainId of group.chainIds) {
+      const account: EtherscanAccount = { address: group.address, chain_id: chainId, label: group.label };
+      await handleReprocessOne(account);
+    }
+  }
+
+  async function handleRemoveGroup(group: GroupedAddress) {
+    try {
+      const backend = getBackend();
+      for (const chainId of group.chainIds) {
+        await backend.removeEtherscanAccount(group.address, chainId);
+      }
+      await loadEthAccounts();
+      toast.success("Address removed");
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
   function formatHash(hash: string): string {
     if (hash.length > 14) return `${hash.slice(0, 8)}...${hash.slice(-4)}`;
     return hash;
@@ -914,56 +1048,160 @@
       </div>
 
       <!-- Tracked Addresses Table -->
-      {#if ethAccounts.length > 0}
+      {#if groupedAddresses.length > 0}
         <Table.Root>
           <Table.Header>
             <Table.Row>
               <Table.Head>Address</Table.Head>
-              <Table.Head>Chain</Table.Head>
               <Table.Head>Label</Table.Head>
+              <Table.Head>Chains</Table.Head>
               <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each ethAccounts as account}
-              {@const key = accountSyncKey(account)}
-              <Table.Row>
-                <Table.Cell class="font-mono text-sm">{formatAddress(account.address)}</Table.Cell>
-                <Table.Cell>
-                  <Badge variant="secondary">{getChainName(account.chain_id)}</Badge>
-                </Table.Cell>
-                <Table.Cell>{account.label}</Table.Cell>
-                <Table.Cell class="text-right">
-                  <div class="flex justify-end gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onclick={() => handleSyncOne(account)}
-                      disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+            {#each groupedAddresses as group}
+              {#if editingAddress === group.address}
+                <!-- Edit mode -->
+                <Table.Row>
+                  <Table.Cell colspan={4}>
+                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                    <div
+                      class="space-y-3 py-2"
+                      role="form"
+                      onkeydown={(e: KeyboardEvent) => { if (e.key === "Escape") cancelEdit(); }}
                     >
-                      <RefreshCw class="mr-1 h-3 w-3" />
-                      {syncingKey === key ? "Syncing..." : "Sync"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onclick={() => handleReprocessOne(account)}
-                      disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
-                    >
-                      <RotateCw class="mr-1 h-3 w-3" />
-                      {reprocessing && reprocessTarget?.address === account.address && reprocessTarget?.chainId === account.chain_id ? "Scanning..." : "Reprocess"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onclick={() => handleRemoveEthAccount(account)}
-                      disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
-                    >
-                      <Trash2 class="h-3 w-3" />
-                    </Button>
-                  </div>
-                </Table.Cell>
-              </Table.Row>
+                      <div class="flex items-center gap-3">
+                        <span class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</span>
+                        <div class="flex-1">
+                          <Input
+                            placeholder="Label"
+                            bind:value={editLabel}
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Chain multi-select -->
+                      <div class="space-y-2">
+                        <span class="text-xs font-medium">Chains</span>
+                        <Popover.Root bind:open={editChainPopoverOpen}>
+                          <Popover.Trigger>
+                            <Button variant="outline" class="w-[300px] justify-between">
+                              {#if editChainIds.size === 0}
+                                Select chains...
+                              {:else}
+                                {editChainIds.size} chain{editChainIds.size === 1 ? "" : "s"} selected
+                              {/if}
+                              <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </Popover.Trigger>
+                          <Popover.Content class="w-[300px] p-0">
+                            <Command.Root>
+                              <Command.Input placeholder="Search chains..." />
+                              <Command.List>
+                                <Command.Empty>No chain found.</Command.Empty>
+                                <Command.Group>
+                                  {#each SUPPORTED_CHAINS as chain}
+                                    <Command.Item
+                                      value={chain.name}
+                                      onSelect={() => toggleEditChain(chain.chain_id)}
+                                    >
+                                      <Check
+                                        class={cn(
+                                          "mr-2 h-4 w-4",
+                                          editChainIds.has(chain.chain_id) ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {chain.name} ({chain.native_currency})
+                                    </Command.Item>
+                                  {/each}
+                                </Command.Group>
+                              </Command.List>
+                            </Command.Root>
+                          </Popover.Content>
+                        </Popover.Root>
+
+                        {#if editChainIds.size > 0}
+                          <div class="flex flex-wrap gap-1">
+                            {#each SUPPORTED_CHAINS.filter((c) => editChainIds.has(c.chain_id)) as chain}
+                              <Badge variant="secondary" class="gap-1">
+                                {chain.name}
+                                <button onclick={() => toggleEditChain(chain.chain_id)} class="ml-0.5 rounded-full outline-none hover:bg-muted">
+                                  <X class="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+
+                      {#if editError}
+                        <p class="text-sm text-destructive">{editError}</p>
+                      {/if}
+
+                      <div class="flex gap-2">
+                        <Button size="sm" onclick={saveEdit} disabled={savingEdit}>
+                          {savingEdit ? "Saving..." : "Save"}
+                        </Button>
+                        <Button variant="outline" size="sm" onclick={cancelEdit} disabled={savingEdit}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              {:else}
+                <!-- Display mode -->
+                {@const isSyncingGroup = syncingKey !== null && syncingKey.startsWith(group.address + ":")}
+                <Table.Row>
+                  <Table.Cell class="font-mono text-sm">{formatAddress(group.address)}</Table.Cell>
+                  <Table.Cell>{group.label}</Table.Cell>
+                  <Table.Cell>
+                    <div class="flex flex-wrap gap-1">
+                      {#each group.chainIds as chainId}
+                        <Badge variant="secondary">{getChainName(chainId)}</Badge>
+                      {/each}
+                    </div>
+                  </Table.Cell>
+                  <Table.Cell class="text-right">
+                    <div class="flex justify-end gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => startEditAddress(group)}
+                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                      >
+                        <Pencil class="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => handleSyncGroup(group)}
+                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                      >
+                        <RefreshCw class="mr-1 h-3 w-3" />
+                        {isSyncingGroup ? "Syncing..." : "Sync"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => handleReprocessGroup(group)}
+                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                      >
+                        <RotateCw class="mr-1 h-3 w-3" />
+                        Reprocess
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => handleRemoveGroup(group)}
+                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                      >
+                        <Trash2 class="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              {/if}
             {/each}
           </Table.Body>
         </Table.Root>
