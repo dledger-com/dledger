@@ -116,8 +116,24 @@ describe("aaveHandler", () => {
     });
   });
 
+  describe("match", () => {
+    it("returns 55 for V3 lowercase aToken like aEthwstETH", () => {
+      const group = makeEmptyGroup({
+        erc20s: [makeErc20({ tokenSymbol: "aEthwstETH" })],
+      });
+      expect(aaveHandler.match(group, ctx)).toBe(55);
+    });
+
+    it("returns 55 for V3 lowercase aToken like aEthtBTC", () => {
+      const group = makeEmptyGroup({
+        erc20s: [makeErc20({ tokenSymbol: "aEthtBTC" })],
+      });
+      expect(aaveHandler.match(group, ctx)).toBe(55);
+    });
+  });
+
   describe("process", () => {
-    it("classifies SUPPLY: aToken minted + underlying outflow", async () => {
+    it("classifies SUPPLY: aToken filtered, only USDC in items", async () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
@@ -167,6 +183,18 @@ describe("aaveHandler", () => {
       expect(entry.metadata["handler:action"]).toBe("SUPPLY");
       expect(entry.metadata["handler:version"]).toBe("V2");
 
+      // No aUSDC in items — only real currencies
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aUSDC");
+      expect(currencies).toContain("USDC");
+
+      // Items should have Assets:Aave:Supply account
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+
       // Items balance to zero per currency
       const sums = new Map<string, Decimal>();
       for (const item of entry.items) {
@@ -177,12 +205,11 @@ describe("aaveHandler", () => {
         expect(sum.isZero()).toBe(true);
       }
 
-      // Currency hints: aUSDC should be null (no auto-pricing)
-      expect(result.currencyHints).toBeDefined();
-      expect(result.currencyHints!["aUSDC"]).toBeNull();
+      // No currency hints (aTokens filtered, not hinted)
+      expect(result.currencyHints).toBeUndefined();
     });
 
-    it("classifies BORROW: debtToken minted + underlying inflow", async () => {
+    it("classifies BORROW: debtToken filtered, only DAI in items", async () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
@@ -229,6 +256,18 @@ describe("aaveHandler", () => {
       expect(entry.entry.description).toContain("DAI");
       expect(entry.metadata["handler:action"]).toBe("BORROW");
 
+      // No variableDebtDAI in items — only real currencies
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("variableDebtDAI");
+      expect(currencies).toContain("DAI");
+
+      // Items should have Liabilities:Aave:Borrow account
+      const accounts = await backend.listAccounts();
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      expect(borrowAcct).toBeDefined();
+      const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
+      expect(borrowItem).toBeDefined();
+
       // Items balance to zero per currency
       const sums = new Map<string, Decimal>();
       for (const item of entry.items) {
@@ -239,9 +278,161 @@ describe("aaveHandler", () => {
         expect(sum.isZero()).toBe(true);
       }
 
-      // Currency hints: variableDebtDAI should be null
-      expect(result.currencyHints).toBeDefined();
-      expect(result.currencyHints!["variableDebtDAI"]).toBeNull();
+      // No currency hints
+      expect(result.currencyHints).toBeUndefined();
+    });
+
+    it("classifies WITHDRAW: aToken burned + underlying inflow → Assets:Aave:Supply", async () => {
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // aUSDC burned from user to 0x0
+          makeErc20({
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "aUSDC",
+            tokenName: "Aave interest bearing USDC",
+            value: "1000000000",
+            tokenDecimal: "6",
+          }),
+          // USDC received from pool to user
+          makeErc20({
+            from: AAVE_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            tokenName: "USD Coin",
+            value: "1000000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+      expect(entry.entry.description).toContain("Withdraw");
+      expect(entry.metadata["handler:action"]).toBe("WITHDRAW");
+
+      // No aUSDC in items
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aUSDC");
+
+      // Should have Assets:Aave:Supply account
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+    });
+
+    it("classifies REPAY: debtToken burned + underlying outflow → Liabilities:Aave:Borrow", async () => {
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // variableDebtDAI burned from user to 0x0
+          makeErc20({
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "variableDebtDAI",
+            tokenName: "Aave variable debt DAI",
+            value: "500000000000000000000",
+            tokenDecimal: "18",
+            contractAddress: "0xdddddddddddddddddddddddddddddddddddddd",
+          }),
+          // DAI sent from user to pool
+          makeErc20({
+            from: USER_ADDR,
+            to: AAVE_POOL,
+            tokenSymbol: "DAI",
+            tokenName: "Dai Stablecoin",
+            value: "500000000000000000000",
+            tokenDecimal: "18",
+            contractAddress: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+      expect(entry.entry.description).toContain("Repay");
+      expect(entry.metadata["handler:action"]).toBe("REPAY");
+
+      // No variableDebtDAI in items
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("variableDebtDAI");
+
+      // Should have Liabilities:Aave:Borrow account
+      const accounts = await backend.listAccounts();
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      expect(borrowAcct).toBeDefined();
+      const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
+      expect(borrowItem).toBeDefined();
+    });
+
+    it("classifies CLAIM_REWARDS: only inflows → Income:Aave:Rewards", async () => {
+      const REWARD_TOKEN = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "150000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // stkAAVE received (reward claim, no aToken/debtToken mint/burn)
+          makeErc20({
+            from: OTHER_ADDR,
+            to: USER_ADDR,
+            tokenSymbol: "stkAAVE",
+            tokenName: "Staked Aave",
+            value: "5000000000000000000", // 5 stkAAVE (18 decimals)
+            tokenDecimal: "18",
+            contractAddress: REWARD_TOKEN,
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+      expect(entry.entry.description).toContain("Claim Rewards");
+      expect(entry.metadata["handler:action"]).toBe("CLAIM_REWARDS");
+
+      // Should have Income:Aave:Rewards account
+      const accounts = await backend.listAccounts();
+      const rewardAcct = accounts.find((a) => a.full_name === "Income:Aave:Rewards");
+      expect(rewardAcct).toBeDefined();
+      const rewardItem = entry.items.find((i) => i.account_id === rewardAcct!.id);
+      expect(rewardItem).toBeDefined();
     });
   });
 });

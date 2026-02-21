@@ -21,7 +21,7 @@ import { getDefiLlamaPools, findPool } from "./defillama-yields.js";
 // ---- Token detection ----
 
 function isAToken(symbol: string): boolean {
-  return /^a(Eth|Arb|Opt|Bas|Pol)?[A-Z]/.test(symbol);
+  return /^a(?:(Eth|Arb|Opt|Bas|Pol)[A-Za-z]|[A-Z])/.test(symbol);
 }
 
 function isDebtToken(symbol: string): boolean {
@@ -192,17 +192,31 @@ export const aaveHandler: TransactionHandler = {
     // Ensure native currency for item building
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
-    const allItems = await buildAllGroupItems(group, addr, ctx.chain, ctx.label, ctx);
+    // Filter out aToken/debtToken ERC20s — protocol receipts, not real assets
+    const filteredGroup: TxHashGroup = {
+      ...group,
+      erc20s: group.erc20s.filter(
+        (tx) => !isAToken(tx.tokenSymbol) && !isDebtToken(tx.tokenSymbol),
+      ),
+    };
+    const allItems = await buildAllGroupItems(filteredGroup, addr, ctx.chain, ctx.label, ctx);
     let merged = mergeItemAccums(allItems);
 
     // Reclassify counterparty accounts based on action
-    if (action === "BORROW") {
+    const remapRules: Record<AaveAction, string | null> = {
+      SUPPLY: "Assets:Aave:Supply",
+      DEPOSIT_ETH: "Assets:Aave:Supply",
+      WITHDRAW: "Assets:Aave:Supply",
+      WITHDRAW_ETH: "Assets:Aave:Supply",
+      BORROW: "Liabilities:Aave:Borrow",
+      REPAY: "Liabilities:Aave:Borrow",
+      CLAIM_REWARDS: "Income:Aave:Rewards",
+      UNKNOWN: null,
+    };
+    const remapTarget = remapRules[action];
+    if (remapTarget) {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Liabilities:Aave:Borrow" },
-      ]);
-    } else if (action === "CLAIM_REWARDS") {
-      merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Aave:Rewards" },
+        { from: "Equity:*:External:*", to: remapTarget },
       ]);
     }
 
@@ -254,17 +268,6 @@ export const aaveHandler: TransactionHandler = {
       metadata,
     });
 
-    // Currency hints: aTokens and debtTokens should not be auto-priced
-    const protocolTokens = allItems
-      .map((i) => i.currency)
-      .filter((c) => isAToken(c) || isDebtToken(c))
-      .filter((c, i, arr) => arr.indexOf(c) === i);
-
-    const currencyHints: Record<string, null> = {};
-    for (const token of protocolTokens) {
-      currencyHints[token] = null;
-    }
-
-    return { type: "entries", entries: [handlerEntry], currencyHints };
+    return { type: "entries", entries: [handlerEntry] };
   },
 };
