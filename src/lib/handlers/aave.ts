@@ -73,6 +73,7 @@ interface ProtocolAction {
   amount: Decimal;
   currency: string;
   interest?: Decimal;
+  viaAdapter?: boolean;
 }
 
 /**
@@ -106,10 +107,12 @@ async function buildProtocolItems(
   chain: { name: string; native_currency: string },
   hasNativeEthFlow: boolean,
   ctx: HandlerContext,
-): Promise<{ items: ItemAccum[]; actions: ProtocolAction[]; unprocessed: Erc20Tx[] }> {
+): Promise<{ items: ItemAccum[]; actions: ProtocolAction[]; unprocessed: Erc20Tx[]; walletConsumptionItems: ItemAccum[] }> {
   const items: ItemAccum[] = [];
   const actions: ProtocolAction[] = [];
   const unprocessed: Erc20Tx[] = [];
+  // Items that correspond to wallet-side flows whose External counterparty should be consumed
+  const walletConsumptionItems: ItemAccum[] = [];
 
   // Collect currencies from regular transfers for native ETH detection
   const regularSymbols = new Set(regularTransfers.map((t) => t.tokenSymbol));
@@ -163,14 +166,17 @@ async function buildProtocolItems(
         const supplyAmount = underlyingTx
           ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
           : amount;
-        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: supplyAmount });
-        actions.push({ action: "SUPPLY", amount: supplyAmount, currency: underlying });
+        const supplyItem: ItemAccum = { account: "Assets:Aave:Supply", currency: underlying, amount: supplyAmount };
+        items.push(supplyItem);
         // When underlying never touches the user wallet (adapter/flash loan),
         // add a Trading counterparty to balance the currency.
         const hasWalletSideFlow = underlyingTx != null
           || (underlying === chain.native_currency && hasNativeEthFlow);
+        actions.push({ action: "SUPPLY", amount: supplyAmount, currency: underlying, viaAdapter: !hasWalletSideFlow || undefined });
         if (!hasWalletSideFlow) {
           items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: supplyAmount.neg() });
+        } else {
+          walletConsumptionItems.push(supplyItem);
         }
       } else if (isBurn && from === addr) {
         // aToken burned → WITHDRAW with interest detection
@@ -190,13 +196,25 @@ async function buildProtocolItems(
           : new Decimal(0);
         const principalPart = withdrawAmount.minus(interest);
 
+        // When underlying never touches the user wallet (withdraw via adapter),
+        // add a Trading counterparty to balance the currency.
+        const hasWalletSideFlow = underlyingTx != null
+          || (underlying === chain.native_currency && hasNativeEthFlow);
+
         if (!principalPart.isZero()) {
-          items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: principalPart.neg() });
+          const principalItem: ItemAccum = { account: "Assets:Aave:Supply", currency: underlying, amount: principalPart.neg() };
+          items.push(principalItem);
+          if (hasWalletSideFlow) walletConsumptionItems.push(principalItem);
         }
         if (interest.isPositive()) {
-          items.push({ account: "Income:Aave:Interest", currency: underlying, amount: interest.neg() });
+          const interestItem: ItemAccum = { account: "Income:Aave:Interest", currency: underlying, amount: interest.neg() };
+          items.push(interestItem);
+          if (hasWalletSideFlow) walletConsumptionItems.push(interestItem);
         }
-        actions.push({ action: "WITHDRAW", amount: withdrawAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
+        if (!hasWalletSideFlow) {
+          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: withdrawAmount });
+        }
+        actions.push({ action: "WITHDRAW", amount: withdrawAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined, viaAdapter: !hasWalletSideFlow || undefined });
       } else if (from === addr) {
         // aToken transferred out (e.g. send aTokens to another address)
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
@@ -221,14 +239,17 @@ async function buildProtocolItems(
         const borrowAmount = underlyingTx
           ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
           : amount;
-        items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: borrowAmount.neg() });
-        actions.push({ action: "BORROW", amount: borrowAmount, currency: underlying });
+        const borrowItem: ItemAccum = { account: "Liabilities:Aave:Borrow", currency: underlying, amount: borrowAmount.neg() };
+        items.push(borrowItem);
         // When underlying never touches the user wallet (adapter/flash loan),
         // add a Trading counterparty to balance the currency.
         const hasWalletSideFlow = underlyingTx != null
           || (underlying === chain.native_currency && hasNativeEthFlow);
+        actions.push({ action: "BORROW", amount: borrowAmount, currency: underlying, viaAdapter: !hasWalletSideFlow || undefined });
         if (!hasWalletSideFlow) {
           items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: borrowAmount });
+        } else {
+          walletConsumptionItems.push(borrowItem);
         }
       } else if (isBurn && from === addr) {
         // debtToken burned → REPAY with interest detection
@@ -249,19 +270,31 @@ async function buildProtocolItems(
           : new Decimal(0);
         const principalPart = repayAmount.minus(interest);
 
+        // When underlying never touches the user wallet (repay with collateral),
+        // add a Trading counterparty to balance the currency.
+        const hasWalletSideFlow = underlyingTx != null
+          || (underlying === chain.native_currency && hasNativeEthFlow);
+
         if (!principalPart.isZero()) {
-          items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: principalPart });
+          const principalItem: ItemAccum = { account: "Liabilities:Aave:Borrow", currency: underlying, amount: principalPart };
+          items.push(principalItem);
+          if (hasWalletSideFlow) walletConsumptionItems.push(principalItem);
         }
         if (interest.isPositive()) {
-          items.push({ account: "Expenses:Aave:Interest", currency: underlying, amount: interest });
+          const interestItem: ItemAccum = { account: "Expenses:Aave:Interest", currency: underlying, amount: interest };
+          items.push(interestItem);
+          if (hasWalletSideFlow) walletConsumptionItems.push(interestItem);
         }
-        actions.push({ action: "REPAY", amount: repayAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined });
+        if (!hasWalletSideFlow) {
+          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: repayAmount.neg() });
+        }
+        actions.push({ action: "REPAY", amount: repayAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined, viaAdapter: !hasWalletSideFlow || undefined });
       }
       // Non-mint/burn debt token transfers are unusual — ignore
     }
   }
 
-  return { items, actions, unprocessed };
+  return { items, actions, unprocessed, walletConsumptionItems };
 }
 
 // ---- Handler ----
@@ -339,11 +372,11 @@ export const aaveHandler: TransactionHandler = {
     let walletItems = mergeItemAccums(allWalletItems);
 
     // Step 4: Consume one matching Equity:External counterparty per protocol item
-    // For each protocol item, find and remove ONE wallet Equity:*:External:* item
-    // with the same currency AND same sign. Sign matching correctly identifies the
-    // counterparty for the Aave interaction (e.g. Supply +1 WETH matches
-    // Equity:aToken +1 WETH, but NOT Equity:DEX -1 WETH which is a fund source).
-    for (const protocolItem of protocol.items) {
+    // Only consume for protocol items that have a corresponding wallet-side flow
+    // (i.e., the underlying token was transferred to/from the user wallet).
+    // Items from aToken transfers or Trading counterparties already balance
+    // within protocol items and should NOT consume wallet Externals.
+    for (const protocolItem of protocol.walletConsumptionItems) {
       const idx = walletItems.findIndex((item) =>
         item.account.startsWith("Equity:") &&
         item.account.includes(":External:") &&
@@ -386,10 +419,10 @@ export const aaveHandler: TransactionHandler = {
     let description: string;
     if (protocol.actions.length > 0) {
       const actionParts = protocol.actions.map((a) => {
-        const label = a.action === "SUPPLY" ? "Supply"
-          : a.action === "WITHDRAW" ? "Withdraw"
-          : a.action === "BORROW" ? "Borrow"
-          : a.action === "REPAY" ? "Repay"
+        const label = a.action === "SUPPLY" ? (a.viaAdapter ? "Supply (adapter)" : "Supply")
+          : a.action === "WITHDRAW" ? (a.viaAdapter ? "Withdraw (adapter)" : "Withdraw")
+          : a.action === "BORROW" ? (a.viaAdapter ? "Borrow (adapter)" : "Borrow")
+          : a.action === "REPAY" ? (a.viaAdapter ? "Repay with Collateral" : "Repay")
           : "Interact";
         let part = `${label} ${formatTokenAmount(a.amount, a.currency)}`;
         if (a.interest) {

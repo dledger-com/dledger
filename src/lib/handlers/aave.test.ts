@@ -1561,6 +1561,172 @@ describe("aaveHandler", () => {
       }
     });
 
+    it("handles repay with collateral: debtToken burned with no underlying wallet flow → Trading counterparty", async () => {
+      // Pattern: CoW Protocol adapter sells collateral (aEthtBTC) to get USDC,
+      // which repays USDC variable debt. The underlying USDC never touches user wallet.
+      // ERC20s: debtToken burn + tiny aToken rebase mint + aToken transfer out + tBTC change in.
+      const ADAPTER = "0x29e3000000000000000000000000000000000000";
+
+      // First, set up prior borrow balance of 350,000 USDC
+      const borrowGroup = makeEmptyGroup({
+        hash: "0xsetup_borrow_001",
+        timestamp: "1704000000",
+        normal: {
+          hash: "0xsetup_borrow_001",
+          timeStamp: "1704000000",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xsetup_borrow_001",
+            timeStamp: "1704000000",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "variableDebtEthUSDC",
+            value: "350000000000", // 350,000 USDC (6 decimals)
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            hash: "0xsetup_borrow_001",
+            timeStamp: "1704000000",
+            from: AAVE_V3_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            value: "350000000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+      const borrowResult = await aaveHandler.process(borrowGroup, ctx);
+      expect(borrowResult.type).toBe("entries");
+      await postHandlerEntry(backend, borrowResult);
+
+      // Also set up prior tBTC supply
+      const supplyGroup = makeEmptyGroup({
+        hash: "0xsetup_supply_001",
+        timestamp: "1704000000",
+        normal: {
+          hash: "0xsetup_supply_001",
+          timeStamp: "1704000000",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xsetup_supply_001",
+            timeStamp: "1704000000",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthtBTC",
+            value: "5000000000000000000", // 5.0 tBTC
+            tokenDecimal: "18",
+          }),
+          makeErc20({
+            hash: "0xsetup_supply_001",
+            timeStamp: "1704000000",
+            from: USER_ADDR,
+            to: AAVE_V3_POOL,
+            tokenSymbol: "tBTC",
+            value: "5000000000000000000",
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+      const supplyResult = await aaveHandler.process(supplyGroup, ctx);
+      expect(supplyResult.type).toBe("entries");
+      await postHandlerEntry(backend, supplyResult);
+
+      // Now: Repay with Collateral transaction
+      const group = makeEmptyGroup({
+        hash: "0xbc8d0cdbd8af99b1",
+        timestamp: "1704067200",
+        normal: null, // CoW solver sent the tx, not user
+        erc20s: [
+          // 1. variableDebtEthUSDC burn: 348,468 USDC debt repaid
+          makeErc20({
+            hash: "0xbc8d0cdbd8af99b1",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "variableDebtEthUSDC",
+            tokenName: "Aave variable debt USDC",
+            value: "348468000000", // 348,468 USDC (6 decimals)
+            tokenDecimal: "6",
+          }),
+          // 2. aEthtBTC rebase mint: tiny amount (interest accrual artifact)
+          makeErc20({
+            hash: "0xbc8d0cdbd8af99b1",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthtBTC",
+            tokenName: "Aave Ethereum tBTC",
+            value: "39000000000000", // 0.000039 tBTC (18 decimals)
+            tokenDecimal: "18",
+          }),
+          // 3. aEthtBTC transfer: user → adapter (collateral sent to be sold)
+          makeErc20({
+            hash: "0xbc8d0cdbd8af99b1",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: ADAPTER,
+            tokenSymbol: "aEthtBTC",
+            tokenName: "Aave Ethereum tBTC",
+            value: "4947000000000000000", // 4.947 tBTC
+            tokenDecimal: "18",
+          }),
+          // 4. tBTC: adapter → user (change returned)
+          makeErc20({
+            hash: "0xbc8d0cdbd8af99b1",
+            timeStamp: "1704067200",
+            from: ADAPTER,
+            to: USER_ADDR,
+            tokenSymbol: "tBTC",
+            tokenName: "tBTC v2",
+            value: "77000000000000000", // 0.077 tBTC
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Description should include "Repay with Collateral"
+      expect(entry.entry.description).toContain("Repay with Collateral");
+      expect(entry.entry.description).toContain("USDC");
+
+      // Action metadata should contain REPAY
+      expect(entry.metadata["handler:action"]).toContain("REPAY");
+
+      // Should have Equity:Trading:USDC counterparty (since USDC never touched user wallet)
+      const accounts = await backend.listAccounts();
+      const tradingUSDC = accounts.find((a) => a.full_name === "Equity:Trading:USDC");
+      expect(tradingUSDC).toBeDefined();
+
+      // Items must balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [currency, sum] of sums) {
+        expect(sum.isZero(), `${currency} should balance to zero but got ${sum.toString()}`).toBe(true);
+      }
+    });
+
     it("classifies LIQUIDATION via subgraph enrichment", async () => {
       // Mock fetch to return subgraph response with liquidation
       const mockFetch = vi.fn().mockResolvedValue({
