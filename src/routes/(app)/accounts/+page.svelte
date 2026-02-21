@@ -12,8 +12,8 @@
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import type { Account, AccountType } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
-  import Search from "lucide-svelte/icons/search";
-  import X from "lucide-svelte/icons/x";
+  import ListFilter from "$lib/components/ListFilter.svelte";
+  import { matchesFilter } from "$lib/utils/list-filter.js";
 
   const store = new AccountStore();
   let dialogOpen = $state(false);
@@ -29,15 +29,9 @@
 
   let searchTerm = $state("");
 
-  const filteredAccounts = $derived.by(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return store.active;
-    return store.active.filter(
-      (a) =>
-        a.full_name.toLowerCase().includes(term) ||
-        a.account_type.toLowerCase().includes(term),
-    );
-  });
+  const filteredAccounts = $derived(
+    store.active.filter((a) => matchesFilter(a, searchTerm.trim(), ["full_name", "account_type"]))
+  );
 
   function resetForm() {
     formName = "";
@@ -89,17 +83,7 @@
       <h1 class="text-2xl font-bold tracking-tight">Chart of Accounts</h1>
       <p class="text-muted-foreground hidden sm:block">Manage your account structure and hierarchy.</p>
     </div>
-    <div class="relative w-full sm:w-auto sm:max-w-sm order-last sm:order-none">
-      <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-      <Input type="text" placeholder="Filter accounts..." bind:value={searchTerm} class="pl-9 pr-9"
-        onkeydown={(e) => { if (e.key === 'Escape') searchTerm = ''; }} />
-      {#if searchTerm}
-        <button type="button" onclick={() => (searchTerm = "")}
-          class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground">
-          <X class="size-4" />
-        </button>
-      {/if}
-    </div>
+    <ListFilter bind:value={searchTerm} placeholder="Filter accounts..." class="order-last sm:order-none" />
     <Dialog.Root bind:open={dialogOpen}>
       <Dialog.Trigger>
         {#snippet child({ props })}

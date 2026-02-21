@@ -13,6 +13,7 @@
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { exportGainLossCsv } from "$lib/utils/csv-export.js";
   import Download from "lucide-svelte/icons/download";
+  import ListFilter from "$lib/components/ListFilter.svelte";
 
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
@@ -22,6 +23,7 @@
   let toDate = $state(now.toISOString().slice(0, 10));
   let generated = $state(false);
   let filterProtocol = $state("");
+  let searchTerm = $state("");
 
   const hiddenFiltered = $derived(
     reportStore.gainLossReport
@@ -35,11 +37,20 @@
 
   const hasProtocols = $derived(uniqueProtocols.length > 0);
 
-  const filteredLines = $derived(
-    filterProtocol
+  const filteredLines = $derived.by(() => {
+    let lines = filterProtocol
       ? hiddenFiltered.filter((l) => l.source_handler === filterProtocol)
-      : hiddenFiltered,
-  );
+      : hiddenFiltered;
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      lines = lines.filter(
+        (l) =>
+          l.currency.toLowerCase().includes(term) ||
+          (l.source_handler && l.source_handler.toLowerCase().includes(term)),
+      );
+    }
+    return lines;
+  });
 
   async function generate() {
     generated = false;
@@ -96,6 +107,7 @@
             </select>
           </div>
         {/if}
+        <ListFilter bind:value={searchTerm} placeholder="Filter lots..." />
       </div>
     </Card.Content>
   </Card.Root>

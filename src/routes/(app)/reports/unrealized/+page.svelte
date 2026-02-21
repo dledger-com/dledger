@@ -13,6 +13,7 @@
   import { exportUnrealizedGainLossCsv } from "$lib/utils/csv-export.js";
   import type { UnrealizedGainLossReport } from "$lib/types/index.js";
   import Download from "lucide-svelte/icons/download";
+  import ListFilter from "$lib/components/ListFilter.svelte";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -21,6 +22,7 @@
   let missingRates = $state<string[]>([]);
   let error = $state<string | null>(null);
   let filterProtocol = $state("");
+  let searchTerm = $state("");
 
   const uniqueProtocols = $derived(
     report
@@ -30,13 +32,22 @@
 
   const hasProtocols = $derived(uniqueProtocols.length > 0);
 
-  const filteredLines = $derived(
-    report
-      ? filterProtocol
-        ? report.lines.filter((l) => l.source_handler === filterProtocol)
-        : report.lines
-      : [],
-  );
+  const filteredLines = $derived.by(() => {
+    if (!report) return [];
+    let lines = filterProtocol
+      ? report.lines.filter((l) => l.source_handler === filterProtocol)
+      : report.lines;
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      lines = lines.filter(
+        (l) =>
+          l.currency.toLowerCase().includes(term) ||
+          l.account_name.toLowerCase().includes(term) ||
+          (l.source_handler && l.source_handler.toLowerCase().includes(term)),
+      );
+    }
+    return lines;
+  });
 
   async function generate() {
     loading = true;
@@ -96,6 +107,7 @@
         </select>
       </div>
     {/if}
+    <ListFilter bind:value={searchTerm} placeholder="Filter positions..." />
   </div>
 
   {#if missingRates.length > 0}

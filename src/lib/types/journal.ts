@@ -26,6 +26,7 @@ export interface TransactionFilter {
   to_date?: string;
   status?: JournalEntryStatus;
   source?: string;
+  description_search?: string;
   limit?: number;
   offset?: number;
 }

@@ -12,6 +12,8 @@
   import type { Budget, Account } from "$lib/types/index.js";
   import Plus from "lucide-svelte/icons/plus";
   import Trash2 from "lucide-svelte/icons/trash-2";
+  import ListFilter from "$lib/components/ListFilter.svelte";
+  import { matchesFilter } from "$lib/utils/list-filter.js";
 
   const settings = new SettingsStore();
 
@@ -24,6 +26,11 @@
   let newAmount = $state("");
   let newCurrency = $state("");
   let adding = $state(false);
+
+  let searchTerm = $state("");
+  const filteredBudgets = $derived(
+    budgets.filter((b) => matchesFilter(b, searchTerm.trim(), ["account_pattern", "currency", "period_type"]))
+  );
 
   // Edit state
   let editingId = $state<string | null>(null);
@@ -123,12 +130,15 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Budgets</h1>
-    <p class="text-muted-foreground">
-      Set monthly or yearly spending limits for expense categories.
-      <a href="/reports/budget" class="underline hover:text-foreground">View budget report</a>.
-    </p>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Budgets</h1>
+      <p class="text-muted-foreground">
+        Set monthly or yearly spending limits for expense categories.
+        <a href="/reports/budget" class="underline hover:text-foreground">View budget report</a>.
+      </p>
+    </div>
+    <ListFilter bind:value={searchTerm} placeholder="Filter budgets..." />
   </div>
 
   <!-- Add Budget -->
@@ -183,10 +193,10 @@
   </Card.Root>
 
   <!-- Budget List -->
-  {#if budgets.length > 0}
+  {#if filteredBudgets.length > 0}
     <Card.Root>
       <Card.Header>
-        <Card.Title>Budget Rules ({budgets.length})</Card.Title>
+        <Card.Title>Budget Rules ({filteredBudgets.length})</Card.Title>
       </Card.Header>
       <Table.Root>
         <Table.Header>
@@ -198,7 +208,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each budgets as budget (budget.id)}
+          {#each filteredBudgets as budget (budget.id)}
             <Table.Row>
               {#if editingId === budget.id}
                 <Table.Cell>
@@ -243,6 +253,14 @@
           {/each}
         </Table.Body>
       </Table.Root>
+    </Card.Root>
+  {:else if budgets.length > 0 && searchTerm}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          No budgets match "{searchTerm}".
+        </p>
+      </Card.Content>
     </Card.Root>
   {:else}
     <Card.Root>

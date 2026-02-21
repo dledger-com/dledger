@@ -1135,6 +1135,10 @@ export class SqlJsBackend implements Backend {
       conditions.push("je.source = ?");
       params.push(filter.source);
     }
+    if (filter.description_search) {
+      conditions.push("je.description LIKE ?");
+      params.push(`%${filter.description_search}%`);
+    }
     if (conditions.length > 0) {
       sql += " WHERE " + conditions.join(" AND ");
     }
@@ -1200,6 +1204,10 @@ export class SqlJsBackend implements Backend {
     if (filter.source) {
       conditions.push("je.source = ?");
       params.push(filter.source);
+    }
+    if (filter.description_search) {
+      conditions.push("je.description LIKE ?");
+      params.push(`%${filter.description_search}%`);
     }
     if (conditions.length > 0) {
       sql += " WHERE " + conditions.join(" AND ");

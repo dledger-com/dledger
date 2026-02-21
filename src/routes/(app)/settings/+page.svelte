@@ -8,6 +8,8 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
+  import ListFilter from "$lib/components/ListFilter.svelte";
+  import { matchesFilter } from "$lib/utils/list-filter.js";
   import { getHiddenCurrencySet, markCurrencyHidden, unmarkCurrencyHidden, reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
   import type { Currency, ExchangeRate } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
@@ -42,6 +44,7 @@
   let exchangeRates = $state<ExchangeRate[]>([]);
   let ratesLoading = $state(false);
   let refetchingCurrency = $state<string | null>(null);
+  let currencySearchTerm = $state("");
 
   const dateFormats = [
     { value: "YYYY-MM-DD", label: "YYYY-MM-DD (ISO)" },
@@ -293,12 +296,13 @@
   <!-- Currencies -->
   <Card.Root>
     <Card.Header>
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Card.Title>Currencies</Card.Title>
           <Card.Description>Add currencies and manage rate sources.</Card.Description>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <ListFilter bind:value={currencySearchTerm} placeholder="Filter currencies..." />
           <label class="flex items-center gap-2 text-sm">
             <Switch
               checked={settings.showHidden}
@@ -358,7 +362,7 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each currencies.filter((c) => !c.is_hidden || settings.showHidden) as c}
+            {#each currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"])) as c}
               {@const rs = rateSources.get(c.code)}
               <Table.Row>
                 <Table.Cell class="font-mono">

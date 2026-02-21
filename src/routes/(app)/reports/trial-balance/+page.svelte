@@ -13,10 +13,12 @@
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { exportTrialBalanceCsv } from "$lib/utils/csv-export.js";
   import Download from "lucide-svelte/icons/download";
+  import ListFilter from "$lib/components/ListFilter.svelte";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
+  let searchTerm = $state("");
 
   async function generate() {
     await store.loadTrialBalance(asOf);
@@ -45,6 +47,7 @@
         CSV
       </Button>
     {/if}
+    <ListFilter bind:value={searchTerm} placeholder="Filter accounts..." />
   </div>
 
   {#if store.loading}
@@ -63,7 +66,9 @@
     </Card.Root>
   {:else if store.trialBalance && store.trialBalance.lines.length > 0}
     {@const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet()}
-    {@const filteredLines = filterHiddenTrialLines(store.trialBalance.lines, hidden)}
+    {@const hiddenFilteredLines = filterHiddenTrialLines(store.trialBalance.lines, hidden)}
+    {@const term = searchTerm.trim().toLowerCase()}
+    {@const filteredLines = term ? hiddenFilteredLines.filter((l) => l.account_name.toLowerCase().includes(term) || l.account_type.toLowerCase().includes(term)) : hiddenFilteredLines}
     {@const filteredDebits = filterHiddenBalances(store.trialBalance.total_debits, hidden)}
     {@const filteredCredits = filterHiddenBalances(store.trialBalance.total_credits, hidden)}
     <Card.Root>

@@ -15,6 +15,7 @@
   import Plus from "lucide-svelte/icons/plus";
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Play from "lucide-svelte/icons/play";
+  import ListFilter from "$lib/components/ListFilter.svelte";
 
   let templates = $state<RecurringTemplate[]>([]);
   let accounts = $state<Account[]>([]);
@@ -33,6 +34,17 @@
     { account_id: "", currency: "USD", amount: "" },
   ]);
   let adding = $state(false);
+  let searchTerm = $state("");
+
+  const filteredTemplates = $derived.by(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return templates;
+    return templates.filter(
+      (t) =>
+        t.description.toLowerCase().includes(term) ||
+        t.frequency.toLowerCase().includes(term),
+    );
+  });
 
   async function loadTemplates() {
     try {
@@ -152,13 +164,14 @@
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Recurring Transactions</h1>
       <p class="text-muted-foreground">
         Automate repeating journal entries.
       </p>
     </div>
+    <ListFilter bind:value={searchTerm} placeholder="Filter templates..." />
     <div class="flex gap-2">
       {#if dueCount > 0}
         <Button onclick={handleGenerate} disabled={generating}>
@@ -254,10 +267,10 @@
     </Card.Root>
   {/if}
 
-  {#if templates.length > 0}
+  {#if filteredTemplates.length > 0}
     <Card.Root>
       <Card.Header>
-        <Card.Title>Templates ({templates.length})</Card.Title>
+        <Card.Title>Templates ({filteredTemplates.length})</Card.Title>
       </Card.Header>
       <Table.Root>
         <Table.Header>
@@ -270,7 +283,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each templates as template (template.id)}
+          {#each filteredTemplates as template (template.id)}
             <Table.Row class={!template.is_active ? "opacity-60" : ""}>
               <Table.Cell>
                 <div>
@@ -306,6 +319,14 @@
           {/each}
         </Table.Body>
       </Table.Root>
+    </Card.Root>
+  {:else if templates.length > 0 && searchTerm}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          No templates match "{searchTerm}".
+        </p>
+      </Card.Content>
     </Card.Root>
   {:else if !showForm}
     <Card.Root>

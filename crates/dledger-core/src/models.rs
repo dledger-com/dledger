@@ -230,6 +230,7 @@ pub struct TransactionFilter {
     pub to_date: Option<NaiveDate>,
     pub status: Option<JournalEntryStatus>,
     pub source: Option<String>,
+    pub description_search: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }

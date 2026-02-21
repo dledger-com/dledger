@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -10,11 +9,9 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
-  import { Input } from "$lib/components/ui/input/index.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
-  import Search from "lucide-svelte/icons/search";
-  import X from "lucide-svelte/icons/x";
+  import ListFilter from "$lib/components/ListFilter.svelte";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import Pagination from "$lib/components/Pagination.svelte";
@@ -73,15 +70,15 @@
     return groups;
   });
 
-  const searchedEntries = $derived.by(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return filteredEntries;
-    return filteredEntries.filter(
-      ([entry]) =>
-        entry.description.toLowerCase().includes(term) ||
-        entry.date.includes(term) ||
-        entry.status.toLowerCase().includes(term),
-    );
+  // Debounced backend search
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    const term = searchTerm.trim();
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      store.load(term ? { description_search: term } : {});
+    }, 300);
+    return () => clearTimeout(debounceTimer);
   });
 
   function totalDebits(items: { amount: string }[]): number {
@@ -109,8 +106,6 @@
       exporting = false;
     }
   }
-
-  onMount(() => store.load());
 </script>
 
 <div class="space-y-6">
@@ -119,17 +114,7 @@
       <h1 class="text-2xl font-bold tracking-tight">Journal</h1>
       <p class="text-muted-foreground hidden sm:block">View and manage all journal entries.</p>
     </div>
-    <div class="relative w-full sm:w-auto sm:max-w-sm order-last sm:order-none">
-      <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-      <Input type="text" placeholder="Filter entries..." bind:value={searchTerm} class="pl-9 pr-9"
-        onkeydown={(e) => { if (e.key === 'Escape') searchTerm = ''; }} />
-      {#if searchTerm}
-        <button type="button" onclick={() => (searchTerm = "")}
-          class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground">
-          <X class="size-4" />
-        </button>
-      {/if}
-    </div>
+    <ListFilter bind:value={searchTerm} placeholder="Filter entries..." class="order-last sm:order-none" />
     <div class="flex flex-wrap gap-2 shrink-0">
       <Button variant="outline" size="sm" class="hidden sm:inline-flex" onclick={async () => { await store.loadAll(); showDuplicates = true; }}>
         Detect Duplicates
@@ -161,7 +146,7 @@
         </p>
       </Card.Content>
     </Card.Root>
-  {:else if searchedEntries.length === 0}
+  {:else if filteredEntries.length === 0 && searchTerm}
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
@@ -184,7 +169,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each searchedEntries as [entry, items] (entry.id)}
+          {#each filteredEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell>

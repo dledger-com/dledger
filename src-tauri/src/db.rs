@@ -398,6 +398,10 @@ impl Storage for SqliteStorage {
             param_values.push(source.clone());
             conditions.push(format!("je.source = ?{}", param_values.len()));
         }
+        if let Some(ref search) = filter.description_search {
+            param_values.push(format!("%{}%", search));
+            conditions.push(format!("je.description LIKE ?{}", param_values.len()));
+        }
 
         if !conditions.is_empty() {
             sql.push_str(" WHERE ");
@@ -1588,6 +1592,10 @@ impl Storage for SqliteStorage {
         if let Some(ref source) = filter.source {
             conditions.push("je.source = ?");
             param_values.push(Box::new(source.clone()));
+        }
+        if let Some(ref search) = filter.description_search {
+            conditions.push("je.description LIKE ?");
+            param_values.push(Box::new(format!("%{}%", search)));
         }
 
         let where_clause = if conditions.is_empty() {
