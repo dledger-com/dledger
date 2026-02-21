@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { AAVE, isAavePool, ZERO_ADDRESS } from "./addresses.js";
+import { getDefiLlamaPools, findPool } from "./defillama-yields.js";
 
 // ---- Token detection ----
 
@@ -130,7 +131,7 @@ function findUnderlyingFlow(flows: TokenFlow[]): TokenFlow | undefined {
   );
 }
 
-// ---- Enrichment via Aave API ----
+// ---- Enrichment via DefiLlama ----
 
 interface AaveEnrichment {
   supply_apy: string;
@@ -139,23 +140,17 @@ interface AaveEnrichment {
 
 async function fetchAaveEnrichment(
   underlyingSymbol: string,
+  chainId: number,
 ): Promise<AaveEnrichment | null> {
-  const resp = await fetch("https://aave-api-v2.aave.com/data/markets-data");
-  if (!resp.ok) return null;
-
-  const data = await resp.json();
-  const reserves = data?.reserves ?? data;
-  if (!Array.isArray(reserves)) return null;
-
-  const target = underlyingSymbol.toUpperCase();
-  const match = reserves.find(
-    (r: { symbol?: string }) => r.symbol?.toUpperCase() === target,
-  );
-  if (!match) return null;
+  const pools = await getDefiLlamaPools();
+  const result =
+    findPool(pools, "aave-v3", underlyingSymbol, chainId) ??
+    findPool(pools, "aave-v2", underlyingSymbol, chainId);
+  if (!result) return null;
 
   return {
-    supply_apy: match.liquidityRate?.toString() ?? match.supplyAPY?.toString() ?? "",
-    borrow_apy: match.variableBorrowRate?.toString() ?? match.borrowAPY?.toString() ?? "",
+    supply_apy: result.apyBase,
+    borrow_apy: result.apyBaseBorrow,
   };
 }
 
@@ -239,7 +234,7 @@ export const aaveHandler: TransactionHandler = {
     // Enrichment: fetch APY data from Aave API (opt-in)
     if (ctx.enrichment && underlying) {
       try {
-        const enrichment = await fetchAaveEnrichment(underlying.symbol);
+        const enrichment = await fetchAaveEnrichment(underlying.symbol, ctx.chainId);
         if (enrichment) {
           metadata["handler:supply_apy"] = enrichment.supply_apy;
           metadata["handler:borrow_apy"] = enrichment.borrow_apy;
