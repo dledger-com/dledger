@@ -77,6 +77,65 @@ function findPrimaryFlow(flows: TokenFlow[]): TokenFlow | undefined {
   return flows.find((f) => !isBptToken(f.symbol) && f.symbol !== "BAL");
 }
 
+// ---- Enrichment via Balancer API ----
+
+interface BalancerEnrichment {
+  pool_apr: string;
+  pool_tvl_usd: string;
+}
+
+const CHAIN_ID_TO_BALANCER: Record<number, string> = {
+  1: "MAINNET",
+  42161: "ARBITRUM",
+  10: "OPTIMISM",
+  137: "POLYGON",
+  8453: "BASE",
+};
+
+async function fetchBalancerEnrichment(
+  poolAddress: string,
+  chainId: number,
+): Promise<BalancerEnrichment | null> {
+  const chain = CHAIN_ID_TO_BALANCER[chainId];
+  if (!chain) return null;
+
+  const query = `{
+    poolGetPool(id: "${poolAddress.toLowerCase()}", chain: ${chain}) {
+      dynamicData {
+        totalLiquidity
+        aprItems {
+          apr
+          type
+        }
+      }
+    }
+  }`;
+
+  const resp = await fetch("https://api-v3.balancer.fi/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  if (!resp.ok) return null;
+
+  const json = await resp.json();
+  const pool = json?.data?.poolGetPool;
+  if (!pool?.dynamicData) return null;
+
+  const aprItems: { apr: number; type: string }[] =
+    pool.dynamicData.aprItems ?? [];
+  const totalApr = aprItems.reduce(
+    (sum: number, item: { apr: number }) => sum + (item.apr ?? 0),
+    0,
+  );
+  const tvl = pool.dynamicData.totalLiquidity ?? "";
+
+  return {
+    pool_apr: totalApr.toString(),
+    pool_tvl_usd: tvl.toString(),
+  };
+}
+
 // ---- Handler ----
 
 export const balancerHandler: TransactionHandler = {
@@ -163,11 +222,29 @@ export const balancerHandler: TransactionHandler = {
       "handler:action": action,
     };
 
-    // Find BPT token symbol for metadata
-    const bptSymbol =
-      group.erc20s.find((tx) => isBptToken(tx.tokenSymbol))?.tokenSymbol ?? "";
-    if (bptSymbol) {
-      metadata["handler:bpt_token"] = bptSymbol;
+    // Find BPT token for metadata + enrichment
+    const bptTx = group.erc20s.find((tx) => isBptToken(tx.tokenSymbol));
+    if (bptTx) {
+      metadata["handler:bpt_token"] = bptTx.tokenSymbol;
+    }
+
+    // Enrichment: fetch pool APR from Balancer API (opt-in)
+    if (ctx.enrichment && action === "JOIN_POOL" && bptTx) {
+      try {
+        const enrichment = await fetchBalancerEnrichment(
+          bptTx.contractAddress,
+          ctx.chainId,
+        );
+        if (enrichment) {
+          metadata["handler:pool_apr"] = enrichment.pool_apr;
+          if (enrichment.pool_tvl_usd) {
+            metadata["handler:pool_tvl_usd"] = enrichment.pool_tvl_usd;
+          }
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Balancer enrichment failed: ${msg}`;
+      }
     }
 
     const handlerEntry = buildHandlerEntry({

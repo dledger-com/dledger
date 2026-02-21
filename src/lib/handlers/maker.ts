@@ -98,6 +98,23 @@ function findUnderlyingFlow(flows: TokenFlow[]): TokenFlow | undefined {
   return flows.find((f) => !isMakerProtocolToken(f.symbol));
 }
 
+// ---- Enrichment via DefiLlama (Spark only) ----
+
+import { getDefiLlamaPools, findPool } from "./defillama-yields.js";
+
+async function fetchSparkEnrichment(
+  underlyingSymbol: string,
+  chainId: number,
+): Promise<{ supply_apy: string; borrow_apy: string } | null> {
+  const pools = await getDefiLlamaPools();
+  const result = findPool(pools, "spark", underlyingSymbol, chainId);
+  if (!result) return null;
+  return {
+    supply_apy: result.apyBase,
+    borrow_apy: result.apyBaseBorrow,
+  };
+}
+
 // ---- Handler ----
 
 export const makerHandler: TransactionHandler = {
@@ -175,6 +192,21 @@ export const makerHandler: TransactionHandler = {
       group.erc20s.find((tx) => isMakerProtocolToken(tx.tokenSymbol))?.tokenSymbol ?? "";
     if (protocolTokenSymbol) {
       metadata["handler:protocol_token"] = protocolTokenSymbol;
+    }
+
+    // Enrichment: fetch Spark APY from DefiLlama (opt-in, Spark actions only)
+    const isSparkAction = action === "SPARK_SUPPLY" || action === "SPARK_WITHDRAW" || action === "SPARK_BORROW";
+    if (ctx.enrichment && isSparkAction && underlying) {
+      try {
+        const enrichment = await fetchSparkEnrichment(underlying.symbol, ctx.chainId);
+        if (enrichment) {
+          metadata["handler:supply_apy"] = enrichment.supply_apy;
+          metadata["handler:borrow_apy"] = enrichment.borrow_apy;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Spark enrichment failed: ${msg}`;
+      }
     }
 
     const handlerEntry = buildHandlerEntry({

@@ -1480,7 +1480,7 @@
                   </div>
                 {/if}
               </Table.Cell>
-              {@const hasEnrichment = ["uniswap", "aave", "lido", "curve", "pendle"].includes(handler.id)}
+              {@const hasEnrichment = ["uniswap", "aave", "lido", "curve", "pendle", "compound", "yearn", "balancer", "maker"].includes(handler.id)}
               {@const enrichmentEnabled = settings.settings.handlers[handler.id]?.enrichment ?? false}
               <Table.Cell class="text-right hidden sm:table-cell">
                 {#if hasEnrichment && !isGeneric}

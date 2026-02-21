@@ -64,6 +64,45 @@ function findUnderlyingFlow(flows: TokenFlow[]): TokenFlow | undefined {
   return flows.find((f) => !isYvToken(f.symbol));
 }
 
+// ---- Enrichment via yDaemon API ----
+
+interface YearnEnrichment {
+  vault_apy: string;
+  vault_tvl_usd: string;
+}
+
+const YEARN_CHAIN_IDS: Record<number, string> = {
+  1: "1",
+  42161: "42161",
+  10: "10",
+  137: "137",
+};
+
+async function fetchYearnEnrichment(
+  vaultAddress: string,
+  chainId: number,
+): Promise<YearnEnrichment | null> {
+  const chain = YEARN_CHAIN_IDS[chainId];
+  if (!chain) return null;
+
+  const resp = await fetch(
+    `https://ydaemon.yearn.fi/${chain}/vaults/${vaultAddress}`,
+  );
+  if (!resp.ok) return null;
+
+  const data = await resp.json();
+  const apy =
+    data?.apr?.forwardAPR?.netAPR ?? data?.apr?.netAPR ?? null;
+  const tvl = data?.tvl?.tvl ?? null;
+
+  if (apy == null) return null;
+
+  return {
+    vault_apy: apy.toString(),
+    vault_tvl_usd: tvl != null ? tvl.toString() : "",
+  };
+}
+
 // ---- Handler ----
 
 export const yearnHandler: TransactionHandler = {
@@ -134,11 +173,29 @@ export const yearnHandler: TransactionHandler = {
       "handler:action": action,
     };
 
-    // Find yvToken symbol for metadata
-    const yvTokenSymbol =
-      group.erc20s.find((tx) => isYvToken(tx.tokenSymbol))?.tokenSymbol ?? "";
-    if (yvTokenSymbol) {
-      metadata["handler:vault_token"] = yvTokenSymbol;
+    // Find yvToken symbol and address for metadata + enrichment
+    const yvTokenTx = group.erc20s.find((tx) => isYvToken(tx.tokenSymbol));
+    if (yvTokenTx) {
+      metadata["handler:vault_token"] = yvTokenTx.tokenSymbol;
+    }
+
+    // Enrichment: fetch vault APY from yDaemon API (opt-in)
+    if (ctx.enrichment && (action === "DEPOSIT" || action === "WITHDRAW") && yvTokenTx) {
+      try {
+        const enrichment = await fetchYearnEnrichment(
+          yvTokenTx.contractAddress,
+          ctx.chainId,
+        );
+        if (enrichment) {
+          metadata["handler:vault_apy"] = enrichment.vault_apy;
+          if (enrichment.vault_tvl_usd) {
+            metadata["handler:vault_tvl_usd"] = enrichment.vault_tvl_usd;
+          }
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Yearn enrichment failed: ${msg}`;
+      }
     }
 
     const handlerEntry = buildHandlerEntry({

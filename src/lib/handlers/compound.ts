@@ -79,6 +79,26 @@ function findUnderlyingFlow(
   return null;
 }
 
+// ---- Enrichment via DefiLlama ----
+
+import { getDefiLlamaPools, findPool } from "./defillama-yields.js";
+
+async function fetchCompoundEnrichment(
+  underlyingSymbol: string,
+  chainId: number,
+): Promise<{ supply_apy: string; borrow_apy: string } | null> {
+  const pools = await getDefiLlamaPools();
+  // Try V3 first, fall back to V2
+  const result =
+    findPool(pools, "compound-v3", underlyingSymbol, chainId) ??
+    findPool(pools, "compound-v2", underlyingSymbol, chainId);
+  if (!result) return null;
+  return {
+    supply_apy: result.apyBase,
+    borrow_apy: result.apyBaseBorrow,
+  };
+}
+
 // ---- Handler ----
 
 export const compoundHandler: TransactionHandler = {
@@ -163,6 +183,20 @@ export const compoundHandler: TransactionHandler = {
       "handler:version": version,
       "handler:ctoken": cTokenSymbol,
     };
+
+    // Enrichment: fetch APY data from DefiLlama (opt-in)
+    if (ctx.enrichment && action !== "CLAIM_COMP" && underlying) {
+      try {
+        const enrichment = await fetchCompoundEnrichment(underlying.symbol, ctx.chainId);
+        if (enrichment) {
+          metadata["handler:supply_apy"] = enrichment.supply_apy;
+          metadata["handler:borrow_apy"] = enrichment.borrow_apy;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        metadata["handler:warnings"] = `Compound enrichment failed: ${msg}`;
+      }
+    }
 
     const handlerEntry = buildHandlerEntry({
       date,
