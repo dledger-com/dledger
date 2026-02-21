@@ -16,7 +16,7 @@ import {
   type ItemAccum,
 } from "./item-builder.js";
 import { AAVE, isAavePool, ZERO_ADDRESS } from "./addresses.js";
-import { getDefiLlamaPools, findPool } from "./defillama-yields.js";
+import { fetchAaveSubgraphData } from "./aave-subgraph.js";
 import { shortAddr } from "../browser-etherscan.js";
 
 // ---- Token detection ----
@@ -66,7 +66,7 @@ export function extractDebtTokenUnderlying(symbol: string): string | null {
 
 // ---- Protocol item building ----
 
-type AaveAction = "SUPPLY" | "WITHDRAW" | "BORROW" | "REPAY" | "CLAIM_REWARDS" | "UNKNOWN";
+type AaveAction = "SUPPLY" | "WITHDRAW" | "BORROW" | "REPAY" | "CLAIM_REWARDS" | "LIQUIDATION" | "UNKNOWN";
 
 interface ProtocolAction {
   action: AaveAction;
@@ -167,29 +167,6 @@ function buildProtocolItems(
   }
 
   return { items, actions, unprocessed };
-}
-
-// ---- Enrichment via DefiLlama ----
-
-interface AaveEnrichment {
-  supply_apy: string;
-  borrow_apy: string;
-}
-
-async function fetchAaveEnrichment(
-  underlyingSymbol: string,
-  chainId: number,
-): Promise<AaveEnrichment | null> {
-  const pools = await getDefiLlamaPools();
-  const result =
-    findPool(pools, "aave-v3", underlyingSymbol, chainId) ??
-    findPool(pools, "aave-v2", underlyingSymbol, chainId);
-  if (!result) return null;
-
-  return {
-    supply_apy: result.apyBase,
-    borrow_apy: result.apyBaseBorrow,
-  };
 }
 
 // ---- Handler ----
@@ -338,7 +315,7 @@ export const aaveHandler: TransactionHandler = {
     }
 
     // Determine actions for metadata
-    const actionSet = protocol.actions.length > 0
+    let actionSet = protocol.actions.length > 0
       ? [...new Set(protocol.actions.map((a) => a.action))].join(",")
       : walletItems.some((i) => i.account === "Income:Aave:Rewards")
         ? "CLAIM_REWARDS"
@@ -356,18 +333,36 @@ export const aaveHandler: TransactionHandler = {
       "handler:version": version,
     };
 
-    // Enrichment: fetch APY data from DefiLlama (opt-in)
+    // Enrichment: fetch historical data from Aave protocol subgraphs (opt-in)
     if (ctx.enrichment && protocol.actions.length > 0) {
-      const firstAction = protocol.actions[0];
       try {
-        const enrichment = await fetchAaveEnrichment(firstAction.currency, ctx.chainId);
-        if (enrichment) {
-          metadata["handler:supply_apy"] = enrichment.supply_apy;
-          metadata["handler:borrow_apy"] = enrichment.borrow_apy;
+        const subgraphData = await fetchAaveSubgraphData(
+          ctx.settings.theGraphApiKey, ctx.chainId, group.hash, isV2,
+        );
+        if (subgraphData) {
+          metadata["handler:supply_apy"] = subgraphData.supply_apy;
+          metadata["handler:borrow_apy"] = subgraphData.borrow_apy;
+          metadata["handler:asset_price_usd"] = subgraphData.asset_price_usd;
+          metadata["handler:utilization_rate"] = subgraphData.utilization_rate;
+          metadata["handler:total_liquidity"] = subgraphData.total_liquidity;
+
+          if (subgraphData.liquidation) {
+            const liq = subgraphData.liquidation;
+            metadata["handler:liquidator"] = liq.liquidator;
+            metadata["handler:collateral_asset"] = liq.collateral_asset;
+            metadata["handler:collateral_amount"] = liq.collateral_amount;
+            metadata["handler:collateral_price_usd"] = liq.collateral_price_usd;
+            metadata["handler:debt_asset"] = liq.debt_asset;
+            metadata["handler:debt_amount"] = liq.debt_amount;
+            metadata["handler:debt_price_usd"] = liq.debt_price_usd;
+            actionSet = "LIQUIDATION";
+            metadata["handler:action"] = actionSet;
+            description = `Aave: Liquidation — ${liq.collateral_amount} ${liq.collateral_asset} seized, ${liq.debt_amount} ${liq.debt_asset} repaid (${hashShort})`;
+          }
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        metadata["handler:warnings"] = `Aave enrichment failed: ${msg}`;
+        metadata["handler:warnings"] = `Aave subgraph enrichment failed: ${msg}`;
       }
     }
 

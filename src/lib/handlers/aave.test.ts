@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import Decimal from "decimal.js-light";
 import { createTestBackend } from "../../test/helpers.js";
 import { createMockHandlerContext } from "../../test/mock-handler-context.js";
@@ -12,6 +12,7 @@ import {
   extractDebtTokenUnderlying,
 } from "./aave.js";
 import { AAVE } from "./addresses.js";
+import { rayToApy } from "./aave-subgraph.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const USER_ADDR = "0x1234567890abcdef1234567890abcdef12345678";
@@ -861,5 +862,157 @@ describe("aaveHandler", () => {
         expect(sum.isZero()).toBe(true);
       }
     });
+
+    it("classifies LIQUIDATION via subgraph enrichment", async () => {
+      // Mock fetch to return subgraph response with liquidation
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            supplies: [],
+            borrows: [],
+            redeemUnderlyings: [],
+            repays: [],
+            liquidationCalls: [{
+              collateralAmount: "500000000000000000", // 0.5 WETH
+              debtToCover: "800000000", // 800 USDC
+              liquidator: "0x9999999999999999999999999999999999999999",
+              collateralAssetPriceUSD: "2000.00",
+              borrowAssetPriceUSD: "1.00",
+              collateralReserve: {
+                symbol: "WETH",
+                liquidityRate: "32847293847293847293847293",
+                variableBorrowRate: "52847293847293847293847293",
+                totalATokenSupply: "1000000000000000000000",
+                availableLiquidity: "500000000000000000000",
+              },
+              principalReserve: {
+                symbol: "USDC",
+                liquidityRate: "12847293847293847293847293",
+                variableBorrowRate: "42847293847293847293847293",
+                totalATokenSupply: "5000000000000",
+                availableLiquidity: "2000000000000",
+              },
+            }],
+          },
+        }),
+      });
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mockFetch;
+
+      try {
+        // Create context with enrichment enabled
+        const enrichedCtx = createMockHandlerContext(backend, {
+          settings: {
+            currency: "USD",
+            dateFormat: "YYYY-MM-DD",
+            fiscalYearStart: "01-01",
+            etherscanApiKey: "",
+            coingeckoApiKey: "",
+            finnhubApiKey: "",
+            theGraphApiKey: "test-api-key",
+            showHidden: false,
+            lastRateSync: "",
+            debugMode: false,
+            holdingPeriodDays: 365,
+            handlers: {
+              "aave": { enabled: true, enrichment: true },
+            },
+          },
+        });
+        // Enable enrichment on context
+        (enrichedCtx as { enrichment?: boolean }).enrichment = true;
+
+        // Liquidation tx: aToken burned (collateral seized) + debtToken burned (debt repaid)
+        const group = makeEmptyGroup({
+          normal: {
+            hash: "0x1234567890abcdef",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: AAVE_V3_POOL,
+            value: "0",
+            isError: "0",
+            gasUsed: "300000",
+            gasPrice: "20000000000",
+          },
+          erc20s: [
+            // aEthWETH burned (collateral seized by liquidator)
+            makeErc20({
+              from: USER_ADDR,
+              to: ZERO_ADDRESS,
+              tokenSymbol: "aEthWETH",
+              tokenName: "Aave Ethereum WETH",
+              value: "500000000000000000", // 0.5 WETH
+              tokenDecimal: "18",
+            }),
+            // variableDebtEthUSDC burned (debt repaid by liquidator)
+            makeErc20({
+              from: USER_ADDR,
+              to: ZERO_ADDRESS,
+              tokenSymbol: "variableDebtEthUSDC",
+              tokenName: "Aave variable debt USDC",
+              value: "800000000", // 800 USDC
+              tokenDecimal: "6",
+            }),
+          ],
+        });
+
+        const result = await aaveHandler.process(group, enrichedCtx);
+        expect(result.type).toBe("entries");
+        if (result.type !== "entries") return;
+
+        const entry = result.entries[0];
+
+        // Description mentions "Liquidation"
+        expect(entry.entry.description).toContain("Liquidation");
+
+        // Action is LIQUIDATION
+        expect(entry.metadata["handler:action"]).toBe("LIQUIDATION");
+
+        // Liquidation metadata populated
+        expect(entry.metadata["handler:liquidator"]).toBe("0x9999999999999999999999999999999999999999");
+        expect(entry.metadata["handler:collateral_asset"]).toBe("WETH");
+        expect(entry.metadata["handler:collateral_amount"]).toBe("500000000000000000");
+        expect(entry.metadata["handler:debt_asset"]).toBe("USDC");
+        expect(entry.metadata["handler:debt_amount"]).toBe("800000000");
+
+        // Enrichment data present
+        expect(entry.metadata["handler:supply_apy"]).toBeDefined();
+        expect(entry.metadata["handler:borrow_apy"]).toBeDefined();
+        expect(entry.metadata["handler:asset_price_usd"]).toBe("2000.00");
+        expect(entry.metadata["handler:utilization_rate"]).toBeDefined();
+        expect(entry.metadata["handler:total_liquidity"]).toBeDefined();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+});
+
+describe("rayToApy", () => {
+  it("converts a known RAY rate to a reasonable APY", () => {
+    // ~3.28% variable rate in RAY
+    const apy = rayToApy("32847293847293847293847293");
+    const apyNum = Number(apy);
+    // Should be a reasonable APY (between 0 and 1, i.e. 0-100%)
+    expect(apyNum).toBeGreaterThan(0);
+    expect(apyNum).toBeLessThan(1);
+    // Roughly 3.3% APY
+    expect(apyNum).toBeGreaterThan(0.03);
+    expect(apyNum).toBeLessThan(0.04);
+  });
+
+  it("returns '0' for zero rate", () => {
+    expect(rayToApy("0")).toBe("0");
+  });
+
+  it("handles a high rate (10% in RAY)", () => {
+    // 10% per-second rate in RAY = 0.1e27 / SECONDS_PER_YEAR ≈ 3.17e18 per second
+    // But actual Aave rates are per-second already, so 100000000000000000000000000 = 10%
+    const apy = rayToApy("100000000000000000000000000");
+    const apyNum = Number(apy);
+    // ~10.5% APY (compounded)
+    expect(apyNum).toBeGreaterThan(0.1);
+    expect(apyNum).toBeLessThan(0.12);
   });
 });
