@@ -481,42 +481,19 @@
     let allWarnings: string[] = [];
 
     try {
-      // Group accounts by chain_id for parallel sync across chains
-      const byChain = new Map<number, EtherscanAccount[]>();
+      // Sync all accounts sequentially to avoid concurrent DB transaction races
       for (const account of ethAccounts) {
-        let list = byChain.get(account.chain_id);
-        if (!list) {
-          list = [];
-          byChain.set(account.chain_id, list);
-        }
-        list.push(account);
-      }
-
-      // Sync chains in parallel (sequential within each chain for per-API-host rate limits)
-      const chainResults = await Promise.all(
-        [...byChain.values()].map(async (chainAccounts) => {
-          const results: EtherscanSyncResult[] = [];
-          for (const account of chainAccounts) {
-            syncingKey = accountSyncKey(account);
-            const r = await getBackend().syncEtherscan(
-              apiKey,
-              account.address,
-              account.label,
-              account.chain_id,
-            );
-            results.push(r);
-          }
-          return results;
-        }),
-      );
-
-      for (const results of chainResults) {
-        for (const r of results) {
-          totalImported += r.transactions_imported;
-          totalSkipped += r.transactions_skipped;
-          totalAccountsCreated += r.accounts_created;
-          allWarnings = allWarnings.concat(r.warnings);
-        }
+        syncingKey = accountSyncKey(account);
+        const r = await getBackend().syncEtherscan(
+          apiKey,
+          account.address,
+          account.label,
+          account.chain_id,
+        );
+        totalImported += r.transactions_imported;
+        totalSkipped += r.transactions_skipped;
+        totalAccountsCreated += r.accounts_created;
+        allWarnings = allWarnings.concat(r.warnings);
       }
 
       ethResult = {
@@ -1167,14 +1144,6 @@
                       <Button
                         variant="outline"
                         size="sm"
-                        onclick={() => startEditAddress(group)}
-                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
-                      >
-                        <Pencil class="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
                         onclick={() => handleSyncGroup(group)}
                         disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
                       >
@@ -1189,6 +1158,14 @@
                       >
                         <RotateCw class="mr-1 h-3 w-3" />
                         Reprocess
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => startEditAddress(group)}
+                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                      >
+                        <Pencil class="h-3 w-3" />
                       </Button>
                       <Button
                         variant="outline"

@@ -638,7 +638,11 @@ export class SqlJsBackend implements Backend {
 
   commitTransaction(): void {
     if (!this.inTransaction) return;
-    this.db.exec("COMMIT");
+    try {
+      this.db.exec("COMMIT");
+    } catch (_) {
+      // Transaction may have already been committed or auto-rolled-back
+    }
     this.inTransaction = false;
     this.scheduleSave();
   }
