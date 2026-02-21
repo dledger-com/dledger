@@ -212,51 +212,60 @@ export async function syncExchangeRates(
         const geckoIds: string[] = [];
         for (const code of coingeckoCodes) {
           const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
+          // Only send IDs that look valid for CoinGecko (lowercase alphanumeric + hyphens)
+          if (!/^[a-z0-9][a-z0-9-]*$/.test(geckoId)) {
+            result.errors.push(`CoinGecko: skipping invalid ID for ${code}`);
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
+            continue;
+          }
           idMap.set(geckoId, code);
           geckoIds.push(geckoId);
         }
 
-        const ids = geckoIds.join(",");
-        const vsBase = baseCurrency.toLowerCase();
-        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
-        const resp = await geckoFetch.fetch(url);
+        if (geckoIds.length > 0) {
+          const ids = geckoIds.join(",");
+          const vsBase = baseCurrency.toLowerCase();
+          const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
+          const resp = await geckoFetch.fetch(url);
 
-        if (!resp.ok) {
-          result.errors.push(`CoinGecko HTTP ${resp.status}: ${resp.statusText}`);
-          for (const code of coingeckoCodes) {
-            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-            allFailed.add(code);
-          }
-        } else {
-          const data: CoinGeckoResponse = await resp.json();
-          for (const [geckoId, ticker] of idMap) {
-            const priceData = data[geckoId];
-            if (!priceData || priceData[vsBase] == null) {
-              result.errors.push(`CoinGecko: no rate for ${ticker} (id: ${geckoId})`);
+          if (!resp.ok) {
+            result.errors.push(`CoinGecko HTTP ${resp.status}: ${resp.statusText}`);
+            for (const [, ticker] of idMap) {
               if (autoDetectCodes.includes(ticker)) autoDetectFailed.add(ticker);
               allFailed.add(ticker);
-              continue;
             }
+          } else {
+            const data: CoinGeckoResponse = await resp.json();
+            for (const [geckoId, ticker] of idMap) {
+              const priceData = data[geckoId];
+              if (!priceData || priceData[vsBase] == null) {
+                result.errors.push(`CoinGecko: no rate for ${ticker} (id: ${geckoId})`);
+                if (autoDetectCodes.includes(ticker)) autoDetectFailed.add(ticker);
+                allFailed.add(ticker);
+                continue;
+              }
 
-            if (autoDetectCodes.includes(ticker)) autoDetectSuccess.add(ticker);
-            allSucceeded.add(ticker);
+              if (autoDetectCodes.includes(ticker)) autoDetectSuccess.add(ticker);
+              allSucceeded.add(ticker);
 
-            const existing = await backend.getExchangeRate(ticker, baseCurrency, today);
-            if (existing !== null) {
-              result.rates_skipped++;
-              continue;
+              const existing = await backend.getExchangeRate(ticker, baseCurrency, today);
+              if (existing !== null) {
+                result.rates_skipped++;
+                continue;
+              }
+
+              const rate = priceData[vsBase];
+              await backend.recordExchangeRate({
+                id: uuidv7(),
+                date: today,
+                from_currency: ticker,
+                to_currency: baseCurrency,
+                rate: rate.toString(),
+                source: "coingecko",
+              });
+              result.rates_fetched++;
             }
-
-            const rate = priceData[vsBase];
-            await backend.recordExchangeRate({
-              id: uuidv7(),
-              date: today,
-              from_currency: ticker,
-              to_currency: baseCurrency,
-              rate: rate.toString(),
-              source: "coingecko",
-            });
-            result.rates_fetched++;
           }
         }
       } catch (err) {
