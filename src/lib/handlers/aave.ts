@@ -165,7 +165,14 @@ async function buildProtocolItems(
           : amount;
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: supplyAmount });
         actions.push({ action: "SUPPLY", amount: supplyAmount, currency: underlying });
-      } else if (isBurn) {
+        // When underlying never touches the user wallet (adapter/flash loan),
+        // add a Trading counterparty to balance the currency.
+        const hasWalletSideFlow = underlyingTx != null
+          || (underlying === chain.native_currency && hasNativeEthFlow);
+        if (!hasWalletSideFlow) {
+          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: supplyAmount.neg() });
+        }
+      } else if (isBurn && from === addr) {
         // aToken burned → WITHDRAW with interest detection
         // Use actual underlying transfer amount for balance accuracy
         const underlyingTx = regularTransfers.find((t) =>
@@ -216,7 +223,14 @@ async function buildProtocolItems(
           : amount;
         items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: borrowAmount.neg() });
         actions.push({ action: "BORROW", amount: borrowAmount, currency: underlying });
-      } else if (isBurn) {
+        // When underlying never touches the user wallet (adapter/flash loan),
+        // add a Trading counterparty to balance the currency.
+        const hasWalletSideFlow = underlyingTx != null
+          || (underlying === chain.native_currency && hasNativeEthFlow);
+        if (!hasWalletSideFlow) {
+          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: borrowAmount });
+        }
+      } else if (isBurn && from === addr) {
         // debtToken burned → REPAY with interest detection
         // Use actual underlying transfer amount for balance accuracy
         const underlyingTx = regularTransfers.find((t) =>
@@ -263,6 +277,7 @@ export const aaveHandler: TransactionHandler = {
       const to = group.normal.to.toLowerCase();
       if (isAavePool(to, ctx.chainId)) return 55;
       if (to === AAVE.WRAPPED_TOKEN_GATEWAY) return 55;
+      if (to === AAVE.SWAP_COLLATERAL_ADAPTER) return 55;
     }
 
     for (const erc20 of group.erc20s) {

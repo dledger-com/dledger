@@ -28,6 +28,7 @@ export function isUniswapRouter(addr: string): boolean {
 export const AAVE = {
   V2_POOL: "0x7d2768de32b0b80b7a3454c06bdac94a69ddc7a9",
   WRAPPED_TOKEN_GATEWAY: "0xd322a49006fc828f9b5b37ab215f99b4e5cab19c",
+  SWAP_COLLATERAL_ADAPTER: "0xadc0a53095a0af87f3aa29fe0715b5c28016364e",
   CHAIN_POOLS: {
     1: ["0x7d2768de32b0b80b7a3454c06bdac94a69ddc7a9", "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2"],
     42161: ["0x794a61358d6845594f94dc1db02a252b5b4814ad"],

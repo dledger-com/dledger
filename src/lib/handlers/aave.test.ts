@@ -232,6 +232,22 @@ describe("aaveHandler", () => {
       expect(aaveHandler.match(group, ctx)).toBe(0);
     });
 
+    it("returns 55 when normal.to is the Swap Collateral Adapter", () => {
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: "0xADC0A53095a0af87F3aa29FE0715b5c28016364e",
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+      });
+      expect(aaveHandler.match(group, ctx)).toBe(55);
+    });
+
     it("returns 55 for V3 lowercase aToken like aEthwstETH", () => {
       const group = makeEmptyGroup({
         erc20s: [makeErc20({ tokenSymbol: "aEthwstETH" })],
@@ -1355,6 +1371,186 @@ describe("aaveHandler", () => {
 
       // Items must balance to zero per currency (this is the key assertion —
       // using the aToken amount would leave a +0.005 tBTC imbalance)
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
+    it("handles collateral swap via adapter: adapter burn skipped, Trading counterparty for new mint", async () => {
+      // Pattern A: Swap Collateral Adapter swaps one aToken for another.
+      // ERC20 pattern: rebase aToken mint (tiny, from 0x0 to user), aToken burn by adapter
+      // (from adapter to 0x0), underlying flows through adapter/DEX (never touch user),
+      // new aToken minted to user.
+      const ADAPTER = "0xadc0a53095a0af87f3aa29fe0715b5c28016364e";
+      const DEX = "0xdef1def1def1def1def1def1def1def1def1def1";
+
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0xcollateral_swap",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: ADAPTER,
+          value: "0",
+          isError: "0",
+          gasUsed: "500000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // 1. Rebase mint: tiny aEthWBTC minted to user (interest accrual artifact)
+          makeErc20({
+            hash: "0xcollateral_swap",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthWBTC",
+            tokenName: "Aave Ethereum WBTC",
+            value: "100000", // 0.001 WBTC (8 decimals)
+            tokenDecimal: "8",
+          }),
+          // 2. Adapter burns aEthWBTC (from adapter, not user)
+          makeErc20({
+            hash: "0xcollateral_swap",
+            timeStamp: "1704067200",
+            from: ADAPTER,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "aEthWBTC",
+            tokenName: "Aave Ethereum WBTC",
+            value: "100000000", // 1.0 WBTC
+            tokenDecimal: "8",
+          }),
+          // 3. WBTC flows: adapter → DEX (not touching user)
+          makeErc20({
+            hash: "0xcollateral_swap",
+            timeStamp: "1704067200",
+            from: ADAPTER,
+            to: DEX,
+            tokenSymbol: "WBTC",
+            tokenName: "Wrapped BTC",
+            value: "100000000", // 1.0 WBTC
+            tokenDecimal: "8",
+          }),
+          // 4. tBTC flows: DEX → adapter (not touching user)
+          makeErc20({
+            hash: "0xcollateral_swap",
+            timeStamp: "1704067200",
+            from: DEX,
+            to: ADAPTER,
+            tokenSymbol: "tBTC",
+            tokenName: "tBTC v2",
+            value: "990000000000000000", // 0.99 tBTC (18 decimals)
+            tokenDecimal: "18",
+          }),
+          // 5. New aEthtBTC minted to user (the new collateral position)
+          makeErc20({
+            hash: "0xcollateral_swap",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthtBTC",
+            tokenName: "Aave Ethereum tBTC",
+            value: "990000000000000000", // 0.99 tBTC
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Should have Supply actions for both mints
+      expect(entry.entry.description).toContain("Supply");
+      expect(entry.metadata["handler:action"]).toContain("SUPPLY");
+
+      // No aToken symbols in items
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthWBTC");
+      expect(currencies).not.toContain("aEthtBTC");
+
+      // Should have Equity:Trading counterparties (no wallet-side underlying flows)
+      const accounts = await backend.listAccounts();
+      const tradingAccts = accounts.filter((a) => a.full_name.startsWith("Equity:Trading:"));
+      expect(tradingAccts.length).toBeGreaterThanOrEqual(1);
+
+      // Items must balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
+    it("handles flash loan supply: aToken minted with no underlying transfer → Trading counterparty", async () => {
+      // Pattern B: Flash loan supply. aToken minted to user but underlying
+      // flows entirely through adapter/pool — no wallet-side counterparty.
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0xflash_loan_supply",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "400000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // aEthtBTC minted to user (new supply position from flash loan)
+          makeErc20({
+            hash: "0xflash_loan_supply",
+            timeStamp: "1704067200",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthtBTC",
+            tokenName: "Aave Ethereum tBTC",
+            value: "5000000000000000000", // 5.0 tBTC
+            tokenDecimal: "18",
+          }),
+          // tBTC flows through pool internally — never from/to user
+          makeErc20({
+            hash: "0xflash_loan_supply",
+            timeStamp: "1704067200",
+            from: AAVE_V3_POOL,
+            to: OTHER_ADDR,
+            tokenSymbol: "tBTC",
+            tokenName: "tBTC v2",
+            value: "5000000000000000000",
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Should have SUPPLY action
+      expect(entry.entry.description).toContain("Supply");
+      expect(entry.metadata["handler:action"]).toBe("SUPPLY");
+
+      // No aEthtBTC in items
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthtBTC");
+      expect(currencies).toContain("tBTC");
+
+      // Should have Equity:Trading:tBTC counterparty
+      const accounts = await backend.listAccounts();
+      const tradingAcct = accounts.find((a) => a.full_name === "Equity:Trading:tBTC");
+      expect(tradingAcct).toBeDefined();
+
+      // Items must balance to zero per currency
       const sums = new Map<string, Decimal>();
       for (const item of entry.items) {
         const existing = sums.get(item.currency) ?? new Decimal(0);
