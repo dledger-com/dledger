@@ -66,27 +66,27 @@ const RESERVE_FIELDS = `
 
 function buildV2Query(txHash: string): string {
   return `{
-  deposits(where: { id_contains: "${txHash}" }, first: 5) {
+  deposits(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  borrows(where: { id_contains: "${txHash}" }, first: 5) {
+  borrows(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  redeemUnderlyings(where: { id_contains: "${txHash}" }, first: 5) {
+  redeemUnderlyings(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  repays(where: { id_contains: "${txHash}" }, first: 5) {
+  repays(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  liquidationCalls(where: { id_contains: "${txHash}" }, first: 5) {
+  liquidationCalls(where: { txHash: "${txHash}" }, first: 5) {
     collateralAmount
     principalAmount
     liquidator
@@ -100,27 +100,27 @@ function buildV2Query(txHash: string): string {
 
 function buildV3Query(txHash: string): string {
   return `{
-  supplies(where: { id_contains: "${txHash}" }, first: 5) {
+  supplies(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  borrows(where: { id_contains: "${txHash}" }, first: 5) {
+  borrows(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  redeemUnderlyings(where: { id_contains: "${txHash}" }, first: 5) {
+  redeemUnderlyings(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  repays(where: { id_contains: "${txHash}" }, first: 5) {
+  repays(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
   }
-  liquidationCalls(where: { id_contains: "${txHash}" }, first: 5) {
+  liquidationCalls(where: { txHash: "${txHash}" }, first: 5) {
     collateralAmount
     principalAmount
     liquidator
@@ -265,13 +265,12 @@ const V3_EVENT_TYPES = ["supplies", "borrows", "redeemUnderlyings", "repays", "l
 
 function buildBatchFields(prefix: string, txHash: string, isV2: boolean): string {
   const eventTypes = isV2 ? V2_EVENT_TYPES : V3_EVENT_TYPES;
-  const supplyType = isV2 ? "deposits" : "supplies";
   const lines: string[] = [];
 
   for (const eventType of eventTypes) {
     const alias = `${prefix}_${eventType}`;
     if (eventType === "liquidationCalls") {
-      lines.push(`  ${alias}: ${eventType}(where: { id_contains: "${txHash}" }, first: 5) {
+      lines.push(`  ${alias}: ${eventType}(where: { txHash: "${txHash}" }, first: 5) {
     collateralAmount
     principalAmount
     liquidator
@@ -281,7 +280,7 @@ function buildBatchFields(prefix: string, txHash: string, isV2: boolean): string
     principalReserve { symbol liquidityRate variableBorrowRate totalATokenSupply availableLiquidity }
   }`);
     } else {
-      lines.push(`  ${alias}: ${eventType}(where: { id_contains: "${txHash}" }, first: 5) {
+      lines.push(`  ${alias}: ${eventType}(where: { txHash: "${txHash}" }, first: 5) {
     amount
     assetPriceUSD
     ${RESERVE_FIELDS}
