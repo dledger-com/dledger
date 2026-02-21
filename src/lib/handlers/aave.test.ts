@@ -4,13 +4,20 @@ import { createTestBackend } from "../../test/helpers.js";
 import { createMockHandlerContext } from "../../test/mock-handler-context.js";
 import type { HandlerContext, TxHashGroup, Erc20Tx } from "./types.js";
 import type { SqlJsBackend } from "../sql-js-backend.js";
-import { aaveHandler } from "./aave.js";
+import {
+  aaveHandler,
+  isAToken,
+  isDebtToken,
+  extractATokenUnderlying,
+  extractDebtTokenUnderlying,
+} from "./aave.js";
 import { AAVE } from "./addresses.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const USER_ADDR = "0x1234567890abcdef1234567890abcdef12345678";
 const OTHER_ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const AAVE_POOL = AAVE.CHAIN_POOLS[1][0]; // V2 pool on mainnet
+const AAVE_V3_POOL = AAVE.CHAIN_POOLS[1][1]; // V3 pool on mainnet
 
 function makeEmptyGroup(overrides: Partial<TxHashGroup> = {}): TxHashGroup {
   return {
@@ -39,6 +46,79 @@ function makeErc20(overrides: Partial<Erc20Tx> = {}): Erc20Tx {
     ...overrides,
   };
 }
+
+describe("extractATokenUnderlying", () => {
+  it("extracts V2 aToken names", () => {
+    expect(extractATokenUnderlying("aUSDC")).toBe("USDC");
+    expect(extractATokenUnderlying("aWETH")).toBe("WETH");
+    expect(extractATokenUnderlying("aDAI")).toBe("DAI");
+    expect(extractATokenUnderlying("aWBTC")).toBe("WBTC");
+  });
+
+  it("extracts V3 aToken names with chain prefix", () => {
+    expect(extractATokenUnderlying("aEthWETH")).toBe("WETH");
+    expect(extractATokenUnderlying("aEthUSDC")).toBe("USDC");
+    expect(extractATokenUnderlying("aArbUSDC")).toBe("USDC");
+    expect(extractATokenUnderlying("aOptDAI")).toBe("DAI");
+    expect(extractATokenUnderlying("aBasDAI")).toBe("DAI");
+    expect(extractATokenUnderlying("aPolWPOL")).toBe("WPOL");
+  });
+
+  it("extracts V3 lowercase aToken names", () => {
+    expect(extractATokenUnderlying("aEthwstETH")).toBe("wstETH");
+    expect(extractATokenUnderlying("aEthtBTC")).toBe("tBTC");
+  });
+
+  it("returns null for non-aToken symbols", () => {
+    expect(extractATokenUnderlying("USDC")).toBeNull();
+    expect(extractATokenUnderlying("variableDebtUSDC")).toBeNull();
+    expect(extractATokenUnderlying("")).toBeNull();
+  });
+});
+
+describe("extractDebtTokenUnderlying", () => {
+  it("extracts variable debt token underlying", () => {
+    expect(extractDebtTokenUnderlying("variableDebtUSDC")).toBe("USDC");
+    expect(extractDebtTokenUnderlying("variableDebtDAI")).toBe("DAI");
+    expect(extractDebtTokenUnderlying("variableDebtWETH")).toBe("WETH");
+  });
+
+  it("extracts stable debt token underlying", () => {
+    expect(extractDebtTokenUnderlying("stableDebtDAI")).toBe("DAI");
+    expect(extractDebtTokenUnderlying("stableDebtUSDC")).toBe("USDC");
+  });
+
+  it("extracts V3 debt tokens with chain prefix", () => {
+    expect(extractDebtTokenUnderlying("variableDebtEthUSDC")).toBe("USDC");
+    expect(extractDebtTokenUnderlying("variableDebtArbWETH")).toBe("WETH");
+    expect(extractDebtTokenUnderlying("stableDebtOptDAI")).toBe("DAI");
+  });
+
+  it("returns null for non-debt symbols", () => {
+    expect(extractDebtTokenUnderlying("USDC")).toBeNull();
+    expect(extractDebtTokenUnderlying("aUSDC")).toBeNull();
+    expect(extractDebtTokenUnderlying("")).toBeNull();
+  });
+});
+
+describe("isAToken / isDebtToken", () => {
+  it("identifies aTokens correctly", () => {
+    expect(isAToken("aUSDC")).toBe(true);
+    expect(isAToken("aEthWETH")).toBe(true);
+    expect(isAToken("aEthwstETH")).toBe(true);
+    expect(isAToken("aEthtBTC")).toBe(true);
+    expect(isAToken("USDC")).toBe(false);
+    expect(isAToken("variableDebtUSDC")).toBe(false);
+  });
+
+  it("identifies debt tokens correctly", () => {
+    expect(isDebtToken("variableDebtUSDC")).toBe(true);
+    expect(isDebtToken("stableDebtDAI")).toBe(true);
+    expect(isDebtToken("variableDebtEthWETH")).toBe(true);
+    expect(isDebtToken("aUSDC")).toBe(false);
+    expect(isDebtToken("USDC")).toBe(false);
+  });
+});
 
 describe("aaveHandler", () => {
   let backend: SqlJsBackend;
@@ -114,9 +194,7 @@ describe("aaveHandler", () => {
       });
       expect(aaveHandler.match(group, ctx)).toBe(0);
     });
-  });
 
-  describe("match", () => {
     it("returns 55 for V3 lowercase aToken like aEthwstETH", () => {
       const group = makeEmptyGroup({
         erc20s: [makeErc20({ tokenSymbol: "aEthwstETH" })],
@@ -133,7 +211,7 @@ describe("aaveHandler", () => {
   });
 
   describe("process", () => {
-    it("classifies SUPPLY: aToken filtered, only USDC in items", async () => {
+    it("classifies SUPPLY: protocol items from aToken mint, USDC in items", async () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
@@ -209,7 +287,7 @@ describe("aaveHandler", () => {
       expect(result.currencyHints).toBeUndefined();
     });
 
-    it("classifies BORROW: debtToken filtered, only DAI in items", async () => {
+    it("classifies BORROW: protocol items from debtToken mint, DAI in items", async () => {
       const group = makeEmptyGroup({
         normal: {
           hash: "0x1234567890abcdef",
@@ -433,6 +511,275 @@ describe("aaveHandler", () => {
       expect(rewardAcct).toBeDefined();
       const rewardItem = entry.items.find((i) => i.account_id === rewardAcct!.id);
       expect(rewardItem).toBeDefined();
+    });
+
+    it("handles V3 aToken names: aEthWETH supply extracts to WETH", async () => {
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // aEthWETH minted from 0x0 to user
+          makeErc20({
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthWETH",
+            tokenName: "Aave Ethereum WETH",
+            value: "1000000000000000000", // 1 WETH (18 decimals)
+            tokenDecimal: "18",
+          }),
+          // WETH sent from user to pool
+          makeErc20({
+            from: USER_ADDR,
+            to: AAVE_V3_POOL,
+            tokenSymbol: "WETH",
+            tokenName: "Wrapped Ether",
+            value: "1000000000000000000",
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+      expect(entry.entry.description).toContain("Supply");
+      expect(entry.entry.description).toContain("WETH");
+      expect(entry.metadata["handler:action"]).toBe("SUPPLY");
+      expect(entry.metadata["handler:version"]).toBe("V3");
+
+      // No aEthWETH in items — only WETH
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthWETH");
+      expect(currencies).toContain("WETH");
+
+      // Protocol items use WETH, not aEthWETH
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(supplyItem!.currency).toBe("WETH");
+    });
+
+    it("handles multi-action: supply WETH + borrow USDC in one tx", async () => {
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "400000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // aEthWETH minted (supply side)
+          makeErc20({
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthWETH",
+            tokenName: "Aave Ethereum WETH",
+            value: "1000000000000000000", // 1 WETH
+            tokenDecimal: "18",
+          }),
+          // WETH sent from user to pool (supply)
+          makeErc20({
+            from: USER_ADDR,
+            to: AAVE_V3_POOL,
+            tokenSymbol: "WETH",
+            tokenName: "Wrapped Ether",
+            value: "1000000000000000000",
+            tokenDecimal: "18",
+          }),
+          // variableDebtEthUSDC minted (borrow side)
+          makeErc20({
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "variableDebtEthUSDC",
+            tokenName: "Aave variable debt USDC",
+            value: "500000000", // 500 USDC
+            tokenDecimal: "6",
+          }),
+          // USDC received from pool (borrow proceeds)
+          makeErc20({
+            from: AAVE_V3_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            tokenName: "USD Coin",
+            value: "500000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Description includes both actions
+      expect(entry.entry.description).toContain("Supply");
+      expect(entry.entry.description).toContain("WETH");
+      expect(entry.entry.description).toContain("Borrow");
+      expect(entry.entry.description).toContain("USDC");
+
+      // Metadata has comma-joined actions
+      expect(entry.metadata["handler:action"]).toContain("SUPPLY");
+      expect(entry.metadata["handler:action"]).toContain("BORROW");
+
+      // Has both protocol accounts
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      expect(supplyAcct).toBeDefined();
+      expect(borrowAcct).toBeDefined();
+
+      // Supply item uses WETH, borrow item uses USDC
+      const supplyItems = entry.items.filter((i) => i.account_id === supplyAcct!.id);
+      const borrowItems = entry.items.filter((i) => i.account_id === borrowAcct!.id);
+      expect(supplyItems).toHaveLength(1);
+      expect(borrowItems).toHaveLength(1);
+      expect(supplyItems[0].currency).toBe("WETH");
+      expect(borrowItems[0].currency).toBe("USDC");
+
+      // Items balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
+    it("handles aToken transfer out: send aEthWETH to another address", async () => {
+      const RECIPIENT = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+      const group = makeEmptyGroup({
+        erc20s: [
+          // aEthWETH transferred from user to recipient (not burn)
+          makeErc20({
+            from: USER_ADDR,
+            to: RECIPIENT,
+            tokenSymbol: "aEthWETH",
+            tokenName: "Aave Ethereum WETH",
+            value: "500000000000000000", // 0.5 WETH
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Should NOT contain aEthWETH in items — uses underlying WETH
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthWETH");
+      expect(currencies).toContain("WETH");
+
+      // Should have Assets:Aave:Supply with negative WETH (supply decreases)
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(new Decimal(supplyItem!.amount).isNegative()).toBe(true);
+
+      // Should have counterparty Equity:*:External:* with positive WETH
+      const externalItem = entry.items.find(
+        (i) => {
+          const acct = accounts.find((a) => a.id === i.account_id);
+          return acct?.full_name.startsWith("Equity:") && acct.full_name.includes(":External:");
+        },
+      );
+      expect(externalItem).toBeDefined();
+      expect(new Decimal(externalItem!.amount).isPositive()).toBe(true);
+
+      // Items balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
+    });
+
+    it("handles DEPOSIT_ETH: native ETH via WrappedTokenGateway → Supply +ETH", async () => {
+      const group = makeEmptyGroup({
+        normal: {
+          hash: "0x1234567890abcdef",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: AAVE.WRAPPED_TOKEN_GATEWAY,
+          value: "1000000000000000000", // 1 ETH
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // aEthWETH minted (protocol receipt for the ETH deposit)
+          makeErc20({
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthWETH",
+            tokenName: "Aave Ethereum WETH",
+            value: "1000000000000000000", // 1 WETH equivalent
+            tokenDecimal: "18",
+          }),
+        ],
+        internals: [],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Description should mention Supply
+      expect(entry.entry.description).toContain("Supply");
+
+      // No WETH or aEthWETH in items — should use native ETH
+      const currencies = entry.items.map((i) => i.currency);
+      expect(currencies).not.toContain("aEthWETH");
+      expect(currencies).not.toContain("WETH");
+      expect(currencies).toContain("ETH");
+
+      // Should have Assets:Aave:Supply with ETH
+      const accounts = await backend.listAccounts();
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
+      expect(supplyItem).toBeDefined();
+      expect(supplyItem!.currency).toBe("ETH");
+      expect(new Decimal(supplyItem!.amount).isPositive()).toBe(true);
+
+      // Items balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [, sum] of sums) {
+        expect(sum.isZero()).toBe(true);
+      }
     });
   });
 });

@@ -1,134 +1,172 @@
+import Decimal from "decimal.js-light";
 import type {
   TransactionHandler,
   HandlerContext,
   HandlerResult,
   TxHashGroup,
+  Erc20Tx,
 } from "./types.js";
-import { timestampToDate } from "../browser-etherscan.js";
+import { timestampToDate, weiToNative } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
-  remapCounterpartyAccounts,
   resolveToLineItems,
   buildHandlerEntry,
-  analyzeErc20Flows,
   formatTokenAmount,
-  type TokenFlow,
+  type ItemAccum,
 } from "./item-builder.js";
 import { AAVE, isAavePool, ZERO_ADDRESS } from "./addresses.js";
 import { getDefiLlamaPools, findPool } from "./defillama-yields.js";
+import { shortAddr } from "../browser-etherscan.js";
 
 // ---- Token detection ----
 
-function isAToken(symbol: string): boolean {
+export function isAToken(symbol: string): boolean {
   return /^a(?:(Eth|Arb|Opt|Bas|Pol)[A-Za-z]|[A-Z])/.test(symbol);
 }
 
-function isDebtToken(symbol: string): boolean {
+export function isDebtToken(symbol: string): boolean {
   return /^(variable|stable)Debt/.test(symbol);
 }
 
-// ---- Action classification ----
+// ---- Underlying currency extraction ----
 
-type AaveAction =
-  | "SUPPLY"
-  | "WITHDRAW"
-  | "BORROW"
-  | "REPAY"
-  | "DEPOSIT_ETH"
-  | "WITHDRAW_ETH"
-  | "CLAIM_REWARDS"
-  | "UNKNOWN";
-
-function classifyAction(
-  flows: TokenFlow[],
-  group: TxHashGroup,
-  addr: string,
-): AaveAction {
-  const aTokenMinted = flows.some((f) => f.isMint && isAToken(f.symbol));
-  const aTokenBurned = flows.some((f) => f.isBurn && isAToken(f.symbol));
-  const debtMinted = flows.some((f) => f.isMint && isDebtToken(f.symbol));
-  const debtBurned = flows.some((f) => f.isBurn && isDebtToken(f.symbol));
-
-  // DEPOSIT_ETH: normal tx value > 0 to WrappedTokenGateway + aWETH minted
-  if (
-    group.normal &&
-    group.normal.value !== "0" &&
-    group.normal.to.toLowerCase() === AAVE.WRAPPED_TOKEN_GATEWAY &&
-    aTokenMinted
-  ) {
-    return "DEPOSIT_ETH";
-  }
-
-  // WITHDRAW_ETH: aToken burned + internal tx ETH to user
-  if (aTokenBurned) {
-    const hasEthInternal = group.internals.some(
-      (itx) => itx.to.toLowerCase() === addr && itx.value !== "0",
-    );
-    if (hasEthInternal) return "WITHDRAW_ETH";
-  }
-
-  // SUPPLY: aToken minted + underlying outflow
-  if (aTokenMinted) {
-    const hasUnderlyingOut = flows.some(
-      (f) => f.direction === "out" && !isAToken(f.symbol) && !isDebtToken(f.symbol),
-    );
-    if (hasUnderlyingOut) return "SUPPLY";
-  }
-
-  // WITHDRAW: aToken burned + underlying inflow
-  if (aTokenBurned) {
-    const hasUnderlyingIn = flows.some(
-      (f) => f.direction === "in" && !isAToken(f.symbol) && !isDebtToken(f.symbol),
-    );
-    if (hasUnderlyingIn) return "WITHDRAW";
-  }
-
-  // BORROW: debtToken minted + underlying inflow
-  if (debtMinted) {
-    const hasUnderlyingIn = flows.some(
-      (f) => f.direction === "in" && !isAToken(f.symbol) && !isDebtToken(f.symbol),
-    );
-    if (hasUnderlyingIn) return "BORROW";
-  }
-
-  // REPAY: debtToken burned + underlying outflow
-  if (debtBurned) {
-    const hasUnderlyingOut = flows.some(
-      (f) => f.direction === "out" && !isAToken(f.symbol) && !isDebtToken(f.symbol),
-    );
-    if (hasUnderlyingOut) return "REPAY";
-  }
-
-  // CLAIM_REWARDS: only inflows, no aToken/debtToken mints/burns
-  if (!aTokenMinted && !aTokenBurned && !debtMinted && !debtBurned) {
-    const hasInflows = flows.some((f) => f.direction === "in");
-    const hasOutflows = flows.some((f) => f.direction === "out");
-    if (hasInflows && !hasOutflows) return "CLAIM_REWARDS";
-  }
-
-  return "UNKNOWN";
-}
-
-// ---- Action labels ----
-
-const ACTION_LABELS: Record<AaveAction, string> = {
-  SUPPLY: "Supply",
-  WITHDRAW: "Withdraw",
-  BORROW: "Borrow",
-  REPAY: "Repay",
-  DEPOSIT_ETH: "Deposit ETH",
-  WITHDRAW_ETH: "Withdraw ETH",
-  CLAIM_REWARDS: "Claim Rewards",
-  UNKNOWN: "Interact",
+/** Map of V3 chain prefixes to wrapped native currency symbols */
+const WRAPPED_NATIVE: Record<string, string> = {
+  Eth: "WETH",
+  Arb: "WETH",
+  Opt: "WETH",
+  Bas: "WETH",
+  Pol: "WPOL",
 };
 
-// ---- Find underlying token flow ----
+/**
+ * Extract underlying currency from aToken symbol.
+ * V3: aEthWETH → WETH, aArbUSDC → USDC, aBasDAI → DAI
+ * V2: aUSDC → USDC, aWETH → WETH
+ */
+export function extractATokenUnderlying(symbol: string): string | null {
+  // V3 with chain prefix: a + (Eth|Arb|Opt|Bas|Pol) + underlying
+  const v3 = symbol.match(/^a(Eth|Arb|Opt|Bas|Pol)(.+)$/);
+  if (v3) return v3[2];
+  // V2: a + uppercase-starting underlying
+  const v2 = symbol.match(/^a([A-Z].+)$/);
+  if (v2) return v2[1];
+  return null;
+}
 
-function findUnderlyingFlow(flows: TokenFlow[]): TokenFlow | undefined {
-  return flows.find(
-    (f) => !isAToken(f.symbol) && !isDebtToken(f.symbol),
-  );
+/**
+ * Extract underlying currency from debt token symbol.
+ * variableDebtEthUSDC → USDC, stableDebtDAI → DAI
+ */
+export function extractDebtTokenUnderlying(symbol: string): string | null {
+  const m = symbol.match(/^(?:variable|stable)Debt(?:Eth|Arb|Opt|Bas|Pol)?(.+)$/);
+  return m ? m[1] : null;
+}
+
+// ---- Protocol item building ----
+
+type AaveAction = "SUPPLY" | "WITHDRAW" | "BORROW" | "REPAY" | "CLAIM_REWARDS" | "UNKNOWN";
+
+interface ProtocolAction {
+  action: AaveAction;
+  amount: Decimal;
+  currency: string;
+}
+
+/**
+ * Build protocol-side ItemAccums from aToken/debtToken ERC20 transfers.
+ * Returns the protocol items and any transfers that couldn't be processed
+ * (pushed back to regular transfers).
+ */
+function buildProtocolItems(
+  protocolTransfers: Erc20Tx[],
+  regularTransfers: Erc20Tx[],
+  addr: string,
+  chain: { native_currency: string },
+  hasNativeEthFlow: boolean,
+): { items: ItemAccum[]; actions: ProtocolAction[]; unprocessed: Erc20Tx[] } {
+  const items: ItemAccum[] = [];
+  const actions: ProtocolAction[] = [];
+  const unprocessed: Erc20Tx[] = [];
+
+  // Collect currencies from regular transfers for native ETH detection
+  const regularSymbols = new Set(regularTransfers.map((t) => t.tokenSymbol));
+
+  for (const tx of protocolTransfers) {
+    const from = tx.from.toLowerCase();
+    const to = tx.to.toLowerCase();
+    const decimals = parseInt(tx.tokenDecimal, 10) || 18;
+    const amount = weiToNative(tx.value, decimals);
+    if (amount.isZero()) continue;
+
+    const isA = isAToken(tx.tokenSymbol);
+    let underlying: string | null;
+    if (isA) {
+      underlying = extractATokenUnderlying(tx.tokenSymbol);
+    } else {
+      underlying = extractDebtTokenUnderlying(tx.tokenSymbol);
+    }
+
+    if (!underlying) {
+      // Can't extract underlying — treat as regular transfer
+      unprocessed.push(tx);
+      continue;
+    }
+
+    // Native ETH override: if extracted underlying is a wrapped native symbol,
+    // there's no ERC20 transfer for it, AND the wallet side has a native ETH flow
+    // (normal tx value or internal tx), use native currency instead of wrapped
+    const chainPrefix = tx.tokenSymbol.match(/^a(Eth|Arb|Opt|Bas|Pol)/)?.[1]
+      ?? tx.tokenSymbol.match(/^(?:variable|stable)Debt(Eth|Arb|Opt|Bas|Pol)/)?.[1];
+    if (chainPrefix && hasNativeEthFlow) {
+      const wrappedNative = WRAPPED_NATIVE[chainPrefix];
+      if (underlying === wrappedNative && !regularSymbols.has(wrappedNative)) {
+        underlying = chain.native_currency;
+      }
+    }
+
+    if (isA) {
+      // aToken transfers
+      const isMint = from === ZERO_ADDRESS;
+      const isBurn = to === ZERO_ADDRESS;
+
+      if (isMint) {
+        // aToken minted → SUPPLY
+        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
+        actions.push({ action: "SUPPLY", amount, currency: underlying });
+      } else if (isBurn) {
+        // aToken burned → WITHDRAW
+        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
+        actions.push({ action: "WITHDRAW", amount, currency: underlying });
+      } else if (from === addr) {
+        // aToken transferred out (e.g. send aTokens to another address)
+        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
+        items.push({ account: `Equity:${chain.native_currency}:External:${shortAddr(to)}`, currency: underlying, amount });
+      } else if (to === addr) {
+        // aToken transferred in (received aTokens)
+        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
+        items.push({ account: `Equity:${chain.native_currency}:External:${shortAddr(from)}`, currency: underlying, amount: amount.neg() });
+      }
+    } else {
+      // Debt token transfers (only mint/burn are meaningful)
+      const isMint = from === ZERO_ADDRESS;
+      const isBurn = to === ZERO_ADDRESS;
+
+      if (isMint) {
+        // debtToken minted → BORROW (liability increases = negative)
+        items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount: amount.neg() });
+        actions.push({ action: "BORROW", amount, currency: underlying });
+      } else if (isBurn) {
+        // debtToken burned → REPAY (liability decreases = positive)
+        items.push({ account: "Liabilities:Aave:Borrow", currency: underlying, amount });
+        actions.push({ action: "REPAY", amount, currency: underlying });
+      }
+      // Non-mint/burn debt token transfers are unusual — ignore
+    }
+  }
+
+  return { items, actions, unprocessed };
 }
 
 // ---- Enrichment via DefiLlama ----
@@ -186,39 +224,79 @@ export const aaveHandler: TransactionHandler = {
     const date = timestampToDate(group.timestamp);
     const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
-    const flows = analyzeErc20Flows(group.erc20s, addr);
-    const action = classifyAction(flows, group, addr);
-
     // Ensure native currency for item building
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
-    // Filter out aToken/debtToken ERC20s — protocol receipts, not real assets
+    // Step 1: Partition ERC20 transfers into protocol (aToken/debtToken) and regular
+    const protocolTransfers: Erc20Tx[] = [];
+    const regularTransfers: Erc20Tx[] = [];
+    for (const tx of group.erc20s) {
+      if (isAToken(tx.tokenSymbol) || isDebtToken(tx.tokenSymbol)) {
+        protocolTransfers.push(tx);
+      } else {
+        regularTransfers.push(tx);
+      }
+    }
+
+    // Step 2: Build protocol-side items from aToken/debtToken transfers
+    // Detect native ETH flow for wrapped native override
+    const hasNativeEthFlow = (group.normal != null && group.normal.value !== "0")
+      || group.internals.some((itx) => itx.value !== "0");
+    const protocol = buildProtocolItems(protocolTransfers, regularTransfers, addr, ctx.chain, hasNativeEthFlow);
+
+    // Ensure currencies for protocol items
+    for (const item of protocol.items) {
+      // Determine decimals from the original transfer
+      const matchingTx = protocolTransfers.find((tx) => {
+        const underlying = isAToken(tx.tokenSymbol)
+          ? extractATokenUnderlying(tx.tokenSymbol)
+          : extractDebtTokenUnderlying(tx.tokenSymbol);
+        return underlying === item.currency || item.currency === ctx.chain.native_currency;
+      });
+      const decimals = matchingTx ? parseInt(matchingTx.tokenDecimal, 10) || 18 : 18;
+      await ctx.ensureCurrency(item.currency, decimals);
+    }
+
+    // Step 3: Build wallet-side items from filtered group (no protocol tokens)
     const filteredGroup: TxHashGroup = {
       ...group,
-      erc20s: group.erc20s.filter(
-        (tx) => !isAToken(tx.tokenSymbol) && !isDebtToken(tx.tokenSymbol),
-      ),
+      erc20s: [...regularTransfers, ...protocol.unprocessed],
     };
-    const allItems = await buildAllGroupItems(filteredGroup, addr, ctx.chain, ctx.label, ctx);
-    let merged = mergeItemAccums(allItems);
+    const allWalletItems = await buildAllGroupItems(filteredGroup, addr, ctx.chain, ctx.label, ctx);
+    let walletItems = mergeItemAccums(allWalletItems);
 
-    // Reclassify counterparty accounts based on action
-    const remapRules: Record<AaveAction, string | null> = {
-      SUPPLY: "Assets:Aave:Supply",
-      DEPOSIT_ETH: "Assets:Aave:Supply",
-      WITHDRAW: "Assets:Aave:Supply",
-      WITHDRAW_ETH: "Assets:Aave:Supply",
-      BORROW: "Liabilities:Aave:Borrow",
-      REPAY: "Liabilities:Aave:Borrow",
-      CLAIM_REWARDS: "Income:Aave:Rewards",
-      UNKNOWN: null,
-    };
-    const remapTarget = remapRules[action];
-    if (remapTarget) {
-      merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: remapTarget },
-      ]);
+    // Step 4: Remove redundant counterparties
+    // Protocol items already represent the protocol-side of supply/borrow/etc.
+    // The wallet-side will have Equity:*:External:* items for the same currencies
+    // that are now handled by protocol items — remove those
+    const protocolCurrencies = new Set(protocol.items.map((i) => i.currency));
+    walletItems = walletItems.filter((item) => {
+      if (item.account.startsWith("Equity:") && item.account.includes(":External:")) {
+        return !protocolCurrencies.has(item.currency);
+      }
+      return true;
+    });
+
+    // Step 5: Reclassify remaining Equity:External:* items
+    // If no protocol actions detected (pure rewards), reclassify as income
+    if (protocol.actions.length === 0) {
+      const hasOnlyInflows = walletItems.some(
+        (i) => i.account.startsWith("Equity:") && i.account.includes(":External:") && i.amount.isNegative(),
+      ) && !walletItems.some(
+        (i) => i.account.startsWith("Equity:") && i.account.includes(":External:") && i.amount.isPositive(),
+      );
+      if (hasOnlyInflows) {
+        walletItems = walletItems.map((item) => {
+          if (item.account.startsWith("Equity:") && item.account.includes(":External:")) {
+            return { ...item, account: "Income:Aave:Rewards" };
+          }
+          return item;
+        });
+      }
     }
+
+    // Step 6: Merge protocol items + remaining wallet items
+    const merged = mergeItemAccums([...protocol.items, ...walletItems]);
 
     if (merged.length === 0) {
       return { type: "skip", reason: "no net movement" };
@@ -226,12 +304,40 @@ export const aaveHandler: TransactionHandler = {
 
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
-    // Build description with underlying token amount
-    const underlying = findUnderlyingFlow(flows);
-    const amountStr = underlying
-      ? ` ${formatTokenAmount(underlying.amount, underlying.symbol)}`
-      : "";
-    const description = `Aave: ${ACTION_LABELS[action]}${amountStr} (${hashShort})`;
+    // Step 7: Build description from protocol actions
+    let description: string;
+    if (protocol.actions.length > 0) {
+      const actionParts = protocol.actions.map((a) => {
+        const label = a.action === "SUPPLY" ? "Supply"
+          : a.action === "WITHDRAW" ? "Withdraw"
+          : a.action === "BORROW" ? "Borrow"
+          : a.action === "REPAY" ? "Repay"
+          : "Interact";
+        return `${label} ${formatTokenAmount(a.amount, a.currency)}`;
+      });
+      description = `Aave: ${actionParts.join(" + ")} (${hashShort})`;
+    } else {
+      // Claim rewards or unknown — check wallet items for inflows
+      const rewardItems = walletItems.filter(
+        (i) => i.account === "Income:Aave:Rewards" || (i.account.startsWith("Assets:") && i.amount.isPositive()),
+      );
+      if (rewardItems.length > 0) {
+        const rewardAsset = rewardItems.find((i) => i.account.startsWith("Assets:"));
+        const amountStr = rewardAsset
+          ? ` ${formatTokenAmount(rewardAsset.amount, rewardAsset.currency)}`
+          : "";
+        description = `Aave: Claim Rewards${amountStr} (${hashShort})`;
+      } else {
+        description = `Aave: Interact (${hashShort})`;
+      }
+    }
+
+    // Determine actions for metadata
+    const actionSet = protocol.actions.length > 0
+      ? [...new Set(protocol.actions.map((a) => a.action))].join(",")
+      : walletItems.some((i) => i.account === "Income:Aave:Rewards")
+        ? "CLAIM_REWARDS"
+        : "UNKNOWN";
 
     // Determine version
     const isV2 = group.normal
@@ -241,14 +347,15 @@ export const aaveHandler: TransactionHandler = {
 
     const metadata: Record<string, string> = {
       handler: "aave",
-      "handler:action": action,
+      "handler:action": actionSet,
       "handler:version": version,
     };
 
-    // Enrichment: fetch APY data from Aave API (opt-in)
-    if (ctx.enrichment && underlying) {
+    // Enrichment: fetch APY data from DefiLlama (opt-in)
+    if (ctx.enrichment && protocol.actions.length > 0) {
+      const firstAction = protocol.actions[0];
       try {
-        const enrichment = await fetchAaveEnrichment(underlying.symbol, ctx.chainId);
+        const enrichment = await fetchAaveEnrichment(firstAction.currency, ctx.chainId);
         if (enrichment) {
           metadata["handler:supply_apy"] = enrichment.supply_apy;
           metadata["handler:borrow_apy"] = enrichment.borrow_apy;
