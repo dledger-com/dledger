@@ -6,6 +6,7 @@ export interface AppSettings {
   coingeckoApiKey: string;
   finnhubApiKey: string;
   theGraphApiKey: string;
+  routescanApiKey: string;
   showHidden: boolean;
   lastRateSync: string;
   debugMode: boolean;
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   coingeckoApiKey: "",
   finnhubApiKey: "",
   theGraphApiKey: "",
+  routescanApiKey: "",
   showHidden: false,
   lastRateSync: "",
   debugMode: false,

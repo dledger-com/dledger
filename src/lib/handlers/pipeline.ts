@@ -197,11 +197,13 @@ export async function syncEtherscanWithHandlers(
   await ensureCurrency(chain.native_currency, chain.decimals);
 
   // Fetch all 5 transfer types (with rate-limiting delays)
+  const routescanKey = settings.routescanApiKey || undefined;
   const normalTxns = await fetchPaginated<NormalTx>(
     apiKey,
     addr,
     "txlist",
     chainId,
+    routescanKey,
   );
 
   await new Promise((r) => setTimeout(r, 250));
@@ -210,6 +212,7 @@ export async function syncEtherscanWithHandlers(
     addr,
     "txlistinternal",
     chainId,
+    routescanKey,
   );
 
   await new Promise((r) => setTimeout(r, 250));
@@ -218,6 +221,7 @@ export async function syncEtherscanWithHandlers(
     addr,
     "tokentx",
     chainId,
+    routescanKey,
   );
 
   await new Promise((r) => setTimeout(r, 250));
@@ -226,6 +230,7 @@ export async function syncEtherscanWithHandlers(
     addr,
     "tokennfttx",
     chainId,
+    routescanKey,
   );
 
   await new Promise((r) => setTimeout(r, 250));
@@ -234,6 +239,7 @@ export async function syncEtherscanWithHandlers(
     addr,
     "token1155tx",
     chainId,
+    routescanKey,
   );
 
   // Group by hash

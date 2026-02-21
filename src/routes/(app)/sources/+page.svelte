@@ -887,7 +887,29 @@
             href="https://etherscan.io/apis"
             target="_blank"
             class="underline hover:text-foreground">etherscan.io</a
-          >. One key works for all supported chains.
+          >. One key works for most chains. BSC, Base, OP, and Avalanche use Routescan (configured below).
+        </p>
+      </div>
+
+      <!-- Routescan API Key -->
+      <div class="space-y-2">
+        <label for="routescan-api-key" class="text-sm font-medium">Routescan API Key (optional)</label>
+        <Input
+          id="routescan-api-key"
+          type="password"
+          placeholder="Routescan API key"
+          value={settings.settings.routescanApiKey}
+          oninput={(e: Event) => {
+            const val = (e.target as HTMLInputElement).value;
+            settings.update({ routescanApiKey: val });
+          }}
+        />
+        <p class="text-xs text-muted-foreground">
+          Used for BSC, Base, Optimism, and Avalanche (free at <a
+            href="https://routescan.io"
+            target="_blank"
+            class="underline hover:text-foreground">routescan.io</a
+          >). Leave blank for keyless access (slower rate limit).
         </p>
       </div>
 

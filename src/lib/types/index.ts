@@ -26,6 +26,9 @@ export type {
   GainLossLine,
 } from "./report.js";
 
+/** Chain IDs excluded from Etherscan free tier — routed to Routescan instead. */
+export const ETHERSCAN_PAID_ONLY_CHAINS = new Set([56, 8453, 10, 43114]);
+
 export interface LedgerImportResult {
   accounts_created: number;
   currencies_created: number;

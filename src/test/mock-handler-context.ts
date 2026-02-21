@@ -13,9 +13,9 @@ const DEFAULT_CHAIN: ChainInfo = {
 
 export function createMockHandlerContext(
   backend: Backend,
-  overrides: Partial<HandlerContext> = {},
+  overrides: Omit<Partial<HandlerContext>, "settings"> & { settings?: Partial<AppSettings> } = {},
 ): HandlerContext {
-  const settings: AppSettings = {
+  const defaultSettings: AppSettings = {
     currency: "USD",
     dateFormat: "YYYY-MM-DD",
     fiscalYearStart: "01-01",
@@ -23,6 +23,7 @@ export function createMockHandlerContext(
     coingeckoApiKey: "",
     finnhubApiKey: "",
     theGraphApiKey: "",
+    routescanApiKey: "",
     showHidden: false,
     lastRateSync: "",
     debugMode: false,
@@ -43,6 +44,9 @@ export function createMockHandlerContext(
       "eigenlayer": { enabled: true },
     },
   };
+
+  const { settings: settingsOverrides, ...restOverrides } = overrides;
+  const settings: AppSettings = { ...defaultSettings, ...settingsOverrides };
 
   const accountCache = new Map<string, string>();
 
@@ -97,6 +101,6 @@ export function createMockHandlerContext(
         is_base: false,
       });
     },
-    ...overrides,
+    ...restOverrides,
   };
 }

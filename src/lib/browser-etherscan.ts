@@ -2,6 +2,7 @@ import Decimal from "decimal.js-light";
 import type {
   AccountType,
 } from "./types/index.js";
+import { ETHERSCAN_PAID_ONLY_CHAINS } from "./types/index.js";
 
 // ---- API types ----
 
@@ -216,12 +217,16 @@ export async function fetchPaginated<T>(
   address: string,
   action: string,
   chainId: number,
+  routescanApiKey?: string,
 ): Promise<T[]> {
   const allResults: T[] = [];
   let page = 1;
+  const useRoutescan = ETHERSCAN_PAID_ONLY_CHAINS.has(chainId);
 
   while (true) {
-    const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=account&action=${action}&address=${address}&startblock=0&endblock=99999999&page=${page}&offset=10000&sort=asc&apikey=${apiKey}`;
+    const url = useRoutescan
+      ? `https://api.routescan.io/v2/network/mainnet/evm/${chainId}/etherscan/api?module=account&action=${action}&address=${address}&startblock=0&endblock=99999999&page=${page}&offset=10000&sort=asc${routescanApiKey ? `&apikey=${routescanApiKey}` : ""}`
+      : `https://api.etherscan.io/v2/api?chainid=${chainId}&module=account&action=${action}&address=${address}&startblock=0&endblock=99999999&page=${page}&offset=10000&sort=asc&apikey=${apiKey}`;
     const resp = await fetch(url);
     const apiResp: ApiResponse = await resp.json();
 
@@ -234,7 +239,8 @@ export async function fetchPaginated<T>(
       ) {
         break;
       }
-      throw new Error(`Etherscan API error: ${apiResp.message}`);
+      const provider = useRoutescan ? "Routescan" : "Etherscan";
+      throw new Error(`${provider} API error: ${apiResp.message}`);
     }
 
     if (Array.isArray(apiResp.result)) {
@@ -246,7 +252,8 @@ export async function fetchPaginated<T>(
     }
 
     page++;
-    await new Promise((r) => setTimeout(r, 250));
+    // Routescan free tier: 2 rps (500ms), Etherscan: ~4 rps (250ms)
+    await new Promise((r) => setTimeout(r, useRoutescan ? 500 : 250));
   }
 
   return allResults;
