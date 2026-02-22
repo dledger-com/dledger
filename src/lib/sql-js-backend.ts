@@ -238,6 +238,17 @@ CREATE TABLE IF NOT EXISTS budget (
     end_date TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS exchange_account (
+    id TEXT PRIMARY KEY NOT NULL,
+    exchange TEXT NOT NULL,
+    label TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    api_secret TEXT NOT NULL,
+    linked_etherscan_account_id TEXT,
+    last_sync TEXT,
+    created_at TEXT NOT NULL
+);
 `;
 
 // ---- Row type helpers ----
@@ -393,7 +404,7 @@ export class SqlJsBackend implements Backend {
       interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
       is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (10)");
+    db.exec("INSERT INTO schema_version (version) VALUES (11)");
     return backend;
   }
 
@@ -408,7 +419,7 @@ export class SqlJsBackend implements Backend {
     if (!saved) {
       db.exec(SCHEMA_SQL);
       db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
-      db.exec("INSERT INTO schema_version (version) VALUES (8)");
+      db.exec("INSERT INTO schema_version (version) VALUES (11)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -537,9 +548,17 @@ export class SqlJsBackend implements Backend {
             is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
           )`);
         }
-        if (currentVersion < 10) {
+        if (currentVersion < 11) {
+          // Migrate v10 → v11: exchange_account table for CEX integration
+          db.exec(`CREATE TABLE IF NOT EXISTS exchange_account (
+            id TEXT PRIMARY KEY NOT NULL, exchange TEXT NOT NULL, label TEXT NOT NULL,
+            api_key TEXT NOT NULL, api_secret TEXT NOT NULL,
+            linked_etherscan_account_id TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+        }
+        if (currentVersion < 11) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (10)");
+          db.exec("INSERT INTO schema_version (version) VALUES (11)");
         }
       }
     }
@@ -2149,6 +2168,54 @@ export class SqlJsBackend implements Backend {
     }
   }
 
+  // ---- Exchange accounts (CEX) ----
+
+  async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
+    return this.query(
+      "SELECT id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at FROM exchange_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string,
+        exchange: row.exchange as import("./cex/types.js").ExchangeId,
+        label: row.label as string,
+        api_key: row.api_key as string,
+        api_secret: row.api_secret as string,
+        linked_etherscan_account_id: (row.linked_etherscan_account_id as string) ?? null,
+        last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addExchangeAccount(account: import("./cex/types.js").ExchangeAccount): Promise<void> {
+    this.run(
+      `INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [account.id, account.exchange, account.label, account.api_key, account.api_secret,
+       account.linked_etherscan_account_id, account.last_sync, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateExchangeAccount(id: string, updates: Partial<import("./cex/types.js").ExchangeAccount>): Promise<void> {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if (updates.label !== undefined) { sets.push("label = ?"); params.push(updates.label); }
+    if (updates.api_key !== undefined) { sets.push("api_key = ?"); params.push(updates.api_key); }
+    if (updates.api_secret !== undefined) { sets.push("api_secret = ?"); params.push(updates.api_secret); }
+    if (updates.linked_etherscan_account_id !== undefined) { sets.push("linked_etherscan_account_id = ?"); params.push(updates.linked_etherscan_account_id); }
+    if (updates.last_sync !== undefined) { sets.push("last_sync = ?"); params.push(updates.last_sync); }
+    if (sets.length === 0) return;
+    params.push(id);
+    this.run(`UPDATE exchange_account SET ${sets.join(", ")} WHERE id = ?`, params);
+    this.scheduleSave();
+  }
+
+  async removeExchangeAccount(id: string): Promise<void> {
+    this.run("DELETE FROM exchange_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
   // ---- Currency origins ----
 
   async getCurrencyOrigins(): Promise<CurrencyOrigin[]> {
@@ -2544,6 +2611,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM recurring_template;
       DELETE FROM account_closure;
       DELETE FROM account;
+      DELETE FROM exchange_account;
       DELETE FROM etherscan_account;
       DELETE FROM currency;
     `);

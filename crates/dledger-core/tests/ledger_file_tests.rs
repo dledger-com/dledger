@@ -1181,6 +1181,12 @@ impl Storage for TestStorage {
 
     // -- Pagination (stub) --
     fn count_journal_entries(&self, _filter: &TransactionFilter) -> StorageResult<u64> { Ok(0) }
+
+    // -- Exchange accounts (stub) --
+    fn list_exchange_accounts(&self) -> StorageResult<Vec<serde_json::Value>> { Ok(vec![]) }
+    fn add_exchange_account(&self, _account: &serde_json::Value) -> StorageResult<()> { Ok(()) }
+    fn update_exchange_account(&self, _id: &str, _updates: &serde_json::Value) -> StorageResult<()> { Ok(()) }
+    fn remove_exchange_account(&self, _id: &str) -> StorageResult<()> { Ok(()) }
 }
 
 // ============================================================================

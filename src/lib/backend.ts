@@ -19,6 +19,7 @@ import type {
   OpenLot,
   Budget,
 } from "./types/index.js";
+import type { ExchangeAccount } from "./cex/types.js";
 
 export interface Reconciliation {
   id: string;
@@ -118,6 +119,12 @@ export interface Backend {
   addEtherscanAccount(address: string, chainId: number, label: string): Promise<void>;
   removeEtherscanAccount(address: string, chainId: number): Promise<void>;
   syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
+
+  // Exchange accounts (CEX)
+  listExchangeAccounts(): Promise<ExchangeAccount[]>;
+  addExchangeAccount(account: ExchangeAccount): Promise<void>;
+  updateExchangeAccount(id: string, updates: Partial<ExchangeAccount>): Promise<void>;
+  removeExchangeAccount(id: string): Promise<void>;
 
   // Metadata
   setMetadata(entryId: string, entries: Record<string, string>): Promise<void>;
@@ -371,6 +378,20 @@ class TauriBackend implements Backend {
     const { syncEtherscanWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
     return syncEtherscanWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+  }
+
+  // Exchange accounts (CEX)
+  async listExchangeAccounts(): Promise<ExchangeAccount[]> {
+    return this.invoke("list_exchange_accounts");
+  }
+  async addExchangeAccount(account: ExchangeAccount): Promise<void> {
+    return this.invoke("add_exchange_account", { account });
+  }
+  async updateExchangeAccount(id: string, updates: Partial<ExchangeAccount>): Promise<void> {
+    return this.invoke("update_exchange_account", { id, updates });
+  }
+  async removeExchangeAccount(id: string): Promise<void> {
+    return this.invoke("remove_exchange_account", { id });
   }
 
   // Currency origins

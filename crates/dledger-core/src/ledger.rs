@@ -582,6 +582,27 @@ impl LedgerEngine {
         Ok(self.storage.count_journal_entries(filter)?)
     }
 
+    // --- Exchange accounts (CEX) ---
+
+    pub fn list_exchange_accounts(&self) -> LedgerResult<Vec<serde_json::Value>> {
+        Ok(self.storage.list_exchange_accounts()?)
+    }
+
+    pub fn add_exchange_account(&self, account: &serde_json::Value) -> LedgerResult<()> {
+        self.storage.add_exchange_account(account)?;
+        Ok(())
+    }
+
+    pub fn update_exchange_account(&self, id: &str, updates: &serde_json::Value) -> LedgerResult<()> {
+        self.storage.update_exchange_account(id, updates)?;
+        Ok(())
+    }
+
+    pub fn remove_exchange_account(&self, id: &str) -> LedgerResult<()> {
+        self.storage.remove_exchange_account(id)?;
+        Ok(())
+    }
+
     // --- Internal helpers ---
 
     fn audit(&self, action: &str, entity_type: &str, entity_id: Uuid, details: &str) -> LedgerResult<()> {

@@ -628,6 +628,38 @@ pub fn count_journal_entries(
         .map_err(|e| e.to_string())
 }
 
+// -- Exchange account commands (CEX) --
+
+#[tauri::command]
+pub fn list_exchange_accounts(state: State<'_, AppState>) -> Result<Vec<serde_json::Value>, String> {
+    state.engine.list_exchange_accounts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_exchange_account(
+    state: State<'_, AppState>,
+    account: serde_json::Value,
+) -> Result<(), String> {
+    state.engine.add_exchange_account(&account).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_exchange_account(
+    state: State<'_, AppState>,
+    id: String,
+    updates: serde_json::Value,
+) -> Result<(), String> {
+    state.engine.update_exchange_account(&id, &updates).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_exchange_account(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    state.engine.remove_exchange_account(&id).map_err(|e| e.to_string())
+}
+
 // -- Etherscan commands --
 
 #[tauri::command]

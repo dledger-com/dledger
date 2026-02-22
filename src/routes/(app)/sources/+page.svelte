@@ -50,6 +50,9 @@
     type ReprocessChange,
   } from "$lib/handlers/index.js";
   import RotateCw from "lucide-svelte/icons/rotate-cw";
+  import { v7 as uuidv7 } from "uuid";
+  import type { ExchangeAccount, CexSyncResult } from "$lib/cex/types.js";
+  import { getCexAdapter, syncCexAccount } from "$lib/cex/index.js";
 
   const handlerRegistry = getDefaultRegistry();
   const handlers = handlerRegistry.getAll();
@@ -147,6 +150,128 @@
   let backfillResult = $state<HistoricalFetchResult | null>(null);
   let backfillProgress = $state({ fetched: 0, total: 0 });
   let availableCurrencies = $state<string[]>([]);
+
+  // -- CEX linked etherscan options --
+  const etherscanLinkOptions = $derived.by(() => {
+    const map = new Map<string, { address: string; label: string; chains: number[] }>();
+    for (const acc of ethAccounts) {
+      const key = acc.address;
+      const existing = map.get(key);
+      if (existing) {
+        existing.chains.push(acc.chain_id);
+      } else {
+        map.set(key, { address: acc.address, label: acc.label, chains: [acc.chain_id] });
+      }
+    }
+    return [...map.values()];
+  });
+
+  // -- CEX state --
+  let cexAccounts = $state<ExchangeAccount[]>([]);
+  let cexNewExchange = $state<"kraken">("kraken");
+  let cexNewLabel = $state("");
+  let cexNewApiKey = $state("");
+  let cexNewApiSecret = $state("");
+  let cexNewLinkedEtherscan = $state<string>("");
+  let cexAdding = $state(false);
+  let cexSyncingId = $state<string | null>(null);
+  let cexSyncingAll = $state(false);
+  let cexResult = $state<CexSyncResult | null>(null);
+
+  async function loadCexAccounts() {
+    try {
+      cexAccounts = await getBackend().listExchangeAccounts();
+    } catch (err) {
+      toast.error(`Failed to load exchange accounts: ${err}`);
+    }
+  }
+
+  async function addCexAccount() {
+    if (!cexNewLabel || !cexNewApiKey || !cexNewApiSecret) {
+      toast.error("Label, API Key, and API Secret are required");
+      return;
+    }
+    cexAdding = true;
+    try {
+      const account: ExchangeAccount = {
+        id: uuidv7(),
+        exchange: cexNewExchange,
+        label: cexNewLabel,
+        api_key: cexNewApiKey,
+        api_secret: cexNewApiSecret,
+        linked_etherscan_account_id: cexNewLinkedEtherscan || null,
+        last_sync: null,
+        created_at: new Date().toISOString(),
+      };
+      await getBackend().addExchangeAccount(account);
+      cexNewLabel = "";
+      cexNewApiKey = "";
+      cexNewApiSecret = "";
+      cexNewLinkedEtherscan = "";
+      await loadCexAccounts();
+      toast.success("Exchange account added");
+    } catch (err) {
+      toast.error(`Failed to add exchange account: ${err}`);
+    } finally {
+      cexAdding = false;
+    }
+  }
+
+  async function removeCexAccount(id: string) {
+    try {
+      await getBackend().removeExchangeAccount(id);
+      await loadCexAccounts();
+      toast.success("Exchange account removed");
+    } catch (err) {
+      toast.error(`Failed to remove exchange account: ${err}`);
+    }
+  }
+
+  async function syncCex(account: ExchangeAccount) {
+    cexSyncingId = account.id;
+    cexResult = null;
+    try {
+      const adapter = getCexAdapter(account.exchange);
+      const backend = getBackend();
+      cexResult = await syncCexAccount(backend, adapter, account, handlerRegistry);
+      await loadCexAccounts();
+      toast.success(`Synced ${account.label}: ${cexResult.entries_imported} imported, ${cexResult.entries_skipped} skipped`);
+    } catch (err) {
+      toast.error(`Sync failed for ${account.label}: ${err}`);
+    } finally {
+      cexSyncingId = null;
+    }
+  }
+
+  async function syncAllCex() {
+    cexSyncingAll = true;
+    cexResult = null;
+    let totalImported = 0;
+    let totalSkipped = 0;
+    const warnings: string[] = [];
+    try {
+      for (const account of cexAccounts) {
+        const adapter = getCexAdapter(account.exchange);
+        const result = await syncCexAccount(getBackend(), adapter, account, handlerRegistry);
+        totalImported += result.entries_imported;
+        totalSkipped += result.entries_skipped;
+        warnings.push(...result.warnings);
+      }
+      cexResult = {
+        entries_imported: totalImported,
+        entries_skipped: totalSkipped,
+        entries_consolidated: 0,
+        accounts_created: 0,
+        warnings,
+      };
+      await loadCexAccounts();
+      toast.success(`Synced all exchanges: ${totalImported} imported, ${totalSkipped} skipped`);
+    } catch (err) {
+      toast.error(`Sync all failed: ${err}`);
+    } finally {
+      cexSyncingAll = false;
+    }
+  }
 
   async function loadAvailableCurrencies() {
     try {
@@ -306,6 +431,7 @@
 
   $effect(() => {
     loadEthAccounts();
+    loadCexAccounts();
     loadAvailableCurrencies();
   });
 
@@ -1456,6 +1582,177 @@
           </ul>
         {/if}
 
+        <div class="mt-4 flex gap-2">
+          <Button variant="outline" size="sm" href="/journal">View Journal</Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
+  {/if}
+
+  <!-- Centralized Exchanges -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Centralized Exchanges</Card.Title>
+      <Card.Description>Import trade history, deposits, and withdrawals from centralized exchanges.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      {#if cexAccounts.length > 0}
+        <Table.Root>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Exchange</Table.Head>
+              <Table.Head>Label</Table.Head>
+              <Table.Head class="hidden md:table-cell">Linked Etherscan</Table.Head>
+              <Table.Head class="hidden sm:table-cell">Last Sync</Table.Head>
+              <Table.Head class="text-right">Actions</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each cexAccounts as account}
+              <Table.Row>
+                <Table.Cell>
+                  <Badge variant="secondary">{account.exchange}</Badge>
+                </Table.Cell>
+                <Table.Cell class="font-medium">{account.label}</Table.Cell>
+                <Table.Cell class="hidden md:table-cell">
+                  {#if account.linked_etherscan_account_id}
+                    {@const [addr] = account.linked_etherscan_account_id.split(":")}
+                    <span class="text-xs text-muted-foreground">{addr?.slice(0, 10)}...</span>
+                  {:else}
+                    <span class="text-xs text-muted-foreground">—</span>
+                  {/if}
+                </Table.Cell>
+                <Table.Cell class="hidden sm:table-cell">
+                  {#if account.last_sync}
+                    <span class="text-xs text-muted-foreground">{new Date(account.last_sync).toLocaleDateString()}</span>
+                  {:else}
+                    <span class="text-xs text-muted-foreground">Never</span>
+                  {/if}
+                </Table.Cell>
+                <Table.Cell class="text-right">
+                  <div class="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={cexSyncingId !== null || cexSyncingAll}
+                      onclick={() => syncCex(account)}
+                    >
+                      <RefreshCw class="h-4 w-4 {cexSyncingId === account.id ? 'animate-spin' : ''}" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onclick={() => removeCexAccount(account.id)}
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </Button>
+                  </div>
+                </Table.Cell>
+              </Table.Row>
+            {/each}
+          </Table.Body>
+        </Table.Root>
+      {/if}
+
+      <!-- Add exchange form -->
+      <div class="space-y-3 rounded-lg border p-4">
+        <h4 class="text-sm font-medium">Add Exchange Account</h4>
+        <div class="flex flex-wrap gap-2">
+          <div class="w-full sm:w-auto">
+            <select
+              class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-32"
+              bind:value={cexNewExchange}
+            >
+              <option value="kraken">Kraken</option>
+            </select>
+          </div>
+          <Input
+            class="w-full sm:w-40"
+            placeholder="Label (e.g., Main)"
+            bind:value={cexNewLabel}
+          />
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <Input
+            class="w-full sm:flex-1"
+            type="password"
+            placeholder="API Key"
+            bind:value={cexNewApiKey}
+          />
+          <Input
+            class="w-full sm:flex-1"
+            type="password"
+            placeholder="API Secret"
+            bind:value={cexNewApiSecret}
+          />
+        </div>
+        {#if etherscanLinkOptions.length > 0}
+          <div class="space-y-1">
+            <label class="text-xs text-muted-foreground">Link to Etherscan account (optional — enables consolidation)</label>
+            <select
+              class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-64"
+              bind:value={cexNewLinkedEtherscan}
+            >
+              <option value="">None</option>
+              {#each etherscanLinkOptions as opt}
+                <option value="{opt.address}:{opt.chains[0]}">{opt.label} ({opt.address.slice(0, 10)}...)</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+        <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
+          <Plus class="mr-1 h-4 w-4" />
+          Add Account
+        </Button>
+      </div>
+
+      {#if cexAccounts.length > 1}
+        <div class="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={cexSyncingAll || cexSyncingId !== null}
+            onclick={syncAllCex}
+          >
+            <RefreshCw class="mr-1 h-4 w-4 {cexSyncingAll ? 'animate-spin' : ''}" />
+            Sync All
+          </Button>
+        </div>
+      {/if}
+    </Card.Content>
+  </Card.Root>
+
+  {#if cexResult}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Exchange Sync Results</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <div class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <div>
+            <div class="text-xs text-muted-foreground">Imported</div>
+            <div class="text-lg font-bold">{cexResult.entries_imported}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted-foreground">Skipped</div>
+            <div class="text-lg font-bold">{cexResult.entries_skipped}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted-foreground">Consolidated</div>
+            <div class="text-lg font-bold">{cexResult.entries_consolidated}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted-foreground">Accounts Created</div>
+            <div class="text-lg font-bold">{cexResult.accounts_created}</div>
+          </div>
+        </div>
+        {#if cexResult.warnings.length > 0}
+          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
+            {#each cexResult.warnings as warning}
+              <li class="py-0.5">{warning}</li>
+            {/each}
+          </ul>
+        {/if}
         <div class="mt-4 flex gap-2">
           <Button variant="outline" size="sm" href="/journal">View Journal</Button>
         </div>

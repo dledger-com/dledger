@@ -103,6 +103,10 @@ pub fn run() {
             commands::update_recurring_template,
             commands::delete_recurring_template,
             commands::count_journal_entries,
+            commands::list_exchange_accounts,
+            commands::add_exchange_account,
+            commands::update_exchange_account,
+            commands::remove_exchange_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

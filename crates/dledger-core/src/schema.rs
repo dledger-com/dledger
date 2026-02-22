@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -200,6 +200,18 @@ CREATE TABLE IF NOT EXISTS recurring_template (
     created_at TEXT NOT NULL
 );
 
+-- CEX exchange accounts (v11)
+CREATE TABLE IF NOT EXISTS exchange_account (
+    id TEXT PRIMARY KEY NOT NULL,
+    exchange TEXT NOT NULL,
+    label TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    api_secret TEXT NOT NULL,
+    linked_etherscan_account_id TEXT,
+    last_sync TEXT,
+    created_at TEXT NOT NULL
+);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -217,6 +229,19 @@ CREATE TABLE IF NOT EXISTS budget (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value);
+"#;
+
+pub const MIGRATION_V11: &str = r#"
+CREATE TABLE IF NOT EXISTS exchange_account (
+    id TEXT PRIMARY KEY NOT NULL,
+    exchange TEXT NOT NULL,
+    label TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    api_secret TEXT NOT NULL,
+    linked_etherscan_account_id TEXT,
+    last_sync TEXT,
+    created_at TEXT NOT NULL
+);
 "#;
 
 pub const MIGRATION_V10: &str = r#"

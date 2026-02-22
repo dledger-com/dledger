@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -1237,7 +1237,8 @@ impl Storage for SqliteStorage {
              DELETE FROM account;
              DELETE FROM currency;
              DELETE FROM currency_rate_source;
-             DELETE FROM raw_transaction;",
+             DELETE FROM raw_transaction;
+             DELETE FROM exchange_account;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
         Ok(())
@@ -1614,6 +1615,119 @@ impl Storage for SqliteStorage {
         Ok(count)
     }
 
+    // -- Exchange accounts (CEX) --
+
+    fn list_exchange_accounts(&self) -> StorageResult<Vec<serde_json::Value>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at FROM exchange_account ORDER BY created_at")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let exchange: String = row.get(1)?;
+                let label: String = row.get(2)?;
+                let api_key: String = row.get(3)?;
+                let api_secret: String = row.get(4)?;
+                let linked_etherscan_account_id: Option<String> = row.get(5)?;
+                let last_sync: Option<String> = row.get(6)?;
+                let created_at: String = row.get(7)?;
+                Ok(serde_json::json!({
+                    "id": id,
+                    "exchange": exchange,
+                    "label": label,
+                    "api_key": api_key,
+                    "api_secret": api_secret,
+                    "linked_etherscan_account_id": linked_etherscan_account_id,
+                    "last_sync": last_sync,
+                    "created_at": created_at,
+                }))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn add_exchange_account(&self, account: &serde_json::Value) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                account["id"].as_str().unwrap_or_default(),
+                account["exchange"].as_str().unwrap_or_default(),
+                account["label"].as_str().unwrap_or_default(),
+                account["api_key"].as_str().unwrap_or_default(),
+                account["api_secret"].as_str().unwrap_or_default(),
+                account["linked_etherscan_account_id"].as_str(),
+                account["last_sync"].as_str(),
+                account["created_at"].as_str().unwrap_or_default(),
+            ],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn update_exchange_account(&self, id: &str, updates: &serde_json::Value) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let mut set_clauses = Vec::new();
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(v) = updates.get("exchange").and_then(|v| v.as_str()) {
+            set_clauses.push("exchange = ?");
+            param_values.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = updates.get("label").and_then(|v| v.as_str()) {
+            set_clauses.push("label = ?");
+            param_values.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = updates.get("api_key").and_then(|v| v.as_str()) {
+            set_clauses.push("api_key = ?");
+            param_values.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = updates.get("api_secret").and_then(|v| v.as_str()) {
+            set_clauses.push("api_secret = ?");
+            param_values.push(Box::new(v.to_string()));
+        }
+        if updates.get("linked_etherscan_account_id").is_some() {
+            set_clauses.push("linked_etherscan_account_id = ?");
+            param_values.push(Box::new(updates["linked_etherscan_account_id"].as_str().map(|s| s.to_string())));
+        }
+        if updates.get("last_sync").is_some() {
+            set_clauses.push("last_sync = ?");
+            param_values.push(Box::new(updates["last_sync"].as_str().map(|s| s.to_string())));
+        }
+
+        if set_clauses.is_empty() {
+            return Ok(());
+        }
+
+        param_values.push(Box::new(id.to_string()));
+        let sql = format!(
+            "UPDATE exchange_account SET {} WHERE id = ?",
+            set_clauses.join(", ")
+        );
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let affected = conn
+            .execute(&sql, params_ref.as_slice())
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("exchange_account {id}")));
+        }
+        Ok(())
+    }
+
+    fn remove_exchange_account(&self, id: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute("DELETE FROM exchange_account WHERE id = ?1", params![id])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("exchange_account {id}")));
+        }
+        Ok(())
+    }
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()> {
@@ -1693,6 +1807,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 10 {
             storage.execute_sql(MIGRATION_V10)?;
             storage.set_schema_version(10)?;
+        }
+        if current < 11 {
+            storage.execute_sql(MIGRATION_V11)?;
+            storage.set_schema_version(11)?;
         }
     }
     Ok(())
@@ -3325,7 +3443,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // 13. Schema migrations v7 → v10
+    // 13. Schema migrations v7 → v11
     // ---------------------------------------------------------------
 
     #[test]
@@ -3339,7 +3457,7 @@ mod tests {
 
         apply_migrations(&storage).unwrap();
 
-        assert_eq!(storage.get_schema_version().unwrap(), 10);
+        assert_eq!(storage.get_schema_version().unwrap(), 11);
 
         // Verify budget table exists
         storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();
@@ -3349,5 +3467,8 @@ mod tests {
 
         // Verify recurring_template table exists
         storage.execute_sql("INSERT INTO recurring_template (id, description, frequency, next_date, created_at) VALUES ('test', 'test', 'monthly', '2024-01-01', '2024-01-01')").unwrap();
+
+        // Verify exchange_account table exists
+        storage.execute_sql("INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, created_at) VALUES ('test', 'binance', 'My Binance', 'key', 'secret', '2024-01-01')").unwrap();
     }
 }

@@ -231,6 +231,13 @@ pub trait Storage: Send + Sync {
 
     fn count_journal_entries(&self, filter: &TransactionFilter) -> StorageResult<u64>;
 
+    // -- Exchange accounts (CEX) --
+
+    fn list_exchange_accounts(&self) -> StorageResult<Vec<serde_json::Value>>;
+    fn add_exchange_account(&self, account: &serde_json::Value) -> StorageResult<()>;
+    fn update_exchange_account(&self, id: &str, updates: &serde_json::Value) -> StorageResult<()>;
+    fn remove_exchange_account(&self, id: &str) -> StorageResult<()>;
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()>;
