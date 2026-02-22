@@ -166,10 +166,10 @@ export class KrakenAdapter implements CexAdapter {
   async fetchLedgerRecords(
     apiKey: string,
     apiSecret: string,
+    since?: number,
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
     let offset = 0;
-    const pageSize = 50;
 
     // Try to resolve unknown assets via public API
     const dynamicMap = await fetchAssetMap();
@@ -181,6 +181,9 @@ export class KrakenAdapter implements CexAdapter {
         nonce: String(nonce),
         ofs: String(offset),
       });
+      if (since) {
+        params.set("start", String(since));
+      }
       const postData = params.toString();
       const signature = await krakenSign(path, nonce, postData, apiSecret);
 

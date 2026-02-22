@@ -27,8 +27,11 @@ export async function syncCexAccount(
     warnings: [],
   };
 
-  // 1. Fetch all records
-  const records = await adapter.fetchLedgerRecords(account.api_key, account.api_secret);
+  // 1. Fetch records (incremental if last_sync available)
+  const since = account.last_sync
+    ? Math.floor(new Date(account.last_sync).getTime() / 1000)
+    : undefined;
+  const records = await adapter.fetchLedgerRecords(account.api_key, account.api_secret, since);
 
   // Enrich txids for deposits/withdrawals if adapter supports it
   if ("enrichTxids" in adapter && typeof (adapter as Record<string, unknown>).enrichTxids === "function") {
