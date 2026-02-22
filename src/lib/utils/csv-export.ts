@@ -8,6 +8,7 @@ import type {
 } from "$lib/types/index.js";
 import type { TaxSummary } from "./tax-summary.js";
 import type { PortfolioReport } from "./portfolio.js";
+import type { FrenchTaxReport } from "./french-tax.js";
 import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 
 function escapeCsv(value: string | number): string {
@@ -232,4 +233,48 @@ export function exportPortfolioCsv(report: PortfolioReport): void {
   }
 
   downloadCsv(`portfolio-${report.as_of}.csv`, rows.join("\n"));
+}
+
+export function exportFrenchTaxCsv(report: FrenchTaxReport): void {
+  const rows: string[] = [];
+
+  // Summary section
+  rows.push(toCsvRow(["French Crypto Tax Report (Art. 150 VH bis)", `Year ${report.taxYear}`]));
+  rows.push(toCsvRow(["Total Plus-Value", report.totalPlusValue]));
+  rows.push(toCsvRow(["Total Fiat Received", report.totalFiatReceived]));
+  rows.push(toCsvRow(["Final Acquisition Cost (A)", report.finalAcquisitionCost]));
+  rows.push(toCsvRow(["Year-End Portfolio Value (V)", report.yearEndPortfolioValue]));
+  rows.push(toCsvRow(["Box 3AN (Plus-Value)", report.box3AN]));
+  rows.push(toCsvRow(["Box 3BN (Moins-Value)", report.box3BN]));
+  rows.push(toCsvRow(["Exempt (<=305 EUR)", report.isExempt ? "Yes" : "No"]));
+  rows.push(toCsvRow(["Tax at PFU 30%", report.taxDuePFU30]));
+  rows.push(toCsvRow(["Tax at PFU 31.4%", report.taxDuePFU314]));
+  rows.push("");
+
+  // Disposition detail rows (Form 2086 fields)
+  rows.push(toCsvRow(["Dispositions (Form 2086)"]));
+  rows.push(
+    toCsvRow(["#", "Date", "Description", "Crypto", "Fiat Received (C)", "Portfolio Value (V)",
+      "Acq. Cost (A)", "Fraction (A*C/V)", "Plus-Value"]),
+  );
+  for (let i = 0; i < report.dispositions.length; i++) {
+    const d = report.dispositions[i];
+    rows.push(
+      toCsvRow([
+        i + 1, d.date, d.description, d.cryptoCurrencies.join("+"),
+        d.fiatReceived, d.portfolioValue, d.acquisitionCostBefore,
+        d.costFraction, d.plusValue,
+      ]),
+    );
+  }
+  rows.push("");
+
+  // Acquisition reference rows
+  rows.push(toCsvRow(["Acquisitions"]));
+  rows.push(toCsvRow(["Date", "Description", "Fiat Spent (EUR)", "Crypto"]));
+  for (const a of report.acquisitions) {
+    rows.push(toCsvRow([a.date, a.description, a.fiatSpent, a.cryptoCurrencies.join("+")]));
+  }
+
+  downloadCsv(`french-tax-${report.taxYear}.csv`, rows.join("\n"));
 }

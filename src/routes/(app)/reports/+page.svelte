@@ -97,5 +97,13 @@
         </Card.Header>
       </Card.Root>
     </a>
+    <a href="/reports/tax-fr" class="block">
+      <Card.Root class="transition-colors hover:bg-accent">
+        <Card.Header>
+          <Card.Title>French Crypto Tax</Card.Title>
+          <Card.Description>Art. 150 VH bis — Weighted average method for crypto-to-fiat dispositions.</Card.Description>
+        </Card.Header>
+      </Card.Root>
+    </a>
   </div>
 </div>

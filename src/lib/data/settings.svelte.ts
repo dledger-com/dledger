@@ -12,6 +12,10 @@ export interface AppSettings {
   debugMode: boolean;
   holdingPeriodDays: number;
   handlers: Record<string, { enabled: boolean; enrichment?: boolean }>;
+  frenchTax?: {
+    priorAcquisitionCost?: string;  // EUR, default "0"
+    fiatCurrencies?: string[];       // override defaults
+  };
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
