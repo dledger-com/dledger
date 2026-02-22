@@ -3,12 +3,15 @@
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import ThemeToggle from "./ThemeToggle.svelte";
+  import TaskQueueIndicator from "./TaskQueueIndicator.svelte";
+  import TaskQueueDrawer from "./TaskQueueDrawer.svelte";
 
   interface Props {
     showSidebarTrigger?: boolean;
   }
 
   let { showSidebarTrigger = true }: Props = $props();
+  let drawerOpen = $state(false);
 
   const breadcrumbs = $derived.by(() => {
     const path = page.url?.pathname ?? "/";
@@ -43,6 +46,8 @@
   </nav>
 
   <div class="ml-auto flex items-center gap-2">
+    <TaskQueueIndicator onclick={() => { drawerOpen = true; }} />
     <ThemeToggle />
   </div>
 </header>
+<TaskQueueDrawer bind:open={drawerOpen} />

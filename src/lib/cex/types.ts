@@ -32,5 +32,5 @@ export interface CexAdapter {
   exchangeId: ExchangeId;
   exchangeName: string;
   normalizeAsset(raw: string): string;
-  fetchLedgerRecords(apiKey: string, apiSecret: string, since?: number): Promise<CexLedgerRecord[]>;
+  fetchLedgerRecords(apiKey: string, apiSecret: string, since?: number, signal?: AbortSignal): Promise<CexLedgerRecord[]>;
 }

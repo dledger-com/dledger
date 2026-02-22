@@ -10,8 +10,10 @@ const KRAKEN_API = "https://api.kraken.com";
 async function krakenFetch(
   url: string,
   init?: RequestInit,
+  signal?: AbortSignal,
 ): Promise<{ status: number; body: string }> {
   if ((window as any).__TAURI_INTERNALS__) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("proxy_fetch", {
       url,
@@ -22,8 +24,19 @@ async function krakenFetch(
   }
   // Browser mode: rewrite URL to use Vite proxy
   const proxyUrl = url.replace("https://api.kraken.com", "/api/kraken");
-  const resp = await fetch(proxyUrl, init);
+  const resp = await fetch(proxyUrl, { ...init, signal });
   return { status: resp.status, body: await resp.text() };
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
 }
 
 // Hardcoded Kraken asset code → standard code mapping.
@@ -167,6 +180,7 @@ export class KrakenAdapter implements CexAdapter {
     apiKey: string,
     apiSecret: string,
     since?: number,
+    signal?: AbortSignal,
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
     let offset = 0;
@@ -175,6 +189,8 @@ export class KrakenAdapter implements CexAdapter {
     const dynamicMap = await fetchAssetMap();
 
     for (;;) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
       const nonce = Date.now() * 1000;
       const path = "/0/private/Ledgers";
       const params = new URLSearchParams({
@@ -187,7 +203,7 @@ export class KrakenAdapter implements CexAdapter {
       const postData = params.toString();
       const signature = await krakenSign(path, nonce, postData, apiSecret);
 
-      const result = await krakenFetch(`${KRAKEN_API}${path}`, {
+      const fetchInit: RequestInit = {
         method: "POST",
         headers: {
           "API-Key": apiKey,
@@ -195,7 +211,9 @@ export class KrakenAdapter implements CexAdapter {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: postData,
-      });
+      };
+
+      const result = await krakenFetch(`${KRAKEN_API}${path}`, fetchInit, signal);
 
       const json = JSON.parse(result.body) as KrakenLedgersResponse;
       if (json.error?.length) {
@@ -230,7 +248,7 @@ export class KrakenAdapter implements CexAdapter {
       if (offset >= (json.result?.count ?? 0)) break;
 
       // Rate limit: wait 6 seconds between paginated calls
-      await new Promise((r) => setTimeout(r, 6000));
+      await abortableDelay(6000, signal);
     }
 
     return records;
@@ -244,6 +262,7 @@ export class KrakenAdapter implements CexAdapter {
     records: CexLedgerRecord[],
     apiKey: string,
     apiSecret: string,
+    signal?: AbortSignal,
   ): Promise<void> {
     // Build a map of refids that need txids
     const needsTxid = records.filter(
@@ -254,6 +273,7 @@ export class KrakenAdapter implements CexAdapter {
     // Fetch deposit statuses
     const depositRefids = new Set(needsTxid.filter((r) => r.type === "deposit").map((r) => r.refid));
     if (depositRefids.size > 0) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       const txidMap = await this.fetchDepositStatuses(apiKey, apiSecret);
       for (const record of needsTxid) {
         if (record.type === "deposit" && txidMap.has(record.refid)) {
@@ -265,7 +285,7 @@ export class KrakenAdapter implements CexAdapter {
     // Fetch withdrawal statuses
     const withdrawalRefids = new Set(needsTxid.filter((r) => r.type === "withdrawal").map((r) => r.refid));
     if (withdrawalRefids.size > 0) {
-      await new Promise((r) => setTimeout(r, 6000)); // Rate limit
+      await abortableDelay(6000, signal); // Rate limit
       const txidMap = await this.fetchWithdrawalStatuses(apiKey, apiSecret);
       for (const record of needsTxid) {
         if (record.type === "withdrawal" && txidMap.has(record.refid)) {

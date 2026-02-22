@@ -51,8 +51,9 @@
   } from "$lib/handlers/index.js";
   import RotateCw from "lucide-svelte/icons/rotate-cw";
   import { v7 as uuidv7 } from "uuid";
-  import type { ExchangeAccount, CexSyncResult } from "$lib/cex/types.js";
+  import type { ExchangeAccount } from "$lib/cex/types.js";
   import { getCexAdapter, syncCexAccount } from "$lib/cex/index.js";
+  import { taskQueue } from "$lib/task-queue.svelte.js";
 
   const handlerRegistry = getDefaultRegistry();
   const handlers = handlerRegistry.getAll();
@@ -158,9 +159,9 @@
   let cexNewApiKey = $state("");
   let cexNewApiSecret = $state("");
   let cexAdding = $state(false);
-  let cexSyncingId = $state<string | null>(null);
-  let cexSyncingAll = $state(false);
-  let cexResult = $state<CexSyncResult | null>(null);
+  const cexBusy = $derived(
+    taskQueue.queue.some((t) => t.key.startsWith("cex-sync:") && (t.status === "pending" || t.status === "running")),
+  );
 
   async function loadCexAccounts() {
     try {
@@ -209,49 +210,27 @@
     }
   }
 
-  async function syncCex(account: ExchangeAccount) {
-    cexSyncingId = account.id;
-    cexResult = null;
-    try {
-      const adapter = getCexAdapter(account.exchange);
-      const backend = getBackend();
-      cexResult = await syncCexAccount(backend, adapter, account, handlerRegistry);
-      await loadCexAccounts();
-      toast.success(`Synced ${account.label}: ${cexResult.entries_imported} imported, ${cexResult.entries_skipped} skipped`);
-    } catch (err) {
-      toast.error(`Sync failed for ${account.label}: ${err}`);
-    } finally {
-      cexSyncingId = null;
-    }
+  function syncCex(account: ExchangeAccount) {
+    const adapter = getCexAdapter(account.exchange);
+    taskQueue.enqueue({
+      key: `cex-sync:${account.id}`,
+      label: `Sync ${account.label} (${adapter.exchangeName})`,
+      async run(ctx) {
+        const result = await syncCexAccount(getBackend(), adapter, account, handlerRegistry, {
+          signal: ctx.signal,
+          onProgress: ctx.reportProgress,
+        });
+        await loadCexAccounts();
+        return {
+          summary: `${result.entries_imported} imported, ${result.entries_skipped} skipped, ${result.entries_consolidated} consolidated`,
+        };
+      },
+    });
   }
 
-  async function syncAllCex() {
-    cexSyncingAll = true;
-    cexResult = null;
-    let totalImported = 0;
-    let totalSkipped = 0;
-    const warnings: string[] = [];
-    try {
-      for (const account of cexAccounts) {
-        const adapter = getCexAdapter(account.exchange);
-        const result = await syncCexAccount(getBackend(), adapter, account, handlerRegistry);
-        totalImported += result.entries_imported;
-        totalSkipped += result.entries_skipped;
-        warnings.push(...result.warnings);
-      }
-      cexResult = {
-        entries_imported: totalImported,
-        entries_skipped: totalSkipped,
-        entries_consolidated: 0,
-        accounts_created: 0,
-        warnings,
-      };
-      await loadCexAccounts();
-      toast.success(`Synced all exchanges: ${totalImported} imported, ${totalSkipped} skipped`);
-    } catch (err) {
-      toast.error(`Sync all failed: ${err}`);
-    } finally {
-      cexSyncingAll = false;
+  function syncAllCex() {
+    for (const account of cexAccounts) {
+      syncCex(account);
     }
   }
 
@@ -1607,10 +1586,10 @@
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={cexSyncingId !== null || cexSyncingAll}
+                      disabled={cexBusy}
                       onclick={() => syncCex(account)}
                     >
-                      <RefreshCw class="h-4 w-4 {cexSyncingId === account.id ? 'animate-spin' : ''}" />
+                      <RefreshCw class="h-4 w-4 {taskQueue.queue.some((t) => t.key === `cex-sync:${account.id}` && t.status === 'running') ? 'animate-spin' : ''}" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -1670,54 +1649,16 @@
           <Button
             variant="outline"
             size="sm"
-            disabled={cexSyncingAll || cexSyncingId !== null}
+            disabled={cexBusy}
             onclick={syncAllCex}
           >
-            <RefreshCw class="mr-1 h-4 w-4 {cexSyncingAll ? 'animate-spin' : ''}" />
+            <RefreshCw class="mr-1 h-4 w-4 {cexBusy ? 'animate-spin' : ''}" />
             Sync All
           </Button>
         </div>
       {/if}
     </Card.Content>
   </Card.Root>
-
-  {#if cexResult}
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Exchange Sync Results</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <div class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-          <div>
-            <div class="text-xs text-muted-foreground">Imported</div>
-            <div class="text-lg font-bold">{cexResult.entries_imported}</div>
-          </div>
-          <div>
-            <div class="text-xs text-muted-foreground">Skipped</div>
-            <div class="text-lg font-bold">{cexResult.entries_skipped}</div>
-          </div>
-          <div>
-            <div class="text-xs text-muted-foreground">Consolidated</div>
-            <div class="text-lg font-bold">{cexResult.entries_consolidated}</div>
-          </div>
-          <div>
-            <div class="text-xs text-muted-foreground">Accounts Created</div>
-            <div class="text-lg font-bold">{cexResult.accounts_created}</div>
-          </div>
-        </div>
-        {#if cexResult.warnings.length > 0}
-          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-            {#each cexResult.warnings as warning}
-              <li class="py-0.5">{warning}</li>
-            {/each}
-          </ul>
-        {/if}
-        <div class="mt-4 flex gap-2">
-          <Button variant="outline" size="sm" href="/journal">View Journal</Button>
-        </div>
-      </Card.Content>
-    </Card.Root>
-  {/if}
 
   <!-- Transaction Handlers -->
   <Card.Root>

@@ -9,6 +9,12 @@ import type { HandlerRegistry } from "../handlers/registry.js";
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "../handlers/item-builder.js";
 import type { ItemAccum } from "../handlers/item-builder.js";
 import type { TxHashGroup } from "../handlers/types.js";
+import type { TaskProgress } from "../task-queue.svelte.js";
+
+export interface CexSyncOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: TaskProgress) => void;
+}
 
 /**
  * Main sync orchestrator for any CEX adapter.
@@ -18,6 +24,7 @@ export async function syncCexAccount(
   adapter: CexAdapter,
   account: ExchangeAccount,
   registry?: HandlerRegistry,
+  options?: CexSyncOptions,
 ): Promise<CexSyncResult> {
   const result: CexSyncResult = {
     entries_imported: 0,
@@ -27,16 +34,22 @@ export async function syncCexAccount(
     warnings: [],
   };
 
+  const signal = options?.signal;
+  const onProgress = options?.onProgress;
+
   // 1. Fetch records (incremental if last_sync available)
+  onProgress?.({ current: 0, total: 0, message: "Fetching records from exchange..." });
   const since = account.last_sync
     ? Math.floor(new Date(account.last_sync).getTime() / 1000)
     : undefined;
-  const records = await adapter.fetchLedgerRecords(account.api_key, account.api_secret, since);
+  const records = await adapter.fetchLedgerRecords(account.api_key, account.api_secret, since, signal);
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   // Enrich txids for deposits/withdrawals if adapter supports it
   if ("enrichTxids" in adapter && typeof (adapter as Record<string, unknown>).enrichTxids === "function") {
-    await (adapter as { enrichTxids(r: CexLedgerRecord[], k: string, s: string): Promise<void> })
-      .enrichTxids(records, account.api_key, account.api_secret);
+    onProgress?.({ current: 0, total: 0, message: "Enriching transaction IDs..." });
+    await (adapter as { enrichTxids(r: CexLedgerRecord[], k: string, s: string, signal?: AbortSignal): Promise<void> })
+      .enrichTxids(records, account.api_key, account.api_secret, signal);
   }
 
   // 2. Build dedup set from existing sources
@@ -195,9 +208,12 @@ export async function syncCexAccount(
   nonTradeRecords.sort((a, b) => a.timestamp - b.timestamp);
 
   const exchangeName = adapter.exchangeName;
+  const totalRecords = sortedTradeRefids.length + nonTradeRecords.length;
+  let processed = 0;
 
   // 6. Process trade pairs
   for (const refid of sortedTradeRefids) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const source = `${adapter.exchangeId}:${refid}`;
     if (existingSources.has(source)) {
       result.entries_skipped++;
@@ -260,10 +276,13 @@ export async function syncCexAccount(
       refid,
     });
     existingSources.add(source);
+    processed++;
+    onProgress?.({ current: processed, total: totalRecords, message: `Processing trades...` });
   }
 
   // 7. Process non-trade records
   for (const record of nonTradeRecords) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const source = `${adapter.exchangeId}:${record.refid}`;
     if (existingSources.has(source)) {
       result.entries_skipped++;
@@ -390,6 +409,8 @@ export async function syncCexAccount(
     }
 
     existingSources.add(source);
+    processed++;
+    onProgress?.({ current: processed, total: totalRecords, message: `Processing records...` });
   }
 
   // Update last_sync
