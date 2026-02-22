@@ -270,6 +270,13 @@
         <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
       </Card.Header>
       <Card.Content>
+        {#if assetsSummary && liabilitiesSummary}
+          <p class="text-2xl font-bold font-mono mb-2">
+            {formatCurrency(assetsSummary.total + liabilitiesSummary.total, settings.currency)}
+          </p>
+        {:else}
+          <Skeleton class="h-8 w-40 mb-2" />
+        {/if}
         {#if chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
