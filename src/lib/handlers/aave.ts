@@ -113,6 +113,9 @@ async function buildProtocolItems(
   const unprocessed: Erc20Tx[] = [];
   // Items that correspond to wallet-side flows whose External counterparty should be consumed
   const walletConsumptionItems: ItemAccum[] = [];
+  // Deferred aToken movements resolved after all transfers are processed
+  const aTokenOutFromUser: { underlying: string; amount: Decimal; to: string }[] = [];
+  const adapterATokenBurns: { underlying: string; amount: Decimal }[] = [];
 
   // Collect currencies from regular transfers for native ETH detection
   const regularSymbols = new Set(regularTransfers.map((t) => t.tokenSymbol));
@@ -216,9 +219,11 @@ async function buildProtocolItems(
         }
         actions.push({ action: "WITHDRAW", amount: withdrawAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined, viaAdapter: !hasWalletSideFlow || undefined });
       } else if (from === addr) {
-        // aToken transferred out (e.g. send aTokens to another address)
-        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount: amount.neg() });
-        items.push({ account: `Equity:${chain.name}:External:${shortAddr(to)}`, currency: underlying, amount });
+        // aToken transferred out — defer to post-processing (may be adapter collateral)
+        aTokenOutFromUser.push({ underlying, amount, to });
+      } else if (isBurn) {
+        // aToken burned by non-user address (adapter burn on behalf of user)
+        adapterATokenBurns.push({ underlying, amount });
       } else if (to === addr) {
         // aToken transferred in (received aTokens)
         items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
@@ -292,6 +297,26 @@ async function buildProtocolItems(
       }
       // Non-mint/burn debt token transfers are unusual — ignore
     }
+  }
+
+  // Resolve deferred aToken movements based on whether adapter operations were detected
+  const hasViaAdapter = actions.some(a => a.viaAdapter);
+
+  for (const out of aTokenOutFromUser) {
+    items.push({ account: "Assets:Aave:Supply", currency: out.underlying, amount: out.amount.neg() });
+    if (hasViaAdapter) {
+      items.push({ account: `Equity:Trading:${out.underlying}`, currency: out.underlying, amount: out.amount });
+    } else {
+      items.push({ account: `Equity:${chain.name}:External:${shortAddr(out.to)}`, currency: out.underlying, amount: out.amount });
+    }
+  }
+
+  for (const burn of adapterATokenBurns) {
+    if (hasViaAdapter) {
+      items.push({ account: "Assets:Aave:Supply", currency: burn.underlying, amount: burn.amount.neg() });
+      items.push({ account: `Equity:Trading:${burn.underlying}`, currency: burn.underlying, amount: burn.amount });
+    }
+    // If no viaAdapter, ignore adapter burns (intermediate routing, not a user action)
   }
 
   return { items, actions, unprocessed, walletConsumptionItems };

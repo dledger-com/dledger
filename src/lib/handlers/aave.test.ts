@@ -1716,6 +1716,195 @@ describe("aaveHandler", () => {
       const tradingUSDC = accounts.find((a) => a.full_name === "Equity:Trading:USDC");
       expect(tradingUSDC).toBeDefined();
 
+      // Collateral side should use Equity:Trading:tBTC (not External)
+      const tradingTBTC = accounts.find((a) => a.full_name === "Equity:Trading:tBTC");
+      expect(tradingTBTC).toBeDefined();
+
+      // Items must balance to zero per currency
+      const sums = new Map<string, Decimal>();
+      for (const item of entry.items) {
+        const existing = sums.get(item.currency) ?? new Decimal(0);
+        sums.set(item.currency, existing.plus(new Decimal(item.amount)));
+      }
+      for (const [currency, sum] of sums) {
+        expect(sum.isZero(), `${currency} should balance to zero but got ${sum.toString()}`).toBe(true);
+      }
+    });
+
+    it("handles repay with collateral Pattern B: adapter burns aTokens on behalf of user", async () => {
+      // Pattern B: Adapter handles aTokens entirely — pool → adapter → burn.
+      // User never touches aTokens. debtToken burned by user.
+      // Expected: Assets:Aave:Supply decreases, Equity:Trading for cross-currency bridge.
+      const ADAPTER = "0xadc0a53095a0af87f3aa29fe0715b5c28016364e";
+
+      // Setup: prior wstETH supply of 10.0
+      const supplyGroup = makeEmptyGroup({
+        hash: "0xsetup_supply_002",
+        timestamp: "1704000000",
+        normal: {
+          hash: "0xsetup_supply_002",
+          timeStamp: "1704000000",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xsetup_supply_002",
+            timeStamp: "1704000000",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "aEthwstETH",
+            value: "10000000000000000000", // 10.0 wstETH
+            tokenDecimal: "18",
+          }),
+          makeErc20({
+            hash: "0xsetup_supply_002",
+            timeStamp: "1704000000",
+            from: USER_ADDR,
+            to: AAVE_V3_POOL,
+            tokenSymbol: "wstETH",
+            value: "10000000000000000000",
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+      const supplyResult = await aaveHandler.process(supplyGroup, ctx);
+      expect(supplyResult.type).toBe("entries");
+      await postHandlerEntry(backend, supplyResult);
+
+      // Setup: prior USDC borrow of 20,000
+      const borrowGroup = makeEmptyGroup({
+        hash: "0xsetup_borrow_002",
+        timestamp: "1704000000",
+        normal: {
+          hash: "0xsetup_borrow_002",
+          timeStamp: "1704000000",
+          from: USER_ADDR,
+          to: AAVE_V3_POOL,
+          value: "0",
+          isError: "0",
+          gasUsed: "200000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          makeErc20({
+            hash: "0xsetup_borrow_002",
+            timeStamp: "1704000000",
+            from: ZERO_ADDRESS,
+            to: USER_ADDR,
+            tokenSymbol: "variableDebtEthUSDC",
+            value: "20000000000", // 20,000 USDC
+            tokenDecimal: "6",
+          }),
+          makeErc20({
+            hash: "0xsetup_borrow_002",
+            timeStamp: "1704000000",
+            from: AAVE_V3_POOL,
+            to: USER_ADDR,
+            tokenSymbol: "USDC",
+            value: "20000000000",
+            tokenDecimal: "6",
+          }),
+        ],
+      });
+      const borrowResult = await aaveHandler.process(borrowGroup, ctx);
+      expect(borrowResult.type).toBe("entries");
+      await postHandlerEntry(backend, borrowResult);
+
+      // Pattern B transaction: adapter handles aTokens entirely
+      const group = makeEmptyGroup({
+        hash: "0xa4e785bb00000001",
+        timestamp: "1704067200",
+        normal: {
+          hash: "0xa4e785bb00000001",
+          timeStamp: "1704067200",
+          from: USER_ADDR,
+          to: ADAPTER,
+          value: "0",
+          isError: "0",
+          gasUsed: "500000",
+          gasPrice: "20000000000",
+        },
+        erc20s: [
+          // 1. aEthwstETH: pool → adapter (intermediate, user never touches)
+          makeErc20({
+            hash: "0xa4e785bb00000001",
+            timeStamp: "1704067200",
+            from: AAVE_V3_POOL,
+            to: ADAPTER,
+            tokenSymbol: "aEthwstETH",
+            tokenName: "Aave Ethereum wstETH",
+            value: "8000000000000000000", // 8.0 wstETH
+            tokenDecimal: "18",
+          }),
+          // 2. aEthwstETH: adapter → 0x0 (burn by adapter, not user)
+          makeErc20({
+            hash: "0xa4e785bb00000001",
+            timeStamp: "1704067200",
+            from: ADAPTER,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "aEthwstETH",
+            tokenName: "Aave Ethereum wstETH",
+            value: "8000000000000000000", // 8.0 wstETH
+            tokenDecimal: "18",
+          }),
+          // 3. variableDebtEthUSDC: user → 0x0 (debt repaid)
+          makeErc20({
+            hash: "0xa4e785bb00000001",
+            timeStamp: "1704067200",
+            from: USER_ADDR,
+            to: ZERO_ADDRESS,
+            tokenSymbol: "variableDebtEthUSDC",
+            tokenName: "Aave variable debt USDC",
+            value: "18000000000", // 18,000 USDC
+            tokenDecimal: "6",
+          }),
+          // 4. wstETH: adapter → user (small change returned)
+          makeErc20({
+            hash: "0xa4e785bb00000001",
+            timeStamp: "1704067200",
+            from: ADAPTER,
+            to: USER_ADDR,
+            tokenSymbol: "wstETH",
+            tokenName: "Wrapped liquid staked Ether 2.0",
+            value: "50000000000000000", // 0.05 wstETH change
+            tokenDecimal: "18",
+          }),
+        ],
+      });
+
+      const result = await aaveHandler.process(group, ctx);
+      expect(result.type).toBe("entries");
+      if (result.type !== "entries") return;
+
+      const entry = result.entries[0];
+
+      // Description should include "Repay with Collateral"
+      expect(entry.entry.description).toContain("Repay with Collateral");
+
+      // Action metadata should contain REPAY
+      expect(entry.metadata["handler:action"]).toContain("REPAY");
+
+      // Should have Equity:Trading:wstETH (collateral side uses Trading, not External)
+      const accounts = await backend.listAccounts();
+      const tradingWstETH = accounts.find((a) => a.full_name === "Equity:Trading:wstETH");
+      expect(tradingWstETH).toBeDefined();
+
+      // Should have Equity:Trading:USDC (repay side uses Trading)
+      const tradingUSDC = accounts.find((a) => a.full_name === "Equity:Trading:USDC");
+      expect(tradingUSDC).toBeDefined();
+
+      // Assets:Aave:Supply should decrease (adapter burn creates supply debit)
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      expect(supplyAcct).toBeDefined();
+      const supplyItems = entry.items.filter((i) => i.account_id === supplyAcct!.id);
+      const supplyTotal = supplyItems.reduce((s, i) => s.plus(new Decimal(i.amount)), new Decimal(0));
+      expect(supplyTotal.isNegative()).toBe(true);
+
       // Items must balance to zero per currency
       const sums = new Map<string, Decimal>();
       for (const item of entry.items) {
