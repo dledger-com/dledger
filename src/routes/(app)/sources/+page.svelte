@@ -41,10 +41,9 @@
   import {
     getDefaultRegistry,
     dryRunReprocess,
-    applyReprocess,
     type ReprocessResult,
-    type ReprocessChange,
   } from "$lib/handlers/index.js";
+  import { reprocessStore } from "$lib/data/reprocess-store.svelte.js";
   import RotateCw from "lucide-svelte/icons/rotate-cw";
   import { v7 as uuidv7 } from "uuid";
   import type { ExchangeAccount } from "$lib/cex/types.js";
@@ -127,8 +126,6 @@
   }
 
   // -- Reprocess state --
-  let reprocessPreview = $state<ReprocessResult | null>(null);
-  let reprocessTarget = $state<{ chainId: number; address: string; label: string } | null>(null);
   const reprocessing = $derived(taskQueue.isActive("reprocess-dryrun"));
   const applyingReprocess = $derived(taskQueue.isActive("reprocess-apply"));
 
@@ -581,8 +578,7 @@
       onAction(task) {
         const d = task.result?.data as { result: ReprocessResult; target: { chainId: number; address: string; label: string } } | undefined;
         if (d) {
-          reprocessPreview = d.result;
-          reprocessTarget = d.target;
+          reprocessStore.show(d.result, d.target);
         }
         taskQueue.dismiss(task.id);
       },
@@ -643,89 +639,11 @@
       onAction(task) {
         const d = task.result?.data as { result: ReprocessResult; target: null } | undefined;
         if (d) {
-          reprocessPreview = d.result;
-          reprocessTarget = null;
+          reprocessStore.show(d.result, null);
         }
         taskQueue.dismiss(task.id);
       },
     });
-  }
-
-  function handleApplyReprocess() {
-    if (!reprocessPreview || reprocessPreview.changes.length === 0) return;
-    const preview = reprocessPreview;
-    const target = reprocessTarget;
-    const accounts = [...ethAccounts];
-
-    taskQueue.enqueue({
-      key: "reprocess-apply",
-      label: `Apply reprocess (${preview.changes.length} changes)`,
-      async run(ctx) {
-        const combined: ReprocessResult = {
-          total: 0,
-          unchanged: 0,
-          changed: 0,
-          skipped: 0,
-          errors: [],
-          changes: [],
-          currencyHints: {},
-        };
-
-        if (target) {
-          const r = await applyReprocess(getBackend(), handlerRegistry, {
-            chainId: target.chainId,
-            address: target.address,
-            label: target.label,
-            settings: settings.settings,
-            onProgress: (processed, total) => {
-              ctx.reportProgress({ current: processed, total });
-            },
-          }, preview.changes);
-          combined.total += r.total;
-          combined.changed += r.changed;
-          combined.errors.push(...r.errors);
-        } else {
-          for (const account of accounts) {
-            const r = await applyReprocess(getBackend(), handlerRegistry, {
-              chainId: account.chain_id,
-              address: account.address,
-              label: account.label,
-              settings: settings.settings,
-              onProgress: (processed, total) => {
-                ctx.reportProgress({ current: combined.changed + processed, total: preview.changes.length });
-              },
-            }, preview.changes);
-            combined.total += r.total;
-            combined.changed += r.changed;
-            combined.errors.push(...r.errors);
-          }
-        }
-
-        // Rebuild currency rate sources from dry-run hints
-        const backend = getBackend();
-        if (!target) {
-          await backend.clearNonUserRateSources();
-        }
-        if (preview.currencyHints) {
-          for (const [currency, hint] of Object.entries(preview.currencyHints)) {
-            const rateSource = hint.source ?? "none";
-            await backend.setCurrencyRateSource(currency, rateSource, `handler:${hint.handler}`);
-          }
-        }
-
-        if (combined.errors.length > 0) {
-          toast.warning(`Reprocessed ${combined.changed} transaction(s) with ${combined.errors.length} error(s)`);
-        } else {
-          toast.success(`Reprocessed ${combined.changed} transaction(s)`);
-        }
-
-        return { summary: `Reprocessed ${combined.changed} transaction(s)`, data: combined };
-      },
-    });
-
-    // Clear preview immediately since the task owns it now
-    reprocessPreview = null;
-    reprocessTarget = null;
   }
 
   // -- Inline edit handlers --
@@ -823,11 +741,6 @@
     } catch (err) {
       toast.error(String(err));
     }
-  }
-
-  function formatHash(hash: string): string {
-    if (hash.length > 14) return `${hash.slice(0, 8)}...${hash.slice(-4)}`;
-    return hash;
   }
 
   function formatAddress(addr: string): string {
@@ -1298,69 +1211,6 @@
       </div>
     </Card.Footer>
   </Card.Root>
-
-  <!-- Reprocess Preview -->
-  {#if reprocessPreview && reprocessPreview.changed > 0}
-    <Card.Root class="border-blue-200 dark:border-blue-800">
-      <Card.Header>
-        <Card.Title>Reprocess Preview</Card.Title>
-        <Card.Description>
-          {reprocessPreview.changed} of {reprocessPreview.total} transaction(s) would change.
-          {reprocessPreview.unchanged} unchanged, {reprocessPreview.skipped} skipped.
-        </Card.Description>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        {#if reprocessPreview.changes.length > 0}
-          <div class="max-h-64 overflow-y-auto">
-            <Table.Root>
-              <Table.Header>
-                <Table.Row>
-                  <Table.Head>Tx Hash</Table.Head>
-                  <Table.Head>Old Handler</Table.Head>
-                  <Table.Head>New Handler</Table.Head>
-                  <Table.Head>Old Description</Table.Head>
-                  <Table.Head>New Description</Table.Head>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {#each reprocessPreview.changes as change}
-                  <Table.Row>
-                    <Table.Cell class="font-mono text-xs">{formatHash(change.hash)}</Table.Cell>
-                    <Table.Cell><Badge variant="secondary">{change.oldHandler}</Badge></Table.Cell>
-                    <Table.Cell><Badge variant="default">{change.newHandler}</Badge></Table.Cell>
-                    <Table.Cell class="text-xs max-w-48 truncate">{change.oldDescription}</Table.Cell>
-                    <Table.Cell class="text-xs max-w-48 truncate">{change.newDescription}</Table.Cell>
-                  </Table.Row>
-                {/each}
-              </Table.Body>
-            </Table.Root>
-          </div>
-        {/if}
-
-        {#if reprocessPreview.errors.length > 0}
-          <div>
-            <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-              Errors ({reprocessPreview.errors.length})
-            </p>
-            <ul class="mt-1 max-h-32 overflow-y-auto text-xs text-muted-foreground">
-              {#each reprocessPreview.errors as error}
-                <li class="py-0.5">{error}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-
-      </Card.Content>
-      <Card.Footer class="flex justify-end gap-2">
-        <Button variant="outline" onclick={() => { reprocessPreview = null; reprocessTarget = null; }}>
-          Cancel
-        </Button>
-        <Button onclick={handleApplyReprocess} disabled={applyingReprocess}>
-          {applyingReprocess ? "Applying..." : `Apply ${reprocessPreview.changed} Change(s)`}
-        </Button>
-      </Card.Footer>
-    </Card.Root>
-  {/if}
 
   <!-- Centralized Exchanges -->
   <Card.Root>

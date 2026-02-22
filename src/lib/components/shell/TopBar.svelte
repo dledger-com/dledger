@@ -5,6 +5,7 @@
   import ThemeToggle from "./ThemeToggle.svelte";
   import TaskQueueIndicator from "./TaskQueueIndicator.svelte";
   import TaskQueueDrawer from "./TaskQueueDrawer.svelte";
+  import ReprocessPreviewDialog from "./ReprocessPreviewDialog.svelte";
 
   interface Props {
     showSidebarTrigger?: boolean;
@@ -51,3 +52,4 @@
   </div>
 </header>
 <TaskQueueDrawer bind:open={drawerOpen} />
+<ReprocessPreviewDialog />

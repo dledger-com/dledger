@@ -157,7 +157,7 @@
                   <Button
                     size="sm"
                     class="mt-1 h-6 text-xs"
-                    onclick={() => taskQueue.handleAction(task.id)}
+                    onclick={() => { open = false; taskQueue.handleAction(task.id); }}
                   >
                     {task.result.actionLabel ?? "Review"}
                   </Button>
