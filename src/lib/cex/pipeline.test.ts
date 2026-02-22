@@ -15,19 +15,19 @@ function makeExchangeAccount(overrides: Partial<ExchangeAccount> = {}): Exchange
     label: "Main Kraken",
     api_key: "test-key",
     api_secret: "test-secret",
-    linked_etherscan_account_id: null,
     last_sync: null,
     created_at: "2024-01-01",
     ...overrides,
   };
 }
 
-function makeMockAdapter(records: CexLedgerRecord[]): CexAdapter {
+function makeMockAdapter(records: CexLedgerRecord[], overrides: Partial<CexAdapter> = {}): CexAdapter {
   return {
     exchangeId: "kraken",
     exchangeName: "Kraken",
     normalizeAsset: (raw: string) => raw,
     fetchLedgerRecords: async () => records,
+    ...overrides,
   };
 }
 
@@ -442,33 +442,121 @@ describe("CEX Pipeline", () => {
   });
 
   describe("Consolidation", () => {
-    it("skips consolidation when no linked etherscan account", async () => {
+    it("imports normally when no matching etherscan or CEX entry for txid", async () => {
       const records: CexLedgerRecord[] = [
         { refid: "C001", type: "deposit", asset: "ETH", amount: "5", fee: "0", timestamp: ts("2024-03-01"), txid: "0xabc123" },
       ];
 
-      // No linked etherscan account
-      const account = makeExchangeAccount({ linked_etherscan_account_id: null });
+      const account = makeExchangeAccount();
       await backend.addExchangeAccount(account);
       const result = await syncCexAccount(backend, makeMockAdapter(records), account);
 
-      // Should import normally (no consolidation)
+      // No matching source → imports normally
       expect(result.entries_imported).toBe(1);
       expect(result.entries_consolidated).toBe(0);
     });
 
-    it("skips consolidation when txid not found in etherscan entries", async () => {
+    it("skips consolidation when txid not found in any existing entries", async () => {
       const records: CexLedgerRecord[] = [
         { refid: "C002", type: "deposit", asset: "ETH", amount: "5", fee: "0", timestamp: ts("2024-03-01"), txid: "0xnotfound" },
       ];
 
-      const account = makeExchangeAccount({ linked_etherscan_account_id: "0x1234:1" });
+      const account = makeExchangeAccount();
       await backend.addExchangeAccount(account);
       const result = await syncCexAccount(backend, makeMockAdapter(records), account);
 
       // No matching etherscan source → imports normally
       expect(result.entries_imported).toBe(1);
       expect(result.entries_consolidated).toBe(0);
+    });
+
+    it("stores txid metadata on deposit entries", async () => {
+      const records: CexLedgerRecord[] = [
+        { refid: "TXM01", type: "deposit", asset: "ETH", amount: "5", fee: "0", timestamp: ts("2024-03-01"), txid: "0xABC123" },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      const entries = await backend.queryJournalEntries({ source: "kraken:TXM01" });
+      const meta = await backend.getMetadata(entries[0][0].id);
+
+      expect(meta.txid).toBe("0xabc123"); // lowercased
+      expect(meta.exchange).toBe("kraken");
+    });
+
+    it("stores txid metadata on withdrawal entries", async () => {
+      const records: CexLedgerRecord[] = [
+        { refid: "TXM02", type: "withdrawal", asset: "BTC", amount: "-0.5", fee: "0", timestamp: ts("2024-03-01"), txid: "0xDEF456" },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      const entries = await backend.queryJournalEntries({ source: "kraken:TXM02" });
+      const meta = await backend.getMetadata(entries[0][0].id);
+
+      expect(meta.txid).toBe("0xdef456"); // lowercased
+    });
+
+    it("consolidates CEX→CEX when another exchange has matching txid", async () => {
+      // Step 1: Simulate a prior "binance" deposit with txid 0xaaa111
+      const binanceAdapter = makeMockAdapter(
+        [{ refid: "BD01", type: "deposit", asset: "ETH", amount: "5", fee: "0", timestamp: ts("2024-03-01"), txid: "0xaaa111" }],
+        { exchangeId: "binance" as never, exchangeName: "Binance" },
+      );
+      const binanceAccount = makeExchangeAccount({ exchange: "binance" as never, label: "Binance" });
+      await backend.addExchangeAccount(binanceAccount);
+      await syncCexAccount(backend, binanceAdapter, binanceAccount);
+
+      // Verify binance deposit exists
+      const binanceEntries = await backend.queryJournalEntries({ source: "binance:BD01" });
+      expect(binanceEntries).toHaveLength(1);
+
+      // Step 2: Sync Kraken with a withdrawal having the same txid
+      const krakenRecords: CexLedgerRecord[] = [
+        { refid: "KW01", type: "withdrawal", asset: "ETH", amount: "-5", fee: "0", timestamp: ts("2024-03-01"), txid: "0xaaa111" },
+      ];
+      const krakenAccount = makeExchangeAccount();
+      await backend.addExchangeAccount(krakenAccount);
+      const result = await syncCexAccount(backend, makeMockAdapter(krakenRecords), krakenAccount);
+
+      // Consolidation should happen
+      expect(result.entries_consolidated).toBe(1);
+      expect(result.entries_imported).toBe(0);
+
+      // The original binance entry should be voided
+      const allEntries = await backend.queryJournalEntries({});
+      const binanceVoided = allEntries.find(([e]) => e.source === "binance:BD01" && e.voided_by);
+      expect(binanceVoided).toBeTruthy();
+
+      // There should be a new non-voided entry (the remapped one) with binance source
+      const remapped = allEntries.find(([e]) => e.source === "binance:BD01" && !e.voided_by);
+      expect(remapped).toBeTruthy();
+
+      // The remapped entry should have Assets:Kraken:ETH instead of Equity:Binance:External
+      const accounts = await backend.listAccounts();
+      const acctMap = new Map(accounts.map((a) => [a.id, a.full_name]));
+      const remappedItems = remapped![1].map((i) => ({
+        account: acctMap.get(i.account_id),
+        currency: i.currency,
+        amount: i.amount,
+      }));
+
+      // Binance deposit asset account remains
+      expect(remappedItems).toContainEqual({
+        account: "Assets:Binance:ETH",
+        currency: "ETH",
+        amount: "5",
+      });
+      // External account is remapped to Kraken asset
+      expect(remappedItems).toContainEqual({
+        account: "Assets:Kraken:ETH",
+        currency: "ETH",
+        amount: "-5",
+      });
     });
   });
 

@@ -2172,7 +2172,7 @@ export class SqlJsBackend implements Backend {
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
     return this.query(
-      "SELECT id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at FROM exchange_account ORDER BY created_at",
+      "SELECT id, exchange, label, api_key, api_secret, last_sync, created_at FROM exchange_account ORDER BY created_at",
       [],
       (row) => ({
         id: row.id as string,
@@ -2180,7 +2180,6 @@ export class SqlJsBackend implements Backend {
         label: row.label as string,
         api_key: row.api_key as string,
         api_secret: row.api_secret as string,
-        linked_etherscan_account_id: (row.linked_etherscan_account_id as string) ?? null,
         last_sync: (row.last_sync as string) ?? null,
         created_at: row.created_at as string,
       }),
@@ -2192,7 +2191,7 @@ export class SqlJsBackend implements Backend {
       `INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [account.id, account.exchange, account.label, account.api_key, account.api_secret,
-       account.linked_etherscan_account_id, account.last_sync, account.created_at],
+       null, account.last_sync, account.created_at],
     );
     this.scheduleSave();
   }
@@ -2203,7 +2202,6 @@ export class SqlJsBackend implements Backend {
     if (updates.label !== undefined) { sets.push("label = ?"); params.push(updates.label); }
     if (updates.api_key !== undefined) { sets.push("api_key = ?"); params.push(updates.api_key); }
     if (updates.api_secret !== undefined) { sets.push("api_secret = ?"); params.push(updates.api_secret); }
-    if (updates.linked_etherscan_account_id !== undefined) { sets.push("linked_etherscan_account_id = ?"); params.push(updates.linked_etherscan_account_id); }
     if (updates.last_sync !== undefined) { sets.push("last_sync = ?"); params.push(updates.last_sync); }
     if (sets.length === 0) return;
     params.push(id);

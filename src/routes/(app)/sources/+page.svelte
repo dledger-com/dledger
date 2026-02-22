@@ -151,28 +151,12 @@
   let backfillProgress = $state({ fetched: 0, total: 0 });
   let availableCurrencies = $state<string[]>([]);
 
-  // -- CEX linked etherscan options --
-  const etherscanLinkOptions = $derived.by(() => {
-    const map = new Map<string, { address: string; label: string; chains: number[] }>();
-    for (const acc of ethAccounts) {
-      const key = acc.address;
-      const existing = map.get(key);
-      if (existing) {
-        existing.chains.push(acc.chain_id);
-      } else {
-        map.set(key, { address: acc.address, label: acc.label, chains: [acc.chain_id] });
-      }
-    }
-    return [...map.values()];
-  });
-
   // -- CEX state --
   let cexAccounts = $state<ExchangeAccount[]>([]);
   let cexNewExchange = $state<"kraken">("kraken");
   let cexNewLabel = $state("");
   let cexNewApiKey = $state("");
   let cexNewApiSecret = $state("");
-  let cexNewLinkedEtherscan = $state<string>("");
   let cexAdding = $state(false);
   let cexSyncingId = $state<string | null>(null);
   let cexSyncingAll = $state(false);
@@ -199,7 +183,6 @@
         label: cexNewLabel,
         api_key: cexNewApiKey,
         api_secret: cexNewApiSecret,
-        linked_etherscan_account_id: cexNewLinkedEtherscan || null,
         last_sync: null,
         created_at: new Date().toISOString(),
       };
@@ -207,7 +190,6 @@
       cexNewLabel = "";
       cexNewApiKey = "";
       cexNewApiSecret = "";
-      cexNewLinkedEtherscan = "";
       await loadCexAccounts();
       toast.success("Exchange account added");
     } catch (err) {
@@ -1602,7 +1584,6 @@
             <Table.Row>
               <Table.Head>Exchange</Table.Head>
               <Table.Head>Label</Table.Head>
-              <Table.Head class="hidden md:table-cell">Linked Etherscan</Table.Head>
               <Table.Head class="hidden sm:table-cell">Last Sync</Table.Head>
               <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
@@ -1614,14 +1595,6 @@
                   <Badge variant="secondary">{account.exchange}</Badge>
                 </Table.Cell>
                 <Table.Cell class="font-medium">{account.label}</Table.Cell>
-                <Table.Cell class="hidden md:table-cell">
-                  {#if account.linked_etherscan_account_id}
-                    {@const [addr] = account.linked_etherscan_account_id.split(":")}
-                    <span class="text-xs text-muted-foreground">{addr?.slice(0, 10)}...</span>
-                  {:else}
-                    <span class="text-xs text-muted-foreground">—</span>
-                  {/if}
-                </Table.Cell>
                 <Table.Cell class="hidden sm:table-cell">
                   {#if account.last_sync}
                     <span class="text-xs text-muted-foreground">{new Date(account.last_sync).toLocaleDateString()}</span>
@@ -1686,20 +1659,6 @@
             bind:value={cexNewApiSecret}
           />
         </div>
-        {#if etherscanLinkOptions.length > 0}
-          <div class="space-y-1">
-            <label class="text-xs text-muted-foreground">Link to Etherscan account (optional — enables consolidation)</label>
-            <select
-              class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-64"
-              bind:value={cexNewLinkedEtherscan}
-            >
-              <option value="">None</option>
-              {#each etherscanLinkOptions as opt}
-                <option value="{opt.address}:{opt.chains[0]}">{opt.label} ({opt.address.slice(0, 10)}...)</option>
-              {/each}
-            </select>
-          </div>
-        {/if}
         <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
           <Plus class="mr-1 h-4 w-4" />
           Add Account

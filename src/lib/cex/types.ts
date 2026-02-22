@@ -6,7 +6,6 @@ export interface ExchangeAccount {
   label: string;
   api_key: string;
   api_secret: string;
-  linked_etherscan_account_id: string | null;
   last_sync: string | null;
   created_at: string;
 }

@@ -1,6 +1,6 @@
 import Decimal from "decimal.js-light";
 import { v7 as uuidv7 } from "uuid";
-import type { Account, JournalEntry, LineItem } from "../types/index.js";
+import type { Account, JournalEntry, LineItem, EtherscanAccount } from "../types/index.js";
 import { SUPPORTED_CHAINS } from "../types/index.js";
 import type { Backend } from "../backend.js";
 import type { CexAdapter, CexLedgerRecord, CexSyncResult, ExchangeAccount } from "./types.js";
@@ -52,14 +52,15 @@ export async function syncCexAccount(
     accountMap.set(acc.full_name, acc);
   }
 
-  // 4. Resolve linked etherscan account for consolidation
-  let linkedEtherscan: { address: string; chainId: number; chainName: string } | null = null;
-  if (account.linked_etherscan_account_id) {
-    const [addr, chainIdStr] = account.linked_etherscan_account_id.split(":");
-    const chainId = parseInt(chainIdStr, 10);
-    const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
-    if (addr && chain) {
-      linkedEtherscan = { address: addr, chainId, chainName: chain.name };
+  // 4. Load etherscan accounts for automatic consolidation
+  const etherscanAccounts = await backend.listEtherscanAccounts();
+
+  // Build entries-by-id map for metadata-based lookups
+  const entriesById = new Map<string, [JournalEntry, LineItem[]]>();
+  for (const pair of allEntries) {
+    const [entry] = pair;
+    if (!entry.voided_by) {
+      entriesById.set(entry.id, pair);
     }
   }
 
@@ -270,17 +271,21 @@ export async function syncCexAccount(
     const amount = new Decimal(record.amount);
     const fee = new Decimal(record.fee);
 
-    // Check for consolidation with Etherscan
-    if ((record.type === "deposit" || record.type === "withdrawal") && record.txid && linkedEtherscan && registry) {
+    // Check for automatic cross-source consolidation
+    if ((record.type === "deposit" || record.type === "withdrawal") && record.txid) {
+      const txidLower = record.txid.toLowerCase();
+      const cexTargetAccount = `Assets:${exchangeName}:${record.asset}`;
+
+      // Try Etherscan source match first
       const etherscanSource = findEtherscanSourceByTxid(existingSources, record.txid);
-      if (etherscanSource) {
+      if (etherscanSource && registry) {
         const consolidated = await consolidateWithEtherscan(
           backend,
           registry,
           etherscanSource,
-          `Assets:${exchangeName}:${record.asset}`,
+          cexTargetAccount,
           adapter,
-          linkedEtherscan,
+          etherscanAccounts,
           accountMap,
           currencySet,
         );
@@ -291,6 +296,31 @@ export async function syncCexAccount(
           continue;
         }
         if (consolidated.warning) result.warnings.push(consolidated.warning);
+      }
+
+      // Try CEX→CEX match (another exchange entry with same txid)
+      if (!etherscanSource) {
+        const cexMatchIds = await backend.queryEntriesByMetadata("txid", txidLower);
+        const matchPair = cexMatchIds
+          .map((id) => entriesById.get(id))
+          .find((m) => m && !m[0].voided_by && !m[0].source.startsWith(adapter.exchangeId + ":"));
+        if (matchPair) {
+          const consolidated = await consolidateWithCex(
+            backend,
+            matchPair,
+            cexTargetAccount,
+            adapter,
+            accountMap,
+            currencySet,
+          );
+          if (consolidated.consolidated) {
+            result.entries_consolidated++;
+            existingSources.add(source);
+            if (consolidated.warning) result.warnings.push(consolidated.warning);
+            continue;
+          }
+          if (consolidated.warning) result.warnings.push(consolidated.warning);
+        }
       }
     }
 
@@ -303,7 +333,7 @@ export async function syncCexAccount(
         await postEntry(date, `${exchangeName} deposit: ${amount.toFixed()} ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
-          ...(record.txid ? { txid: record.txid } : {}),
+          ...(record.txid ? { txid: record.txid.toLowerCase() } : {}),
         });
         break;
       }
@@ -320,7 +350,7 @@ export async function syncCexAccount(
         await postEntry(date, `${exchangeName} withdrawal: ${absAmount.toFixed()} ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
-          ...(record.txid ? { txid: record.txid } : {}),
+          ...(record.txid ? { txid: record.txid.toLowerCase() } : {}),
         });
         break;
       }
@@ -386,6 +416,7 @@ export function findEtherscanSourceByTxid(
 /**
  * Consolidate an Etherscan entry with a CEX deposit/withdrawal.
  * Voids the old Etherscan entry and re-posts it with the CEX account as counterparty.
+ * Derives chain/wallet info from the Etherscan source string and raw tx data.
  */
 async function consolidateWithEtherscan(
   backend: Backend,
@@ -393,7 +424,7 @@ async function consolidateWithEtherscan(
   etherscanSource: string,
   cexTargetAccount: string,
   adapter: CexAdapter,
-  linkedEtherscan: { address: string; chainId: number; chainName: string },
+  etherscanAccounts: EtherscanAccount[],
   accountMap: Map<string, Account>,
   currencySet: Set<string>,
 ): Promise<{ consolidated: boolean; warning?: string }> {
@@ -414,18 +445,35 @@ async function consolidateWithEtherscan(
     return { consolidated: false, warning: `No raw data for ${etherscanSource}, skipping reclassification` };
   }
 
-  // 3. Re-process through handler pipeline
-  const group = JSON.parse(rawData) as TxHashGroup;
-
-  // Build a minimal handler context
-  const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === linkedEtherscan.chainId);
+  // 3. Derive chain/wallet from the etherscan source string + raw tx data
+  const sourceParts = etherscanSource.split(":");
+  const chainId = parseInt(sourceParts[1], 10);
+  const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
   if (!chain) {
-    return { consolidated: false, warning: `Unknown chain ${linkedEtherscan.chainId}` };
+    return { consolidated: false, warning: `Unknown chain ${chainId}` };
   }
 
+  const group = JSON.parse(rawData) as TxHashGroup;
+
+  // Find the user's address from etherscan accounts matching this chain
+  const chainAccounts = etherscanAccounts.filter((a) => a.chain_id === chainId);
+  if (chainAccounts.length === 0) {
+    return { consolidated: false, warning: `No Etherscan account found for chain ${chainId}` };
+  }
+
+  let userAddress = chainAccounts[0].address.toLowerCase();
+  if (chainAccounts.length > 1 && group.normal) {
+    const fromAddr = group.normal.from.toLowerCase();
+    const toAddr = group.normal.to.toLowerCase();
+    const fromMatch = chainAccounts.find((a) => a.address.toLowerCase() === fromAddr);
+    const toMatch = chainAccounts.find((a) => a.address.toLowerCase() === toAddr);
+    userAddress = (fromMatch ?? toMatch)?.address.toLowerCase() ?? userAddress;
+  }
+
+  // Build a minimal handler context
   const ctx = {
-    address: linkedEtherscan.address.toLowerCase(),
-    chainId: linkedEtherscan.chainId,
+    address: userAddress,
+    chainId,
     label: "",
     chain,
     backend,
@@ -576,5 +624,126 @@ async function consolidateWithEtherscan(
   return {
     consolidated: true,
     warning: `Consolidated: ${adapter.exchangeName} transfer matched Etherscan entry ${etherscanSource} — counterparty reclassified to ${cexTargetAccount}`,
+  };
+}
+
+/**
+ * Consolidate a CEX entry with another CEX entry (cross-exchange transfer).
+ * Voids the existing entry and re-posts it with the new exchange's asset account as counterparty.
+ */
+async function consolidateWithCex(
+  backend: Backend,
+  existingPair: [JournalEntry, LineItem[]],
+  cexTargetAccount: string,
+  adapter: CexAdapter,
+  accountMap: Map<string, Account>,
+  currencySet: Set<string>,
+): Promise<{ consolidated: boolean; warning?: string }> {
+  const [existingEntry, existingItems] = existingPair;
+
+  // Build id→name reverse lookup helper
+  function getAccountName(id: string): string | undefined {
+    for (const [name, acc] of accountMap) {
+      if (acc.id === id) return name;
+    }
+    return undefined;
+  }
+
+  backend.beginTransaction?.();
+  try {
+    // Void the existing CEX entry
+    await backend.voidJournalEntry(existingEntry.id);
+
+    // Build items with remapped accounts
+    const newItems: Array<{ account: string; currency: string; amount: Decimal }> = [];
+    for (const item of existingItems) {
+      const fullName = getAccountName(item.account_id) ?? item.account_id;
+      // Remap Equity:*:External → cexTargetAccount (CEX external accounts are 3-segment)
+      const remappedName = fullName.match(/^Equity:[^:]+:External$/) ? cexTargetAccount : fullName;
+      newItems.push({
+        account: remappedName,
+        currency: item.currency,
+        amount: new Decimal(item.amount),
+      });
+    }
+
+    // Ensure accounts and currencies
+    for (const item of newItems) {
+      if (!currencySet.has(item.currency)) {
+        await backend.createCurrency({ code: item.currency, name: item.currency, decimal_places: 8, is_base: false });
+        currencySet.add(item.currency);
+      }
+      if (!accountMap.has(item.account)) {
+        // Create account with parents
+        const accountType = inferAccountType(item.account);
+        const parts = item.account.split(":");
+        let parentId: string | null = null;
+        for (let depth = 1; depth < parts.length; depth++) {
+          const ancestorName = parts.slice(0, depth).join(":");
+          const existing = accountMap.get(ancestorName);
+          if (existing) {
+            parentId = existing.id;
+          } else {
+            const id = uuidv7();
+            const acc: Account = {
+              id, parent_id: parentId, account_type: accountType,
+              name: parts[depth - 1], full_name: ancestorName,
+              allowed_currencies: [], is_postable: true, is_archived: false,
+              created_at: existingEntry.date,
+            };
+            await backend.createAccount(acc);
+            accountMap.set(ancestorName, acc);
+            parentId = id;
+          }
+        }
+        const id = uuidv7();
+        const acc: Account = {
+          id, parent_id: parentId, account_type: accountType,
+          name: parts[parts.length - 1], full_name: item.account,
+          allowed_currencies: [], is_postable: true, is_archived: false,
+          created_at: existingEntry.date,
+        };
+        await backend.createAccount(acc);
+        accountMap.set(item.account, acc);
+      }
+    }
+
+    // Post remapped entry
+    const entryId = uuidv7();
+    const newEntry: JournalEntry = {
+      id: entryId,
+      date: existingEntry.date,
+      description: existingEntry.description,
+      status: "confirmed",
+      source: existingEntry.source,
+      voided_by: null,
+      created_at: existingEntry.date,
+    };
+
+    const lineItems: LineItem[] = newItems.map((item) => ({
+      id: uuidv7(),
+      journal_entry_id: entryId,
+      account_id: accountMap.get(item.account)!.id,
+      currency: item.currency,
+      amount: item.amount.toFixed(),
+      lot_id: null,
+    }));
+
+    await backend.postJournalEntry(newEntry, lineItems);
+
+    // Copy existing metadata and add cex_linked
+    const existingMeta = await backend.getMetadata(existingEntry.id);
+    await backend.setMetadata(entryId, { ...existingMeta, cex_linked: adapter.exchangeId });
+
+    backend.commitTransaction?.();
+  } catch (e) {
+    backend.rollbackTransaction?.();
+    const msg = e instanceof Error ? e.message : String(e);
+    return { consolidated: false, warning: `CEX consolidation failed for ${existingEntry.source}: ${msg}` };
+  }
+
+  return {
+    consolidated: true,
+    warning: `Consolidated: ${adapter.exchangeName} transfer matched CEX entry ${existingEntry.source} — counterparty reclassified to ${cexTargetAccount}`,
   };
 }

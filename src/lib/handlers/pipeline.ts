@@ -20,9 +20,12 @@ import {
   type Erc721Tx,
   type Erc1155Tx,
 } from "../browser-etherscan.js";
+import Decimal from "decimal.js-light";
 import { isAToken, isDebtToken } from "./aave.js";
 import { isAavePool, AAVE } from "./addresses.js";
 import { prefetchAaveSubgraphBatch, clearAaveSubgraphCache } from "./aave-subgraph.js";
+import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "./item-builder.js";
+import type { ItemAccum } from "./item-builder.js";
 
 // --- Reprocess types ---
 
@@ -83,11 +86,16 @@ export async function syncEtherscanWithHandlers(
     accountMap.set(acc.full_name, acc);
   }
 
-  // Collect existing sources for dedup
-  const entries = await backend.queryJournalEntries({});
+  // Collect existing sources for dedup + build entries-by-id for cross-source consolidation
+  const allLoadedEntries = await backend.queryJournalEntries({});
   const existingSources = new Set<string>();
+  const entriesById = new Map<string, [JournalEntry, LineItem[]]>();
   const chainPrefix = `etherscan:${chainId}:`;
-  for (const [e] of entries) {
+  for (const pair of allLoadedEntries) {
+    const [e] = pair;
+    if (!e.voided_by) {
+      entriesById.set(e.id, pair);
+    }
     if (!e.source.startsWith("etherscan:")) continue;
     existingSources.add(e.source);
     // Backward compat for chain_id=1
@@ -307,36 +315,119 @@ export async function syncEtherscanWithHandlers(
     }
 
     if (handlerResult.type === "entries" || handlerResult.type === "review") {
-      for (const handlerEntry of handlerResult.entries) {
-        const entryId = uuidv7();
-        const entry: JournalEntry = {
-          id: entryId,
-          date: handlerEntry.entry.date,
-          description: handlerEntry.entry.description,
-          status: handlerEntry.entry.status,
-          source: handlerEntry.entry.source,
-          voided_by: handlerEntry.entry.voided_by,
-          created_at: handlerEntry.entry.date,
-        };
+      // Check for matching CEX entry to consolidate (Etherscan→CEX direction)
+      let cexConsolidated = false;
+      const cexMatchIds = await backend.queryEntriesByMetadata("txid", group.hash.toLowerCase());
+      if (cexMatchIds.length > 0) {
+        const cexMatch = cexMatchIds
+          .map((id) => entriesById.get(id))
+          .find((m) => m && !m[0].voided_by);
 
-        const items: LineItem[] = handlerEntry.items.map((item) => ({
-          id: uuidv7(),
-          journal_entry_id: entryId,
-          account_id: item.account_id,
-          currency: item.currency,
-          amount: item.amount,
-          lot_id: item.lot_id,
-        }));
+        if (cexMatch) {
+          const [cexEntry, cexItems] = cexMatch;
 
-        try {
-          await backend.postJournalEntry(entry, items);
-          if (Object.keys(handlerEntry.metadata).length > 0) {
-            await backend.setMetadata(entryId, handlerEntry.metadata);
+          // Extract CEX asset account from matched entry's line items
+          let cexAssetAccount: string | null = null;
+          for (const item of cexItems) {
+            for (const [name, acc] of accountMap) {
+              if (acc.id === item.account_id && name.startsWith("Assets:")) {
+                cexAssetAccount = name;
+                break;
+              }
+            }
+            if (cexAssetAccount) break;
           }
-          result.transactions_imported++;
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          result.warnings.push(`post tx ${group.hash}: ${msg}`);
+
+          if (cexAssetAccount) {
+            try {
+              // Void the CEX entry
+              await backend.voidJournalEntry(cexEntry.id);
+              entriesById.delete(cexEntry.id);
+
+              // Remap and post each handler entry with CEX asset account as counterparty
+              for (const handlerEntry of handlerResult.entries) {
+                const accums: ItemAccum[] = handlerEntry.items.map((item) => {
+                  let fullName = item.account_id;
+                  for (const [name, acc] of accountMap) {
+                    if (acc.id === item.account_id) { fullName = name; break; }
+                  }
+                  return { account: fullName, currency: item.currency, amount: new Decimal(item.amount) };
+                });
+
+                const remapped = remapCounterpartyAccounts(accums, [
+                  { from: "Equity:*:External:*", to: cexAssetAccount },
+                ]);
+                const merged = mergeItemAccums(remapped);
+                const resolved = await resolveToLineItems(merged, handlerEntry.entry.date, ctx);
+
+                const entryId = uuidv7();
+                const newEntry: JournalEntry = {
+                  id: entryId,
+                  date: handlerEntry.entry.date,
+                  description: handlerEntry.entry.description,
+                  status: handlerEntry.entry.status,
+                  source: handlerEntry.entry.source,
+                  voided_by: null,
+                  created_at: handlerEntry.entry.date,
+                };
+
+                const lineItems: LineItem[] = resolved.map((item) => ({
+                  id: uuidv7(),
+                  journal_entry_id: entryId,
+                  account_id: item.account_id,
+                  currency: item.currency,
+                  amount: item.amount,
+                  lot_id: item.lot_id,
+                }));
+
+                await backend.postJournalEntry(newEntry, lineItems);
+                const cexExchangeId = cexEntry.source.split(":")[0];
+                await backend.setMetadata(entryId, { ...handlerEntry.metadata, cex_linked: cexExchangeId });
+              }
+
+              cexConsolidated = true;
+              result.transactions_imported++;
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : String(e);
+              result.warnings.push(`CEX consolidation for tx ${group.hash}: ${msg}`);
+            }
+          }
+        }
+      }
+
+      if (!cexConsolidated) {
+        // Normal posting loop (no CEX match found)
+        for (const handlerEntry of handlerResult.entries) {
+          const entryId = uuidv7();
+          const entry: JournalEntry = {
+            id: entryId,
+            date: handlerEntry.entry.date,
+            description: handlerEntry.entry.description,
+            status: handlerEntry.entry.status,
+            source: handlerEntry.entry.source,
+            voided_by: handlerEntry.entry.voided_by,
+            created_at: handlerEntry.entry.date,
+          };
+
+          const items: LineItem[] = handlerEntry.items.map((item) => ({
+            id: uuidv7(),
+            journal_entry_id: entryId,
+            account_id: item.account_id,
+            currency: item.currency,
+            amount: item.amount,
+            lot_id: item.lot_id,
+          }));
+
+          try {
+            await backend.postJournalEntry(entry, items);
+            if (Object.keys(handlerEntry.metadata).length > 0) {
+              await backend.setMetadata(entryId, handlerEntry.metadata);
+            }
+            result.transactions_imported++;
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            result.warnings.push(`post tx ${group.hash}: ${msg}`);
+          }
         }
       }
 
