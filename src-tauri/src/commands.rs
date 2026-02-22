@@ -660,6 +660,35 @@ pub fn remove_exchange_account(
     state.engine.remove_exchange_account(&id).map_err(|e| e.to_string())
 }
 
+// -- HTTP proxy command (bypasses CORS for APIs that don't support it) --
+
+#[tauri::command]
+pub fn proxy_fetch(
+    url: String,
+    method: String,
+    headers: std::collections::HashMap<String, String>,
+    body: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut resp = if method == "POST" {
+        let mut req = ureq::post(&url);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+        req.send(body.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?
+    } else {
+        let mut req = ureq::get(&url);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+        req.call().map_err(|e| e.to_string())?
+    };
+
+    let status = resp.status().as_u16();
+    let body_str: String = resp.body_mut().read_to_string().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "status": status, "body": body_str }))
+}
+
 // -- Etherscan commands --
 
 #[tauri::command]

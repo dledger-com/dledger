@@ -103,6 +103,7 @@ pub fn run() {
             commands::update_recurring_template,
             commands::delete_recurring_template,
             commands::count_journal_entries,
+            commands::proxy_fetch,
             commands::list_exchange_accounts,
             commands::add_exchange_account,
             commands::update_exchange_account,

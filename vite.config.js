@@ -39,5 +39,12 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+    proxy: {
+      '/api/kraken': {
+        target: 'https://api.kraken.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/kraken/, ''),
+      },
+    },
   },
 }));

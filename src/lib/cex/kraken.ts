@@ -2,6 +2,30 @@ import type { CexAdapter, CexLedgerRecord } from "./types.js";
 
 const KRAKEN_API = "https://api.kraken.com";
 
+/**
+ * Route Kraken API calls through a proxy to avoid CORS issues.
+ * - Tauri mode: uses the proxy_fetch Rust command (ureq, no CORS)
+ * - Browser mode: uses Vite dev server proxy (/api/kraken → api.kraken.com)
+ */
+async function krakenFetch(
+  url: string,
+  init?: RequestInit,
+): Promise<{ status: number; body: string }> {
+  if ((window as any).__TAURI_INTERNALS__) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("proxy_fetch", {
+      url,
+      method: init?.method ?? "GET",
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
+      body: typeof init?.body === "string" ? init.body : null,
+    });
+  }
+  // Browser mode: rewrite URL to use Vite proxy
+  const proxyUrl = url.replace("https://api.kraken.com", "/api/kraken");
+  const resp = await fetch(proxyUrl, init);
+  return { status: resp.status, body: await resp.text() };
+}
+
 // Hardcoded Kraken asset code → standard code mapping.
 // Kraken uses X-prefixed crypto (XXBT, XETH) and Z-prefixed fiat (ZUSD, ZEUR).
 const KRAKEN_ASSET_MAP: Record<string, string> = {
@@ -45,8 +69,8 @@ let assetCache: Map<string, string> | null = null;
 async function fetchAssetMap(): Promise<Map<string, string>> {
   if (assetCache) return assetCache;
   try {
-    const resp = await fetch(`${KRAKEN_API}/0/public/Assets`);
-    const json = await resp.json();
+    const result = await krakenFetch(`${KRAKEN_API}/0/public/Assets`);
+    const json = JSON.parse(result.body);
     if (json.error?.length) throw new Error(json.error[0]);
     const map = new Map<string, string>();
     for (const [krakenCode, info] of Object.entries(json.result as Record<string, { altname: string }>)) {
@@ -160,7 +184,7 @@ export class KrakenAdapter implements CexAdapter {
       const postData = params.toString();
       const signature = await krakenSign(path, nonce, postData, apiSecret);
 
-      const resp = await fetch(`${KRAKEN_API}${path}`, {
+      const result = await krakenFetch(`${KRAKEN_API}${path}`, {
         method: "POST",
         headers: {
           "API-Key": apiKey,
@@ -170,7 +194,7 @@ export class KrakenAdapter implements CexAdapter {
         body: postData,
       });
 
-      const json = (await resp.json()) as KrakenLedgersResponse;
+      const json = JSON.parse(result.body) as KrakenLedgersResponse;
       if (json.error?.length) {
         throw new Error(`Kraken API error: ${json.error.join(", ")}`);
       }
@@ -260,7 +284,7 @@ export class KrakenAdapter implements CexAdapter {
     const signature = await krakenSign(path, nonce, postData, apiSecret);
 
     try {
-      const resp = await fetch(`${KRAKEN_API}${path}`, {
+      const result = await krakenFetch(`${KRAKEN_API}${path}`, {
         method: "POST",
         headers: {
           "API-Key": apiKey,
@@ -269,7 +293,7 @@ export class KrakenAdapter implements CexAdapter {
         },
         body: postData,
       });
-      const json = await resp.json();
+      const json = JSON.parse(result.body);
       if (json.error?.length) return map;
 
       for (const entry of json.result ?? []) {
@@ -295,7 +319,7 @@ export class KrakenAdapter implements CexAdapter {
     const signature = await krakenSign(path, nonce, postData, apiSecret);
 
     try {
-      const resp = await fetch(`${KRAKEN_API}${path}`, {
+      const result = await krakenFetch(`${KRAKEN_API}${path}`, {
         method: "POST",
         headers: {
           "API-Key": apiKey,
@@ -304,7 +328,7 @@ export class KrakenAdapter implements CexAdapter {
         },
         body: postData,
       });
-      const json = await resp.json();
+      const json = JSON.parse(result.body);
       if (json.error?.length) return map;
 
       for (const entry of json.result ?? []) {
