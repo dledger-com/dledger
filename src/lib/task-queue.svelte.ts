@@ -18,6 +18,7 @@ export interface TaskProgress {
 
 export interface TaskResult {
   summary: string;
+  data?: unknown;
 }
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -62,6 +63,14 @@ class TaskQueueStore {
   readonly isIdle = $derived(
     this.queue.every((t) => t.status !== "running" && t.status !== "pending"),
   );
+
+  isActive(keyOrPrefix: string): boolean {
+    return this.queue.some(
+      (t) =>
+        (t.key === keyOrPrefix || t.key.startsWith(keyOrPrefix + ":")) &&
+        (t.status === "pending" || t.status === "running"),
+    );
+  }
 
   enqueue(def: TaskDefinition): string | null {
     // Reject duplicate keys

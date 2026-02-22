@@ -10,7 +10,7 @@
   import { getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
   import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
-  import { aggregateErrors } from "$lib/utils/aggregate-errors.js";
+
   import * as Command from "$lib/components/ui/command/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import { cn } from "$lib/utils.js";
@@ -26,20 +26,16 @@
   import {
     syncExchangeRates,
     fetchSingleRate,
-    type ExchangeRateSyncResult,
-    type SourceName,
   } from "$lib/exchange-rate-sync.js";
   import {
     findMissingRates,
     fetchHistoricalRates,
     type HistoricalRateRequest,
-    type HistoricalFetchResult,
   } from "$lib/exchange-rate-historical.js";
   import type {
     LedgerImportResult,
     ChainInfo,
     EtherscanAccount,
-    EtherscanSyncResult,
   } from "$lib/types/index.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
   import {
@@ -78,9 +74,7 @@
   let newAddress = $state("");
   let newLabel = $state("");
   let addingAccount = $state(false);
-  let syncingKey = $state<string | null>(null);
-  let syncingAll = $state(false);
-  let ethResult = $state<EtherscanSyncResult | null>(null);
+  const ethBusy = $derived(taskQueue.isActive("etherscan-sync"));
 
   // -- Inline edit state --
   let editingAddress = $state<string | null>(null);
@@ -113,13 +107,10 @@
 
   // -- Post-import missing rate backfill state --
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
-  let fetchingMissingRates = $state(false);
-  let missingRateResult = $state<HistoricalFetchResult | null>(null);
-  let missingRateProgress = $state({ fetched: 0, total: 0 });
+  const fetchingMissingRates = $derived(taskQueue.isActive("rate-backfill:missing"));
 
   // -- Exchange rate sync state --
-  let syncingRates = $state(false);
-  let rateResult = $state<ExchangeRateSyncResult | null>(null);
+  const syncingRates = $derived(taskQueue.isActive("rate-sync"));
 
   // -- Handler change suggestion state --
   let reprocessSuggested = $state(false);
@@ -140,16 +131,13 @@
   let reprocessPreview = $state<ReprocessResult | null>(null);
   let reprocessTarget = $state<{ chainId: number; address: string; label: string } | null>(null);
   let reprocessProgress = $state({ processed: 0, total: 0 });
-  let applyingReprocess = $state(false);
-  let reprocessApplyResult = $state<ReprocessResult | null>(null);
+  const applyingReprocess = $derived(taskQueue.isActive("reprocess-apply"));
 
   // -- Historical backfill state --
   let backfillCurrencies = $state<string[]>([]);
   let backfillFromDate = $state("");
   let backfillToDate = $state(new Date().toISOString().slice(0, 10));
-  let backfilling = $state(false);
-  let backfillResult = $state<HistoricalFetchResult | null>(null);
-  let backfillProgress = $state({ fetched: 0, total: 0 });
+  const backfilling = $derived(taskQueue.isActive("rate-backfill"));
   let availableCurrencies = $state<string[]>([]);
 
   // -- CEX state --
@@ -159,9 +147,7 @@
   let cexNewApiKey = $state("");
   let cexNewApiSecret = $state("");
   let cexAdding = $state(false);
-  const cexBusy = $derived(
-    taskQueue.queue.some((t) => t.key.startsWith("cex-sync:") && (t.status === "pending" || t.status === "running")),
-  );
+  const cexBusy = $derived(taskQueue.isActive("cex-sync"));
 
   async function loadCexAccounts() {
     try {
@@ -259,121 +245,110 @@
     }
   }
 
-  async function handleBackfill() {
+  function handleBackfill() {
     if (backfillCurrencies.length === 0 || !backfillFromDate || !backfillToDate) {
       toast.error("Select currencies and date range");
       return;
     }
 
-    backfilling = true;
-    backfillResult = null;
-    backfillProgress = { fetched: 0, total: 0 };
+    const currencies = [...backfillCurrencies];
+    const from = backfillFromDate;
+    const to = backfillToDate;
 
-    try {
-      // Generate date targets for each currency
-      const currencyDates: { currency: string; date: string }[] = [];
-      for (const currency of backfillCurrencies) {
-        let current = new Date(backfillFromDate);
-        const end = new Date(backfillToDate);
-        while (current <= end) {
-          currencyDates.push({ currency, date: current.toISOString().slice(0, 10) });
-          current.setDate(current.getDate() + 1);
+    taskQueue.enqueue({
+      key: "rate-backfill",
+      label: `Backfill rates (${currencies.length} currencies)`,
+      async run(ctx) {
+        // Generate date targets for each currency
+        const currencyDates: { currency: string; date: string }[] = [];
+        for (const currency of currencies) {
+          let current = new Date(from);
+          const end = new Date(to);
+          while (current <= end) {
+            currencyDates.push({ currency, date: current.toISOString().slice(0, 10) });
+            current.setDate(current.getDate() + 1);
+          }
         }
-      }
 
-      const missing = await findMissingRates(
-        getBackend(),
-        settings.currency,
-        currencyDates,
-      );
-
-      if (missing.length === 0) {
-        toast.success("All rates already available for the selected range");
-        backfilling = false;
-        return;
-      }
-
-      const totalDates = missing.reduce((sum, r) => sum + r.dates.length, 0);
-      backfillProgress = { fetched: 0, total: totalDates };
-
-      backfillResult = await fetchHistoricalRates(
-        getBackend(),
-        missing,
-        {
-          baseCurrency: settings.currency,
-          coingeckoApiKey: settings.coingeckoApiKey,
-          finnhubApiKey: settings.finnhubApiKey,
-          onProgress: (fetched, total) => {
-            backfillProgress = { fetched, total };
-          },
-        },
-      );
-
-      // Auto-hide currencies that failed all sources
-      if (backfillResult.failedCurrencies.length > 0) {
-        const backend = getBackend();
-        for (const code of backfillResult.failedCurrencies) {
-          await backend.setCurrencyRateSource(code, "none", "auto");
-          await markCurrencyHidden(backend, code);
-        }
-        showAutoHideToast(backfillResult.failedCurrencies);
-        loadAvailableCurrencies();
-      }
-
-      if (backfillResult.errors.length > 0) {
-        toast.warning(`Fetched ${backfillResult.fetched} rate(s) with ${backfillResult.errors.length} warning(s)`);
-      } else {
-        toast.success(`Fetched ${backfillResult.fetched} historical rate(s)`);
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      backfilling = false;
-    }
-  }
-
-  async function handleSyncRates() {
-    syncingRates = true;
-    rateResult = null;
-    try {
-      const backend = getBackend();
-
-      rateResult = await syncExchangeRates(
-        backend,
-        settings.currency,
-        settings.coingeckoApiKey,
-        settings.finnhubApiKey,
-        getHiddenCurrencySet(),
-      );
-
-      // Update last sync time
-      settings.update({ lastRateSync: new Date().toISOString().slice(0, 10) });
-
-      // Auto-hide unrecognized currencies
-      if (rateResult.autoHidden.length > 0) {
-        for (const code of rateResult.autoHidden) {
-          await markCurrencyHidden(getBackend(), code);
-        }
-        showAutoHideToast(rateResult.autoHidden);
-        loadAvailableCurrencies();
-      }
-
-      if (rateResult.errors.length > 0) {
-        toast.warning(
-          `Synced ${rateResult.rates_fetched} rate(s) with ${rateResult.errors.length} warning(s)`,
+        const missing = await findMissingRates(
+          getBackend(),
+          settings.currency,
+          currencyDates,
         );
-      } else {
-        toast.success(`Synced ${rateResult.rates_fetched} exchange rate(s)`);
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      syncingRates = false;
-    }
+
+        if (missing.length === 0) {
+          toast.success("All rates already available for the selected range");
+          return { summary: "All rates already available" };
+        }
+
+        const result = await fetchHistoricalRates(
+          getBackend(),
+          missing,
+          {
+            baseCurrency: settings.currency,
+            coingeckoApiKey: settings.coingeckoApiKey,
+            finnhubApiKey: settings.finnhubApiKey,
+            onProgress: (fetched, total) => {
+              ctx.reportProgress({ current: fetched, total });
+            },
+          },
+        );
+
+        // Auto-hide currencies that failed all sources
+        if (result.failedCurrencies.length > 0) {
+          const backend = getBackend();
+          for (const code of result.failedCurrencies) {
+            await backend.setCurrencyRateSource(code, "none", "auto");
+            await markCurrencyHidden(backend, code);
+          }
+          showAutoHideToast(result.failedCurrencies);
+          loadAvailableCurrencies();
+        }
+
+        if (result.errors.length > 0) {
+          toast.warning(`Fetched ${result.fetched} rate(s) with ${result.errors.length} warning(s)`);
+        } else {
+          toast.success(`Fetched ${result.fetched} historical rate(s)`);
+        }
+
+        return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
+      },
+    });
   }
 
-  function accountSyncKey(account: EtherscanAccount): string {
-    return `${account.address}:${account.chain_id}`;
+  function handleSyncRates() {
+    taskQueue.enqueue({
+      key: "rate-sync",
+      label: "Sync exchange rates",
+      async run() {
+        const backend = getBackend();
+        const r = await syncExchangeRates(
+          backend,
+          settings.currency,
+          settings.coingeckoApiKey,
+          settings.finnhubApiKey,
+          getHiddenCurrencySet(),
+        );
+
+        settings.update({ lastRateSync: new Date().toISOString().slice(0, 10) });
+
+        if (r.autoHidden.length > 0) {
+          for (const code of r.autoHidden) {
+            await markCurrencyHidden(backend, code);
+          }
+          showAutoHideToast(r.autoHidden);
+          loadAvailableCurrencies();
+        }
+
+        if (r.errors.length > 0) {
+          toast.warning(`Synced ${r.rates_fetched} rate(s) with ${r.errors.length} warning(s)`);
+        } else {
+          toast.success(`Synced ${r.rates_fetched} exchange rate(s)`);
+        }
+
+        return { summary: `${r.rates_fetched} rate(s) synced`, data: r };
+      },
+    });
   }
 
   function getChainName(chainId: number): string {
@@ -419,7 +394,6 @@
     submitting = true;
     result = null;
     missingRateRequests = [];
-    missingRateResult = null;
 
     try {
       result = await getBackend().importLedgerFile(fileContent);
@@ -444,47 +418,46 @@
     }
   }
 
-  async function handleFetchMissingRates() {
-    fetchingMissingRates = true;
-    missingRateResult = null;
-    const totalDates = missingRateRequests.reduce((sum, r) => sum + r.dates.length, 0);
-    missingRateProgress = { fetched: 0, total: totalDates };
-    try {
-      missingRateResult = await fetchHistoricalRates(
-        getBackend(),
-        missingRateRequests,
-        {
-          baseCurrency: settings.currency,
-          coingeckoApiKey: settings.coingeckoApiKey,
-          finnhubApiKey: settings.finnhubApiKey,
-          onProgress: (fetched, total) => {
-            missingRateProgress = { fetched, total };
+  function handleFetchMissingRates() {
+    const requests = [...missingRateRequests];
+    taskQueue.enqueue({
+      key: "rate-backfill:missing",
+      label: `Fetch ${requests.reduce((sum, r) => sum + r.dates.length, 0)} missing rate(s)`,
+      async run(ctx) {
+        const result = await fetchHistoricalRates(
+          getBackend(),
+          requests,
+          {
+            baseCurrency: settings.currency,
+            coingeckoApiKey: settings.coingeckoApiKey,
+            finnhubApiKey: settings.finnhubApiKey,
+            onProgress: (fetched, total) => {
+              ctx.reportProgress({ current: fetched, total });
+            },
           },
-        },
-      );
-      missingRateRequests = [];
+        );
+        missingRateRequests = [];
 
-      // Auto-hide currencies that failed all sources
-      if (missingRateResult.failedCurrencies.length > 0) {
-        const backend = getBackend();
-        for (const code of missingRateResult.failedCurrencies) {
-          await backend.setCurrencyRateSource(code, "none", "auto");
-          await markCurrencyHidden(backend, code);
+        // Auto-hide currencies that failed all sources
+        if (result.failedCurrencies.length > 0) {
+          const backend = getBackend();
+          for (const code of result.failedCurrencies) {
+            await backend.setCurrencyRateSource(code, "none", "auto");
+            await markCurrencyHidden(backend, code);
+          }
+          showAutoHideToast(result.failedCurrencies);
+          loadAvailableCurrencies();
         }
-        showAutoHideToast(missingRateResult.failedCurrencies);
-        loadAvailableCurrencies();
-      }
 
-      if (missingRateResult.errors.length > 0) {
-        toast.warning(`Fetched ${missingRateResult.fetched} rate(s) with ${missingRateResult.errors.length} warning(s)`);
-      } else {
-        toast.success(`Fetched ${missingRateResult.fetched} historical rate(s)`);
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      fetchingMissingRates = false;
-    }
+        if (result.errors.length > 0) {
+          toast.warning(`Fetched ${result.fetched} rate(s) with ${result.errors.length} warning(s)`);
+        } else {
+          toast.success(`Fetched ${result.fetched} historical rate(s)`);
+        }
+
+        return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
+      },
+    });
   }
 
   // -- Etherscan handlers --
@@ -539,32 +512,32 @@
     }
   }
 
-  async function handleSyncOne(account: EtherscanAccount) {
+  function syncEthAccount(account: EtherscanAccount) {
     const apiKey = settings.etherscanApiKey;
     if (!apiKey) {
       toast.error("Etherscan API key is required");
       return;
     }
-    syncingKey = accountSyncKey(account);
-    ethResult = null;
-    try {
-      ethResult = await getBackend().syncEtherscan(
-        apiKey,
-        account.address,
-        account.label,
-        account.chain_id,
-      );
-      toast.success(
-        `Synced ${account.label} (${getChainName(account.chain_id)}): ${ethResult.transactions_imported} imported`,
-      );
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      syncingKey = null;
-    }
+    taskQueue.enqueue({
+      key: `etherscan-sync:${account.address}:${account.chain_id}`,
+      label: `Sync ${account.label} (${getChainName(account.chain_id)})`,
+      async run() {
+        const r = await getBackend().syncEtherscan(
+          apiKey,
+          account.address,
+          account.label,
+          account.chain_id,
+        );
+        await loadEthAccounts();
+        return {
+          summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+          data: r,
+        };
+      },
+    });
   }
 
-  async function handleSyncAll() {
+  function handleSyncAll() {
     const apiKey = settings.etherscanApiKey;
     if (!apiKey) {
       toast.error("Etherscan API key is required");
@@ -574,48 +547,14 @@
       toast.error("No tracked addresses to sync");
       return;
     }
-    syncingAll = true;
-    ethResult = null;
-    let totalImported = 0;
-    let totalSkipped = 0;
-    let totalAccountsCreated = 0;
-    let allWarnings: string[] = [];
-
-    try {
-      // Sync all accounts sequentially to avoid concurrent DB transaction races
-      for (const account of ethAccounts) {
-        syncingKey = accountSyncKey(account);
-        const r = await getBackend().syncEtherscan(
-          apiKey,
-          account.address,
-          account.label,
-          account.chain_id,
-        );
-        totalImported += r.transactions_imported;
-        totalSkipped += r.transactions_skipped;
-        totalAccountsCreated += r.accounts_created;
-        allWarnings = allWarnings.concat(r.warnings);
-      }
-
-      ethResult = {
-        transactions_imported: totalImported,
-        transactions_skipped: totalSkipped,
-        accounts_created: totalAccountsCreated,
-        warnings: allWarnings,
-      };
-      toast.success(`Sync complete: ${totalImported} transactions imported`);
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      syncingKey = null;
-      syncingAll = false;
+    for (const account of ethAccounts) {
+      syncEthAccount(account);
     }
   }
 
   async function handleReprocessOne(account: EtherscanAccount) {
     reprocessing = true;
     reprocessPreview = null;
-    reprocessApplyResult = null;
     reprocessTarget = { chainId: account.chain_id, address: account.address, label: account.label };
     reprocessProgress = { processed: 0, total: 0 };
     try {
@@ -645,7 +584,6 @@
     if (ethAccounts.length === 0) return;
     reprocessing = true;
     reprocessPreview = null;
-    reprocessApplyResult = null;
     reprocessTarget = null;
     reprocessProgress = { processed: 0, total: 0 };
 
@@ -691,84 +629,81 @@
     }
   }
 
-  async function handleApplyReprocess() {
+  function handleApplyReprocess() {
     if (!reprocessPreview || reprocessPreview.changes.length === 0) return;
-    applyingReprocess = true;
-    reprocessApplyResult = null;
-    reprocessProgress = { processed: 0, total: 0 };
+    const preview = reprocessPreview;
+    const target = reprocessTarget;
+    const accounts = [...ethAccounts];
 
-    // Group changes by chainId (derived from reprocessTarget or from changes)
-    // If reprocessTarget is set, apply for that single account; else iterate all accounts
-    const combined: ReprocessResult = {
-      total: 0,
-      unchanged: 0,
-      changed: 0,
-      skipped: 0,
-      errors: [],
-      changes: [],
-      currencyHints: {},
-    };
+    taskQueue.enqueue({
+      key: "reprocess-apply",
+      label: `Apply reprocess (${preview.changes.length} changes)`,
+      async run(ctx) {
+        const combined: ReprocessResult = {
+          total: 0,
+          unchanged: 0,
+          changed: 0,
+          skipped: 0,
+          errors: [],
+          changes: [],
+          currencyHints: {},
+        };
 
-    try {
-      if (reprocessTarget) {
-        const r = await applyReprocess(getBackend(), handlerRegistry, {
-          chainId: reprocessTarget.chainId,
-          address: reprocessTarget.address,
-          label: reprocessTarget.label,
-          settings: settings.settings,
-          onProgress: (processed, total) => {
-            reprocessProgress = { processed, total };
-          },
-        }, reprocessPreview.changes);
-        combined.total += r.total;
-        combined.changed += r.changed;
-        combined.errors.push(...r.errors);
-      } else {
-        // "Reprocess All" — re-run apply per account with all changes.
-        // applyReprocess only processes hashes present in the changes list,
-        // so passing the full list to each account is safe.
-        for (const account of ethAccounts) {
+        if (target) {
           const r = await applyReprocess(getBackend(), handlerRegistry, {
-            chainId: account.chain_id,
-            address: account.address,
-            label: account.label,
+            chainId: target.chainId,
+            address: target.address,
+            label: target.label,
             settings: settings.settings,
             onProgress: (processed, total) => {
-              reprocessProgress = { processed: combined.changed + processed, total: reprocessPreview!.changes.length };
+              ctx.reportProgress({ current: processed, total });
             },
-          }, reprocessPreview.changes);
+          }, preview.changes);
           combined.total += r.total;
           combined.changed += r.changed;
           combined.errors.push(...r.errors);
+        } else {
+          for (const account of accounts) {
+            const r = await applyReprocess(getBackend(), handlerRegistry, {
+              chainId: account.chain_id,
+              address: account.address,
+              label: account.label,
+              settings: settings.settings,
+              onProgress: (processed, total) => {
+                ctx.reportProgress({ current: combined.changed + processed, total: preview.changes.length });
+              },
+            }, preview.changes);
+            combined.total += r.total;
+            combined.changed += r.changed;
+            combined.errors.push(...r.errors);
+          }
         }
-      }
 
-      // Rebuild currency rate sources from dry-run hints
-      const backend = getBackend();
-      if (!reprocessTarget) {
-        // "Reprocess All" — safe to clear non-user entries and rebuild
-        await backend.clearNonUserRateSources();
-      }
-      if (reprocessPreview!.currencyHints) {
-        for (const [currency, hint] of Object.entries(reprocessPreview!.currencyHints)) {
-          const rateSource = hint.source ?? "none";
-          await backend.setCurrencyRateSource(currency, rateSource, `handler:${hint.handler}`);
+        // Rebuild currency rate sources from dry-run hints
+        const backend = getBackend();
+        if (!target) {
+          await backend.clearNonUserRateSources();
         }
-      }
+        if (preview.currencyHints) {
+          for (const [currency, hint] of Object.entries(preview.currencyHints)) {
+            const rateSource = hint.source ?? "none";
+            await backend.setCurrencyRateSource(currency, rateSource, `handler:${hint.handler}`);
+          }
+        }
 
-      reprocessApplyResult = combined;
-      reprocessPreview = null;
+        if (combined.errors.length > 0) {
+          toast.warning(`Reprocessed ${combined.changed} transaction(s) with ${combined.errors.length} error(s)`);
+        } else {
+          toast.success(`Reprocessed ${combined.changed} transaction(s)`);
+        }
 
-      if (combined.errors.length > 0) {
-        toast.warning(`Reprocessed ${combined.changed} transaction(s) with ${combined.errors.length} error(s)`);
-      } else {
-        toast.success(`Reprocessed ${combined.changed} transaction(s)`);
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      applyingReprocess = false;
-    }
+        return { summary: `Reprocessed ${combined.changed} transaction(s)`, data: combined };
+      },
+    });
+
+    // Clear preview immediately since the task owns it now
+    reprocessPreview = null;
+    reprocessTarget = null;
   }
 
   // -- Inline edit handlers --
@@ -843,15 +778,9 @@
     }
   }
 
-  async function handleSyncGroup(group: GroupedAddress) {
-    const apiKey = settings.etherscanApiKey;
-    if (!apiKey) {
-      toast.error("Etherscan API key is required");
-      return;
-    }
+  function handleSyncGroup(group: GroupedAddress) {
     for (const chainId of group.chainIds) {
-      const account: EtherscanAccount = { address: group.address, chain_id: chainId, label: group.label };
-      await handleSyncOne(account);
+      syncEthAccount({ address: group.address, chain_id: chainId, label: group.label });
     }
   }
 
@@ -1021,19 +950,6 @@
             <Badge variant="secondary">{req.currency} ({req.dates.length} date{req.dates.length === 1 ? "" : "s"})</Badge>
           {/each}
         </div>
-        {#if fetchingMissingRates}
-          <div class="mt-3">
-            <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                class="h-full bg-primary transition-all duration-300"
-                style="width: {missingRateProgress.total > 0 ? (missingRateProgress.fetched / missingRateProgress.total * 100) : 0}%"
-              ></div>
-            </div>
-            <p class="text-xs text-muted-foreground mt-1">
-              {missingRateProgress.fetched} / {missingRateProgress.total}
-            </p>
-          </div>
-        {/if}
       </Card.Content>
       <Card.Footer class="flex justify-end gap-2">
         <Button variant="outline" onclick={() => { missingRateRequests = []; }}>Skip</Button>
@@ -1041,40 +957,6 @@
           {fetchingMissingRates ? "Fetching..." : "Fetch Now"}
         </Button>
       </Card.Footer>
-    </Card.Root>
-  {/if}
-
-  {#if missingRateResult}
-    <Card.Root class="border-green-200 dark:border-green-800">
-      <Card.Header>
-        <Card.Title>Historical Rate Fetch Results</Card.Title>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div class="text-center">
-            <p class="text-2xl font-bold">{missingRateResult.fetched}</p>
-            <p class="text-xs text-muted-foreground">Fetched</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold">{missingRateResult.skipped}</p>
-            <p class="text-xs text-muted-foreground">Skipped</p>
-          </div>
-          {#if missingRateResult.errors.length > 0}
-            <div class="text-center">
-              <p class="text-2xl font-bold text-yellow-600">{missingRateResult.errors.length}</p>
-              <p class="text-xs text-muted-foreground">Errors</p>
-            </div>
-          {/if}
-        </div>
-        {#if missingRateResult.errors.length > 0}
-          {@const aggregated = aggregateErrors(missingRateResult.errors)}
-          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-            {#each aggregated as error}
-              <li class="py-0.5">{error.message}</li>
-            {/each}
-          </ul>
-        {/if}
-      </Card.Content>
     </Card.Root>
   {/if}
 
@@ -1233,7 +1115,7 @@
                 </Table.Row>
               {:else}
                 <!-- Display mode -->
-                {@const isSyncingGroup = syncingKey !== null && syncingKey.startsWith(group.address + ":")}
+                {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
                 <Table.Row>
                   <Table.Cell class="font-mono text-sm">{formatAddress(group.address)}</Table.Cell>
                   <Table.Cell>{group.label}</Table.Cell>
@@ -1250,7 +1132,7 @@
                         variant="outline"
                         size="sm"
                         onclick={() => handleSyncGroup(group)}
-                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                        disabled={ethBusy || reprocessing || applyingReprocess}
                       >
                         <RefreshCw class="mr-1 h-3 w-3" />
                         {isSyncingGroup ? "Syncing..." : "Sync"}
@@ -1259,7 +1141,7 @@
                         variant="outline"
                         size="sm"
                         onclick={() => handleReprocessGroup(group)}
-                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                        disabled={ethBusy || reprocessing || applyingReprocess}
                       >
                         <RotateCw class="mr-1 h-3 w-3" />
                         Reprocess
@@ -1268,7 +1150,7 @@
                         variant="outline"
                         size="sm"
                         onclick={() => startEditAddress(group)}
-                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                        disabled={ethBusy || reprocessing || applyingReprocess}
                       >
                         <Pencil class="h-3 w-3" />
                       </Button>
@@ -1276,7 +1158,7 @@
                         variant="outline"
                         size="sm"
                         onclick={() => handleRemoveGroup(group)}
-                        disabled={syncingKey !== null || syncingAll || reprocessing || applyingReprocess}
+                        disabled={ethBusy || reprocessing || applyingReprocess}
                       >
                         <Trash2 class="h-3 w-3" />
                       </Button>
@@ -1380,64 +1262,21 @@
         <Button
           variant="outline"
           onclick={handleReprocessAll}
-          disabled={syncingAll || syncingKey !== null || reprocessing || applyingReprocess || ethAccounts.length === 0}
+          disabled={ethBusy || reprocessing || applyingReprocess || ethAccounts.length === 0}
         >
           <RotateCw class="mr-1 h-4 w-4" />
           {reprocessing && !reprocessTarget ? "Scanning..." : "Reprocess All"}
         </Button>
         <Button
           onclick={handleSyncAll}
-          disabled={syncingAll || syncingKey !== null || reprocessing || applyingReprocess || ethAccounts.length === 0 || !settings.etherscanApiKey}
+          disabled={ethBusy || reprocessing || applyingReprocess || ethAccounts.length === 0 || !settings.etherscanApiKey}
         >
           <RefreshCw class="mr-1 h-4 w-4" />
-          {syncingAll ? "Syncing All..." : "Sync All"}
+          {ethBusy ? "Syncing All..." : "Sync All"}
         </Button>
       </div>
     </Card.Footer>
   </Card.Root>
-
-  <!-- Etherscan Sync Results -->
-  {#if ethResult}
-    <Card.Root class="border-green-200 dark:border-green-800">
-      <Card.Header>
-        <Card.Title>Sync Results</Card.Title>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        <div class="grid grid-cols-3 gap-4">
-          <div class="text-center">
-            <p class="text-2xl font-bold">{ethResult.transactions_imported}</p>
-            <p class="text-xs text-muted-foreground">Imported</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold">{ethResult.transactions_skipped}</p>
-            <p class="text-xs text-muted-foreground">Skipped</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold">{ethResult.accounts_created}</p>
-            <p class="text-xs text-muted-foreground">Accounts Created</p>
-          </div>
-        </div>
-
-        {#if ethResult.warnings.length > 0}
-          <div class="mt-4">
-            <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-              Warnings ({ethResult.warnings.length})
-            </p>
-            <ul class="mt-1 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-              {#each ethResult.warnings as warning}
-                <li class="py-0.5">{warning}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-
-        <div class="mt-4 flex gap-2">
-          <Button variant="outline" size="sm" href="/journal">View Journal</Button>
-          <Button variant="outline" size="sm" href="/accounts">View Accounts</Button>
-        </div>
-      </Card.Content>
-    </Card.Root>
-  {/if}
 
   <!-- Reprocess Preview -->
   {#if reprocessPreview && reprocessPreview.changed > 0}
@@ -1490,19 +1329,6 @@
           </div>
         {/if}
 
-        {#if applyingReprocess}
-          <div>
-            <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                class="h-full bg-primary transition-all duration-300"
-                style="width: {reprocessProgress.total > 0 ? (reprocessProgress.processed / reprocessProgress.total * 100) : 0}%"
-              ></div>
-            </div>
-            <p class="text-xs text-muted-foreground mt-1">
-              {reprocessProgress.processed} / {reprocessProgress.total}
-            </p>
-          </div>
-        {/if}
       </Card.Content>
       <Card.Footer class="flex justify-end gap-2">
         <Button variant="outline" onclick={() => { reprocessPreview = null; reprocessTarget = null; }}>
@@ -1512,41 +1338,6 @@
           {applyingReprocess ? "Applying..." : `Apply ${reprocessPreview.changed} Change(s)`}
         </Button>
       </Card.Footer>
-    </Card.Root>
-  {/if}
-
-  <!-- Reprocess Apply Results -->
-  {#if reprocessApplyResult}
-    <Card.Root class="border-green-200 dark:border-green-800">
-      <Card.Header>
-        <Card.Title>Reprocess Results</Card.Title>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="text-center">
-            <p class="text-2xl font-bold">{reprocessApplyResult.changed}</p>
-            <p class="text-xs text-muted-foreground">Reprocessed</p>
-          </div>
-          {#if reprocessApplyResult.errors.length > 0}
-            <div class="text-center">
-              <p class="text-2xl font-bold text-yellow-600">{reprocessApplyResult.errors.length}</p>
-              <p class="text-xs text-muted-foreground">Errors</p>
-            </div>
-          {/if}
-        </div>
-
-        {#if reprocessApplyResult.errors.length > 0}
-          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-            {#each reprocessApplyResult.errors as error}
-              <li class="py-0.5">{error}</li>
-            {/each}
-          </ul>
-        {/if}
-
-        <div class="mt-4 flex gap-2">
-          <Button variant="outline" size="sm" href="/journal">View Journal</Button>
-        </div>
-      </Card.Content>
     </Card.Root>
   {/if}
 
@@ -1819,40 +1610,6 @@
     </Card.Footer>
   </Card.Root>
 
-  {#if rateResult}
-    <Card.Root class="border-green-200 dark:border-green-800">
-      <Card.Header>
-        <Card.Title>Rate Sync Results</Card.Title>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="text-center">
-            <p class="text-2xl font-bold">{rateResult.rates_fetched}</p>
-            <p class="text-xs text-muted-foreground">Fetched</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold">{rateResult.rates_skipped}</p>
-            <p class="text-xs text-muted-foreground">Skipped</p>
-          </div>
-        </div>
-
-        {#if rateResult.errors.length > 0}
-          {@const aggregated = aggregateErrors(rateResult.errors)}
-          <div class="mt-4">
-            <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-              Warnings ({rateResult.errors.length})
-            </p>
-            <ul class="mt-1 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-              {#each aggregated as error}
-                <li class="py-0.5">{error.message}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-      </Card.Content>
-    </Card.Root>
-  {/if}
-
   <!-- Historical Backfill -->
   <Card.Root>
     <Card.Header>
@@ -1898,19 +1655,6 @@
         </div>
       </div>
 
-      {#if backfilling}
-        <div>
-          <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              class="h-full bg-primary transition-all duration-300"
-              style="width: {backfillProgress.total > 0 ? (backfillProgress.fetched / backfillProgress.total * 100) : 0}%"
-            ></div>
-          </div>
-          <p class="text-xs text-muted-foreground mt-1">
-            {backfillProgress.fetched} / {backfillProgress.total} rates
-          </p>
-        </div>
-      {/if}
     </Card.Content>
     <Card.Footer class="flex justify-end">
       <Button
@@ -1922,37 +1666,4 @@
     </Card.Footer>
   </Card.Root>
 
-  {#if backfillResult}
-    <Card.Root class="border-green-200 dark:border-green-800">
-      <Card.Header>
-        <Card.Title>Backfill Results</Card.Title>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div class="text-center">
-            <p class="text-2xl font-bold">{backfillResult.fetched}</p>
-            <p class="text-xs text-muted-foreground">Fetched</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold">{backfillResult.skipped}</p>
-            <p class="text-xs text-muted-foreground">Skipped</p>
-          </div>
-          {#if backfillResult.errors.length > 0}
-            <div class="text-center">
-              <p class="text-2xl font-bold text-yellow-600">{backfillResult.errors.length}</p>
-              <p class="text-xs text-muted-foreground">Errors</p>
-            </div>
-          {/if}
-        </div>
-        {#if backfillResult.errors.length > 0}
-          {@const aggregated = aggregateErrors(backfillResult.errors)}
-          <ul class="mt-2 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-            {#each aggregated as error}
-              <li class="py-0.5">{error.message}</li>
-            {/each}
-          </ul>
-        {/if}
-      </Card.Content>
-    </Card.Root>
-  {/if}
 </div>
