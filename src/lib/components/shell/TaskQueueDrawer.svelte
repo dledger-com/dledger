@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { taskQueue, type QueuedTask } from "$lib/task-queue.svelte.js";
   import CircleCheck from "lucide-svelte/icons/circle-check";
+  import CircleAlert from "lucide-svelte/icons/circle-alert";
   import CircleX from "lucide-svelte/icons/circle-x";
   import Ban from "lucide-svelte/icons/ban";
   import X from "lucide-svelte/icons/x";
@@ -124,7 +125,9 @@
           </div>
           {#each taskQueue.history as task (task.id)}
             <div class="group mb-2 flex items-start gap-2 rounded-lg border p-2">
-              {#if task.status === "completed"}
+              {#if task.status === "completed" && task.result?.actionRequired}
+                <CircleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              {:else if task.status === "completed"}
                 <CircleCheck class="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
               {:else if task.status === "failed"}
                 <CircleX class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
@@ -149,6 +152,15 @@
                   <p class="text-xs text-red-500">{task.error}</p>
                 {:else if task.status === "cancelled"}
                   <p class="text-xs text-muted-foreground">Cancelled</p>
+                {/if}
+                {#if task.status === "completed" && task.result?.actionRequired}
+                  <Button
+                    size="sm"
+                    class="mt-1 h-6 text-xs"
+                    onclick={() => taskQueue.handleAction(task.id)}
+                  >
+                    {task.result.actionLabel ?? "Review"}
+                  </Button>
                 {/if}
                 {#if task.finishedAt}
                   <p class="text-xs text-muted-foreground">{formatTime(task.finishedAt)}</p>

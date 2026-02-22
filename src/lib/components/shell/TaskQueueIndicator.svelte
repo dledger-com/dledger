@@ -13,7 +13,8 @@
 
   const visible = $derived(taskQueue.queue.length > 0);
   const hasActive = $derived(taskQueue.activeCount > 0);
-  const hasErrors = $derived(!hasActive && taskQueue.hasErrors);
+  const hasActions = $derived(!hasActive && taskQueue.actionCount > 0);
+  const hasErrors = $derived(!hasActive && !hasActions && taskQueue.hasErrors);
 </script>
 
 {#if visible}
@@ -24,6 +25,13 @@
         class="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground"
       >
         {taskQueue.activeCount}
+      </span>
+    {:else if hasActions}
+      <ListTodo class="h-4 w-4 text-amber-500" />
+      <span
+        class="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-medium text-white"
+      >
+        {taskQueue.actionCount}
       </span>
     {:else if hasErrors}
       <AlertTriangle class="h-4 w-4 text-amber-500" />

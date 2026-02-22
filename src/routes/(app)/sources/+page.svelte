@@ -127,10 +127,9 @@
   }
 
   // -- Reprocess state --
-  let reprocessing = $state(false);
   let reprocessPreview = $state<ReprocessResult | null>(null);
   let reprocessTarget = $state<{ chainId: number; address: string; label: string } | null>(null);
-  let reprocessProgress = $state({ processed: 0, total: 0 });
+  const reprocessing = $derived(taskQueue.isActive("reprocess-dryrun"));
   const applyingReprocess = $derived(taskQueue.isActive("reprocess-apply"));
 
   // -- Historical backfill state --
@@ -552,81 +551,104 @@
     }
   }
 
-  async function handleReprocessOne(account: EtherscanAccount) {
-    reprocessing = true;
-    reprocessPreview = null;
-    reprocessTarget = { chainId: account.chain_id, address: account.address, label: account.label };
-    reprocessProgress = { processed: 0, total: 0 };
-    try {
-      reprocessPreview = await dryRunReprocess(getBackend(), handlerRegistry, {
-        chainId: account.chain_id,
-        address: account.address,
-        label: account.label,
-        settings: settings.settings,
-        onProgress: (processed, total) => {
-          reprocessProgress = { processed, total };
-        },
-      });
-      if (reprocessPreview.total === 0) {
-        toast.info("No raw transaction data found — re-sync this account first to enable reprocessing");
-      } else if (reprocessPreview.changed === 0) {
-        toast.success("All transactions unchanged — nothing to reprocess");
-      }
-    } catch (err) {
-      toast.error(String(err));
-      reprocessTarget = null;
-    } finally {
-      reprocessing = false;
-    }
-  }
-
-  async function handleReprocessAll() {
-    if (ethAccounts.length === 0) return;
-    reprocessing = true;
-    reprocessPreview = null;
-    reprocessTarget = null;
-    reprocessProgress = { processed: 0, total: 0 };
-
-    const combined: ReprocessResult = {
-      total: 0,
-      unchanged: 0,
-      changed: 0,
-      skipped: 0,
-      errors: [],
-      changes: [],
-      currencyHints: {},
-    };
-
-    try {
-      for (const account of ethAccounts) {
+  function handleReprocessOne(account: EtherscanAccount) {
+    taskQueue.enqueue({
+      key: `reprocess-dryrun:${account.address}:${account.chain_id}`,
+      label: `Reprocess scan ${account.label} (${getChainName(account.chain_id)})`,
+      async run(ctx) {
         const r = await dryRunReprocess(getBackend(), handlerRegistry, {
           chainId: account.chain_id,
           address: account.address,
           label: account.label,
           settings: settings.settings,
-          onProgress: (processed, total) => {
-            reprocessProgress = { processed: combined.total + processed, total: combined.total + total };
-          },
+          onProgress: (processed, total) => ctx.reportProgress({ current: processed, total }),
         });
-        combined.total += r.total;
-        combined.unchanged += r.unchanged;
-        combined.changed += r.changed;
-        combined.skipped += r.skipped;
-        combined.errors.push(...r.errors);
-        combined.changes.push(...r.changes);
-        combined.currencyHints = { ...combined.currencyHints, ...r.currencyHints };
-      }
-      reprocessPreview = combined;
-      if (combined.total === 0) {
-        toast.info("No raw transaction data found — re-sync your accounts first to enable reprocessing");
-      } else if (combined.changed === 0) {
-        toast.success("All transactions unchanged — nothing to reprocess");
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      reprocessing = false;
-    }
+        if (r.total === 0) {
+          toast.info("No raw transaction data found — re-sync first");
+          return { summary: "No raw data found" };
+        }
+        if (r.changed === 0) {
+          toast.success("All transactions unchanged");
+          return { summary: `${r.total} scanned, 0 changed` };
+        }
+        return {
+          summary: `${r.changed} of ${r.total} would change`,
+          data: { result: r, target: { chainId: account.chain_id, address: account.address, label: account.label } },
+          actionRequired: true,
+          actionLabel: `Review ${r.changed} Change(s)`,
+        };
+      },
+      onAction(task) {
+        const d = task.result?.data as { result: ReprocessResult; target: { chainId: number; address: string; label: string } } | undefined;
+        if (d) {
+          reprocessPreview = d.result;
+          reprocessTarget = d.target;
+        }
+        taskQueue.dismiss(task.id);
+      },
+    });
+  }
+
+  function handleReprocessAll() {
+    if (ethAccounts.length === 0) return;
+    const accounts = [...ethAccounts];
+    taskQueue.enqueue({
+      key: "reprocess-dryrun:all",
+      label: `Reprocess scan (${accounts.length} accounts)`,
+      async run(ctx) {
+        const combined: ReprocessResult = {
+          total: 0,
+          unchanged: 0,
+          changed: 0,
+          skipped: 0,
+          errors: [],
+          changes: [],
+          currencyHints: {},
+        };
+        let processedSoFar = 0;
+        for (const account of accounts) {
+          const r = await dryRunReprocess(getBackend(), handlerRegistry, {
+            chainId: account.chain_id,
+            address: account.address,
+            label: account.label,
+            settings: settings.settings,
+            onProgress: (processed, total) => {
+              ctx.reportProgress({ current: processedSoFar + processed, total: processedSoFar + total });
+            },
+          });
+          processedSoFar += r.total;
+          combined.total += r.total;
+          combined.unchanged += r.unchanged;
+          combined.changed += r.changed;
+          combined.skipped += r.skipped;
+          combined.errors.push(...r.errors);
+          combined.changes.push(...r.changes);
+          combined.currencyHints = { ...combined.currencyHints, ...r.currencyHints };
+        }
+        if (combined.total === 0) {
+          toast.info("No raw transaction data found — re-sync your accounts first");
+          return { summary: "No raw data found" };
+        }
+        if (combined.changed === 0) {
+          toast.success("All transactions unchanged");
+          return { summary: `${combined.total} scanned, 0 changed` };
+        }
+        return {
+          summary: `${combined.changed} of ${combined.total} would change`,
+          data: { result: combined, target: null },
+          actionRequired: true,
+          actionLabel: `Review ${combined.changed} Change(s)`,
+        };
+      },
+      onAction(task) {
+        const d = task.result?.data as { result: ReprocessResult; target: null } | undefined;
+        if (d) {
+          reprocessPreview = d.result;
+          reprocessTarget = null;
+        }
+        taskQueue.dismiss(task.id);
+      },
+    });
   }
 
   function handleApplyReprocess() {
@@ -784,10 +806,9 @@
     }
   }
 
-  async function handleReprocessGroup(group: GroupedAddress) {
+  function handleReprocessGroup(group: GroupedAddress) {
     for (const chainId of group.chainIds) {
-      const account: EtherscanAccount = { address: group.address, chain_id: chainId, label: group.label };
-      await handleReprocessOne(account);
+      handleReprocessOne({ address: group.address, chain_id: chainId, label: group.label });
     }
   }
 
@@ -1265,7 +1286,7 @@
           disabled={ethBusy || reprocessing || applyingReprocess || ethAccounts.length === 0}
         >
           <RotateCw class="mr-1 h-4 w-4" />
-          {reprocessing && !reprocessTarget ? "Scanning..." : "Reprocess All"}
+          {taskQueue.isActive("reprocess-dryrun:all") ? "Scanning..." : "Reprocess All"}
         </Button>
         <Button
           onclick={handleSyncAll}

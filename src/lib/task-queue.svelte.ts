@@ -3,6 +3,7 @@ export interface TaskDefinition {
   label: string;
   description?: string;
   run: (ctx: TaskContext) => Promise<TaskResult | void>;
+  onAction?: (task: QueuedTask) => void;
 }
 
 export interface TaskContext {
@@ -19,6 +20,8 @@ export interface TaskProgress {
 export interface TaskResult {
   summary: string;
   data?: unknown;
+  actionRequired?: boolean;
+  actionLabel?: string;
 }
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -47,6 +50,7 @@ class TaskQueueStore {
 
   // Run functions stored outside $state to avoid proxying closures
   private runFns = new Map<string, TaskDefinition["run"]>();
+  private actionCallbacks = new Map<string, (task: QueuedTask) => void>();
   private abortControllers = new Map<string, AbortController>();
   private processing = false;
   private autoDismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -58,6 +62,9 @@ class TaskQueueStore {
   );
   readonly activeCount = $derived(
     this.queue.filter((t) => t.status === "running" || t.status === "pending").length,
+  );
+  readonly actionCount = $derived(
+    this.queue.filter((t) => t.status === "completed" && t.result?.actionRequired).length,
   );
   readonly hasErrors = $derived(this.queue.some((t) => t.status === "failed"));
   readonly isIdle = $derived(
@@ -94,6 +101,7 @@ class TaskQueueStore {
     };
 
     this.runFns.set(id, def.run);
+    if (def.onAction) this.actionCallbacks.set(id, def.onAction);
     this.queue.push(task);
     this.scheduleNext();
     return id;
@@ -107,6 +115,7 @@ class TaskQueueStore {
       // Remove pending task immediately
       this.queue = this.queue.filter((t) => t.id !== id);
       this.runFns.delete(id);
+      this.actionCallbacks.delete(id);
     } else if (task.status === "running") {
       // Abort the running task
       const controller = this.abortControllers.get(id);
@@ -123,7 +132,15 @@ class TaskQueueStore {
       this.clearAutoDismissTimer(id);
       this.queue = this.queue.filter((t) => t.id !== id);
       this.runFns.delete(id);
+      this.actionCallbacks.delete(id);
     }
+  }
+
+  handleAction(id: string): void {
+    const task = this.queue.find((t) => t.id === id);
+    if (!task) return;
+    const cb = this.actionCallbacks.get(id);
+    if (cb) cb(task);
   }
 
   clearHistory(): void {
@@ -133,6 +150,7 @@ class TaskQueueStore {
     for (const t of toRemove) {
       this.clearAutoDismissTimer(t.id);
       this.runFns.delete(t.id);
+      this.actionCallbacks.delete(t.id);
     }
     this.queue = this.queue.filter(
       (t) => t.status === "pending" || t.status === "running",
@@ -177,7 +195,9 @@ class TaskQueueStore {
       } else {
         next.status = "completed";
         next.result = result ?? null;
-        this.scheduleAutoDismiss(next.id);
+        if (!result?.actionRequired) {
+          this.scheduleAutoDismiss(next.id);
+        }
       }
     } catch (err: unknown) {
       if (isAbortError(err) || controller.signal.aborted) {
@@ -225,6 +245,7 @@ class TaskQueueStore {
       for (const id of removeIds) {
         this.clearAutoDismissTimer(id);
         this.runFns.delete(id);
+        this.actionCallbacks.delete(id);
       }
       this.queue = this.queue.filter((t) => !removeIds.has(t.id));
     }

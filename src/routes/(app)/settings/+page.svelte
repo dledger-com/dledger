@@ -16,6 +16,7 @@
   import { v7 as uuidv7 } from "uuid";
   import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
   import { exportDatabaseBackup, readFileAsUint8Array, downloadDatabase } from "$lib/utils/database-export.js";
+  import { taskQueue } from "$lib/task-queue.svelte.js";
   const settings = new SettingsStore();
 
   // Backup/restore state
@@ -43,7 +44,6 @@
   // Exchange rates list
   let exchangeRates = $state<ExchangeRate[]>([]);
   let ratesLoading = $state(false);
-  let refetchingCurrency = $state<string | null>(null);
   let currencySearchTerm = $state("");
 
   const dateFormats = [
@@ -151,41 +151,56 @@
     settings.update({ fiscalYearStart: `${mm}-01` });
   }
 
-  async function handleClearExchangeRates() {
+  const clearing = $derived(
+    taskQueue.isActive("clear-exchange-rates") ||
+    taskQueue.isActive("clear-ledger-data") ||
+    taskQueue.isActive("clear-all-data"),
+  );
+
+  function handleClearExchangeRates() {
     if (!window.confirm("Are you sure you want to clear all exchange rates? This cannot be undone.")) return;
-    try {
-      await getBackend().clearExchangeRates();
-      await getBackend().clearAutoRateSources();
-      await loadExchangeRates();
-      toast.success("Exchange rates cleared");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
+    taskQueue.enqueue({
+      key: "clear-exchange-rates",
+      label: "Clear exchange rates",
+      async run() {
+        await getBackend().clearExchangeRates();
+        await getBackend().clearAutoRateSources();
+        await loadExchangeRates();
+        toast.success("Exchange rates cleared");
+        return { summary: "Exchange rates cleared" };
+      },
+    });
   }
 
-  async function handleClearLedgerData() {
+  function handleClearLedgerData() {
     if (!window.confirm("Are you sure you want to clear all ledger data? This will remove all accounts, transactions, and currencies. Exchange rates, sources, and settings will be preserved. This cannot be undone.")) return;
-    try {
-      await getBackend().clearLedgerData();
-      await reloadHiddenCurrencies(getBackend());
-      currencies = [];
-      toast.success("Ledger data cleared");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
+    taskQueue.enqueue({
+      key: "clear-ledger-data",
+      label: "Clear ledger data",
+      async run() {
+        await getBackend().clearLedgerData();
+        await reloadHiddenCurrencies(getBackend());
+        currencies = [];
+        toast.success("Ledger data cleared");
+        return { summary: "Ledger data cleared" };
+      },
+    });
   }
 
-  async function handleClearAllData() {
+  function handleClearAllData() {
     if (!window.confirm("Are you sure you want to delete ALL data? This will remove all accounts, transactions, currencies, exchange rates, and reset settings. This cannot be undone.")) return;
-    try {
-      await getBackend().clearAllData();
-      settings.reset();
-      currencies = [];
-      exchangeRates = [];
-      toast.success("All data cleared");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
+    taskQueue.enqueue({
+      key: "clear-all-data",
+      label: "Clear all data",
+      async run() {
+        await getBackend().clearAllData();
+        settings.reset();
+        currencies = [];
+        exchangeRates = [];
+        toast.success("All data cleared");
+        return { summary: "All data cleared" };
+      },
+    });
   }
 
   async function handleSourceChange(currencyCode: string, newSource: string) {
@@ -198,29 +213,29 @@
       return;
     }
 
-    // Refetch rate from new source
-    refetchingCurrency = currencyCode;
-    try {
-      const res = await fetchSingleRate(
-        getBackend(),
-        currencyCode,
-        newSource as SourceName,
-        settings.currency,
-        settings.coingeckoApiKey,
-        settings.finnhubApiKey,
-      );
-      if (res.success) {
-        await loadExchangeRates();
-        toast.success(`Fetched ${currencyCode} rate from ${newSource}`);
-      } else {
-        toast.error(res.error ?? `Failed to fetch ${currencyCode} rate`);
-      }
-    } catch (err) {
-      toast.error(`Failed to refetch rate: ${err}`);
-    } finally {
-      refetchingCurrency = null;
-      await loadRateSources();
-    }
+    // Refetch rate from new source via task queue
+    taskQueue.enqueue({
+      key: `rate-refetch:${currencyCode}`,
+      label: `Fetch ${currencyCode} rate from ${newSource}`,
+      async run() {
+        const res = await fetchSingleRate(
+          getBackend(),
+          currencyCode,
+          newSource as SourceName,
+          settings.currency,
+          settings.coingeckoApiKey,
+          settings.finnhubApiKey,
+        );
+        await loadRateSources();
+        if (res.success) {
+          await loadExchangeRates();
+          toast.success(`Fetched ${currencyCode} rate from ${newSource}`);
+        } else {
+          toast.error(res.error ?? `Failed to fetch ${currencyCode} rate`);
+        }
+        return { summary: res.success ? `${currencyCode} rate fetched` : "Failed" };
+      },
+    });
   }
 
   onMount(() => {
@@ -387,7 +402,7 @@
                           const val = (e.target as HTMLSelectElement).value;
                           handleSourceChange(c.code, val);
                         }}
-                        disabled={refetchingCurrency === c.code}
+                        disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}
                         class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm disabled:opacity-50"
                       >
                         <option value="auto">auto-detect</option>
@@ -618,7 +633,9 @@
           <p class="text-sm font-medium">Clear Exchange Rates</p>
           <p class="text-sm text-muted-foreground">Remove all synced and manual exchange rates.</p>
         </div>
-        <Button variant="destructive" size="sm" onclick={handleClearExchangeRates}>Clear Rates</Button>
+        <Button variant="destructive" size="sm" onclick={handleClearExchangeRates} disabled={clearing}>
+          {taskQueue.isActive("clear-exchange-rates") ? "Clearing..." : "Clear Rates"}
+        </Button>
       </div>
       <Separator />
       <div class="flex items-center justify-between">
@@ -626,7 +643,9 @@
           <p class="text-sm font-medium">Clear Ledger Data</p>
           <p class="text-sm text-muted-foreground">Remove all accounts, transactions, and currencies. Exchange rates, sources, and settings are preserved.</p>
         </div>
-        <Button variant="destructive" size="sm" onclick={handleClearLedgerData}>Clear Ledger</Button>
+        <Button variant="destructive" size="sm" onclick={handleClearLedgerData} disabled={clearing}>
+          {taskQueue.isActive("clear-ledger-data") ? "Clearing..." : "Clear Ledger"}
+        </Button>
       </div>
       <Separator />
       <div class="flex items-center justify-between">
@@ -634,7 +653,9 @@
           <p class="text-sm font-medium">Clear All Data</p>
           <p class="text-sm text-muted-foreground">Delete all accounts, transactions, currencies, exchange rates, and reset settings.</p>
         </div>
-        <Button variant="destructive" size="sm" onclick={handleClearAllData}>Clear All Data</Button>
+        <Button variant="destructive" size="sm" onclick={handleClearAllData} disabled={clearing}>
+          {taskQueue.isActive("clear-all-data") ? "Clearing..." : "Clear All Data"}
+        </Button>
       </div>
     </Card.Content>
   </Card.Root>
