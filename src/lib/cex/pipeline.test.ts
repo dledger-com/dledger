@@ -66,9 +66,12 @@ describe("CEX Pipeline", () => {
       expect(entry.source).toBe("kraken:T001");
       expect(entry.date).toBe("2024-03-15");
 
-      // Verify line items:
-      // EUR: -10000 (asset) + 10000 (trading) + 2.50 (fee expense) + -2.50 (fee asset)
-      // BTC: +0.5 (asset) + -0.5 (trading)
+      // Verify line items (merged by account+currency):
+      // Assets:Kraken:EUR = -10000 + -2.50 (fee) = -10002.5
+      // Equity:Trading:EUR = 10000
+      // Assets:Kraken:BTC = +0.5
+      // Equity:Trading:BTC = -0.5
+      // Expenses:Kraken:Fees EUR = 2.5
       const accounts = await backend.listAccounts();
       const acctMap = new Map(accounts.map((a) => [a.id, a.full_name]));
 
@@ -78,11 +81,11 @@ describe("CEX Pipeline", () => {
         amount: i.amount,
       }));
 
-      // Check asset EUR debit (-10000)
+      // Check asset EUR debit (trade + fee merged)
       expect(itemDetails).toContainEqual({
         account: "Assets:Kraken:EUR",
         currency: "EUR",
-        amount: "-10000",
+        amount: "-10002.5",
       });
 
       // Check trading EUR credit (10000)
@@ -143,11 +146,11 @@ describe("CEX Pipeline", () => {
         amount: "-2",
       });
 
-      // EUR arrives
+      // EUR arrives (trade + fee merged: 6000 - 1.80 = 5998.2)
       expect(itemDetails).toContainEqual({
         account: "Assets:Kraken:EUR",
         currency: "EUR",
-        amount: "6000",
+        amount: "5998.2",
       });
 
       // Fee on EUR

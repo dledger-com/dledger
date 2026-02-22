@@ -152,8 +152,27 @@ export async function syncCexAccount(
     items: Array<{ account: string; currency: string; amount: Decimal }>,
     metadata?: Record<string, string>,
   ): Promise<void> {
-    // Ensure currencies and accounts
+    // Merge items by (account, currency) and filter zeros
+    const merged = new Map<string, { account: string; currency: string; amount: Decimal }>();
     for (const item of items) {
+      const key = `${item.account}\0${item.currency}`;
+      const existing = merged.get(key);
+      if (existing) {
+        existing.amount = existing.amount.plus(item.amount);
+      } else {
+        merged.set(key, { ...item, amount: new Decimal(item.amount) });
+      }
+    }
+    const filteredItems = [...merged.values()].filter((item) => !item.amount.isZero());
+
+    if (filteredItems.length === 0) {
+      result.entries_skipped++;
+      result.warnings.push(`Entry "${description}" on ${date}: all items netted to zero — skipping`);
+      return;
+    }
+
+    // Ensure currencies and accounts
+    for (const item of filteredItems) {
       await ensureCurrency(item.currency);
       await ensureAccount(item.account, date);
     }
@@ -169,7 +188,7 @@ export async function syncCexAccount(
       created_at: date,
     };
 
-    const lineItems: LineItem[] = items.map((item) => ({
+    const lineItems: LineItem[] = filteredItems.map((item) => ({
       id: uuidv7(),
       journal_entry_id: entryId,
       account_id: accountMap.get(item.account)!.id,
