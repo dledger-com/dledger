@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
+  import * as Drawer from "$lib/components/ui/drawer/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { taskQueue, type QueuedTask } from "$lib/task-queue.svelte.js";
   import CircleCheck from "lucide-svelte/icons/circle-check";
@@ -15,6 +15,16 @@
   }
 
   let { open = $bindable() }: Props = $props();
+
+  let isMobile = $state(false);
+
+  $effect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    isMobile = mq.matches;
+    const handler = (e: MediaQueryListEvent) => { isMobile = e.matches; };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  });
 
   let elapsed = $state(0);
   let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -53,11 +63,11 @@
   }
 </script>
 
-<Sheet.Root bind:open>
-  <Sheet.Content side="right" class="w-[360px] sm:max-w-[400px]">
-    <Sheet.Header>
-      <Sheet.Title>Background Tasks</Sheet.Title>
-    </Sheet.Header>
+<Drawer.Root bind:open direction={isMobile ? 'bottom' : 'right'}>
+  <Drawer.Content class={isMobile ? '' : 'sm:max-w-[400px]'}>
+    <Drawer.Header>
+      <Drawer.Title>Background Tasks</Drawer.Title>
+    </Drawer.Header>
 
     <div class="flex-1 overflow-y-auto px-1">
       {#if taskQueue.queue.length === 0}
@@ -171,5 +181,5 @@
         {/if}
       {/if}
     </div>
-  </Sheet.Content>
-</Sheet.Root>
+  </Drawer.Content>
+</Drawer.Root>
