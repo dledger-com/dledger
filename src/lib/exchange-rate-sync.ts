@@ -68,14 +68,23 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export type SourceName = "frankfurter" | "coingecko" | "finnhub";
+export type SourceName = "frankfurter" | "coingecko" | "finnhub" | "defillama" | "cryptocompare" | "binance";
 
 /** Auto-detect the best source for a currency using static heuristics */
-function autoDetectSource(code: string, baseCurrency: string): SourceName {
+function autoDetectSource(code: string, baseCurrency: string, hasTokenAddress: boolean): SourceName {
   if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
     return "frankfurter";
   }
-  return "coingecko";
+  if (hasTokenAddress) return "defillama";     // DeFi tokens with known contract
+  if (COINGECKO_IDS[code]) return "defillama"; // Known crypto → DefiLlama via coingecko: alias
+  return "defillama";                           // Default crypto → DefiLlama
+}
+
+/** Map base currency to Binance quote currency and construct trading pair */
+function toBinancePair(currency: string, baseCurrency: string): string | null {
+  const quoteMap: Record<string, string> = { USD: "USDT", EUR: "EUR" };
+  const quote = quoteMap[baseCurrency] ?? baseCurrency;
+  return `${currency}${quote}`;
 }
 
 /**
@@ -93,6 +102,7 @@ export async function syncExchangeRates(
   coingeckoApiKey: string,
   finnhubApiKey: string,
   hiddenCurrencies: Set<string>,
+  cryptoCompareApiKey?: string,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -117,10 +127,17 @@ export async function syncExchangeRates(
     sourceMap.set(src.currency, src);
   }
 
+  // Load token addresses for auto-detection
+  const tokenAddresses = await backend.getCurrencyTokenAddresses();
+  const tokenAddrSet = new Set(tokenAddresses.map((t) => t.currency));
+
   // Build per-source fetch lists
   const frankfurterCodes: string[] = [];
   const coingeckoCodes: string[] = [];
   const finnhubCodes: string[] = [];
+  const defillamaCodes: string[] = [];
+  const cryptocompareCodes: string[] = [];
+  const binanceCodes: string[] = [];
   const autoDetectCodes: string[] = []; // codes needing auto-detection
 
   for (const code of codes) {
@@ -131,12 +148,18 @@ export async function syncExchangeRates(
       if (stored.rate_source === "frankfurter") frankfurterCodes.push(code);
       else if (stored.rate_source === "coingecko") coingeckoCodes.push(code);
       else if (stored.rate_source === "finnhub") finnhubCodes.push(code);
+      else if (stored.rate_source === "defillama") defillamaCodes.push(code);
+      else if (stored.rate_source === "cryptocompare") cryptocompareCodes.push(code);
+      else if (stored.rate_source === "binance") binanceCodes.push(code);
     } else {
       // No stored source → auto-detect
-      const detected = autoDetectSource(code, baseCurrency);
+      const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code));
       if (detected === "frankfurter") frankfurterCodes.push(code);
       else if (detected === "coingecko") coingeckoCodes.push(code);
       else if (detected === "finnhub") finnhubCodes.push(code);
+      else if (detected === "defillama") defillamaCodes.push(code);
+      else if (detected === "cryptocompare") cryptocompareCodes.push(code);
+      else if (detected === "binance") binanceCodes.push(code);
       autoDetectCodes.push(code);
     }
   }
@@ -337,9 +360,188 @@ export async function syncExchangeRates(
     }
   }
 
+  // ---- DefiLlama rates (current prices, batch) ----
+  if (defillamaCodes.length > 0) {
+    try {
+      // Build coin identifiers: token addresses or coingecko aliases
+      const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+      const coinIds: string[] = [];
+      const coinToCode = new Map<string, string>();
+      for (const code of defillamaCodes) {
+        const ta = tokenAddrMap.get(code);
+        let coinId: string;
+        if (ta) {
+          coinId = `${ta.chain}:${ta.contract_address}`;
+        } else {
+          const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
+          coinId = `coingecko:${geckoId}`;
+        }
+        coinIds.push(coinId);
+        coinToCode.set(coinId, code);
+      }
+
+      // DefiLlama /prices/current supports comma-separated coins
+      const url = `https://coins.llama.fi/prices/current/${coinIds.join(",")}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        result.errors.push(`DefiLlama HTTP ${resp.status}: ${resp.statusText}`);
+        for (const code of defillamaCodes) {
+          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          allFailed.add(code);
+        }
+      } else {
+        const data = await resp.json() as { coins: Record<string, { price: number; confidence?: number }> };
+        for (const [coinId, code] of coinToCode) {
+          const priceData = data.coins[coinId];
+          if (!priceData || priceData.price == null) {
+            result.errors.push(`DefiLlama: no price for ${code} (${coinId})`);
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
+            continue;
+          }
+
+          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+          allSucceeded.add(code);
+
+          // DefiLlama returns USD prices; check if rate already exists
+          const toCurrency = "USD";
+          const existing = await backend.getExchangeRate(code, toCurrency, today);
+          if (existing !== null) {
+            result.rates_skipped++;
+            continue;
+          }
+
+          await backend.recordExchangeRate({
+            id: uuidv7(),
+            date: today,
+            from_currency: code,
+            to_currency: toCurrency,
+            rate: priceData.price.toString(),
+            source: "defillama",
+          });
+          result.rates_fetched++;
+        }
+      }
+    } catch (err) {
+      result.errors.push(`DefiLlama: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // ---- CryptoCompare rates (current prices, batch) ----
+  if (cryptocompareCodes.length > 0) {
+    if (!cryptoCompareApiKey) {
+      result.errors.push(
+        `CryptoCompare: no API key provided; skipping ${cryptocompareCodes.length} rate(s)`,
+      );
+      for (const code of cryptocompareCodes) {
+        if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+        allFailed.add(code);
+      }
+    } else {
+      try {
+        const fsyms = cryptocompareCodes.join(",");
+        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${fsyms}&tsyms=${baseCurrency}&api_key=${cryptoCompareApiKey}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          result.errors.push(`CryptoCompare HTTP ${resp.status}: ${resp.statusText}`);
+          for (const code of cryptocompareCodes) {
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
+          }
+        } else {
+          const data = await resp.json() as Record<string, Record<string, number>>;
+          for (const code of cryptocompareCodes) {
+            const priceData = data[code];
+            if (!priceData || priceData[baseCurrency] == null) {
+              result.errors.push(`CryptoCompare: no rate for ${code}`);
+              if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+              allFailed.add(code);
+              continue;
+            }
+
+            if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+            allSucceeded.add(code);
+
+            const existing = await backend.getExchangeRate(code, baseCurrency, today);
+            if (existing !== null) {
+              result.rates_skipped++;
+              continue;
+            }
+
+            await backend.recordExchangeRate({
+              id: uuidv7(),
+              date: today,
+              from_currency: code,
+              to_currency: baseCurrency,
+              rate: priceData[baseCurrency].toString(),
+              source: "cryptocompare",
+            });
+            result.rates_fetched++;
+          }
+        }
+      } catch (err) {
+        result.errors.push(`CryptoCompare: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  // ---- Binance rates (current prices) ----
+  if (binanceCodes.length > 0) {
+    try {
+      for (const code of binanceCodes) {
+        const pair = toBinancePair(code, baseCurrency);
+        if (!pair) {
+          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          allFailed.add(code);
+          continue;
+        }
+
+        const existing = await backend.getExchangeRate(code, baseCurrency, today);
+        if (existing !== null) {
+          result.rates_skipped++;
+          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+          allSucceeded.add(code);
+          continue;
+        }
+
+        const url = `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          result.errors.push(`Binance HTTP ${resp.status} for ${code} (${pair})`);
+          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          allFailed.add(code);
+          continue;
+        }
+
+        const data = await resp.json() as { price?: string };
+        if (!data.price) {
+          result.errors.push(`Binance: no price for ${code} (${pair})`);
+          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          allFailed.add(code);
+          continue;
+        }
+
+        if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+        allSucceeded.add(code);
+
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate: data.price,
+          source: "binance",
+        });
+        result.rates_fetched++;
+      }
+    } catch (err) {
+      result.errors.push(`Binance: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   // Post-process: Write auto-detection results to DB
   for (const code of autoDetectSuccess) {
-    const detected = autoDetectSource(code, baseCurrency);
+    const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code));
     await backend.setCurrencyRateSource(code, detected, "auto");
     result.newlyDetected.push(code);
   }
@@ -364,6 +566,7 @@ export async function fetchSingleRate(
   baseCurrency: string,
   coingeckoApiKey: string,
   finnhubApiKey: string,
+  cryptoCompareApiKey?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const today = todayISO();
 
@@ -435,6 +638,83 @@ export async function fetchSingleRate(
         return { success: true };
       } catch (err) {
         return { success: false, error: `Finnhub: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "defillama": {
+      try {
+        // Try to get token address, fall back to coingecko alias
+        const tokenAddr = await backend.getCurrencyTokenAddress(code);
+        let coinId: string;
+        if (tokenAddr) {
+          coinId = `${tokenAddr.chain}:${tokenAddr.contract_address}`;
+        } else {
+          const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
+          coinId = `coingecko:${geckoId}`;
+        }
+        const url = `https://coins.llama.fi/prices/current/${coinId}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return { success: false, error: `DefiLlama HTTP ${resp.status}: ${resp.statusText}` };
+        const data = await resp.json() as { coins: Record<string, { price: number }> };
+        const priceData = data.coins[coinId];
+        if (!priceData || priceData.price == null) return { success: false, error: `DefiLlama: no price for ${code} (${coinId})` };
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: "USD",
+          rate: priceData.price.toString(),
+          source: "defillama",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `DefiLlama: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "cryptocompare": {
+      if (!cryptoCompareApiKey) return { success: false, error: "CryptoCompare API key is required" };
+      try {
+        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${code}&tsyms=${baseCurrency}&api_key=${cryptoCompareApiKey}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return { success: false, error: `CryptoCompare HTTP ${resp.status}: ${resp.statusText}` };
+        const data = await resp.json() as Record<string, Record<string, number>>;
+        const priceData = data[code];
+        if (!priceData || priceData[baseCurrency] == null) return { success: false, error: `CryptoCompare: no rate for ${code}` };
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate: priceData[baseCurrency].toString(),
+          source: "cryptocompare",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `CryptoCompare: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "binance": {
+      try {
+        const pair = toBinancePair(code, baseCurrency);
+        if (!pair) return { success: false, error: `Binance: cannot form pair for ${code}/${baseCurrency}` };
+        const url = `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return { success: false, error: `Binance HTTP ${resp.status} for ${code} (${pair})` };
+        const data = await resp.json() as { price?: string };
+        if (!data.price) return { success: false, error: `Binance: no price for ${code} (${pair})` };
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate: data.price,
+          source: "binance",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `Binance: ${err instanceof Error ? err.message : String(err)}` };
       }
     }
   }

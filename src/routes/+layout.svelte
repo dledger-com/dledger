@@ -39,6 +39,7 @@
                 settings.coingeckoApiKey,
                 settings.finnhubApiKey,
                 getHiddenCurrencySet(),
+                settings.cryptoCompareApiKey,
               );
               settings.update({ lastRateSync: today });
               for (const code of syncResult.autoHidden) {

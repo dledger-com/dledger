@@ -108,6 +108,9 @@ pub fn run() {
             commands::add_exchange_account,
             commands::update_exchange_account,
             commands::remove_exchange_account,
+            commands::set_currency_token_address,
+            commands::get_currency_token_addresses,
+            commands::get_currency_token_address,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

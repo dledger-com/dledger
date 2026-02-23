@@ -660,6 +660,29 @@ pub fn remove_exchange_account(
     state.engine.remove_exchange_account(&id).map_err(|e| e.to_string())
 }
 
+// -- Currency token address commands --
+
+#[tauri::command]
+pub fn set_currency_token_address(state: State<'_, AppState>, currency: String, chain: String, contract_address: String) -> Result<(), String> {
+    state.engine.set_currency_token_address(&currency, &chain, &contract_address).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_currency_token_addresses(state: State<'_, AppState>) -> Result<Vec<serde_json::Value>, String> {
+    let rows = state.engine.get_currency_token_addresses().map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(|(currency, chain, contract_address)| {
+        serde_json::json!({ "currency": currency, "chain": chain, "contract_address": contract_address })
+    }).collect())
+}
+
+#[tauri::command]
+pub fn get_currency_token_address(state: State<'_, AppState>, currency: String) -> Result<Option<serde_json::Value>, String> {
+    let result = state.engine.get_currency_token_address(&currency).map_err(|e| e.to_string())?;
+    Ok(result.map(|(chain, contract_address)| {
+        serde_json::json!({ "chain": chain, "contract_address": contract_address })
+    }))
+}
+
 // -- HTTP proxy command (bypasses CORS for APIs that don't support it) --
 
 #[tauri::command]

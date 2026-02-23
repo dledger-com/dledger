@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -1216,6 +1216,7 @@ impl Storage for SqliteStorage {
              DELETE FROM currency;
              DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;
+             DELETE FROM currency_token_address;
              UPDATE exchange_account SET last_sync = NULL;
              PRAGMA foreign_keys=ON;",
         )
@@ -1239,6 +1240,7 @@ impl Storage for SqliteStorage {
              DELETE FROM currency;
              DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;
+             DELETE FROM currency_token_address;
              DELETE FROM exchange_account;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1729,6 +1731,54 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
+    // -- Currency token addresses --
+
+    fn set_currency_token_address(&self, currency: &str, chain: &str, contract_address: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT OR REPLACE INTO currency_token_address (currency, chain, contract_address) VALUES (?1, ?2, ?3)",
+            params![currency, chain, contract_address],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn get_currency_token_addresses(&self) -> StorageResult<Vec<(String, String, String)>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT currency, chain, contract_address FROM currency_token_address ORDER BY currency")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn get_currency_token_address(&self, currency: &str) -> StorageResult<Option<(String, String)>> {
+        let conn = self.conn.borrow();
+        let result = conn
+            .query_row(
+                "SELECT chain, contract_address FROM currency_token_address WHERE currency = ?1 LIMIT 1",
+                params![currency],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(result)
+    }
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()> {
@@ -1812,6 +1862,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 11 {
             storage.execute_sql(MIGRATION_V11)?;
             storage.set_schema_version(11)?;
+        }
+        if current < 12 {
+            storage.execute_sql(MIGRATION_V12)?;
+            storage.set_schema_version(12)?;
         }
     }
     Ok(())
@@ -3515,7 +3569,7 @@ mod tests {
 
         apply_migrations(&storage).unwrap();
 
-        assert_eq!(storage.get_schema_version().unwrap(), 11);
+        assert_eq!(storage.get_schema_version().unwrap(), 12);
 
         // Verify budget table exists
         storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();
@@ -3528,5 +3582,8 @@ mod tests {
 
         // Verify exchange_account table exists
         storage.execute_sql("INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, created_at) VALUES ('test', 'binance', 'My Binance', 'key', 'secret', '2024-01-01')").unwrap();
+
+        // Verify currency_token_address table exists
+        storage.execute_sql("INSERT INTO currency_token_address (currency, chain, contract_address) VALUES ('USDC', 'ethereum', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48')").unwrap();
     }
 }

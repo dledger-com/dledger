@@ -309,6 +309,7 @@
             baseCurrency: settings.currency,
             coingeckoApiKey: settings.coingeckoApiKey,
             finnhubApiKey: settings.finnhubApiKey,
+            cryptoCompareApiKey: settings.cryptoCompareApiKey,
             onProgress: (fetched, total) => {
               ctx.reportProgress({ current: fetched, total });
             },
@@ -349,6 +350,7 @@
           settings.coingeckoApiKey,
           settings.finnhubApiKey,
           getHiddenCurrencySet(),
+          settings.cryptoCompareApiKey,
         );
 
         settings.update({ lastRateSync: new Date().toISOString().slice(0, 10) });
@@ -452,6 +454,7 @@
             baseCurrency: settings.currency,
             coingeckoApiKey: settings.coingeckoApiKey,
             finnhubApiKey: settings.finnhubApiKey,
+            cryptoCompareApiKey: settings.cryptoCompareApiKey,
             onProgress: (fetched, total) => {
               ctx.reportProgress({ current: fetched, total });
             },
@@ -1444,7 +1447,7 @@
   <Card.Root>
     <Card.Header>
       <Card.Title>External Services</Card.Title>
-      <Card.Description>API keys for external data providers. Rates: ECB (fiat), CoinGecko (crypto), Finnhub (stocks). Enrichment: The Graph (Uniswap pools).</Card.Description>
+      <Card.Description>API keys for external data providers. Rates: ECB (fiat), DefiLlama/CoinGecko/CryptoCompare/Binance (crypto), Finnhub (stocks). Enrichment: The Graph (Uniswap pools).</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <div class="space-y-2">
@@ -1465,6 +1468,25 @@
             target="_blank"
             class="underline hover:text-foreground">coingecko.com</a
           >. Required for crypto rates. Fiat rates work without a key.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <label for="cryptocompare-api-key" class="text-sm font-medium">CryptoCompare API Key</label>
+        <Input
+          id="cryptocompare-api-key"
+          type="password"
+          placeholder="CryptoCompare API key (optional)"
+          value={settings.cryptoCompareApiKey}
+          oninput={(e: Event) => {
+            const val = (e.target as HTMLInputElement).value;
+            settings.update({ cryptoCompareApiKey: val });
+          }}
+        />
+        <p class="text-xs text-muted-foreground">
+          Get a free key at <a href="https://www.cryptocompare.com/cryptopian/api-keys" target="_blank"
+            class="underline hover:text-foreground">cryptocompare.com</a>.
+          Optional fallback for crypto historical rates.
         </p>
       </div>
 

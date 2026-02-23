@@ -405,7 +405,12 @@ export class SqlJsBackend implements Backend {
       interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
       is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (11)");
+    // Token address mapping (v12)
+    db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
+      currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
+      PRIMARY KEY (currency, chain)
+    )`);
+    db.exec("INSERT INTO schema_version (version) VALUES (12)");
     return backend;
   }
 
@@ -420,7 +425,11 @@ export class SqlJsBackend implements Backend {
     if (!saved) {
       db.exec(SCHEMA_SQL);
       db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
-      db.exec("INSERT INTO schema_version (version) VALUES (11)");
+      db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
+        currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
+        PRIMARY KEY (currency, chain)
+      )`);
+      db.exec("INSERT INTO schema_version (version) VALUES (12)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -557,9 +566,15 @@ export class SqlJsBackend implements Backend {
             linked_etherscan_account_id TEXT, last_sync TEXT, created_at TEXT NOT NULL
           )`);
         }
-        if (currentVersion < 11) {
+        if (currentVersion < 12) {
+          db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
+            currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
+            PRIMARY KEY (currency, chain)
+          )`);
+        }
+        if (currentVersion < 12) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (11)");
+          db.exec("INSERT INTO schema_version (version) VALUES (12)");
         }
       }
     }
@@ -965,6 +980,39 @@ export class SqlJsBackend implements Backend {
       "SELECT code FROM currency WHERE is_hidden = 1 ORDER BY code",
       [],
       (row) => row.code as string,
+    );
+  }
+
+  // ---- Backend: Currency token addresses ----
+
+  async setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void> {
+    this.run(
+      "INSERT OR IGNORE INTO currency_token_address (currency, chain, contract_address) VALUES (?, ?, ?)",
+      [currency, chain, contractAddress],
+    );
+    this.scheduleSave();
+  }
+
+  async getCurrencyTokenAddresses(): Promise<Array<{ currency: string; chain: string; contract_address: string }>> {
+    return this.query(
+      "SELECT currency, chain, contract_address FROM currency_token_address ORDER BY currency",
+      [],
+      (row) => ({
+        currency: row.currency as string,
+        chain: row.chain as string,
+        contract_address: row.contract_address as string,
+      }),
+    );
+  }
+
+  async getCurrencyTokenAddress(currency: string): Promise<{ chain: string; contract_address: string } | null> {
+    return this.queryOne(
+      "SELECT chain, contract_address FROM currency_token_address WHERE currency = ? LIMIT 1",
+      [currency],
+      (row) => ({
+        chain: row.chain as string,
+        contract_address: row.contract_address as string,
+      }),
     );
   }
 
@@ -2584,6 +2632,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM currency_rate_source;
       DELETE FROM budget;
       DELETE FROM recurring_template;
+      DELETE FROM currency_token_address;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -2609,6 +2658,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM currency_rate_source;
       DELETE FROM budget;
       DELETE FROM recurring_template;
+      DELETE FROM currency_token_address;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM exchange_account;

@@ -603,6 +603,21 @@ impl LedgerEngine {
         Ok(())
     }
 
+    // --- Currency token addresses ---
+
+    pub fn set_currency_token_address(&self, currency: &str, chain: &str, contract_address: &str) -> LedgerResult<()> {
+        self.storage.set_currency_token_address(currency, chain, contract_address)?;
+        Ok(())
+    }
+
+    pub fn get_currency_token_addresses(&self) -> LedgerResult<Vec<(String, String, String)>> {
+        Ok(self.storage.get_currency_token_addresses()?)
+    }
+
+    pub fn get_currency_token_address(&self, currency: &str) -> LedgerResult<Option<(String, String)>> {
+        Ok(self.storage.get_currency_token_address(currency)?)
+    }
+
     // --- Internal helpers ---
 
     fn audit(&self, action: &str, entity_type: &str, entity_id: Uuid, details: &str) -> LedgerResult<()> {

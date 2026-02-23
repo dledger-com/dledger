@@ -24,6 +24,21 @@ const COINGECKO_IDS: Record<string, string> = {
   TIA: "celestia", USDT: "tether", USDC: "usd-coin", DAI: "dai",
 };
 
+// ---- Chain ID → DefiLlama chain name mapping ----
+
+const CHAIN_ID_TO_DEFILLAMA: Record<number, string> = {
+  1: "ethereum", 10: "optimism", 42161: "arbitrum",
+  8453: "base", 137: "polygon", 56: "bsc",
+  43114: "avax", 100: "gnosis", 59144: "linea",
+  534352: "scroll", 81457: "blast", 250: "fantom",
+  1284: "moonbeam", 1285: "moonriver", 42220: "celo",
+  5000: "mantle",
+};
+
+export function chainIdToDefiLlamaChain(chainId: number): string | null {
+  return CHAIN_ID_TO_DEFILLAMA[chainId] ?? null;
+}
+
 // ---- Types ----
 
 export interface HistoricalRateRequest {
@@ -36,6 +51,7 @@ export interface HistoricalFetchConfig {
   baseCurrency: string;
   coingeckoApiKey: string;
   finnhubApiKey: string;
+  cryptoCompareApiKey?: string;
   onProgress?: (fetched: number, total: number) => void;
 }
 
@@ -52,6 +68,7 @@ function classifySource(
   currency: string,
   baseCurrency: string,
   rateSourceMap: Map<string, CurrencyRateSource>,
+  tokenAddressCurrencies?: Set<string>,
 ): SourceName | null {
   // 1. DB-stored source always wins
   const stored = rateSourceMap.get(currency);
@@ -61,8 +78,9 @@ function classifySource(
   }
   // 2. Static heuristic fallback
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
-  if (COINGECKO_IDS[currency]) return "coingecko";
-  return "coingecko";
+  if (tokenAddressCurrencies?.has(currency)) return "defillama";
+  if (COINGECKO_IDS[currency]) return "defillama";
+  return "defillama";
 }
 
 // ---- Find missing rates ----
@@ -90,6 +108,10 @@ export async function findMissingRates(
     rateSourceMap.set(src.currency, src);
   }
 
+  // Load token addresses for source classification
+  const tokenAddresses = await backend.getCurrencyTokenAddresses();
+  const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
+
   // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
 
@@ -99,7 +121,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap);
+      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -112,7 +134,7 @@ export async function findMissingRates(
       const rate = await backend.getExchangeRate(currency, baseCurrency, date);
       if (rate !== null) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap);
+      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -148,13 +170,15 @@ export async function fetchHistoricalRates(
   const frankfurterReqs = requests.filter((r) => r.source === "frankfurter");
   const coingeckoReqs = requests.filter((r) => r.source === "coingecko");
   const finnhubReqs = requests.filter((r) => r.source === "finnhub");
+  const defillamaReqs = requests.filter((r) => r.source === "defillama");
+  const cryptocompareReqs = requests.filter((r) => r.source === "cryptocompare");
+  const binanceReqs = requests.filter((r) => r.source === "binance");
+
+  const tick = () => { progress++; config.onProgress?.(progress, totalDates); };
 
   // ---- Frankfurter: full timeseries, multi-symbol ----
   if (frankfurterReqs.length > 0) {
-    await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, successCurrencies, () => {
-      progress++;
-      config.onProgress?.(progress, totalDates);
-    });
+    await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, successCurrencies, tick);
   }
 
   // ---- CoinGecko: market_chart/range per coin ----
@@ -162,10 +186,7 @@ export async function fetchHistoricalRates(
     if (!config.coingeckoApiKey) {
       result.errors.push(`CoinGecko: no API key; skipping ${coingeckoReqs.length} currency(ies)`);
     } else {
-      await fetchCoinGeckoHistorical(backend, coingeckoReqs, config, result, successCurrencies, () => {
-        progress++;
-        config.onProgress?.(progress, totalDates);
-      });
+      await fetchCoinGeckoHistorical(backend, coingeckoReqs, config, result, successCurrencies, tick);
     }
   }
 
@@ -174,10 +195,43 @@ export async function fetchHistoricalRates(
     if (!config.finnhubApiKey) {
       result.errors.push(`Finnhub: no API key; skipping ${finnhubReqs.length} currency(ies)`);
     } else {
-      await fetchFinnhubHistorical(backend, finnhubReqs, config, result, successCurrencies, () => {
-        progress++;
-        config.onProgress?.(progress, totalDates);
-      });
+      await fetchFinnhubHistorical(backend, finnhubReqs, config, result, successCurrencies, tick);
+    }
+  }
+
+  // ---- DefiLlama: batch historical ----
+  if (defillamaReqs.length > 0) {
+    await fetchDefiLlamaHistorical(backend, defillamaReqs, config, result, successCurrencies, tick);
+  }
+
+  // ---- CryptoCompare: histoday per symbol ----
+  if (cryptocompareReqs.length > 0) {
+    if (!config.cryptoCompareApiKey) {
+      result.errors.push(`CryptoCompare: no API key; skipping ${cryptocompareReqs.length} currency(ies)`);
+    } else {
+      await fetchCryptoCompareHistorical(backend, cryptocompareReqs, config, result, successCurrencies, tick);
+    }
+  }
+
+  // ---- Binance: klines per symbol ----
+  if (binanceReqs.length > 0) {
+    await fetchBinanceHistorical(backend, binanceReqs, config, result, successCurrencies, tick);
+  }
+
+  // Fallback chain: if DefiLlama failed for some currencies, try CoinGecko → CryptoCompare
+  const failedAfterPrimary = new Set<string>();
+  for (const currency of allCurrencies) {
+    if (!successCurrencies.has(currency)) {
+      failedAfterPrimary.add(currency);
+    }
+  }
+
+  if (failedAfterPrimary.size > 0 && config.coingeckoApiKey) {
+    const fallbackReqs = requests
+      .filter((r) => failedAfterPrimary.has(r.currency) && r.source === "defillama")
+      .map((r) => ({ ...r, source: "coingecko" as SourceName }));
+    if (fallbackReqs.length > 0) {
+      await fetchCoinGeckoHistorical(backend, fallbackReqs, config, result, successCurrencies, tick);
     }
   }
 
@@ -444,6 +498,306 @@ async function fetchFinnhubHistorical(
   }
 
   // Batch insert all collected rates
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
+    }
+  }
+}
+
+// ---- DefiLlama historical ----
+
+async function fetchDefiLlamaHistorical(
+  backend: Backend,
+  requests: HistoricalRateRequest[],
+  config: HistoricalFetchConfig,
+  result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
+  onDateDone: () => void,
+): Promise<void> {
+  const llamaFetch = new RateLimitedFetcher({ maxRequests: 400, intervalMs: 60_000 });
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
+
+  // Load token addresses for coin ID resolution
+  const tokenAddresses = await backend.getCurrencyTokenAddresses();
+  const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+
+  try {
+    for (const req of requests) {
+      const ta = tokenAddrMap.get(req.currency);
+      let coinId: string;
+      if (ta) {
+        coinId = `${ta.chain}:${ta.contract_address}`;
+      } else {
+        const geckoId = COINGECKO_IDS[req.currency] ?? req.currency.toLowerCase();
+        coinId = `coingecko:${geckoId}`;
+      }
+
+      const sortedDates = [...req.dates].sort();
+      const neededDates = new Set(sortedDates);
+
+      // Build timestamps for batchHistorical
+      const timestamps = sortedDates.map((d) => Math.floor(new Date(d + "T12:00:00Z").getTime() / 1000));
+
+      try {
+        // Use batchHistorical POST endpoint
+        const body = JSON.stringify({
+          coins: { [coinId]: timestamps },
+          searchWidth: "6h",
+        });
+        const resp = await llamaFetch.fetch("https://coins.llama.fi/batchHistorical", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+
+        if (!resp.ok) {
+          result.errors.push(`DefiLlama HTTP ${resp.status} for ${req.currency}`);
+          continue;
+        }
+
+        const data = await resp.json() as { coins: Record<string, { prices: Array<{ timestamp: number; price: number; confidence?: number }> }> };
+        const coinData = data.coins[coinId];
+        if (!coinData || !coinData.prices || coinData.prices.length === 0) {
+          result.errors.push(`DefiLlama: no historical data for ${req.currency} (${coinId})`);
+          continue;
+        }
+
+        // Map timestamps back to dates
+        const dateMap = new Map<string, number>();
+        for (const point of coinData.prices) {
+          const date = new Date(point.timestamp * 1000).toISOString().slice(0, 10);
+          dateMap.set(date, point.price);
+        }
+
+        const toCurrency = "USD";
+        await ensureCurrency(backend, req.currency);
+        await ensureCurrency(backend, toCurrency);
+
+        for (const date of neededDates) {
+          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 1);
+          if (price != null) {
+            successCurrencies.add(req.currency);
+            rateBatch.push({
+              id: uuidv7(),
+              date,
+              from_currency: req.currency,
+              to_currency: toCurrency,
+              rate: price.toString(),
+              source: "defillama",
+            });
+            result.fetched++;
+            onDateDone();
+          } else {
+            result.skipped++;
+            onDateDone();
+          }
+        }
+      } catch (err) {
+        result.errors.push(`DefiLlama ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  } finally {
+    llamaFetch.dispose();
+  }
+
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
+    }
+  }
+}
+
+// ---- CryptoCompare historical ----
+
+async function fetchCryptoCompareHistorical(
+  backend: Backend,
+  requests: HistoricalRateRequest[],
+  config: HistoricalFetchConfig,
+  result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
+  onDateDone: () => void,
+): Promise<void> {
+  const ccFetch = new RateLimitedFetcher({ maxRequests: 50, intervalMs: 60_000 });
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
+
+  try {
+    for (const req of requests) {
+      const sortedDates = [...req.dates].sort();
+      const neededDates = new Set(sortedDates);
+
+      // CryptoCompare histoday returns up to 2000 data points
+      // Calculate limit from earliest to latest date
+      const earliest = new Date(sortedDates[0]);
+      const latest = new Date(sortedDates[sortedDates.length - 1]);
+      const daysDiff = Math.ceil((latest.getTime() - earliest.getTime()) / 86400000) + 1;
+      const limit = Math.min(daysDiff, 2000);
+
+      // toTs = latest date as unix timestamp
+      const toTs = Math.floor(latest.getTime() / 1000) + 86400;
+
+      try {
+        const url = `https://min-api.cryptocompare.com/data/v2/histoday?fsym=${req.currency}&tsym=${config.baseCurrency}&limit=${limit}&toTs=${toTs}&api_key=${config.cryptoCompareApiKey}`;
+        const resp = await ccFetch.fetch(url);
+        if (!resp.ok) {
+          result.errors.push(`CryptoCompare HTTP ${resp.status} for ${req.currency}`);
+          continue;
+        }
+
+        const data = await resp.json() as { Response: string; Data?: { Data?: Array<{ time: number; close: number }> } };
+        if (data.Response !== "Success" || !data.Data?.Data) {
+          result.errors.push(`CryptoCompare: no data for ${req.currency}`);
+          continue;
+        }
+
+        const dateMap = new Map<string, number>();
+        for (const point of data.Data.Data) {
+          const date = new Date(point.time * 1000).toISOString().slice(0, 10);
+          if (point.close > 0) {
+            dateMap.set(date, point.close);
+          }
+        }
+
+        await ensureCurrency(backend, req.currency);
+        await ensureCurrency(backend, config.baseCurrency);
+
+        for (const date of neededDates) {
+          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 1);
+          if (price != null) {
+            successCurrencies.add(req.currency);
+            rateBatch.push({
+              id: uuidv7(),
+              date,
+              from_currency: req.currency,
+              to_currency: config.baseCurrency,
+              rate: price.toString(),
+              source: "cryptocompare",
+            });
+            result.fetched++;
+            onDateDone();
+          } else {
+            result.skipped++;
+            onDateDone();
+          }
+        }
+      } catch (err) {
+        result.errors.push(`CryptoCompare ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  } finally {
+    ccFetch.dispose();
+  }
+
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
+    }
+  }
+}
+
+// ---- Binance historical ----
+
+async function fetchBinanceHistorical(
+  backend: Backend,
+  requests: HistoricalRateRequest[],
+  config: HistoricalFetchConfig,
+  result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
+  onDateDone: () => void,
+): Promise<void> {
+  const binanceFetch = new RateLimitedFetcher({ maxRequests: 200, intervalMs: 60_000 });
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
+
+  const quoteMap: Record<string, string> = { USD: "USDT", EUR: "EUR" };
+  const quote = quoteMap[config.baseCurrency] ?? config.baseCurrency;
+
+  try {
+    for (const req of requests) {
+      const pair = `${req.currency}${quote}`;
+      const sortedDates = [...req.dates].sort();
+      const neededDates = new Set(sortedDates);
+
+      const startMs = new Date(sortedDates[0]).getTime();
+      const endMs = new Date(sortedDates[sortedDates.length - 1]).getTime() + 86400000;
+
+      // Chunk into 1000-candle segments (~2.7 years per call)
+      const chunks: [number, number][] = [];
+      let cursor = startMs;
+      while (cursor < endMs) {
+        const chunkEnd = Math.min(cursor + 1000 * 86400000, endMs);
+        chunks.push([cursor, chunkEnd]);
+        cursor = chunkEnd;
+      }
+
+      const dateMap = new Map<string, number>();
+
+      try {
+        for (const [cStart, cEnd] of chunks) {
+          const url = `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1d&startTime=${cStart}&endTime=${cEnd}&limit=1000`;
+          const resp = await binanceFetch.fetch(url);
+          if (!resp.ok) {
+            result.errors.push(`Binance HTTP ${resp.status} for ${req.currency} (${pair})`);
+            break;
+          }
+
+          const data = await resp.json() as Array<[number, string, string, string, string, ...unknown[]]>;
+          for (const kline of data) {
+            const date = new Date(kline[0]).toISOString().slice(0, 10);
+            const close = parseFloat(kline[4]); // close price
+            if (close > 0) {
+              dateMap.set(date, close);
+            }
+          }
+        }
+
+        if (dateMap.size === 0) {
+          result.errors.push(`Binance: no kline data for ${req.currency} (${pair})`);
+          continue;
+        }
+
+        const toCurrency = config.baseCurrency;
+        await ensureCurrency(backend, req.currency);
+        await ensureCurrency(backend, toCurrency);
+
+        for (const date of neededDates) {
+          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 3);
+          if (price != null) {
+            successCurrencies.add(req.currency);
+            rateBatch.push({
+              id: uuidv7(),
+              date,
+              from_currency: req.currency,
+              to_currency: toCurrency,
+              rate: price.toString(),
+              source: "binance",
+            });
+            result.fetched++;
+            onDateDone();
+          } else {
+            result.skipped++;
+            onDateDone();
+          }
+        }
+      } catch (err) {
+        result.errors.push(`Binance ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  } finally {
+    binanceFetch.dispose();
+  }
+
   if (rateBatch.length > 0) {
     if (backend.recordExchangeRateBatch) {
       await backend.recordExchangeRateBatch(rateBatch);

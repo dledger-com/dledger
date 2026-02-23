@@ -5,6 +5,7 @@ export interface AppSettings {
   etherscanApiKey: string;
   coingeckoApiKey: string;
   finnhubApiKey: string;
+  cryptoCompareApiKey: string;
   theGraphApiKey: string;
   routescanApiKey: string;
   showHidden: boolean;
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   etherscanApiKey: "",
   coingeckoApiKey: "",
   finnhubApiKey: "",
+  cryptoCompareApiKey: "",
   theGraphApiKey: "",
   routescanApiKey: "",
   showHidden: false,
@@ -92,6 +94,10 @@ export class SettingsStore {
 
   get finnhubApiKey() {
     return this.settings.finnhubApiKey;
+  }
+
+  get cryptoCompareApiKey() {
+    return this.settings.cryptoCompareApiKey;
   }
 
   get theGraphApiKey() {

@@ -22,6 +22,7 @@ export function createMockHandlerContext(
     etherscanApiKey: "",
     coingeckoApiKey: "",
     finnhubApiKey: "",
+    cryptoCompareApiKey: "",
     theGraphApiKey: "",
     routescanApiKey: "",
     showHidden: false,

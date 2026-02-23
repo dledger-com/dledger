@@ -120,7 +120,7 @@ export async function buildErc20TxItems(
   if (value.isZero()) return [];
 
   const currency = tx.tokenSymbol || `ERC20:${shortAddr(tx.contractAddress)}`;
-  await ctx.ensureCurrency(currency, decimals);
+  await ctx.ensureCurrency(currency, decimals, tx.contractAddress);
 
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();

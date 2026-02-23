@@ -36,7 +36,7 @@ export interface HandlerContext {
   /** Whether API enrichment is enabled for the current handler */
   enrichment?: boolean;
   ensureAccount(fullName: string, date: string): Promise<string>;
-  ensureCurrency(code: string, decimals: number): Promise<void>;
+  ensureCurrency(code: string, decimals: number, contractAddress?: string): Promise<void>;
 }
 
 export type HandlerResult =

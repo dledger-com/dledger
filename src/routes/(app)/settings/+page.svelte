@@ -225,6 +225,7 @@
           settings.currency,
           settings.coingeckoApiKey,
           settings.finnhubApiKey,
+          settings.cryptoCompareApiKey,
         );
         await loadRateSources();
         if (res.success) {
@@ -407,7 +408,10 @@
                       >
                         <option value="auto">auto-detect</option>
                         <option value="frankfurter">frankfurter</option>
+                        <option value="defillama">defillama</option>
                         <option value="coingecko">coingecko</option>
+                        <option value="cryptocompare">cryptocompare</option>
+                        <option value="binance">binance</option>
                         <option value="finnhub">finnhub</option>
                         <option value="none">none</option>
                       </select>

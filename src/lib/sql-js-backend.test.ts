@@ -599,4 +599,63 @@ describe("SqlJsBackend", () => {
       expect(currencies).toHaveLength(0);
     });
   });
+
+  // ---- Currency token addresses ----
+
+  describe("currency token addresses", () => {
+    it("stores and retrieves token addresses", async () => {
+      await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+      await backend.setCurrencyTokenAddress("WETH", "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+
+      const all = await backend.getCurrencyTokenAddresses();
+      expect(all).toHaveLength(2);
+      expect(all.find((t) => t.currency === "USDC")?.contract_address).toBe("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+
+      const single = await backend.getCurrencyTokenAddress("WETH");
+      expect(single).not.toBeNull();
+      expect(single!.chain).toBe("ethereum");
+      expect(single!.contract_address).toBe("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+    });
+
+    it("returns null for unknown currency", async () => {
+      const result = await backend.getCurrencyTokenAddress("UNKNOWN");
+      expect(result).toBeNull();
+    });
+
+    it("INSERT OR IGNORE keeps first-seen address (same currency, different chain)", async () => {
+      await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xeth_address");
+      await backend.setCurrencyTokenAddress("USDC", "arbitrum", "0xarb_address");
+
+      const all = await backend.getCurrencyTokenAddresses();
+      expect(all).toHaveLength(2);
+
+      // getCurrencyTokenAddress returns first row (first-seen chain)
+      const single = await backend.getCurrencyTokenAddress("USDC");
+      expect(single).not.toBeNull();
+    });
+
+    it("INSERT OR IGNORE ignores duplicate (same currency + chain)", async () => {
+      await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xoriginal");
+      await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xduplicate");
+
+      const all = await backend.getCurrencyTokenAddresses();
+      const ethUsdc = all.filter((t) => t.currency === "USDC" && t.chain === "ethereum");
+      expect(ethUsdc).toHaveLength(1);
+      expect(ethUsdc[0].contract_address).toBe("0xoriginal");
+    });
+
+    it("clearLedgerData clears token addresses", async () => {
+      await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xaddress");
+      await backend.clearLedgerData();
+      const all = await backend.getCurrencyTokenAddresses();
+      expect(all).toHaveLength(0);
+    });
+
+    it("clearAllData clears token addresses", async () => {
+      await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xaddress");
+      await backend.clearAllData();
+      const all = await backend.getCurrencyTokenAddresses();
+      expect(all).toHaveLength(0);
+    });
+  });
 });

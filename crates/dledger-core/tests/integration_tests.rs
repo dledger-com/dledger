@@ -988,6 +988,10 @@ impl Storage for TestStorage {
     fn add_exchange_account(&self, _account: &serde_json::Value) -> StorageResult<()> { Ok(()) }
     fn update_exchange_account(&self, _id: &str, _updates: &serde_json::Value) -> StorageResult<()> { Ok(()) }
     fn remove_exchange_account(&self, _id: &str) -> StorageResult<()> { Ok(()) }
+
+    fn set_currency_token_address(&self, _currency: &str, _chain: &str, _contract_address: &str) -> StorageResult<()> { Ok(()) }
+    fn get_currency_token_addresses(&self) -> StorageResult<Vec<(String, String, String)>> { Ok(vec![]) }
+    fn get_currency_token_address(&self, _currency: &str) -> StorageResult<Option<(String, String)>> { Ok(None) }
 }
 
 // ============================================================================

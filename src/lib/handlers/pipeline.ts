@@ -29,6 +29,7 @@ import type { ItemAccum } from "./item-builder.js";
 import { normalizeTxid } from "../cex/pipeline.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
+import { chainIdToDefiLlamaChain } from "../exchange-rate-historical.js";
 
 // --- Reprocess types ---
 
@@ -138,6 +139,7 @@ export async function syncEtherscanWithHandlers(
   async function ensureCurrency(
     code: string,
     decimals: number,
+    contractAddress?: string,
   ): Promise<void> {
     if (currencySet.has(code)) return;
     await backend.createCurrency({
@@ -147,6 +149,13 @@ export async function syncEtherscanWithHandlers(
       is_base: false,
     });
     currencySet.add(code);
+    // Record token address for DeFi pricing (first-seen wins via INSERT OR IGNORE)
+    if (contractAddress && chain) {
+      const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
+      if (llamaChain) {
+        await backend.setCurrencyTokenAddress(code, llamaChain, contractAddress.toLowerCase());
+      }
+    }
   }
 
   async function ensureAccount(
@@ -488,7 +497,7 @@ function buildHandlerContext(
   const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
   if (!chain) throw new Error(`unsupported chain_id: ${chainId}`);
 
-  async function ensureCurrency(code: string, decimals: number): Promise<void> {
+  async function ensureCurrency(code: string, decimals: number, contractAddress?: string): Promise<void> {
     if (currencySet.has(code)) return;
     await backend.createCurrency({
       code,
@@ -497,6 +506,12 @@ function buildHandlerContext(
       is_base: false,
     });
     currencySet.add(code);
+    if (contractAddress && chain) {
+      const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
+      if (llamaChain) {
+        await backend.setCurrencyTokenAddress(code, llamaChain, contractAddress.toLowerCase());
+      }
+    }
   }
 
   async function ensureAccount(fullName: string, date: string): Promise<string> {

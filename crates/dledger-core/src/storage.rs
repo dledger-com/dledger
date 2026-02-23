@@ -238,6 +238,12 @@ pub trait Storage: Send + Sync {
     fn update_exchange_account(&self, id: &str, updates: &serde_json::Value) -> StorageResult<()>;
     fn remove_exchange_account(&self, id: &str) -> StorageResult<()>;
 
+    // -- Currency token addresses --
+
+    fn set_currency_token_address(&self, currency: &str, chain: &str, contract_address: &str) -> StorageResult<()>;
+    fn get_currency_token_addresses(&self) -> StorageResult<Vec<(String, String, String)>>; // (currency, chain, contract_address)
+    fn get_currency_token_address(&self, currency: &str) -> StorageResult<Option<(String, String)>>; // (chain, contract_address)
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()>;

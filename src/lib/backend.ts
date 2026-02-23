@@ -145,6 +145,11 @@ export interface Backend {
   clearAutoRateSources(): Promise<void>;
   clearNonUserRateSources(): Promise<void>;
 
+  // Currency token addresses (for DeFi pricing via DefiLlama)
+  setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void>;
+  getCurrencyTokenAddresses(): Promise<Array<{ currency: string; chain: string; contract_address: string }>>;
+  getCurrencyTokenAddress(currency: string): Promise<{ chain: string; contract_address: string } | null>;
+
   // Currency hidden management
   setCurrencyHidden(code: string, isHidden: boolean): Promise<void>;
   listHiddenCurrencies(): Promise<string[]>;
@@ -412,6 +417,17 @@ class TauriBackend implements Backend {
   }
   async clearNonUserRateSources(): Promise<void> {
     return this.invoke("clear_non_user_rate_sources");
+  }
+
+  // Currency token addresses
+  async setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void> {
+    return this.invoke("set_currency_token_address", { currency, chain, contractAddress });
+  }
+  async getCurrencyTokenAddresses(): Promise<Array<{ currency: string; chain: string; contract_address: string }>> {
+    return this.invoke("get_currency_token_addresses");
+  }
+  async getCurrencyTokenAddress(currency: string): Promise<{ chain: string; contract_address: string } | null> {
+    return this.invoke("get_currency_token_address", { currency });
   }
 
   // Currency hidden management
