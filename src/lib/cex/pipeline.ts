@@ -11,6 +11,19 @@ import type { ItemAccum } from "../handlers/item-builder.js";
 import type { TxHashGroup } from "../handlers/types.js";
 import type { TaskProgress } from "../task-queue.svelte.js";
 
+/**
+ * Normalize a transaction ID: lowercase and ensure 0x prefix for hex hashes.
+ * Kraken may return txids without 0x prefix, while Etherscan always uses 0x.
+ */
+export function normalizeTxid(txid: string): string {
+  const lower = txid.toLowerCase().trim();
+  // If it looks like a bare hex hash (40+ hex chars without 0x prefix), add 0x
+  if (/^[0-9a-f]{40,}$/.test(lower)) {
+    return `0x${lower}`;
+  }
+  return lower;
+}
+
 export interface CexSyncOptions {
   signal?: AbortSignal;
   onProgress?: (progress: TaskProgress) => void;
@@ -50,6 +63,16 @@ export async function syncCexAccount(
     onProgress?.({ current: 0, total: 0, message: "Enriching transaction IDs..." });
     await (adapter as { enrichTxids(r: CexLedgerRecord[], k: string, s: string, signal?: AbortSignal): Promise<void> })
       .enrichTxids(records, account.api_key, account.api_secret, signal);
+  }
+
+  // Count records still missing txid after enrichment
+  const missingTxidCount = records.filter(
+    (r) => (r.type === "deposit" || r.type === "withdrawal") && !r.txid,
+  ).length;
+  if (missingTxidCount > 0) {
+    result.warnings.push(
+      `${missingTxidCount} deposit/withdrawal record(s) could not be enriched with on-chain txid — consolidation with Etherscan entries may be incomplete`,
+    );
   }
 
   // 2. Build dedup set from existing sources
@@ -314,7 +337,7 @@ export async function syncCexAccount(
 
     // Check for automatic cross-source consolidation
     if ((record.type === "deposit" || record.type === "withdrawal") && record.txid) {
-      const txidLower = record.txid.toLowerCase();
+      const txidNormalized = normalizeTxid(record.txid);
       const cexTargetAccount = `Assets:${exchangeName}:${record.asset}`;
 
       // Try Etherscan source match first
@@ -341,7 +364,7 @@ export async function syncCexAccount(
 
       // Try CEX→CEX match (another exchange entry with same txid)
       if (!etherscanSource) {
-        const cexMatchIds = await backend.queryEntriesByMetadata("txid", txidLower);
+        const cexMatchIds = await backend.queryEntriesByMetadata("txid", txidNormalized);
         const matchPair = cexMatchIds
           .map((id) => entriesById.get(id))
           .find((m) => m && !m[0].voided_by && !m[0].source.startsWith(adapter.exchangeId + ":"));
@@ -374,7 +397,7 @@ export async function syncCexAccount(
         await postEntry(date, `${exchangeName} deposit: ${amount.toFixed()} ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
-          ...(record.txid ? { txid: record.txid.toLowerCase() } : {}),
+          ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
         });
         break;
       }
@@ -391,7 +414,7 @@ export async function syncCexAccount(
         await postEntry(date, `${exchangeName} withdrawal: ${absAmount.toFixed()} ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
-          ...(record.txid ? { txid: record.txid.toLowerCase() } : {}),
+          ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
         });
         break;
       }
@@ -447,9 +470,9 @@ export function findEtherscanSourceByTxid(
   existingSources: Set<string>,
   txid: string,
 ): string | null {
-  const lowerTxid = txid.toLowerCase();
+  const normalized = normalizeTxid(txid);
   for (const src of existingSources) {
-    if (src.startsWith("etherscan:") && src.toLowerCase().endsWith(`:${lowerTxid}`)) {
+    if (src.startsWith("etherscan:") && src.toLowerCase().endsWith(`:${normalized}`)) {
       return src;
     }
   }

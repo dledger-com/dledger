@@ -1,4 +1,5 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
+import { normalizeTxid } from "./pipeline.js";
 
 const KRAKEN_API = "https://api.kraken.com";
 
@@ -321,7 +322,7 @@ export class KrakenAdapter implements CexAdapter {
 
       for (const entry of json.result ?? []) {
         if (entry.refid && entry.txid) {
-          map.set(entry.refid as string, entry.txid as string);
+          map.set(entry.refid as string, normalizeTxid(entry.txid as string));
         }
       }
     } catch {
@@ -356,7 +357,7 @@ export class KrakenAdapter implements CexAdapter {
 
       for (const entry of json.result ?? []) {
         if (entry.refid && entry.txid) {
-          map.set(entry.refid as string, entry.txid as string);
+          map.set(entry.refid as string, normalizeTxid(entry.txid as string));
         }
       }
     } catch {

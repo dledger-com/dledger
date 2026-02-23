@@ -11,6 +11,8 @@ export function getCexAdapter(id: ExchangeId): CexAdapter {
   return factory();
 }
 
-export { syncCexAccount } from "./pipeline.js";
+export { syncCexAccount, normalizeTxid } from "./pipeline.js";
 export { KrakenAdapter } from "./kraken.js";
+export { retroactiveConsolidate } from "./consolidate.js";
+export type { ConsolidationResult, ConsolidationOptions } from "./consolidate.js";
 export type { ExchangeId, ExchangeAccount, CexAdapter, CexLedgerRecord, CexSyncResult } from "./types.js";

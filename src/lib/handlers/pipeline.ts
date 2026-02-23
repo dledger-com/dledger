@@ -26,6 +26,7 @@ import { isAavePool, AAVE } from "./addresses.js";
 import { prefetchAaveSubgraphBatch, clearAaveSubgraphCache } from "./aave-subgraph.js";
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "./item-builder.js";
 import type { ItemAccum } from "./item-builder.js";
+import { normalizeTxid } from "../cex/pipeline.js";
 
 // --- Reprocess types ---
 
@@ -317,7 +318,7 @@ export async function syncEtherscanWithHandlers(
     if (handlerResult.type === "entries" || handlerResult.type === "review") {
       // Check for matching CEX entry to consolidate (Etherscan→CEX direction)
       let cexConsolidated = false;
-      const cexMatchIds = await backend.queryEntriesByMetadata("txid", group.hash.toLowerCase());
+      const cexMatchIds = await backend.queryEntriesByMetadata("txid", normalizeTxid(group.hash));
       if (cexMatchIds.length > 0) {
         const cexMatch = cexMatchIds
           .map((id) => entriesById.get(id))

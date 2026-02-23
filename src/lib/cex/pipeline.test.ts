@@ -3,7 +3,7 @@ import { v7 as uuidv7 } from "uuid";
 import { createTestBackend } from "../../test/helpers.js";
 import type { SqlJsBackend } from "../sql-js-backend.js";
 import type { CexAdapter, CexLedgerRecord, ExchangeAccount } from "./types.js";
-import { syncCexAccount, findEtherscanSourceByTxid } from "./pipeline.js";
+import { syncCexAccount, findEtherscanSourceByTxid, normalizeTxid } from "./pipeline.js";
 import type { Account, Currency, JournalEntry, LineItem } from "../types/index.js";
 
 // -- Helpers --
@@ -427,6 +427,42 @@ describe("CEX Pipeline", () => {
     });
   });
 
+  describe("normalizeTxid", () => {
+    it("adds 0x prefix to bare hex hashes", () => {
+      expect(normalizeTxid("abc123def456abc123def456abc123def456abc123")).toBe(
+        "0xabc123def456abc123def456abc123def456abc123",
+      );
+    });
+
+    it("preserves existing 0x prefix", () => {
+      expect(normalizeTxid("0xabc123def456abc123def456abc123def456abc123")).toBe(
+        "0xabc123def456abc123def456abc123def456abc123",
+      );
+    });
+
+    it("lowercases the hash", () => {
+      expect(normalizeTxid("0xABC123")).toBe("0xabc123");
+    });
+
+    it("lowercases bare hex and adds 0x", () => {
+      expect(normalizeTxid("ABC123DEF456ABC123DEF456ABC123DEF456ABC123")).toBe(
+        "0xabc123def456abc123def456abc123def456abc123",
+      );
+    });
+
+    it("passes through non-hex strings", () => {
+      expect(normalizeTxid("some-refid")).toBe("some-refid");
+    });
+
+    it("passes through short hex strings (less than 40 chars)", () => {
+      expect(normalizeTxid("abc123")).toBe("abc123");
+    });
+
+    it("trims whitespace", () => {
+      expect(normalizeTxid("  0xabc123  ")).toBe("0xabc123");
+    });
+  });
+
   describe("findEtherscanSourceByTxid", () => {
     it("finds matching etherscan source", () => {
       const sources = new Set(["etherscan:1:0xabc123", "etherscan:1:0xdef456", "kraken:T001"]);
@@ -441,6 +477,34 @@ describe("CEX Pipeline", () => {
     it("matches case-insensitively", () => {
       const sources = new Set(["etherscan:1:0xABC123"]);
       expect(findEtherscanSourceByTxid(sources, "0xabc123")).toBe("etherscan:1:0xABC123");
+    });
+
+    it("matches bare hex txid (without 0x prefix) against 0x-prefixed source", () => {
+      // Simulates Kraken returning a txid without 0x prefix
+      const sources = new Set(["etherscan:1:0xabc123def456abc123def456abc123def456abc123"]);
+      expect(
+        findEtherscanSourceByTxid(sources, "abc123def456abc123def456abc123def456abc123"),
+      ).toBe("etherscan:1:0xabc123def456abc123def456abc123def456abc123");
+    });
+  });
+
+  describe("Enrichment warnings", () => {
+    it("warns when deposits/withdrawals are missing txid after enrichment", async () => {
+      const records: CexLedgerRecord[] = [
+        { refid: "EW01", type: "deposit", asset: "ETH", amount: "5", fee: "0", timestamp: ts("2024-03-01"), txid: null },
+        { refid: "EW02", type: "withdrawal", asset: "BTC", amount: "-0.5", fee: "0", timestamp: ts("2024-03-01"), txid: null },
+        { refid: "EW03", type: "trade", asset: "EUR", amount: "-100", fee: "0", timestamp: ts("2024-03-01"), txid: null },
+        { refid: "EW03", type: "trade", asset: "BTC", amount: "0.01", fee: "0", timestamp: ts("2024-03-01"), txid: null },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      const result = await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      // Should warn about the 2 deposit/withdrawal records missing txid
+      const enrichWarning = result.warnings.find((w) => w.includes("could not be enriched"));
+      expect(enrichWarning).toBeTruthy();
+      expect(enrichWarning).toContain("2 deposit/withdrawal");
     });
   });
 

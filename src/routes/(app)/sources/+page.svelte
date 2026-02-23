@@ -47,8 +47,9 @@
   import RotateCw from "lucide-svelte/icons/rotate-cw";
   import { v7 as uuidv7 } from "uuid";
   import type { ExchangeAccount } from "$lib/cex/types.js";
-  import { getCexAdapter, syncCexAccount } from "$lib/cex/index.js";
+  import { getCexAdapter, syncCexAccount, retroactiveConsolidate } from "$lib/cex/index.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
+  import Link2 from "lucide-svelte/icons/link-2";
 
   const handlerRegistry = getDefaultRegistry();
   const handlers = handlerRegistry.getAll();
@@ -144,6 +145,7 @@
   let cexNewApiSecret = $state("");
   let cexAdding = $state(false);
   const cexBusy = $derived(taskQueue.isActive("cex-sync"));
+  const cexConsolidating = $derived(taskQueue.isActive("cex-consolidate"));
 
   async function loadCexAccounts() {
     try {
@@ -203,6 +205,10 @@
           onProgress: ctx.reportProgress,
         });
         await loadCexAccounts();
+        // Auto-trigger consolidation if entries were imported and etherscan accounts exist
+        if (result.entries_imported > 0 && ethAccounts.length > 0) {
+          handleConsolidateCex();
+        }
         return {
           summary: `${result.entries_imported} imported, ${result.entries_skipped} skipped, ${result.entries_consolidated} consolidated`,
         };
@@ -214,6 +220,25 @@
     for (const account of cexAccounts) {
       syncCex(account);
     }
+  }
+
+  function handleConsolidateCex() {
+    taskQueue.enqueue({
+      key: "cex-consolidate",
+      label: "Consolidate CEX ↔ Etherscan entries",
+      async run(ctx) {
+        const result = await retroactiveConsolidate(getBackend(), handlerRegistry, {
+          signal: ctx.signal,
+          onProgress: ctx.reportProgress,
+        });
+        if (result.pairs_found === 0) {
+          return { summary: "No matching pairs found" };
+        }
+        return {
+          summary: `${result.pairs_consolidated} consolidated, ${result.pairs_skipped} skipped of ${result.pairs_found} pairs`,
+        };
+      },
+    });
   }
 
   async function loadAvailableCurrencies() {
@@ -525,6 +550,10 @@
           account.chain_id,
         );
         await loadEthAccounts();
+        // Auto-trigger consolidation if entries were imported and CEX accounts exist
+        if (r.transactions_imported > 0 && cexAccounts.length > 0) {
+          handleConsolidateCex();
+        }
         return {
           summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
           data: r,
@@ -1306,17 +1335,30 @@
         </Button>
       </div>
 
-      {#if cexAccounts.length > 1}
-        <div class="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={cexBusy}
-            onclick={syncAllCex}
-          >
-            <RefreshCw class="mr-1 h-4 w-4 {cexBusy ? 'animate-spin' : ''}" />
-            Sync All
-          </Button>
+      {#if cexAccounts.length > 0}
+        <div class="flex justify-end gap-2">
+          {#if ethAccounts.length > 0}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={cexBusy || cexConsolidating}
+              onclick={handleConsolidateCex}
+            >
+              <Link2 class="mr-1 h-4 w-4" />
+              {cexConsolidating ? "Consolidating..." : "Consolidate"}
+            </Button>
+          {/if}
+          {#if cexAccounts.length > 1}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={cexBusy}
+              onclick={syncAllCex}
+            >
+              <RefreshCw class="mr-1 h-4 w-4 {cexBusy ? 'animate-spin' : ''}" />
+              Sync All
+            </Button>
+          {/if}
         </div>
       {/if}
     </Card.Content>
