@@ -343,11 +343,15 @@ export async function syncCexAccount(
       // Try Etherscan source match first
       const etherscanSource = findEtherscanSourceByTxid(existingSources, record.txid);
       if (etherscanSource && registry) {
+        const cexDescription = record.type === "withdrawal"
+          ? `${exchangeName} withdrawal: ${amount.abs().toFixed()} ${record.asset}`
+          : `${exchangeName} deposit: ${amount.toFixed()} ${record.asset}`;
         const consolidated = await consolidateWithEtherscan(
           backend,
           registry,
           etherscanSource,
           cexTargetAccount,
+          cexDescription,
           adapter,
           etherscanAccounts,
           accountMap,
@@ -489,6 +493,7 @@ async function consolidateWithEtherscan(
   registry: HandlerRegistry,
   etherscanSource: string,
   cexTargetAccount: string,
+  cexDescription: string,
   adapter: CexAdapter,
   etherscanAccounts: EtherscanAccount[],
   accountMap: Map<string, Account>,
@@ -656,7 +661,7 @@ async function consolidateWithEtherscan(
       const newEntry: JournalEntry = {
         id: entryId,
         date: handlerEntry.entry.date,
-        description: handlerEntry.entry.description,
+        description: cexDescription,
         status: handlerEntry.entry.status,
         source: handlerEntry.entry.source,
         voided_by: null,

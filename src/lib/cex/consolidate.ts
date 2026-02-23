@@ -447,7 +447,7 @@ async function consolidateViaHandlers(
     const newEntry: JournalEntry = {
       id: entryId,
       date: handlerEntry.entry.date,
-      description: handlerEntry.entry.description,
+      description: cexEntry.description,
       status: handlerEntry.entry.status,
       source: handlerEntry.entry.source,
       voided_by: null,
@@ -530,7 +530,7 @@ async function consolidateDirectRemap(
   const newEntry: JournalEntry = {
     id: entryId,
     date: etherscanEntry.date,
-    description: etherscanEntry.description,
+    description: cexEntry.description,
     status: "confirmed",
     source: etherscanEntry.source,
     voided_by: null,
