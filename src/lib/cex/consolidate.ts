@@ -11,6 +11,12 @@ import type { ItemAccum } from "../handlers/item-builder.js";
 import { normalizeTxid } from "./pipeline.js";
 import type { TaskProgress } from "../task-queue.svelte.js";
 
+interface CexIndexEntry {
+  entry: JournalEntry;
+  items: LineItem[];
+  exchangeId: string;
+}
+
 export interface ConsolidationOptions {
   dryRun?: boolean;
   signal?: AbortSignal;
@@ -74,7 +80,9 @@ export async function retroactiveConsolidate(
 
   // 2. Build indexes
   // CEX entries with txid metadata (not already consolidated)
-  const cexEntriesWithTxid = new Map<string, { entry: JournalEntry; items: LineItem[]; exchangeId: string }>();
+  const cexEntriesWithTxid = new Map<string, CexIndexEntry>();
+  // CEX deposit/withdrawal entries WITHOUT txid (fallback matching)
+  const cexEntriesWithoutTxid: CexIndexEntry[] = [];
   // Etherscan entries by normalized hash (not already consolidated)
   const etherscanEntriesByHash = new Map<string, { entry: JournalEntry; items: LineItem[] }>();
 
@@ -91,26 +99,33 @@ export async function retroactiveConsolidate(
         const hash = normalizeTxid(parts.slice(2).join(":"));
         etherscanEntriesByHash.set(hash, { entry, items });
       }
-    } else if (!entry.source.startsWith("etherscan:")) {
-      // Potential CEX entry — check for txid metadata
+    } else {
+      // Potential CEX entry
       const meta = await backend.getMetadata(entry.id);
-      if (!meta["txid"]) continue;
       if (meta["cex_linked"]) continue; // already consolidated
       if (!meta["exchange"]) continue; // not a CEX entry
 
-      const normalizedTxid = normalizeTxid(meta["txid"]);
-      cexEntriesWithTxid.set(normalizedTxid, {
-        entry,
-        items,
-        exchangeId: meta["exchange"],
-      });
+      const cexData: CexIndexEntry = { entry, items, exchangeId: meta["exchange"] };
+
+      if (meta["txid"]) {
+        const normalizedTxid = normalizeTxid(meta["txid"]);
+        cexEntriesWithTxid.set(normalizedTxid, cexData);
+      } else {
+        // Deposit/withdrawal without txid — candidate for fallback matching
+        const isDepositOrWithdrawal = entry.description.includes(" deposit:") || entry.description.includes(" withdrawal:");
+        if (isDepositOrWithdrawal) {
+          cexEntriesWithoutTxid.push(cexData);
+        }
+      }
     }
   }
 
-  // 3. Match by normalized txid
+  // 3. Match by normalized txid (primary)
+  const matchedEthHashes = new Set<string>();
+  const matchedCexIds = new Set<string>();
   const pairs: Array<{
     txid: string;
-    cex: { entry: JournalEntry; items: LineItem[]; exchangeId: string };
+    cex: CexIndexEntry;
     etherscan: { entry: JournalEntry; items: LineItem[] };
   }> = [];
 
@@ -118,6 +133,71 @@ export async function retroactiveConsolidate(
     const ethData = etherscanEntriesByHash.get(txid);
     if (ethData) {
       pairs.push({ txid, cex: cexData, etherscan: ethData });
+      matchedEthHashes.add(txid);
+      matchedCexIds.add(cexData.entry.id);
+    }
+  }
+
+  // 4. Fallback: match CEX entries without txid by amount + currency + date
+  const accountList = await backend.listAccounts();
+  const accountIdToName = new Map<string, string>();
+  for (const acc of accountList) {
+    accountIdToName.set(acc.id, acc.full_name);
+  }
+
+  for (const cexData of cexEntriesWithoutTxid) {
+    if (matchedCexIds.has(cexData.entry.id)) continue;
+
+    // Extract the CEX asset movement: find the Assets:* line item
+    const cexAsset = extractCexAssetMovement(cexData.items, accountIdToName);
+    if (!cexAsset) continue;
+
+    // For a CEX deposit (+amount): look for an Etherscan entry where the user's
+    // wallet sends the same currency with a similar amount on a close date.
+    // For a CEX withdrawal (-amount): look for an Etherscan entry where the
+    // user's wallet receives the same currency.
+    const isDeposit = new Decimal(cexAsset.amount).gt(0);
+    const cexAmount = new Decimal(cexAsset.amount).abs();
+    const cexDate = new Date(cexData.entry.date + "T00:00:00Z").getTime();
+
+    let bestMatch: { hash: string; ethData: { entry: JournalEntry; items: LineItem[] } } | null = null;
+    let bestDateDiff = Infinity;
+
+    for (const [hash, ethData] of etherscanEntriesByHash) {
+      if (matchedEthHashes.has(hash)) continue;
+
+      // Check date proximity (within 2 days — blockchain confirmations can cause date drift)
+      const ethDate = new Date(ethData.entry.date + "T00:00:00Z").getTime();
+      const dateDiffDays = Math.abs(ethDate - cexDate) / (1000 * 60 * 60 * 24);
+      if (dateDiffDays > 2) continue;
+
+      // Look for a matching asset movement in the Etherscan entry
+      // For deposits: user's wallet should have negative (outgoing) amount in the same currency
+      // For withdrawals: user's wallet should have positive (incoming) amount
+      const ethMovement = extractEtherscanWalletMovement(ethData.items, accountIdToName, cexAsset.currency);
+      if (!ethMovement) continue;
+
+      const ethAmount = new Decimal(ethMovement.amount).abs();
+      const ethIsOutgoing = new Decimal(ethMovement.amount).lt(0);
+
+      // Direction must match: deposit ↔ outgoing, withdrawal ↔ incoming
+      if (isDeposit !== ethIsOutgoing) continue;
+
+      // Amount must be close (allow up to 5% difference for gas/fees)
+      const ratio = cexAmount.gt(0) ? ethAmount.div(cexAmount) : new Decimal(0);
+      if (ratio.lt(0.95) || ratio.gt(1.05)) continue;
+
+      // Prefer closest date
+      if (dateDiffDays < bestDateDiff) {
+        bestDateDiff = dateDiffDays;
+        bestMatch = { hash, ethData };
+      }
+    }
+
+    if (bestMatch) {
+      pairs.push({ txid: `fallback:${bestMatch.hash}`, cex: cexData, etherscan: bestMatch.ethData });
+      matchedEthHashes.add(bestMatch.hash);
+      matchedCexIds.add(cexData.entry.id);
     }
   }
 
@@ -230,6 +310,42 @@ export async function retroactiveConsolidate(
 
   onProgress?.({ current: pairs.length, total: pairs.length, message: "Done" });
   return result;
+}
+
+/**
+ * Extract the Assets:* line item from a CEX deposit/withdrawal entry.
+ * Returns the currency and signed amount (positive = deposit, negative = withdrawal).
+ */
+function extractCexAssetMovement(
+  items: LineItem[],
+  accountIdToName: Map<string, string>,
+): { currency: string; amount: string } | null {
+  for (const item of items) {
+    const name = accountIdToName.get(item.account_id);
+    if (name?.startsWith("Assets:")) {
+      return { currency: item.currency, amount: item.amount };
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract the user's wallet movement from an Etherscan entry for a specific currency.
+ * Looks for Assets:* line items (not Equity/Expenses) with the matching currency.
+ */
+function extractEtherscanWalletMovement(
+  items: LineItem[],
+  accountIdToName: Map<string, string>,
+  currency: string,
+): { amount: string } | null {
+  for (const item of items) {
+    if (item.currency !== currency) continue;
+    const name = accountIdToName.get(item.account_id);
+    if (name?.startsWith("Assets:")) {
+      return { amount: item.amount };
+    }
+  }
+  return null;
 }
 
 /**
