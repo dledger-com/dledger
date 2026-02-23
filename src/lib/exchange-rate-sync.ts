@@ -71,13 +71,13 @@ function todayISO(): string {
 export type SourceName = "frankfurter" | "coingecko" | "finnhub" | "defillama" | "cryptocompare" | "binance";
 
 /** Auto-detect the best source for a currency using static heuristics */
-function autoDetectSource(code: string, baseCurrency: string, hasTokenAddress: boolean): SourceName {
+function autoDetectSource(code: string, baseCurrency: string, hasTokenAddress: boolean): SourceName | "none" {
   if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
     return "frankfurter";
   }
   if (hasTokenAddress) return "defillama";     // DeFi tokens with known contract
   if (COINGECKO_IDS[code]) return "defillama"; // Known crypto → DefiLlama via coingecko: alias
-  return "defillama";                           // Default crypto → DefiLlama
+  return "none";                               // Unknown token — skip to avoid garbage API calls
 }
 
 /** Map base currency to Binance quote currency and construct trading pair */
@@ -154,6 +154,7 @@ export async function syncExchangeRates(
     } else {
       // No stored source → auto-detect
       const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code));
+      if (detected === "none") continue; // No known pricing path — skip
       if (detected === "frankfurter") frankfurterCodes.push(code);
       else if (detected === "coingecko") coingeckoCodes.push(code);
       else if (detected === "finnhub") finnhubCodes.push(code);
@@ -372,9 +373,11 @@ export async function syncExchangeRates(
         let coinId: string;
         if (ta) {
           coinId = `${ta.chain}:${ta.contract_address}`;
+        } else if (COINGECKO_IDS[code]) {
+          coinId = `coingecko:${COINGECKO_IDS[code]}`;
         } else {
-          const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
-          coinId = `coingecko:${geckoId}`;
+          // No token address and no CoinGecko mapping — skip to avoid garbage API calls
+          continue;
         }
         coinIds.push(coinId);
         coinToCode.set(coinId, code);
@@ -643,14 +646,15 @@ export async function fetchSingleRate(
 
     case "defillama": {
       try {
-        // Try to get token address, fall back to coingecko alias
+        // Try to get token address, fall back to known coingecko alias
         const tokenAddr = await backend.getCurrencyTokenAddress(code);
         let coinId: string;
         if (tokenAddr) {
           coinId = `${tokenAddr.chain}:${tokenAddr.contract_address}`;
+        } else if (COINGECKO_IDS[code]) {
+          coinId = `coingecko:${COINGECKO_IDS[code]}`;
         } else {
-          const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
-          coinId = `coingecko:${geckoId}`;
+          return { success: false, error: `DefiLlama: no token address or CoinGecko mapping for ${code}` };
         }
         const url = `https://coins.llama.fi/prices/current/${coinId}`;
         const resp = await fetch(url);

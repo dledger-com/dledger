@@ -80,15 +80,14 @@ describe("findMissingRates source classification", () => {
     expect(requests[0].source).toBe("defillama");
   });
 
-  it("classifies unknown crypto (no COINGECKO_IDS, no token address) as defillama", async () => {
+  it("skips unknown crypto with no COINGECKO_IDS and no token address", async () => {
     await backend.createCurrency({ code: "RANDOMTOKEN", name: "Random", decimal_places: 18, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "RANDOMTOKEN", date: "2024-03-01" },
     ]);
 
-    expect(requests).toHaveLength(1);
-    expect(requests[0].source).toBe("defillama");
+    expect(requests).toHaveLength(0); // No pricing path — skipped
   });
 
   it("respects DB-stored rate source override", async () => {

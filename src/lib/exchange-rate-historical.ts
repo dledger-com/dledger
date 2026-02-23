@@ -80,7 +80,7 @@ function classifySource(
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (tokenAddressCurrencies?.has(currency)) return "defillama";
   if (COINGECKO_IDS[currency]) return "defillama";
-  return "defillama";
+  return null; // No known pricing path — skip
 }
 
 // ---- Find missing rates ----
@@ -532,9 +532,12 @@ async function fetchDefiLlamaHistorical(
       let coinId: string;
       if (ta) {
         coinId = `${ta.chain}:${ta.contract_address}`;
+      } else if (COINGECKO_IDS[req.currency]) {
+        coinId = `coingecko:${COINGECKO_IDS[req.currency]}`;
       } else {
-        const geckoId = COINGECKO_IDS[req.currency] ?? req.currency.toLowerCase();
-        coinId = `coingecko:${geckoId}`;
+        // No token address and no CoinGecko mapping — skip
+        result.errors.push(`DefiLlama: no token address or CoinGecko mapping for ${req.currency}`);
+        continue;
       }
 
       const sortedDates = [...req.dates].sort();
