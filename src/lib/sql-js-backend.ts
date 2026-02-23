@@ -321,6 +321,7 @@ function sourcePriority(source: string): number {
     case "manual":
       return 3;
     case "ledger-file":
+    case "transaction":
       return 2;
     default:
       return 1;

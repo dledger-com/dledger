@@ -10,6 +10,8 @@ import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "
 import type { ItemAccum } from "../handlers/item-builder.js";
 import type { TxHashGroup } from "../handlers/types.js";
 import type { TaskProgress } from "../task-queue.svelte.js";
+import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
+import type { TradeRateItem } from "../utils/derive-trade-rate.js";
 
 /**
  * Normalize a transaction ID: lowercase and ensure 0x prefix for hex hashes.
@@ -317,6 +319,15 @@ export async function syncCexAccount(
       exchange: adapter.exchangeId,
       refid,
     });
+
+    // Derive and record exchange rate from trade items
+    const rateItems: TradeRateItem[] = items.map((i) => ({
+      account_name: i.account,
+      currency: i.currency,
+      amount: i.amount.toString(),
+    }));
+    await deriveAndRecordTradeRate(backend, date, rateItems);
+
     existingSources.add(source);
     processed++;
     onProgress?.({ current: processed, total: totalRecords, message: `Processing trades...` });

@@ -507,6 +507,16 @@ export async function importLedger(
           amount: costTotal.toString(),
           lot_id: null,
         });
+
+        // Record implied exchange rate from cost syntax
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date,
+          from_currency: commodity,
+          to_currency: p.costPrice.commodity,
+          rate: p.costPrice.price,
+          source: "transaction",
+        });
       }
     }
 

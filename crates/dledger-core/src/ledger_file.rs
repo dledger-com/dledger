@@ -663,6 +663,17 @@ fn parse_transaction_body(
                 "cost_price".to_string(),
                 format!("{} {}", price, price_commodity),
             ));
+
+            // Record implied exchange rate from cost syntax
+            let trade_rate = ExchangeRate {
+                id: Uuid::now_v7(),
+                date,
+                from_currency: commodity.to_string(),
+                to_currency: price_commodity.to_string(),
+                rate: *price,
+                source: "transaction".to_string(),
+            };
+            let _ = engine.record_exchange_rate(&trade_rate);
         }
     }
 

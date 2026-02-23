@@ -27,6 +27,8 @@ import { prefetchAaveSubgraphBatch, clearAaveSubgraphCache } from "./aave-subgra
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "./item-builder.js";
 import type { ItemAccum } from "./item-builder.js";
 import { normalizeTxid } from "../cex/pipeline.js";
+import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
+import type { TradeRateItem } from "../utils/derive-trade-rate.js";
 
 // --- Reprocess types ---
 
@@ -85,6 +87,14 @@ export async function syncEtherscanWithHandlers(
   const accountMap = new Map<string, Account>();
   for (const acc of await backend.listAccounts()) {
     accountMap.set(acc.full_name, acc);
+  }
+
+  // Reverse lookup: account id → full name
+  function accountNameById(id: string): string {
+    for (const [name, acc] of accountMap) {
+      if (acc.id === id) return name;
+    }
+    return id;
   }
 
   // Collect existing sources for dedup + build entries-by-id for cross-source consolidation
@@ -384,6 +394,14 @@ export async function syncEtherscanWithHandlers(
                 await backend.postJournalEntry(newEntry, lineItems);
                 const cexExchangeId = cexEntry.source.split(":")[0];
                 await backend.setMetadata(entryId, { ...handlerEntry.metadata, cex_linked: cexExchangeId });
+
+                // Derive and record exchange rate from consolidated items
+                const cexRateItems: TradeRateItem[] = lineItems.map((li) => ({
+                  account_name: accountNameById(li.account_id),
+                  currency: li.currency,
+                  amount: li.amount,
+                }));
+                await deriveAndRecordTradeRate(backend, handlerEntry.entry.date, cexRateItems);
               }
 
               cexConsolidated = true;
@@ -424,6 +442,15 @@ export async function syncEtherscanWithHandlers(
             if (Object.keys(handlerEntry.metadata).length > 0) {
               await backend.setMetadata(entryId, handlerEntry.metadata);
             }
+
+            // Derive and record exchange rate from handler items
+            const normalRateItems: TradeRateItem[] = handlerEntry.items.map((item) => ({
+              account_name: accountNameById(item.account_id),
+              currency: item.currency,
+              amount: item.amount,
+            }));
+            await deriveAndRecordTradeRate(backend, handlerEntry.entry.date, normalRateItems);
+
             result.transactions_imported++;
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);

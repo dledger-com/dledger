@@ -92,11 +92,11 @@ fn parse_entry_status(s: &str) -> StorageResult<JournalEntryStatus> {
         .ok_or_else(|| StorageError::Internal(format!("invalid entry status: {s}")))
 }
 
-/// Source priority: manual (3) > ledger-file (2) > API (1).
+/// Source priority: manual (3) > ledger-file/transaction (2) > API (1).
 fn source_priority(source: &str) -> u8 {
     match source {
         "manual" => 3,
-        "ledger-file" => 2,
+        "ledger-file" | "transaction" => 2,
         _ => 1,
     }
 }
@@ -2663,6 +2663,63 @@ mod tests {
         s.insert_exchange_rate(&api_rate2).unwrap();
         // Should still be the manual rate
         assert_eq!(s.get_exchange_rate("EUR", "USD", date).unwrap(), Some(dec!(1.10)));
+    }
+
+    #[test]
+    fn test_transaction_source_priority() {
+        let s = setup();
+        s.create_currency(&make_currency("BTC", "Bitcoin", 8, false)).unwrap();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+
+        let date = make_date(2024, 6, 1);
+
+        // Insert API rate (priority 1)
+        let api_rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "BTC".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(50000),
+            source: "coingecko".to_string(),
+        };
+        s.insert_exchange_rate(&api_rate).unwrap();
+        assert_eq!(s.get_exchange_rate("BTC", "USD", date).unwrap(), Some(dec!(50000)));
+
+        // Insert transaction rate (priority 2) — should overwrite API
+        let tx_rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "BTC".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(50500),
+            source: "transaction".to_string(),
+        };
+        s.insert_exchange_rate(&tx_rate).unwrap();
+        assert_eq!(s.get_exchange_rate("BTC", "USD", date).unwrap(), Some(dec!(50500)));
+
+        // Insert manual rate (priority 3) — should overwrite transaction
+        let manual_rate = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "BTC".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(51000),
+            source: "manual".to_string(),
+        };
+        s.insert_exchange_rate(&manual_rate).unwrap();
+        assert_eq!(s.get_exchange_rate("BTC", "USD", date).unwrap(), Some(dec!(51000)));
+
+        // Try to overwrite manual with transaction — should NOT overwrite
+        let tx_rate2 = ExchangeRate {
+            id: Uuid::now_v7(),
+            date,
+            from_currency: "BTC".to_string(),
+            to_currency: "USD".to_string(),
+            rate: dec!(49000),
+            source: "transaction".to_string(),
+        };
+        s.insert_exchange_rate(&tx_rate2).unwrap();
+        assert_eq!(s.get_exchange_rate("BTC", "USD", date).unwrap(), Some(dec!(51000)));
     }
 
     #[test]
