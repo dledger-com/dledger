@@ -526,82 +526,79 @@ async function fetchDefiLlamaHistorical(
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
 
+  // Resolve coin IDs and build a date→coins index for batching
+  const coinIdByCurrency = new Map<string, string>();
+  const dateToCoins = new Map<string, Set<string>>(); // date → Set<coinId>
+
+  for (const req of requests) {
+    const ta = tokenAddrMap.get(req.currency);
+    let coinId: string;
+    if (ta) {
+      coinId = `${ta.chain}:${ta.contract_address}`;
+    } else if (COINGECKO_IDS[req.currency]) {
+      coinId = `coingecko:${COINGECKO_IDS[req.currency]}`;
+    } else {
+      result.errors.push(`DefiLlama: no token address or CoinGecko mapping for ${req.currency}`);
+      for (const _d of req.dates) onDateDone();
+      continue;
+    }
+    coinIdByCurrency.set(req.currency, coinId);
+    for (const date of req.dates) {
+      let set = dateToCoins.get(date);
+      if (!set) { set = new Set(); dateToCoins.set(date, set); }
+      set.add(coinId);
+    }
+  }
+
+  // Reverse map: coinId → currency code
+  const coinToCurrency = new Map<string, string>();
+  for (const [cur, cid] of coinIdByCurrency) coinToCurrency.set(cid, cur);
+
+  // Fetch using GET /prices/historical/{timestamp}/{coins} — one request per date,
+  // batching all coins for that date into a single comma-separated call.
+  const toCurrency = "USD";
+  const ensured = new Set<string>();
+
   try {
-    for (const req of requests) {
-      const ta = tokenAddrMap.get(req.currency);
-      let coinId: string;
-      if (ta) {
-        coinId = `${ta.chain}:${ta.contract_address}`;
-      } else if (COINGECKO_IDS[req.currency]) {
-        coinId = `coingecko:${COINGECKO_IDS[req.currency]}`;
-      } else {
-        // No token address and no CoinGecko mapping — skip
-        result.errors.push(`DefiLlama: no token address or CoinGecko mapping for ${req.currency}`);
-        continue;
-      }
-
-      const sortedDates = [...req.dates].sort();
-      const neededDates = new Set(sortedDates);
-
-      // Build timestamps for batchHistorical
-      const timestamps = sortedDates.map((d) => Math.floor(new Date(d + "T12:00:00Z").getTime() / 1000));
+    for (const [date, coinSet] of [...dateToCoins.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const timestamp = Math.floor(new Date(date + "T12:00:00Z").getTime() / 1000);
+      const coinList = [...coinSet].join(",");
+      const url = `https://coins.llama.fi/prices/historical/${timestamp}/${coinList}?searchWidth=21600`;
 
       try {
-        // Use batchHistorical POST endpoint
-        const body = JSON.stringify({
-          coins: { [coinId]: timestamps },
-          searchWidth: "6h",
-        });
-        const resp = await llamaFetch.fetch("https://coins.llama.fi/batchHistorical", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-
+        const resp = await llamaFetch.fetch(url);
         if (!resp.ok) {
-          result.errors.push(`DefiLlama HTTP ${resp.status} for ${req.currency}`);
+          result.errors.push(`DefiLlama HTTP ${resp.status} for date ${date}`);
+          for (const _c of coinSet) onDateDone();
           continue;
         }
 
-        const data = await resp.json() as { coins: Record<string, { prices: Array<{ timestamp: number; price: number; confidence?: number }> }> };
-        const coinData = data.coins[coinId];
-        if (!coinData || !coinData.prices || coinData.prices.length === 0) {
-          result.errors.push(`DefiLlama: no historical data for ${req.currency} (${coinId})`);
-          continue;
-        }
+        const data = await resp.json() as { coins: Record<string, { price: number; symbol?: string; timestamp?: number; confidence?: number }> };
 
-        // Map timestamps back to dates
-        const dateMap = new Map<string, number>();
-        for (const point of coinData.prices) {
-          const date = new Date(point.timestamp * 1000).toISOString().slice(0, 10);
-          dateMap.set(date, point.price);
-        }
-
-        const toCurrency = "USD";
-        await ensureCurrency(backend, req.currency);
-        await ensureCurrency(backend, toCurrency);
-
-        for (const date of neededDates) {
-          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 1);
-          if (price != null) {
-            successCurrencies.add(req.currency);
+        for (const coinId of coinSet) {
+          const currency = coinToCurrency.get(coinId)!;
+          const coinData = data.coins[coinId];
+          if (coinData && coinData.price != null) {
+            if (!ensured.has(currency)) { await ensureCurrency(backend, currency); ensured.add(currency); }
+            if (!ensured.has(toCurrency)) { await ensureCurrency(backend, toCurrency); ensured.add(toCurrency); }
+            successCurrencies.add(currency);
             rateBatch.push({
               id: uuidv7(),
               date,
-              from_currency: req.currency,
+              from_currency: currency,
               to_currency: toCurrency,
-              rate: price.toString(),
+              rate: coinData.price.toString(),
               source: "defillama",
             });
             result.fetched++;
-            onDateDone();
           } else {
             result.skipped++;
-            onDateDone();
           }
+          onDateDone();
         }
       } catch (err) {
-        result.errors.push(`DefiLlama ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
+        result.errors.push(`DefiLlama date ${date}: ${err instanceof Error ? err.message : String(err)}`);
+        for (const _c of coinSet) onDateDone();
       }
     }
   } finally {
