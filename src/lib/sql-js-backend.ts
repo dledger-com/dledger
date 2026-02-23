@@ -2586,6 +2586,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
+      UPDATE exchange_account SET last_sync = NULL;
       PRAGMA foreign_keys=ON;
     `);
     this.scheduleSave();

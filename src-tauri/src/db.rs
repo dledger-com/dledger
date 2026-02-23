@@ -1216,6 +1216,7 @@ impl Storage for SqliteStorage {
              DELETE FROM currency;
              DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;
+             UPDATE exchange_account SET last_sync = NULL;
              PRAGMA foreign_keys=ON;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
