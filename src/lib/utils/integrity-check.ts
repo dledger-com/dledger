@@ -17,6 +17,10 @@ export async function runIntegrityChecks(backend: Backend): Promise<IntegrityIss
     const today = new Date().toISOString().slice(0, 10);
     const tb = await backend.trialBalance(today);
 
+    // Build a map of currency → decimal_places for tolerance checks
+    const currencies = await backend.listCurrencies();
+    const dpMap = new Map(currencies.map((c) => [c.code, c.decimal_places]));
+
     for (const debit of tb.total_debits) {
       const credit = tb.total_credits.find((c) => c.currency === debit.currency);
       if (!credit) {
@@ -28,7 +32,9 @@ export async function runIntegrityChecks(backend: Backend): Promise<IntegrityIss
         continue;
       }
       const diff = new Decimal(debit.amount).minus(new Decimal(credit.amount));
-      if (!diff.isZero()) {
+      const dp = dpMap.get(debit.currency) ?? 2;
+      const tolerance = new Decimal(10).pow(-dp);
+      if (diff.abs().greaterThan(tolerance)) {
         issues.push({
           severity: "error",
           category: "Trial Balance",
