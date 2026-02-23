@@ -84,6 +84,8 @@ export interface FrenchTaxReport {
   /** Tax at PFU 31.4% (social contributions included). */
   taxDuePFU314: string;
   warnings: string[];
+  /** Structured missing rate data for inline backfill. */
+  missingCurrencyDates: { currency: string; date: string }[];
 }
 
 // ---------- Internal types ----------
@@ -180,9 +182,10 @@ export async function computePortfolioValueEUR(
   rateCache: ExchangeRateCache,
   date: string,
   baseCurrency: string,
-): Promise<{ value: Decimal; missingRates: string[] }> {
+): Promise<{ value: Decimal; missingRates: string[]; missingCurrencyDates: { currency: string; date: string }[] }> {
   let value = new Decimal(0);
   const missingRates: string[] = [];
+  const missingCurrencyDates: { currency: string; date: string }[] = [];
 
   for (const line of trialBalance.lines) {
     // Only count asset-type accounts
@@ -203,11 +206,12 @@ export async function computePortfolioValueEUR(
         value = value.plus(amount.times(new Decimal(rateStr)));
       } else {
         missingRates.push(`${bal.currency}/${baseCurrency} on ${date}`);
+        missingCurrencyDates.push({ currency: bal.currency, date });
       }
     }
   }
 
-  return { value, missingRates };
+  return { value, missingRates, missingCurrencyDates };
 }
 
 // ---------- Main algorithm ----------
@@ -221,6 +225,7 @@ export async function computeFrenchTaxReport(
     ? new Set(opts.fiatCurrencies)
     : new Set(DEFAULT_FIAT_CURRENCIES);
   const warnings: string[] = [];
+  const missingCurrencyDates: { currency: string; date: string }[] = [];
 
   // 1. Load all accounts into a map
   const accounts = await backend.listAccounts();
@@ -277,6 +282,7 @@ export async function computeFrenchTaxReport(
           fiatEUR = fiatEUR.times(new Decimal(rate));
         } else {
           warnings.push(`Missing ${fiatCurrencyUsed}/${baseCurrency} rate on ${entry.date} for acquisition`);
+          missingCurrencyDates.push({ currency: fiatCurrencyUsed, date: entry.date });
         }
       }
 
@@ -301,17 +307,19 @@ export async function computeFrenchTaxReport(
           C = C.times(new Decimal(rate));
         } else {
           warnings.push(`Missing ${fiatCurrencyUsed}/${baseCurrency} rate on ${entry.date} for disposition`);
+          missingCurrencyDates.push({ currency: fiatCurrencyUsed, date: entry.date });
         }
       }
 
       // Get portfolio value V at moment of sale
       const tb = await getTrialBalance(entry.date);
-      const { value: V, missingRates } = await computePortfolioValueEUR(
+      const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
         tb, fiatSet, rateCache, entry.date, baseCurrency,
       );
       for (const mr of missingRates) {
         warnings.push(`Missing rate: ${mr}`);
       }
+      missingCurrencyDates.push(...pvMissing);
 
       // Only record dispositions within the tax year
       if (entry.date >= yearStart) {
@@ -366,12 +374,13 @@ export async function computeFrenchTaxReport(
   // 5. Compute end-of-year portfolio value
   const yearEndDate = `${opts.taxYear + 1}-01-01`; // trial balance as-of is exclusive
   const yearEndTb = await getTrialBalance(yearEndDate);
-  const { value: yearEndV, missingRates: yearEndMissing } = await computePortfolioValueEUR(
+  const { value: yearEndV, missingRates: yearEndMissing, missingCurrencyDates: yearEndMissingCd } = await computePortfolioValueEUR(
     yearEndTb, fiatSet, rateCache, yearEnd, baseCurrency,
   );
   for (const mr of yearEndMissing) {
     warnings.push(`Missing rate for year-end portfolio: ${mr}`);
   }
+  missingCurrencyDates.push(...yearEndMissingCd);
 
   // 6. Build report
   const isPositive = totalPlusValue.gte(0);
@@ -396,6 +405,7 @@ export async function computeFrenchTaxReport(
       ? totalPlusValue.times(new Decimal("0.314")).toFixed(2)
       : "0.00",
     warnings,
+    missingCurrencyDates,
   };
 }
 

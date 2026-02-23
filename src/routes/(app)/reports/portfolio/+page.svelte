@@ -14,12 +14,18 @@
   import { exportPortfolioCsv } from "$lib/utils/csv-export.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
+  import {
+    findMissingRates,
+    type HistoricalRateRequest,
+  } from "$lib/exchange-rate-historical.js";
+  import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
   let loading = $state(false);
   let report = $state<PortfolioReport | null>(null);
   let error = $state<string | null>(null);
+  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
 
   function chainName(chainId: number): string {
     const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
@@ -30,6 +36,7 @@
     loading = true;
     error = null;
     report = null;
+    missingRateRequests = [];
     try {
       const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
       report = await computePortfolioReport(
@@ -38,6 +45,14 @@
         asOf,
         hidden,
       );
+      if (report.missingCurrencies.length > 0) {
+        const currencyDates = report.missingCurrencies.map((currency) => ({ currency, date: asOf }));
+        missingRateRequests = await findMissingRates(
+          getBackend(),
+          settings.currency,
+          currencyDates,
+        );
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -74,6 +89,8 @@
       <span class="text-sm text-muted-foreground">Show Hidden</span>
     </div>
   </div>
+
+  <MissingRateBanner requests={missingRateRequests} onFetched={generate} />
 
   {#if loading}
     <Card.Root><Card.Content class="py-4">

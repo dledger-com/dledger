@@ -15,13 +15,10 @@
   import { getBackend } from "$lib/backend.js";
   import {
     findMissingRates,
-    fetchHistoricalRates,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
-  import { markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
-  import { toast } from "svelte-sonner";
-  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
   import { exportIncomeStatementCsv } from "$lib/utils/csv-export.js";
+  import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import Download from "lucide-svelte/icons/download";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection } from "$lib/types/index.js";
@@ -37,7 +34,6 @@
   let expensesSummary = $state<ConvertedSummary | null>(null);
   let netIncomeSummary = $state<ConvertedSummary | null>(null);
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
-  let fetchingRates = $state(false);
 
   async function generate() {
     await store.loadIncomeStatement(fromDate, toDate);
@@ -79,43 +75,6 @@
       expensesSummary = null;
       netIncomeSummary = null;
       missingRateRequests = [];
-    }
-  }
-
-  async function handleFetchMissingRates() {
-    fetchingRates = true;
-    try {
-      const result = await fetchHistoricalRates(
-        getBackend(),
-        missingRateRequests,
-        {
-          baseCurrency: settings.currency,
-          coingeckoApiKey: settings.coingeckoApiKey,
-          finnhubApiKey: settings.finnhubApiKey,
-        },
-      );
-      missingRateRequests = [];
-
-      // Auto-hide currencies that failed all sources
-      if (result.failedCurrencies.length > 0) {
-        const backend = getBackend();
-        for (const code of result.failedCurrencies) {
-          await backend.setCurrencyRateSource(code, "none", "auto");
-          await markCurrencyHidden(backend, code);
-        }
-        showAutoHideToast(result.failedCurrencies);
-      }
-
-      await runConversion();
-      if (result.failedCurrencies.length > 0) {
-        toast.success(`Fetched ${result.fetched} rate(s), auto-hid ${result.failedCurrencies.length} currency(ies)`);
-      } else {
-        toast.success("Missing rates fetched");
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      fetchingRates = false;
     }
   }
 
@@ -163,18 +122,7 @@
     {/if}
   </div>
 
-  {#if missingRateRequests.length > 0}
-    <Card.Root class="border-amber-200 dark:border-amber-800">
-      <Card.Content class="flex items-center justify-between py-3">
-        <span class="text-sm">
-          Missing rates for {missingRateRequests.map((r) => r.currency).join(", ")}.
-        </span>
-        <Button size="sm" onclick={handleFetchMissingRates} disabled={fetchingRates}>
-          {fetchingRates ? "Fetching..." : "Fetch Missing Rates"}
-        </Button>
-      </Card.Content>
-    </Card.Root>
-  {/if}
+  <MissingRateBanner requests={missingRateRequests} onFetched={runConversion} />
 
   {#if store.loading}
     <Card.Root><Card.Content class="py-4">

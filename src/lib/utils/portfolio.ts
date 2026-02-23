@@ -21,6 +21,7 @@ export interface PortfolioReport {
   base_currency: string;
   wallets: WalletSummary[];
   aggregate_total: string | null;
+  missingCurrencies: string[];
 }
 
 export async function computePortfolioReport(
@@ -34,6 +35,7 @@ export async function computePortfolioReport(
   const cache = new ExchangeRateCache(backend);
 
   const wallets: WalletSummary[] = [];
+  const missingCurrencySet = new Set<string>();
 
   // Group etherscan accounts by label
   const byLabel = new Map<string, EtherscanAccount[]>();
@@ -76,6 +78,8 @@ export async function computePortfolioReport(
             const rate = await cache.get(bal.currency, baseCurrency, asOf);
             if (rate) {
               baseValue = (amount * parseFloat(rate)).toFixed(2);
+            } else {
+              missingCurrencySet.add(bal.currency);
             }
           }
 
@@ -132,5 +136,6 @@ export async function computePortfolioReport(
     base_currency: baseCurrency,
     wallets: wallets.sort((a, b) => a.label.localeCompare(b.label)),
     aggregate_total: aggregateTotal,
+    missingCurrencies: [...missingCurrencySet],
   };
 }

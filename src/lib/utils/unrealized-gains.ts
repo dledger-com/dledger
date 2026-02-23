@@ -13,10 +13,11 @@ export interface UnrealizedGainLossOptions {
 export async function computeUnrealizedGainLoss(
   backend: Backend,
   opts: UnrealizedGainLossOptions,
-): Promise<{ report: UnrealizedGainLossReport; missingRates: string[] }> {
+): Promise<{ report: UnrealizedGainLossReport; missingRates: string[]; missingCurrencyDates: { currency: string; date: string }[] }> {
   const lots = await backend.listOpenLots();
   const lines: UnrealizedGainLossLine[] = [];
   const missingRates: string[] = [];
+  const missingCurrencyDates: { currency: string; date: string }[] = [];
   let totalUnrealized = 0;
 
   // Group by currency to batch rate lookups
@@ -41,6 +42,7 @@ export async function computeUnrealizedGainLoss(
         rate = parseFloat(rateStr);
       } else {
         missingRates.push(currency);
+        missingCurrencyDates.push({ currency, date: opts.asOfDate });
       }
     }
 
@@ -68,6 +70,7 @@ export async function computeUnrealizedGainLoss(
           costBasisInBase = totalCostBasis;
           if (!missingRates.includes(lot.cost_basis_currency)) {
             missingRates.push(lot.cost_basis_currency);
+            missingCurrencyDates.push({ currency: lot.cost_basis_currency, date: opts.asOfDate });
           }
         }
       }
@@ -106,5 +109,6 @@ export async function computeUnrealizedGainLoss(
       base_currency: opts.baseCurrency,
     },
     missingRates,
+    missingCurrencyDates,
   };
 }

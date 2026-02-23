@@ -11,6 +11,11 @@
   import { getBackend } from "$lib/backend.js";
   import { computeUnrealizedGainLoss } from "$lib/utils/unrealized-gains.js";
   import { exportUnrealizedGainLossCsv } from "$lib/utils/csv-export.js";
+  import {
+    findMissingRates,
+    type HistoricalRateRequest,
+  } from "$lib/exchange-rate-historical.js";
+  import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import type { UnrealizedGainLossReport } from "$lib/types/index.js";
   import Download from "lucide-svelte/icons/download";
   import ListFilter from "$lib/components/ListFilter.svelte";
@@ -19,7 +24,7 @@
   let asOf = $state(new Date().toISOString().slice(0, 10));
   let loading = $state(false);
   let report = $state<UnrealizedGainLossReport | null>(null);
-  let missingRates = $state<string[]>([]);
+  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
   let error = $state<string | null>(null);
   let filterProtocol = $state("");
   let searchTerm = $state("");
@@ -53,7 +58,7 @@
     loading = true;
     error = null;
     report = null;
-    missingRates = [];
+    missingRateRequests = [];
     filterProtocol = "";
     try {
       const result = await computeUnrealizedGainLoss(getBackend(), {
@@ -61,7 +66,13 @@
         asOfDate: asOf,
       });
       report = result.report;
-      missingRates = result.missingRates;
+      if (result.missingCurrencyDates.length > 0) {
+        missingRateRequests = await findMissingRates(
+          getBackend(),
+          settings.currency,
+          result.missingCurrencyDates,
+        );
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -110,18 +121,7 @@
     <ListFilter bind:value={searchTerm} placeholder="Filter positions..." />
   </div>
 
-  {#if missingRates.length > 0}
-    <Card.Root class="border-amber-200 dark:border-amber-800">
-      <Card.Content class="flex items-center justify-between py-3">
-        <span class="text-sm">
-          Missing exchange rates for: {missingRates.join(", ")}. Values may be incomplete.
-        </span>
-        <Button size="sm" variant="outline" href="/sources">
-          Fetch Rates
-        </Button>
-      </Card.Content>
-    </Card.Root>
-  {/if}
+  <MissingRateBanner requests={missingRateRequests} onFetched={generate} />
 
   {#if loading}
     <Card.Root><Card.Content class="py-4">

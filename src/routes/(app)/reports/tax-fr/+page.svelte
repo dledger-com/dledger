@@ -11,6 +11,11 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { computeFrenchTaxReport, type FrenchTaxReport } from "$lib/utils/french-tax.js";
   import { exportFrenchTaxCsv } from "$lib/utils/csv-export.js";
+  import {
+    findMissingRates,
+    type HistoricalRateRequest,
+  } from "$lib/exchange-rate-historical.js";
+  import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import Download from "lucide-svelte/icons/download";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
@@ -23,6 +28,7 @@
   let loading = $state(false);
   let report = $state<FrenchTaxReport | null>(null);
   let error = $state<string | null>(null);
+  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
 
   const totalPV = $derived(report ? parseFloat(report.totalPlusValue) : 0);
   const totalFiat = $derived(report ? parseFloat(report.totalFiatReceived) : 0);
@@ -33,6 +39,7 @@
     loading = true;
     error = null;
     report = null;
+    missingRateRequests = [];
 
     // Save prior acquisition cost to settings
     settings.update({
@@ -48,6 +55,13 @@
         priorAcquisitionCost,
         fiatCurrencies: settings.settings.frenchTax?.fiatCurrencies,
       });
+      if (report.missingCurrencyDates.length > 0) {
+        missingRateRequests = await findMissingRates(
+          getBackend(),
+          "EUR",
+          report.missingCurrencyDates,
+        );
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -293,6 +307,8 @@
         </Collapsible.Content>
       </Card.Root>
     </Collapsible.Root>
+
+    <MissingRateBanner requests={missingRateRequests} onFetched={generate} baseCurrency="EUR" />
 
     <!-- Warnings -->
     {#if report.warnings.length > 0}
