@@ -274,7 +274,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-4xl max-h-[90vh] overflow-y-auto">
+  <Dialog.Content class="w-fit max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
         {#if step === 1}
