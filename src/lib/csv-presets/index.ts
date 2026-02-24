@@ -6,6 +6,17 @@ import {
   binanceTradePreset,
   coinbaseTransactionsPreset,
   bybitTradePreset,
+  bisqPreset,
+  bitfinexPreset,
+  bitstampPreset,
+  bittrexPreset,
+  coinlistPreset,
+  cryptoComAppPreset,
+  cryptoComExchangePreset,
+  gateioPreset,
+  nexoPreset,
+  poloniexPreset,
+  yieldAppPreset,
 } from "./presets/index.js";
 
 export { CsvPresetRegistry } from "./registry.js";
@@ -27,6 +38,17 @@ export function getDefaultPresetRegistry(): CsvPresetRegistry {
   reg.register(binanceTradePreset);
   reg.register(coinbaseTransactionsPreset);
   reg.register(bybitTradePreset);
+  reg.register(bisqPreset);
+  reg.register(bitfinexPreset);
+  reg.register(bitstampPreset);
+  reg.register(bittrexPreset);
+  reg.register(coinlistPreset);
+  reg.register(cryptoComAppPreset);
+  reg.register(cryptoComExchangePreset);
+  reg.register(gateioPreset);
+  reg.register(nexoPreset);
+  reg.register(poloniexPreset);
+  reg.register(yieldAppPreset);
   reg.register(revolutPreset);
   reg.register(bankStatementPreset); // lowest priority (score 40-60)
   _defaultRegistry = reg;

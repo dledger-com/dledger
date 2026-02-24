@@ -1,30 +1,10 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { parsePair } from "./shared.js";
 
 // Binance trade history headers (spot trade)
 const REQUIRED_HEADERS_V1 = ["Date(UTC)", "Pair", "Side", "Price", "Filled", "Total", "Fee", "Fee Coin"];
 const REQUIRED_HEADERS_V2 = ["Date(UTC)", "Market", "Side", "Price", "Amount", "Total", "Fee", "Fee Coin"];
-
-function parsePair(pair: string): { base: string; quote: string } | null {
-  // Common quote currencies (longest first for matching)
-  const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "BTC", "ETH", "BNB", "EUR", "GBP", "USD", "TRY", "AUD", "BRL"];
-  const upper = pair.trim().toUpperCase();
-
-  // Try slash-separated first: "BTC/USDT"
-  if (upper.includes("/")) {
-    const [base, quote] = upper.split("/");
-    return { base: base.trim(), quote: quote.trim() };
-  }
-
-  // Try matching known quote currencies
-  for (const q of quotes) {
-    if (upper.endsWith(q) && upper.length > q.length) {
-      return { base: upper.slice(0, -q.length), quote: q };
-    }
-  }
-
-  return null;
-}
 
 export const binanceTradePreset: CsvPreset = {
   id: "binance-trade",

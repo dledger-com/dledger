@@ -1,27 +1,9 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { parsePair } from "./shared.js";
 
 const REQUIRED_HEADERS_V1 = ["Date", "Pair", "Side", "Avg. Price", "Filled", "Total", "Fee"];
 const REQUIRED_HEADERS_V2 = ["Date", "Symbol", "Side", "Avg. Price", "Qty", "Total", "Fee"];
-
-// Shared pair parser with Binance
-function parsePair(pair: string): { base: string; quote: string } | null {
-  const quotes = ["USDT", "USDC", "BUSD", "BTC", "ETH", "EUR", "USD"];
-  const upper = pair.trim().toUpperCase();
-
-  if (upper.includes("/")) {
-    const [base, quote] = upper.split("/");
-    return { base: base.trim(), quote: quote.trim() };
-  }
-
-  for (const q of quotes) {
-    if (upper.endsWith(q) && upper.length > q.length) {
-      return { base: upper.slice(0, -q.length), quote: q };
-    }
-  }
-
-  return null;
-}
 
 export const bybitTradePreset: CsvPreset = {
   id: "bybit-trade",
