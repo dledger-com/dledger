@@ -30,6 +30,7 @@
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
   import Trash2 from "lucide-svelte/icons/trash-2";
+  import GripVertical from "lucide-svelte/icons/grip-vertical";
   import Plus from "lucide-svelte/icons/plus";
   import Check from "lucide-svelte/icons/check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
@@ -233,6 +234,18 @@
     } finally {
       importing = false;
     }
+  }
+
+  let dragIdx = $state<number | null>(null);
+  let dropIdx = $state<number | null>(null);
+
+  function moveRule(from: number, to: number) {
+    if (from === to) return;
+    const updated = [...rules];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    rules = updated;
+    saveRules();
   }
 
   function addRule() {
@@ -583,9 +596,38 @@
               Match keywords in descriptions to auto-assign counterparty accounts. First match wins.
             </p>
             {#if rules.length > 0}
-              <div class="space-y-1 max-h-40 overflow-y-auto">
-                {#each rules as rule}
-                  <div class="flex items-center gap-2 text-sm">
+              <div class="space-y-0 max-h-40 overflow-y-auto">
+                {#each rules as rule, index}
+                  <div
+                    role="listitem"
+                    class="flex items-center gap-2 text-sm py-1 {dragIdx === index ? 'opacity-50' : ''}"
+                    style={dropIdx === index ? "border-top: 2px solid hsl(var(--primary))" : ""}
+                    draggable="true"
+                    ondragstart={(e) => {
+                      dragIdx = index;
+                      if (e.dataTransfer) {
+                        e.dataTransfer.effectAllowed = "move";
+                      }
+                    }}
+                    ondragover={(e) => {
+                      e.preventDefault();
+                      dropIdx = index;
+                    }}
+                    ondragleave={() => {
+                      if (dropIdx === index) dropIdx = null;
+                    }}
+                    ondrop={(e) => {
+                      e.preventDefault();
+                      if (dragIdx !== null) moveRule(dragIdx, index);
+                      dragIdx = null;
+                      dropIdx = null;
+                    }}
+                    ondragend={() => {
+                      dragIdx = null;
+                      dropIdx = null;
+                    }}
+                  >
+                    <GripVertical class="h-3 w-3 text-muted-foreground cursor-grab shrink-0" />
                     <Badge variant="outline" class="font-mono">{rule.pattern}</Badge>
                     <span class="text-muted-foreground">&rarr;</span>
                     <span class="font-mono text-xs">{rule.account}</span>
