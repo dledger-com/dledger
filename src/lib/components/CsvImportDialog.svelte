@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -263,9 +264,11 @@
   // Auto-advance to step 2 when opened with initial content (drag-and-drop)
   $effect(() => {
     if (open && initialContent) {
+      // Use untrack to avoid infinite loop: handleParse writes reactive state
+      // that this effect would otherwise re-track
       rawContent = initialContent;
       fileName = initialFileName;
-      handleParse();
+      untrack(() => handleParse());
     }
   });
 </script>
