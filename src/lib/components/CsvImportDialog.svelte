@@ -65,6 +65,7 @@
   // -- Step 2 state --
   let usePreset = $state(false);
   let selectedPresetId = $state("");
+  let selectedPreset = $derived(presetResults.find(pr => pr.preset.id === selectedPresetId) ?? bestPreset);
   let delimiter = $state(",");
   let dateFormat = $state<DateFormatId>("YYYY-MM-DD");
   let dateColumn = $state("");
@@ -338,49 +339,36 @@
       <div class="space-y-4">
         <!-- Preset detection banner -->
         {#if bestPreset}
-          <div class="rounded-md border bg-muted/50 p-4">
+          <div class="rounded-md border bg-muted/50 p-4 space-y-3">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium">
-                  This looks like a <strong>{bestPreset.preset.name}</strong>
-                  <Badge variant="secondary" class="ml-1">{bestPreset.confidence}% confidence</Badge>
+                  Detected format: <strong>{selectedPreset?.preset.name ?? bestPreset.preset.name}</strong>
+                  <Badge variant="secondary" class="ml-1">{selectedPreset?.confidence ?? bestPreset.confidence}% confidence</Badge>
                 </p>
-                <p class="text-xs text-muted-foreground mt-1">{bestPreset.preset.description}</p>
-              </div>
-              <div class="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={usePreset ? "default" : "outline"}
-                  onclick={() => { usePreset = true; selectedPresetId = bestPreset!.preset.id; }}
-                >
-                  Use Preset
-                </Button>
-                <Button
-                  size="sm"
-                  variant={!usePreset ? "default" : "outline"}
-                  onclick={() => { usePreset = false; }}
-                >
-                  Manual Mapping
-                </Button>
+                <p class="text-xs text-muted-foreground mt-1">{selectedPreset?.preset.description ?? bestPreset.preset.description}</p>
               </div>
             </div>
-            {#if presetResults.length > 1}
-              <details class="mt-2">
-                <summary class="text-xs text-muted-foreground cursor-pointer">Other detected formats</summary>
-                <div class="flex flex-wrap gap-1 mt-1">
-                  {#each presetResults.slice(1) as pr}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      class="text-xs h-6"
-                      onclick={() => { usePreset = true; selectedPresetId = pr.preset.id; }}
-                    >
-                      {pr.preset.name} ({pr.confidence}%)
-                    </Button>
-                  {/each}
-                </div>
-              </details>
-            {/if}
+            <div class="flex flex-wrap gap-1.5">
+              {#each presetResults as pr}
+                <Button
+                  size="sm"
+                  variant={usePreset && selectedPresetId === pr.preset.id ? "default" : "outline"}
+                  class="text-xs h-7"
+                  onclick={() => { usePreset = true; selectedPresetId = pr.preset.id; }}
+                >
+                  {pr.preset.name} ({pr.confidence}%)
+                </Button>
+              {/each}
+              <Button
+                size="sm"
+                variant={!usePreset ? "default" : "outline"}
+                class="text-xs h-7"
+                onclick={() => { usePreset = false; }}
+              >
+                Manual Mapping
+              </Button>
+            </div>
           </div>
         {/if}
 
