@@ -59,6 +59,45 @@ function parseCsvRow(line: string, delimiter: string): string[] {
   return fields;
 }
 
+export function detectDelimiter(content: string): string {
+  // Sample the first few non-empty lines
+  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(0, 10);
+  if (lines.length === 0) return ",";
+
+  const candidates = [",", ";", "\t", "|"];
+  let bestDelim = ",";
+  let bestScore = 0;
+
+  for (const delim of candidates) {
+    // Count fields per line, check consistency
+    const counts = lines.map((l) => {
+      // Don't count delimiters inside quotes
+      let inQuotes = false;
+      let count = 0;
+      for (const ch of l) {
+        if (ch === '"') inQuotes = !inQuotes;
+        else if (ch === delim && !inQuotes) count++;
+      }
+      return count;
+    });
+
+    // Need at least 1 delimiter occurrence
+    if (counts[0] === 0) continue;
+
+    // Score: how many lines have the same count as the first line (consistency)
+    const refCount = counts[0];
+    const consistent = counts.filter((c) => c === refCount).length;
+    const score = consistent * refCount; // prefer more fields AND more consistency
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestDelim = delim;
+    }
+  }
+
+  return bestDelim;
+}
+
 export function parseCsv(content: string, delimiter = ","): { headers: string[]; rows: string[][] } {
   const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length === 0) return { headers: [], rows: [] };

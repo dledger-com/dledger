@@ -10,7 +10,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
-  import { parseCsv } from "$lib/utils/csv-import.js";
+  import { parseCsv, detectDelimiter } from "$lib/utils/csv-import.js";
   import type { CsvImportResult } from "$lib/utils/csv-import.js";
   import {
     getDefaultPresetRegistry,
@@ -20,6 +20,7 @@
     DATE_FORMATS,
     setBankStatementRules,
     setRevolutRules,
+    setLaBanquePostaleRules,
     type DateFormatId,
     type ColumnDetection,
     type PresetDetectionResult,
@@ -102,6 +103,7 @@
     settings.update({ csvCategorizationRules: rules });
     setBankStatementRules(rules);
     setRevolutRules(rules);
+    setLaBanquePostaleRules(rules);
   }
 
   function handleFileChange(e: Event) {
@@ -122,6 +124,9 @@
       return;
     }
 
+    // Auto-detect delimiter from content
+    delimiter = detectDelimiter(rawContent);
+
     const parsed = parseCsv(rawContent, delimiter);
     headers = parsed.headers;
     rows = parsed.rows;
@@ -138,6 +143,7 @@
     // Detect presets
     setBankStatementRules(rules);
     setRevolutRules(rules);
+    setLaBanquePostaleRules(rules);
     presetResults = presetRegistry.detectAll(headers, sampleRows);
     bestPreset = presetResults.length > 0 && presetResults[0].confidence >= 50
       ? presetResults[0]
