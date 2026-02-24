@@ -21,6 +21,7 @@
     setBankStatementRules,
     setRevolutRules,
     setLaBanquePostaleRules,
+    setN26Rules,
     type DateFormatId,
     type ColumnDetection,
     type PresetDetectionResult,
@@ -110,6 +111,7 @@
     setBankStatementRules(rules);
     setRevolutRules(rules);
     setLaBanquePostaleRules(rules);
+    setN26Rules(rules);
   }
 
   function handleFileChange(e: Event) {

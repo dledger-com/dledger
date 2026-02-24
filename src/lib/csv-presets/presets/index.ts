@@ -16,3 +16,4 @@ export { nexoPreset } from "./nexo.js";
 export { poloniexPreset } from "./poloniex.js";
 export { yieldAppPreset } from "./yield-app.js";
 export { laBanquePostalePreset, setLaBanquePostaleRules } from "./la-banque-postale.js";
+export { n26Preset, setN26Rules } from "./n26.js";

@@ -18,6 +18,7 @@ import {
   poloniexPreset,
   yieldAppPreset,
   laBanquePostalePreset,
+  n26Preset,
 } from "./presets/index.js";
 
 export { CsvPresetRegistry } from "./registry.js";
@@ -30,6 +31,7 @@ export type { CsvPreset, CsvRecord, CsvFileHeader, PresetDetectionResult } from 
 export { setBankStatementRules } from "./presets/bank-statement.js";
 export { setRevolutRules } from "./presets/revolut.js";
 export { setLaBanquePostaleRules } from "./presets/la-banque-postale.js";
+export { setN26Rules } from "./presets/n26.js";
 
 let _defaultRegistry: CsvPresetRegistry | null = null;
 
@@ -52,6 +54,7 @@ export function getDefaultPresetRegistry(): CsvPresetRegistry {
   reg.register(poloniexPreset);
   reg.register(yieldAppPreset);
   reg.register(laBanquePostalePreset);
+  reg.register(n26Preset);
   reg.register(revolutPreset);
   reg.register(bankStatementPreset); // lowest priority (score 40-60)
   _defaultRegistry = reg;
