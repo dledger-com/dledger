@@ -411,7 +411,14 @@ export class SqlJsBackend implements Backend {
       currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
       PRIMARY KEY (currency, chain)
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (12)");
+    // Account metadata (v14)
+    db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
+      account_id TEXT NOT NULL REFERENCES account(id),
+      key TEXT NOT NULL, value TEXT NOT NULL,
+      PRIMARY KEY (account_id, key)
+    )`);
+    db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
+    db.exec("INSERT INTO schema_version (version) VALUES (14)");
     return backend;
   }
 
@@ -430,7 +437,13 @@ export class SqlJsBackend implements Backend {
         currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
         PRIMARY KEY (currency, chain)
       )`);
-      db.exec("INSERT INTO schema_version (version) VALUES (12)");
+      db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
+        account_id TEXT NOT NULL REFERENCES account(id),
+        key TEXT NOT NULL, value TEXT NOT NULL,
+        PRIMARY KEY (account_id, key)
+      )`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
+      db.exec("INSERT INTO schema_version (version) VALUES (14)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -576,9 +589,17 @@ export class SqlJsBackend implements Backend {
         if (currentVersion < 13) {
           db.exec("ALTER TABLE exchange_account ADD COLUMN passphrase TEXT");
         }
-        if (currentVersion < 13) {
+        if (currentVersion < 14) {
+          db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
+            account_id TEXT NOT NULL REFERENCES account(id),
+            key TEXT NOT NULL, value TEXT NOT NULL,
+            PRIMARY KEY (account_id, key)
+          )`);
+          db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
+        }
+        if (currentVersion < 14) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (13)");
+          db.exec("INSERT INTO schema_version (version) VALUES (14)");
         }
       }
     }
@@ -2125,6 +2146,31 @@ export class SqlJsBackend implements Backend {
     return result;
   }
 
+  // ---- Backend: Account Metadata ----
+
+  async setAccountMetadata(accountId: string, entries: Record<string, string>): Promise<void> {
+    for (const [key, value] of Object.entries(entries)) {
+      this.run(
+        "INSERT OR REPLACE INTO account_metadata (account_id, key, value) VALUES (?, ?, ?)",
+        [accountId, key, value],
+      );
+    }
+    this.scheduleSave();
+  }
+
+  async getAccountMetadata(accountId: string): Promise<Record<string, string>> {
+    const rows = this.query(
+      "SELECT key, value FROM account_metadata WHERE account_id = ? ORDER BY key",
+      [accountId],
+      (row) => ({ key: row.key as string, value: row.value as string }),
+    );
+    const result: Record<string, string> = {};
+    for (const { key, value } of rows) {
+      result[key] = value;
+    }
+    return result;
+  }
+
   // ---- Backend: Metadata query ----
 
   async queryEntriesByMetadata(key: string, value: string): Promise<string[]> {
@@ -2639,6 +2685,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM budget;
       DELETE FROM recurring_template;
       DELETE FROM currency_token_address;
+      DELETE FROM account_metadata;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM currency;
@@ -2665,6 +2712,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM budget;
       DELETE FROM recurring_template;
       DELETE FROM currency_token_address;
+      DELETE FROM account_metadata;
       DELETE FROM account_closure;
       DELETE FROM account;
       DELETE FROM exchange_account;

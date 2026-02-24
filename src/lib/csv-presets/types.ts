@@ -8,6 +8,14 @@ export interface CsvRecord {
   sourceKey?: string;
 }
 
+export interface CsvFileHeader {
+  mainAccount?: string;
+  accountMetadata?: Record<string, string>;
+  balanceDate?: string;
+  balanceAmount?: string;
+  balanceCurrency?: string;
+}
+
 export interface CsvPreset {
   id: string;
   name: string;
@@ -15,6 +23,7 @@ export interface CsvPreset {
   detect(headers: string[], sampleRows: string[][]): number; // 0-100
   getDefaultMapping(headers: string[]): Partial<CsvImportOptions>;
   transform(headers: string[], rows: string[][]): CsvRecord[] | null;
+  parseFileHeader?(headers: string[], rows: string[][]): CsvFileHeader | null;
 }
 
 export interface PresetDetectionResult {

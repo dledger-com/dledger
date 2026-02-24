@@ -653,6 +653,15 @@ export async function exportLedger(backend: Backend): Promise<string> {
         ? `  ${acc.allowed_currencies.join(",")}`
         : "";
     out += `${acc.created_at} open ${acc.full_name}${commodities}\n`;
+    // Emit account metadata as comments
+    try {
+      const meta = await backend.getAccountMetadata(acc.id);
+      for (const [key, value] of Object.entries(meta)) {
+        out += `  ; ${key}: ${value}\n`;
+      }
+    } catch {
+      // Account metadata is optional, skip on error
+    }
   }
   out += "\n";
 

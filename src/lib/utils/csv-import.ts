@@ -25,6 +25,7 @@ export interface CsvImportResult {
   currencies_created: number;
   warnings: string[];
   transaction_currency_dates: [string, string][];
+  balance_assertion_created?: boolean;
 }
 
 function parseCsvRow(line: string, delimiter: string): string[] {
@@ -98,11 +99,12 @@ export function detectDelimiter(content: string): string {
   return bestDelim;
 }
 
-export function parseCsv(content: string, delimiter = ","): { headers: string[]; rows: string[][] } {
+export function parseCsv(content: string, delimiter = ",", skipLines = 0): { headers: string[]; rows: string[][] } {
   const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return { headers: [], rows: [] };
-  const headers = parseCsvRow(lines[0], delimiter);
-  const rows = lines.slice(1).map((l) => parseCsvRow(l, delimiter));
+  const effective = skipLines > 0 ? lines.slice(skipLines) : lines;
+  if (effective.length === 0) return { headers: [], rows: [] };
+  const headers = parseCsvRow(effective[0], delimiter);
+  const rows = effective.slice(1).map((l) => parseCsvRow(l, delimiter));
   return { headers, rows };
 }
 

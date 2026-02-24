@@ -26,7 +26,7 @@ export { parseAmount, detectNumberFormat } from "./parse-amount.js";
 export { detectColumns, type ColumnDetection } from "./detect.js";
 export { matchRule, type CsvCategorizationRule } from "./categorize.js";
 export { transformGeneric, importRecords, type TransformOptions, type TransformResult } from "./transform.js";
-export type { CsvPreset, CsvRecord, PresetDetectionResult } from "./types.js";
+export type { CsvPreset, CsvRecord, CsvFileHeader, PresetDetectionResult } from "./types.js";
 export { setBankStatementRules } from "./presets/bank-statement.js";
 export { setRevolutRules } from "./presets/revolut.js";
 export { setLaBanquePostaleRules } from "./presets/la-banque-postale.js";

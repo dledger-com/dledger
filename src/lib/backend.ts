@@ -131,6 +131,10 @@ export interface Backend {
   getMetadata(entryId: string): Promise<Record<string, string>>;
   queryEntriesByMetadata(key: string, value: string): Promise<string[]>;
 
+  // Account metadata
+  setAccountMetadata(accountId: string, entries: Record<string, string>): Promise<void>;
+  getAccountMetadata(accountId: string): Promise<Record<string, string>>;
+
   // Raw transactions
   storeRawTransaction(source: string, data: string): Promise<void>;
   getRawTransaction(source: string): Promise<string | null>;
@@ -356,6 +360,14 @@ class TauriBackend implements Backend {
 
   async queryEntriesByMetadata(key: string, value: string): Promise<string[]> {
     return this.invoke("query_entries_by_metadata", { key, value });
+  }
+
+  // Account metadata
+  async setAccountMetadata(accountId: string, entries: Record<string, string>): Promise<void> {
+    return this.invoke("set_account_metadata", { accountId, entries });
+  }
+  async getAccountMetadata(accountId: string): Promise<Record<string, string>> {
+    return this.invoke("get_account_metadata", { accountId });
   }
 
   // Raw transactions

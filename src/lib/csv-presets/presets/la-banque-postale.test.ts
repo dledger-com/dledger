@@ -82,9 +82,9 @@ describe("laBanquePostalePreset", () => {
       expect(records[1].lines[0].amount).toBe("5000");
     });
 
-    it("uses EUR currency and La Banque Postale account", () => {
+    it("uses EUR currency and LaBanquePostale account from preamble", () => {
       const records = laBanquePostalePreset.transform(metadataHeaders, rows)!;
-      expect(records[0].lines[0].account).toBe("Assets:La Banque Postale:EUR");
+      expect(records[0].lines[0].account).toBe("Assets:Bank:LaBanquePostale:CCP");
       expect(records[0].lines[0].currency).toBe("EUR");
     });
 
@@ -125,6 +125,55 @@ describe("laBanquePostalePreset", () => {
 
       const records = laBanquePostalePreset.transform(headers, rows);
       expect(records![0].lines[1].account).toBe("Expenses:Telecom");
+    });
+  });
+
+  describe("parseFileHeader", () => {
+    const metadataHeaders = ["Numéro Compte   ", "1234567X020"];
+    const preambleRows = [
+      ["Type         ", "CCP"],
+      ["Compte tenu en  ", "euros"],
+      ["Date            ", "24/02/2026"],
+      ["Solde (EUROS)   ", "707,39"],
+      [""],
+      ["Date", "Libellé", "Montant(EUROS)"],
+      ["16/02/2026", "PRELEVEMENT DE EXAMPLE TELCO", "-24,99"],
+    ];
+
+    it("extracts all fields from full preamble", () => {
+      const result = laBanquePostalePreset.parseFileHeader!(metadataHeaders, preambleRows);
+      expect(result).not.toBeNull();
+      expect(result!.accountMetadata).toEqual({ accountID: "1234567X020" });
+      expect(result!.mainAccount).toBe("Assets:Bank:LaBanquePostale:CCP");
+      expect(result!.balanceDate).toBe("2026-02-24");
+      expect(result!.balanceAmount).toBe("707.39");
+      expect(result!.balanceCurrency).toBe("EUR");
+    });
+
+    it("returns null for direct headers (no preamble)", () => {
+      const result = laBanquePostalePreset.parseFileHeader!(
+        ["Date", "Libellé", "Montant(EUROS)"],
+        [["16/02/2026", "PRELEVEMENT", "-24,99"]],
+      );
+      expect(result).toBeNull();
+    });
+
+    it("returns partial result when Solde line is missing", () => {
+      const partialRows = [
+        ["Type         ", "CCP"],
+        ["Compte tenu en  ", "euros"],
+        ["Date            ", "24/02/2026"],
+        [""],
+        ["Date", "Libellé", "Montant(EUROS)"],
+        ["16/02/2026", "PRELEVEMENT", "-24,99"],
+      ];
+      const result = laBanquePostalePreset.parseFileHeader!(metadataHeaders, partialRows);
+      expect(result).not.toBeNull();
+      expect(result!.accountMetadata).toEqual({ accountID: "1234567X020" });
+      expect(result!.mainAccount).toBe("Assets:Bank:LaBanquePostale:CCP");
+      expect(result!.balanceDate).toBe("2026-02-24");
+      expect(result!.balanceAmount).toBeUndefined();
+      expect(result!.balanceCurrency).toBe("EUR");
     });
   });
 

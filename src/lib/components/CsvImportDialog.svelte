@@ -25,6 +25,7 @@
     type ColumnDetection,
     type PresetDetectionResult,
     type CsvRecord,
+    type CsvFileHeader,
     type CsvCategorizationRule,
   } from "$lib/csv-presets/index.js";
   import Upload from "lucide-svelte/icons/upload";
@@ -82,6 +83,10 @@
   let mainAccount = $state("Assets:Bank:Import");
   let counterAccount = $state("Expenses:Uncategorized");
   let europeanNumbers = $state(false);
+  let skipLines = $state(0);
+
+  // -- File header (preset preamble) --
+  let fileHeader = $state<CsvFileHeader | null>(null);
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
@@ -174,13 +179,19 @@
       usePreset = true;
       selectedPresetId = bestPreset.preset.id;
       showRules = false;
+
+      // Extract file header metadata from preamble if preset supports it
+      if (bestPreset.preset.parseFileHeader) {
+        fileHeader = bestPreset.preset.parseFileHeader(headers, rows);
+        if (fileHeader?.mainAccount) mainAccount = fileHeader.mainAccount;
+      }
     }
 
     step = 2;
   }
 
   function handleReParse() {
-    const parsed = parseCsv(rawContent, delimiter);
+    const parsed = parseCsv(rawContent, delimiter, usePreset ? 0 : skipLines);
     headers = parsed.headers;
     rows = parsed.rows;
   }
@@ -191,6 +202,15 @@
       if (preset) {
         const records = preset.transform(headers, rows);
         if (records) {
+          // Apply main account override if user changed it
+          const defaultMainAccount = fileHeader?.mainAccount;
+          if (defaultMainAccount && mainAccount !== defaultMainAccount) {
+            for (const rec of records) {
+              for (const line of rec.lines) {
+                if (line.account === defaultMainAccount) line.account = mainAccount;
+              }
+            }
+          }
           previewRecords = records;
           previewWarnings = [];
           step = 3;
@@ -226,8 +246,46 @@
     importing = true;
     importResult = null;
     try {
+      const backend = getBackend();
       const presetId = usePreset && selectedPresetId ? selectedPresetId : undefined;
-      importResult = await importRecords(getBackend(), previewRecords, presetId);
+      const result = await importRecords(backend, previewRecords, presetId);
+
+      // Store account metadata from file header if available
+      if (fileHeader?.accountMetadata && mainAccount) {
+        try {
+          const accounts = await backend.listAccounts();
+          const acct = accounts.find((a) => a.full_name === mainAccount);
+          if (acct) {
+            await backend.setAccountMetadata(acct.id, fileHeader.accountMetadata);
+          }
+        } catch {
+          // Account metadata is non-critical
+        }
+      }
+
+      // Create balance assertion from file header if available
+      if (fileHeader?.balanceDate && fileHeader?.balanceAmount && fileHeader?.balanceCurrency) {
+        try {
+          const accounts = await backend.listAccounts();
+          const acct = accounts.find((a) => a.full_name === mainAccount);
+          if (acct) {
+            await backend.createBalanceAssertion({
+              id: uuidv7(),
+              account_id: acct.id,
+              date: fileHeader.balanceDate,
+              currency: fileHeader.balanceCurrency,
+              expected_balance: fileHeader.balanceAmount,
+              is_passing: true,
+              actual_balance: null,
+            });
+            result.balance_assertion_created = true;
+          }
+        } catch {
+          // Balance assertion is non-critical
+        }
+      }
+
+      importResult = result;
       toast.success(`Imported ${importResult.entries_created} entries`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -272,6 +330,8 @@
     bestPreset = null;
     usePreset = false;
     selectedPresetId = "";
+    fileHeader = null;
+    skipLines = 0;
     previewRecords = [];
     previewWarnings = [];
     importResult = null;
@@ -375,7 +435,16 @@
                   size="sm"
                   variant={usePreset && selectedPresetId === pr.preset.id ? "default" : "outline"}
                   class="text-xs h-7"
-                  onclick={() => { usePreset = true; selectedPresetId = pr.preset.id; }}
+                  onclick={() => {
+                    usePreset = true;
+                    selectedPresetId = pr.preset.id;
+                    if (pr.preset.parseFileHeader) {
+                      fileHeader = pr.preset.parseFileHeader(headers, rows);
+                      if (fileHeader?.mainAccount) mainAccount = fileHeader.mainAccount;
+                    } else {
+                      fileHeader = null;
+                    }
+                  }}
                 >
                   {pr.preset.name} ({pr.confidence}%)
                 </Button>
@@ -392,9 +461,60 @@
           </div>
         {/if}
 
+        <!-- File header info card (preset mode with preamble metadata) -->
+        {#if usePreset && fileHeader}
+          <div class="rounded-md border bg-muted/30 p-3 space-y-2">
+            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">File Header</h4>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              {#if fileHeader.accountMetadata?.accountID}
+                <div>
+                  <span class="text-xs text-muted-foreground">Account #</span>
+                  <p class="font-mono text-xs">{fileHeader.accountMetadata.accountID}</p>
+                </div>
+              {/if}
+              {#if fileHeader.balanceCurrency}
+                <div>
+                  <span class="text-xs text-muted-foreground">Currency</span>
+                  <p class="font-mono text-xs">{fileHeader.balanceCurrency}</p>
+                </div>
+              {/if}
+              {#if fileHeader.balanceDate}
+                <div>
+                  <span class="text-xs text-muted-foreground">Balance Date</span>
+                  <p class="font-mono text-xs">{fileHeader.balanceDate}</p>
+                </div>
+              {/if}
+              {#if fileHeader.balanceAmount}
+                <div>
+                  <span class="text-xs text-muted-foreground">Balance</span>
+                  <p class="font-mono text-xs">{fileHeader.balanceAmount} {fileHeader.balanceCurrency ?? ""}</p>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Editable main account (preset mode) -->
+        {#if usePreset}
+          <div class="space-y-1">
+            <label for="d-presetMainAcct" class="text-sm font-medium">Main Account</label>
+            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+          </div>
+        {/if}
+
         <!-- Manual mapping (shown when not using preset) -->
         {#if !usePreset}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="space-y-1">
+              <label for="d-skipLines" class="text-sm font-medium">Skip Header Lines</label>
+              <Input
+                id="d-skipLines"
+                type="number"
+                min="0"
+                bind:value={skipLines}
+                onchange={handleReParse}
+              />
+            </div>
             <div class="space-y-1">
               <label for="d-delimiter" class="text-sm font-medium">Delimiter</label>
               <select
@@ -710,6 +830,9 @@
                 <p class="text-xs text-muted-foreground">Currencies Created</p>
               </div>
             </div>
+            {#if importResult.balance_assertion_created}
+              <p class="text-xs text-green-600 dark:text-green-400">Balance assertion created from file header.</p>
+            {/if}
             {#if importResult.warnings.length > 0}
               <div>
                 <h4 class="text-xs font-semibold mb-1">Warnings ({importResult.warnings.length})</h4>

@@ -1,4 +1,4 @@
-import type { CsvPreset, CsvRecord } from "../types.js";
+import type { CsvPreset, CsvRecord, CsvFileHeader } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
@@ -32,6 +32,57 @@ function hasDirectHeaders(headers: string[]): boolean {
   return lower.includes("date") && (lower.some((c) => c.includes("libellé")) || lower.some((c) => c.includes("montant")));
 }
 
+/** Parse preamble rows into structured metadata. */
+function parsePreambleFields(headers: string[], rows: string[][]): {
+  accountID?: string;
+  accountType?: string;
+  currencyLabel?: string;
+  balanceDate?: string;
+  balanceAmount?: string;
+} {
+  const result: ReturnType<typeof parsePreambleFields> = {};
+
+  // headers row is the first preamble line, e.g. ["Numéro Compte", "1234567X020"]
+  const firstKey = (headers[0] ?? "").trim().toLowerCase();
+  if (firstKey.includes("numéro compte") || firstKey.includes("num")) {
+    result.accountID = (headers[1] ?? "").trim();
+  }
+
+  for (const row of rows) {
+    const key = (row[0] ?? "").trim().toLowerCase();
+    const value = (row[1] ?? "").trim();
+    if (!key || !value) continue;
+
+    if (key.includes("type")) {
+      result.accountType = value;
+    } else if (key.includes("compte tenu en")) {
+      result.currencyLabel = value;
+    } else if (key === "date" || key.startsWith("date")) {
+      // Only treat as preamble date if the value looks like a date (DD/MM/YYYY)
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+        result.balanceDate = value;
+      }
+    } else if (key.includes("solde")) {
+      result.balanceAmount = value;
+    }
+
+    // Stop scanning once we hit the real header row
+    const lower = row.map((c) => c.trim().toLowerCase());
+    if (lower.includes("date") && (lower.some((c) => c.includes("libellé")) || lower.some((c) => c.includes("montant")))) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+/** Map a currency label (e.g. "euros") to a currency code. */
+function currencyLabelToCode(label: string): string {
+  const lower = label.toLowerCase();
+  if (lower === "euros" || lower === "euro" || lower === "eur") return "EUR";
+  return label.toUpperCase();
+}
+
 export const laBanquePostalePreset: CsvPreset = {
   id: "la-banque-postale",
   name: "La Banque Postale",
@@ -60,14 +111,46 @@ export const laBanquePostalePreset: CsvPreset = {
     return { dateColumn: dateCol, descriptionColumn: descCol };
   },
 
+  parseFileHeader(headers: string[], rows: string[][]): CsvFileHeader | null {
+    if (!isMetadataPreamble(headers)) return null;
+
+    const fields = parsePreambleFields(headers, rows);
+    const result: CsvFileHeader = {};
+
+    if (fields.accountID) {
+      if (!result.accountMetadata) result.accountMetadata = {};
+      result.accountMetadata.accountID = fields.accountID;
+    }
+
+    const currency = fields.currencyLabel ? currencyLabelToCode(fields.currencyLabel) : "EUR";
+    const accountType = fields.accountType ?? currency;
+    result.mainAccount = `Assets:Bank:LaBanquePostale:${accountType}`;
+
+    if (fields.balanceDate) {
+      const parsed = parseDate(fields.balanceDate, "DD/MM/YYYY");
+      if (parsed) result.balanceDate = parsed;
+    }
+
+    if (fields.balanceAmount) {
+      const parsed = parseAmount(fields.balanceAmount, true);
+      if (parsed !== null) result.balanceAmount = parsed.toString();
+    }
+
+    result.balanceCurrency = currency;
+
+    return result;
+  },
+
   transform(headers: string[], rows: string[][]): CsvRecord[] | null {
     let realHeaders: string[];
     let dataRows: string[][];
+    let fileHeader: CsvFileHeader | null = null;
 
     if (isMetadataPreamble(headers)) {
       const found = findRealHeaders(rows);
       if (!found) return null;
       [realHeaders, dataRows] = found;
+      fileHeader = this.parseFileHeader!(headers, rows);
     } else if (hasDirectHeaders(headers)) {
       realHeaders = headers;
       dataRows = rows;
@@ -96,6 +179,9 @@ export const laBanquePostalePreset: CsvPreset = {
     const { european } = detectNumberFormat(amtSamples);
 
     const records: CsvRecord[] = [];
+    const currency = "EUR";
+    // Use preamble-derived main account if available, otherwise fallback
+    const mainAccount = fileHeader?.mainAccount ?? `Assets:La Banque Postale:${currency}`;
 
     for (const row of dataRows) {
       if (row.length === 0 || (row.length === 1 && row[0] === "")) continue;
@@ -107,9 +193,6 @@ export const laBanquePostalePreset: CsvPreset = {
       const description = descIdx >= 0 ? (row[descIdx] ?? "").trim() || "La Banque Postale transaction" : "La Banque Postale transaction";
       const amount = parseAmount(row[amtIdx] ?? "", european);
       if (amount === null || amount === 0) continue;
-
-      const currency = "EUR";
-      const mainAccount = `Assets:La Banque Postale:${currency}`;
 
       const rule = matchRule(description, _rules);
       let counterAccount: string;
