@@ -1,43 +1,15 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
+import { cexFetch, abortableDelay } from "./fetch.js";
 
 const KRAKEN_API = "https://api.kraken.com";
 
-/**
- * Route Kraken API calls through a proxy to avoid CORS issues.
- * - Tauri mode: uses the proxy_fetch Rust command (ureq, no CORS)
- * - Browser mode: uses Vite dev server proxy (/api/kraken → api.kraken.com)
- */
 async function krakenFetch(
   url: string,
   init?: RequestInit,
   signal?: AbortSignal,
 ): Promise<{ status: number; body: string }> {
-  if ((window as any).__TAURI_INTERNALS__) {
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke("proxy_fetch", {
-      url,
-      method: init?.method ?? "GET",
-      headers: Object.fromEntries(new Headers(init?.headers).entries()),
-      body: typeof init?.body === "string" ? init.body : null,
-    });
-  }
-  // Browser mode: rewrite URL to use Vite proxy
-  const proxyUrl = url.replace("https://api.kraken.com", "/api/kraken");
-  const resp = await fetch(proxyUrl, { ...init, signal });
-  return { status: resp.status, body: await resp.text() };
-}
-
-function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    }, { once: true });
-  });
+  return cexFetch(url, KRAKEN_API, "/api/kraken", init, signal);
 }
 
 // Hardcoded Kraken asset code → standard code mapping.

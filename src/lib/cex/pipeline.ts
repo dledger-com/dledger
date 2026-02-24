@@ -57,7 +57,7 @@ export async function syncCexAccount(
   const since = account.last_sync
     ? Math.floor(new Date(account.last_sync).getTime() / 1000)
     : undefined;
-  const records = await adapter.fetchLedgerRecords(account.api_key, account.api_secret, since, signal);
+  const records = await adapter.fetchLedgerRecords(account.api_key, account.api_secret, since, signal, account.passphrase ?? undefined);
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   // Enrich txids for deposits/withdrawals if adapter supports it

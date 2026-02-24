@@ -1,3 +1,5 @@
+import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
+
 export interface AppSettings {
   currency: string;
   dateFormat: string;
@@ -17,6 +19,7 @@ export interface AppSettings {
     priorAcquisitionCost?: string;  // EUR, default "0"
     fiatCurrencies?: string[];       // override defaults
   };
+  csvCategorizationRules?: CsvCategorizationRule[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

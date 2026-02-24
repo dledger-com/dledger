@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -1623,7 +1623,7 @@ impl Storage for SqliteStorage {
     fn list_exchange_accounts(&self) -> StorageResult<Vec<serde_json::Value>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
-            .prepare("SELECT id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at FROM exchange_account ORDER BY created_at")
+            .prepare("SELECT id, exchange, label, api_key, api_secret, linked_etherscan_account_id, passphrase, last_sync, created_at FROM exchange_account ORDER BY created_at")
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
@@ -1633,8 +1633,9 @@ impl Storage for SqliteStorage {
                 let api_key: String = row.get(3)?;
                 let api_secret: String = row.get(4)?;
                 let linked_etherscan_account_id: Option<String> = row.get(5)?;
-                let last_sync: Option<String> = row.get(6)?;
-                let created_at: String = row.get(7)?;
+                let passphrase: Option<String> = row.get(6)?;
+                let last_sync: Option<String> = row.get(7)?;
+                let created_at: String = row.get(8)?;
                 Ok(serde_json::json!({
                     "id": id,
                     "exchange": exchange,
@@ -1642,6 +1643,7 @@ impl Storage for SqliteStorage {
                     "api_key": api_key,
                     "api_secret": api_secret,
                     "linked_etherscan_account_id": linked_etherscan_account_id,
+                    "passphrase": passphrase,
                     "last_sync": last_sync,
                     "created_at": created_at,
                 }))
@@ -1654,8 +1656,8 @@ impl Storage for SqliteStorage {
     fn add_exchange_account(&self, account: &serde_json::Value) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, last_sync, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, passphrase, last_sync, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 account["id"].as_str().unwrap_or_default(),
                 account["exchange"].as_str().unwrap_or_default(),
@@ -1663,6 +1665,7 @@ impl Storage for SqliteStorage {
                 account["api_key"].as_str().unwrap_or_default(),
                 account["api_secret"].as_str().unwrap_or_default(),
                 account["linked_etherscan_account_id"].as_str(),
+                account["passphrase"].as_str(),
                 account["last_sync"].as_str(),
                 account["created_at"].as_str().unwrap_or_default(),
             ],
@@ -1695,6 +1698,10 @@ impl Storage for SqliteStorage {
         if updates.get("linked_etherscan_account_id").is_some() {
             set_clauses.push("linked_etherscan_account_id = ?");
             param_values.push(Box::new(updates["linked_etherscan_account_id"].as_str().map(|s| s.to_string())));
+        }
+        if updates.get("passphrase").is_some() {
+            set_clauses.push("passphrase = ?");
+            param_values.push(Box::new(updates["passphrase"].as_str().map(|s| s.to_string())));
         }
         if updates.get("last_sync").is_some() {
             set_clauses.push("last_sync = ?");
@@ -1866,6 +1873,11 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 12 {
             storage.execute_sql(MIGRATION_V12)?;
             storage.set_schema_version(12)?;
+        }
+        if current < 13 {
+            // Add passphrase column if it doesn't already exist (idempotent)
+            let _ = storage.execute_sql(MIGRATION_V13);
+            storage.set_schema_version(13)?;
         }
     }
     Ok(())
@@ -3569,7 +3581,7 @@ mod tests {
 
         apply_migrations(&storage).unwrap();
 
-        assert_eq!(storage.get_schema_version().unwrap(), 12);
+        assert_eq!(storage.get_schema_version().unwrap(), 13);
 
         // Verify budget table exists
         storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();
@@ -3580,8 +3592,8 @@ mod tests {
         // Verify recurring_template table exists
         storage.execute_sql("INSERT INTO recurring_template (id, description, frequency, next_date, created_at) VALUES ('test', 'test', 'monthly', '2024-01-01', '2024-01-01')").unwrap();
 
-        // Verify exchange_account table exists
-        storage.execute_sql("INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, created_at) VALUES ('test', 'binance', 'My Binance', 'key', 'secret', '2024-01-01')").unwrap();
+        // Verify exchange_account table exists with passphrase column (v13)
+        storage.execute_sql("INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, passphrase, created_at) VALUES ('test', 'binance', 'My Binance', 'key', 'secret', 'pass', '2024-01-01')").unwrap();
 
         // Verify currency_token_address table exists
         storage.execute_sql("INSERT INTO currency_token_address (currency, chain, contract_address) VALUES ('USDC', 'ethereum', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48')").unwrap();

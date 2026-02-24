@@ -50,6 +50,9 @@
   import { getCexAdapter, syncCexAccount, retroactiveConsolidate } from "$lib/cex/index.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import Link2 from "lucide-svelte/icons/link-2";
+  import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
+
+  let csvDialogOpen = $state(false);
 
   const handlerRegistry = getDefaultRegistry();
   const handlers = handlerRegistry.getAll();
@@ -139,10 +142,11 @@
 
   // -- CEX state --
   let cexAccounts = $state<ExchangeAccount[]>([]);
-  let cexNewExchange = $state<"kraken">("kraken");
+  let cexNewExchange = $state<import("$lib/cex/types.js").ExchangeId>("kraken");
   let cexNewLabel = $state("");
   let cexNewApiKey = $state("");
   let cexNewApiSecret = $state("");
+  let cexNewPassphrase = $state("");
   let cexAdding = $state(false);
   const cexBusy = $derived(taskQueue.isActive("cex-sync"));
   const cexConsolidating = $derived(taskQueue.isActive("cex-consolidate"));
@@ -168,6 +172,7 @@
         label: cexNewLabel,
         api_key: cexNewApiKey,
         api_secret: cexNewApiSecret,
+        passphrase: cexNewPassphrase || null,
         last_sync: null,
         created_at: new Date().toISOString(),
       };
@@ -175,6 +180,7 @@
       cexNewLabel = "";
       cexNewApiKey = "";
       cexNewApiSecret = "";
+      cexNewPassphrase = "";
       await loadCexAccounts();
       toast.success("Exchange account added");
     } catch (err) {
@@ -842,7 +848,7 @@
     <Card.Footer class="flex justify-between">
       <div class="flex gap-2">
         <Button variant="outline" href="/journal">Cancel</Button>
-        <Button variant="outline" href="/journal/csv-import">Import CSV</Button>
+        <Button variant="outline" onclick={() => { csvDialogOpen = true; }}>Import CSV</Button>
       </div>
       <Button
         onclick={handleImport}
@@ -925,6 +931,21 @@
       </Card.Footer>
     </Card.Root>
   {/if}
+
+  <!-- CSV Import -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>CSV Import</Card.Title>
+      <Card.Description>Import transactions from CSV files — bank statements, exchange exports, and more.</Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <Button onclick={() => { csvDialogOpen = true; }}>
+        <Upload class="mr-2 h-4 w-4" /> Import CSV
+      </Button>
+    </Card.Content>
+  </Card.Root>
+
+  <CsvImportDialog bind:open={csvDialogOpen} />
 
   <!-- Blockchain Sync -->
   <Card.Root>
@@ -1306,10 +1327,16 @@
         <div class="flex flex-wrap gap-2">
           <div class="w-full sm:w-auto">
             <select
-              class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-32"
+              class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-40"
               bind:value={cexNewExchange}
             >
               <option value="kraken">Kraken</option>
+              <option value="binance">Binance</option>
+              <option value="coinbase">Coinbase</option>
+              <option value="bybit">Bybit</option>
+              <option value="okx">OKX</option>
+              <option value="bitstamp">Bitstamp</option>
+              <option value="cryptocom">Crypto.com</option>
             </select>
           </div>
           <Input
@@ -1322,16 +1349,24 @@
           <Input
             class="w-full sm:flex-1"
             type="password"
-            placeholder="API Key"
+            placeholder={cexNewExchange === "coinbase" ? "API Key Name" : "API Key"}
             bind:value={cexNewApiKey}
           />
           <Input
             class="w-full sm:flex-1"
             type="password"
-            placeholder="API Secret"
+            placeholder={cexNewExchange === "coinbase" ? "EC Private Key (PEM)" : "API Secret"}
             bind:value={cexNewApiSecret}
           />
         </div>
+        {#if getCexAdapter(cexNewExchange).requiresPassphrase}
+          <Input
+            class="w-full sm:w-64"
+            type="password"
+            placeholder="API Passphrase"
+            bind:value={cexNewPassphrase}
+          />
+        {/if}
         <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
           <Plus class="mr-1 h-4 w-4" />
           Add Account

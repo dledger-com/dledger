@@ -1,4 +1,4 @@
-export type ExchangeId = "kraken";
+export type ExchangeId = "kraken" | "binance" | "coinbase" | "bybit" | "okx" | "bitstamp" | "cryptocom";
 
 export interface ExchangeAccount {
   id: string;
@@ -6,6 +6,7 @@ export interface ExchangeAccount {
   label: string;
   api_key: string;
   api_secret: string;
+  passphrase?: string | null;
   last_sync: string | null;
   created_at: string;
 }
@@ -31,6 +32,7 @@ export interface CexSyncResult {
 export interface CexAdapter {
   exchangeId: ExchangeId;
   exchangeName: string;
+  requiresPassphrase?: boolean;
   normalizeAsset(raw: string): string;
-  fetchLedgerRecords(apiKey: string, apiSecret: string, since?: number, signal?: AbortSignal): Promise<CexLedgerRecord[]>;
+  fetchLedgerRecords(apiKey: string, apiSecret: string, since?: number, signal?: AbortSignal, passphrase?: string): Promise<CexLedgerRecord[]>;
 }

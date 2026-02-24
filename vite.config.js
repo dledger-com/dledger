@@ -45,6 +45,36 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kraken/, ''),
       },
+      '/api/binance': {
+        target: 'https://api.binance.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/binance/, ''),
+      },
+      '/api/coinbase': {
+        target: 'https://api.coinbase.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/coinbase/, ''),
+      },
+      '/api/bybit': {
+        target: 'https://api.bybit.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bybit/, ''),
+      },
+      '/api/okx': {
+        target: 'https://www.okx.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/okx/, ''),
+      },
+      '/api/bitstamp': {
+        target: 'https://www.bitstamp.net',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bitstamp/, ''),
+      },
+      '/api/cryptocom': {
+        target: 'https://api.crypto.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cryptocom/, ''),
+      },
     },
   },
 }));
