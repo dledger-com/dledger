@@ -32,7 +32,15 @@
   import Check from "lucide-svelte/icons/check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
 
-  let { open = $bindable(false) }: { open: boolean } = $props();
+  let {
+    open = $bindable(false),
+    initialContent = "",
+    initialFileName = "",
+  }: {
+    open: boolean;
+    initialContent?: string;
+    initialFileName?: string;
+  } = $props();
 
   const settings = new SettingsStore();
   const presetRegistry = getDefaultPresetRegistry();
@@ -250,6 +258,15 @@
   // Reset on close
   $effect(() => {
     if (!open) resetDialog();
+  });
+
+  // Auto-advance to step 2 when opened with initial content (drag-and-drop)
+  $effect(() => {
+    if (open && initialContent) {
+      rawContent = initialContent;
+      fileName = initialFileName;
+      handleParse();
+    }
   });
 </script>
 

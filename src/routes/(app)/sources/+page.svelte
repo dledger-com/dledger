@@ -53,6 +53,32 @@
   import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
 
   let csvDialogOpen = $state(false);
+  let csvInitialContent = $state("");
+  let csvInitialFileName = $state("");
+  let dragCounter = $state(0);
+  let draggingCsv = $derived(dragCounter > 0);
+
+  // Clear initial content when dialog closes
+  $effect(() => {
+    if (!csvDialogOpen) {
+      csvInitialContent = "";
+      csvInitialFileName = "";
+    }
+  });
+
+  function handleCsvDrop(e: DragEvent) {
+    e.preventDefault();
+    dragCounter = 0;
+    const file = e.dataTransfer?.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      csvInitialContent = reader.result as string;
+      csvInitialFileName = file.name;
+      csvDialogOpen = true;
+    };
+    reader.readAsText(file);
+  }
 
   const handlerRegistry = getDefaultRegistry();
   const handlers = handlerRegistry.getAll();
@@ -933,19 +959,34 @@
   {/if}
 
   <!-- CSV Import -->
-  <Card.Root>
+  <Card.Root
+    class={draggingCsv ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors" : "transition-colors"}
+    ondragenter={(e: DragEvent) => { e.preventDefault(); dragCounter++; }}
+    ondragover={(e: DragEvent) => { e.preventDefault(); }}
+    ondragleave={() => { dragCounter--; }}
+    ondrop={handleCsvDrop}
+  >
     <Card.Header>
       <Card.Title>CSV Import</Card.Title>
       <Card.Description>Import transactions from CSV files — bank statements, exchange exports, and more.</Card.Description>
     </Card.Header>
     <Card.Content>
-      <Button onclick={() => { csvDialogOpen = true; }}>
-        <Upload class="mr-2 h-4 w-4" /> Import CSV
-      </Button>
+      <div class="flex items-center gap-3">
+        <Button onclick={() => { csvDialogOpen = true; }}>
+          <Upload class="mr-2 h-4 w-4" /> Import CSV
+        </Button>
+        {#if draggingCsv}
+          <p class="text-sm text-muted-foreground">Drop CSV file to import...</p>
+        {/if}
+      </div>
     </Card.Content>
   </Card.Root>
 
-  <CsvImportDialog bind:open={csvDialogOpen} />
+  <CsvImportDialog
+    bind:open={csvDialogOpen}
+    initialContent={csvInitialContent}
+    initialFileName={csvInitialFileName}
+  />
 
   <!-- Blockchain Sync -->
   <Card.Root>
