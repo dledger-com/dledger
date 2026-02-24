@@ -172,6 +172,7 @@
     if (bestPreset) {
       usePreset = true;
       selectedPresetId = bestPreset.preset.id;
+      showRules = false;
     }
 
     step = 2;
@@ -567,47 +568,48 @@
             {/if}
           </div>
 
-          <!-- Categorization Rules -->
-          <div class="rounded-md border p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-semibold">Categorization Rules</h4>
-              <Button size="sm" variant="ghost" onclick={() => { showRules = !showRules; }}>
-                {showRules ? "Hide" : "Show"} ({rules.length} rules)
-              </Button>
-            </div>
-            {#if showRules}
-              <p class="text-xs text-muted-foreground">
-                Match keywords in descriptions to auto-assign counterparty accounts. First match wins.
-              </p>
-              {#if rules.length > 0}
-                <div class="space-y-1 max-h-40 overflow-y-auto">
-                  {#each rules as rule}
-                    <div class="flex items-center gap-2 text-sm">
-                      <Badge variant="outline" class="font-mono">{rule.pattern}</Badge>
-                      <span class="text-muted-foreground">&rarr;</span>
-                      <span class="font-mono text-xs">{rule.account}</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        class="h-6 w-6 p-0 ml-auto"
-                        onclick={() => removeRule(rule.id)}
-                      >
-                        <Trash2 class="h-3 w-3" />
-                      </Button>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-              <div class="flex gap-2">
-                <Input bind:value={newPattern} placeholder="Keyword (e.g. coffee)" class="flex-1 h-8 text-sm" />
-                <Input bind:value={newAccount} placeholder="Account (e.g. Expenses:Coffee)" class="flex-1 h-8 text-sm" />
-                <Button size="sm" class="h-8" onclick={addRule} disabled={!newPattern.trim() || !newAccount.trim()}>
-                  <Plus class="h-3 w-3 mr-1" /> Add
-                </Button>
+        {/if}
+
+        <!-- Categorization Rules (always visible in step 2) -->
+        <div class="rounded-md border p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-semibold">Categorization Rules</h4>
+            <Button size="sm" variant="ghost" onclick={() => { showRules = !showRules; }}>
+              {showRules ? "Hide" : "Show"} ({rules.length} rules)
+            </Button>
+          </div>
+          {#if showRules}
+            <p class="text-xs text-muted-foreground">
+              Match keywords in descriptions to auto-assign counterparty accounts. First match wins.
+            </p>
+            {#if rules.length > 0}
+              <div class="space-y-1 max-h-40 overflow-y-auto">
+                {#each rules as rule}
+                  <div class="flex items-center gap-2 text-sm">
+                    <Badge variant="outline" class="font-mono">{rule.pattern}</Badge>
+                    <span class="text-muted-foreground">&rarr;</span>
+                    <span class="font-mono text-xs">{rule.account}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      class="h-6 w-6 p-0 ml-auto"
+                      onclick={() => removeRule(rule.id)}
+                    >
+                      <Trash2 class="h-3 w-3" />
+                    </Button>
+                  </div>
+                {/each}
               </div>
             {/if}
-          </div>
-        {/if}
+            <div class="flex gap-2">
+              <Input bind:value={newPattern} placeholder="Keyword (e.g. coffee)" class="flex-1 h-8 text-sm" />
+              <Input bind:value={newAccount} placeholder="Account (e.g. Expenses:Coffee)" class="flex-1 h-8 text-sm" />
+              <Button size="sm" class="h-8" onclick={addRule} disabled={!newPattern.trim() || !newAccount.trim()}>
+                <Plus class="h-3 w-3 mr-1" /> Add
+              </Button>
+            </div>
+          {/if}
+        </div>
 
         <!-- Preview table (first 5 rows) -->
         {#if rows.length > 0}
