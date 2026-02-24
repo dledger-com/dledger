@@ -28,6 +28,7 @@ export const n26Preset: CsvPreset = {
   id: "n26",
   name: "N26",
   description: "N26 bank statement CSV export with Booking Date, Partner Name, Amount (EUR), comma-delimited, ISO dates.",
+  suggestedMainAccount: "Assets:Banks:N26",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -68,7 +69,7 @@ export const n26Preset: CsvPreset = {
     const amtSamples = rows.slice(0, 20).map((r) => r[amtIdx] ?? "").filter(Boolean);
     const { european } = detectNumberFormat(amtSamples);
 
-    const mainAccount = `Assets:Bank:N26:${currency}`;
+    const mainAccount = `Assets:Banks:N26:${currency}`;
     const records: CsvRecord[] = [];
 
     for (const row of rows) {

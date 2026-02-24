@@ -40,7 +40,7 @@ describe("coinbaseTransactionsPreset", () => {
       expect(records!).toHaveLength(1);
 
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Coinbase:BTC")).toBe(true);
+      expect(lines.some((l) => l.account === "Assets:Exchanges:Coinbase:BTC")).toBe(true);
     });
 
     it("transforms sell transactions", () => {
@@ -52,7 +52,7 @@ describe("coinbaseTransactionsPreset", () => {
       const records = coinbaseTransactionsPreset.transform(headers, rows);
       expect(records).not.toBeNull();
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Coinbase:ETH" && parseFloat(l.amount) === -2)).toBe(true);
+      expect(lines.some((l) => l.account === "Assets:Exchanges:Coinbase:ETH" && parseFloat(l.amount) === -2)).toBe(true);
     });
 
     it("transforms send transactions", () => {
@@ -63,7 +63,7 @@ describe("coinbaseTransactionsPreset", () => {
 
       const records = coinbaseTransactionsPreset.transform(headers, rows);
       expect(records!).toHaveLength(1);
-      expect(records![0].lines.some((l) => l.account === "Assets:Coinbase:BTC" && parseFloat(l.amount) === -0.1)).toBe(true);
+      expect(records![0].lines.some((l) => l.account === "Assets:Exchanges:Coinbase:BTC" && parseFloat(l.amount) === -0.1)).toBe(true);
       expect(records![0].lines.some((l) => l.account === "Equity:External")).toBe(true);
     });
 
@@ -75,7 +75,7 @@ describe("coinbaseTransactionsPreset", () => {
 
       const records = coinbaseTransactionsPreset.transform(headers, rows);
       expect(records!).toHaveLength(1);
-      expect(records![0].lines.some((l) => l.account === "Assets:Coinbase:ETH" && parseFloat(l.amount) === 5)).toBe(true);
+      expect(records![0].lines.some((l) => l.account === "Assets:Exchanges:Coinbase:ETH" && parseFloat(l.amount) === 5)).toBe(true);
     });
 
     it("transforms staking rewards", () => {
@@ -86,7 +86,7 @@ describe("coinbaseTransactionsPreset", () => {
 
       const records = coinbaseTransactionsPreset.transform(headers, rows);
       expect(records!).toHaveLength(1);
-      expect(records![0].lines.some((l) => l.account === "Income:Coinbase:Rewards")).toBe(true);
+      expect(records![0].lines.some((l) => l.account === "Income:Exchanges:Coinbase:Rewards")).toBe(true);
     });
 
     it("handles fees", () => {
@@ -97,7 +97,7 @@ describe("coinbaseTransactionsPreset", () => {
 
       const records = coinbaseTransactionsPreset.transform(headers, rows);
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Coinbase:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === "Expenses:Exchanges:Coinbase:Fees")).toBe(true);
     });
 
     it("returns null for invalid headers", () => {

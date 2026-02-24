@@ -19,6 +19,7 @@ export const krakenLedgerPreset: CsvPreset = {
   id: "kraken-ledger",
   name: "Kraken Ledger Export",
   description: "Kraken exchange ledger CSV export with refid, time, type, asset, amount, fee, balance.",
+  suggestedMainAccount: "Assets:Exchanges:Kraken",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -90,18 +91,18 @@ export const krakenLedgerPreset: CsvPreset = {
         for (const e of entries) {
           assets.push(e.asset);
           lines.push({
-            account: `Assets:Kraken:${e.asset}`,
+            account: `Assets:Exchanges:Kraken:${e.asset}`,
             currency: e.asset,
             amount: e.amount.toString(),
           });
           if (Math.abs(e.fee) > 0) {
             lines.push({
-              account: `Expenses:Kraken:Fees`,
+              account: `Expenses:Exchanges:Kraken:Fees`,
               currency: e.asset,
               amount: Math.abs(e.fee).toString(),
             });
             lines.push({
-              account: `Assets:Kraken:${e.asset}`,
+              account: `Assets:Exchanges:Kraken:${e.asset}`,
               currency: e.asset,
               amount: (-Math.abs(e.fee)).toString(),
             });
@@ -138,7 +139,7 @@ export const krakenLedgerPreset: CsvPreset = {
         for (const e of entries) {
           const lines: CsvRecord["lines"] = [
             {
-              account: `Assets:Kraken:${e.asset}`,
+              account: `Assets:Exchanges:Kraken:${e.asset}`,
               currency: e.asset,
               amount: e.amount.toString(),
             },
@@ -151,12 +152,12 @@ export const krakenLedgerPreset: CsvPreset = {
 
           if (Math.abs(e.fee) > 0) {
             lines.push({
-              account: `Expenses:Kraken:Fees`,
+              account: `Expenses:Exchanges:Kraken:Fees`,
               currency: e.asset,
               amount: Math.abs(e.fee).toString(),
             });
             lines.push({
-              account: `Assets:Kraken:${e.asset}`,
+              account: `Assets:Exchanges:Kraken:${e.asset}`,
               currency: e.asset,
               amount: (-Math.abs(e.fee)).toString(),
             });
@@ -177,12 +178,12 @@ export const krakenLedgerPreset: CsvPreset = {
             description: `Kraken staking reward: ${e.asset}`,
             lines: [
               {
-                account: `Assets:Kraken:${e.asset}`,
+                account: `Assets:Exchanges:Kraken:${e.asset}`,
                 currency: e.asset,
                 amount: e.amount.toString(),
               },
               {
-                account: `Income:Kraken:Staking`,
+                account: `Income:Exchanges:Kraken:Staking`,
                 currency: e.asset,
                 amount: (-e.amount).toString(),
               },
@@ -198,7 +199,7 @@ export const krakenLedgerPreset: CsvPreset = {
             description: `Kraken ${type}: ${e.asset}`,
             lines: [
               {
-                account: `Assets:Kraken:${e.asset}`,
+                account: `Assets:Exchanges:Kraken:${e.asset}`,
                 currency: e.asset,
                 amount: e.amount.toString(),
               },

@@ -36,7 +36,7 @@ describe("revolutPreset", () => {
       expect(records).not.toBeNull();
       expect(records!).toHaveLength(2);
 
-      expect(records![0].lines[0].account).toBe("Assets:Revolut:EUR");
+      expect(records![0].lines[0].account).toBe("Assets:Banks:Revolut:EUR");
       expect(records![0].lines[0].currency).toBe("EUR");
     });
 
@@ -61,7 +61,7 @@ describe("revolutPreset", () => {
       const records = revolutPreset.transform(headers, rows);
       expect(records).not.toBeNull();
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Revolut:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === "Expenses:Banks:Revolut:Fees")).toBe(true);
     });
 
     it("uses categorization rules", () => {
@@ -104,8 +104,8 @@ describe("revolutPreset", () => {
       ];
 
       const records = revolutPreset.transform(headers, rows);
-      expect(records![0].lines[0].account).toBe("Assets:Revolut:USD");
-      expect(records![1].lines[0].account).toBe("Assets:Revolut:GBP");
+      expect(records![0].lines[0].account).toBe("Assets:Banks:Revolut:USD");
+      expect(records![1].lines[0].account).toBe("Assets:Banks:Revolut:GBP");
     });
   });
 });

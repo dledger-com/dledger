@@ -100,7 +100,7 @@ export const bankStatementPreset: CsvPreset = {
     }).filter(Boolean);
     const { european } = detectNumberFormat(amtSamples);
 
-    const bankAccount = "Assets:Bank:Import";
+    const bankAccount = "Assets:Banks:Import";
     const records: CsvRecord[] = [];
 
     for (const row of rows) {

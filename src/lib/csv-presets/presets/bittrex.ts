@@ -27,6 +27,7 @@ export const bittrexPreset: CsvPreset = {
   id: "bittrex",
   name: "Bittrex",
   description: "Bittrex order history, transaction history, and legacy order exports.",
+  suggestedMainAccount: "Assets:Exchanges:Bittrex",
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -89,7 +90,7 @@ function transformNewOrders(headers: string[], rows: string[][]): CsvRecord[] {
     const total = parseFloat((row[totalIdx] ?? "0").replace(/,/g, ""));
     if (isNaN(qty) || isNaN(total) || qty === 0) continue;
 
-    const lines = makeTradeLines("Bittrex", pair.base, pair.quote, side, qty, total);
+    const lines = makeTradeLines("Exchanges:Bittrex", pair.base, pair.quote, side, qty, total);
     records.push({ date, description: `Bittrex ${side.toLowerCase()} ${pair.base}/${pair.quote}`, lines });
   }
 
@@ -118,7 +119,7 @@ function transformTransactions(headers: string[], rows: string[][]): CsvRecord[]
 
     const type = (row[typeIdx] ?? "").trim().toUpperCase();
     const isDeposit = type === "DEPOSIT";
-    const lines = makeTransferLines("Bittrex", currency, isDeposit ? amount : -Math.abs(amount));
+    const lines = makeTransferLines("Exchanges:Bittrex", currency, isDeposit ? amount : -Math.abs(amount));
 
     records.push({ date, description: `Bittrex ${type.toLowerCase()}: ${currency}`, lines });
   }
@@ -169,11 +170,11 @@ function transformOldOrders(headers: string[], rows: string[][]): CsvRecord[] {
     const total = parseFloat((cells[priceIdx] ?? "0").replace(/,/g, ""));
     if (isNaN(qty) || qty === 0) continue;
 
-    const lines = makeTradeLines("Bittrex", pair.base, pair.quote, side, qty, isNaN(total) ? 0 : total);
+    const lines = makeTradeLines("Exchanges:Bittrex", pair.base, pair.quote, side, qty, isNaN(total) ? 0 : total);
 
     const commission = commIdx >= 0 ? parseFloat((cells[commIdx] ?? "0").replace(/,/g, "")) : 0;
     if (!isNaN(commission) && commission > 0) {
-      lines.push(...makeFeeLines("Bittrex", pair.quote, commission));
+      lines.push(...makeFeeLines("Exchanges:Bittrex", pair.quote, commission));
     }
 
     records.push({ date, description: `Bittrex ${side.toLowerCase()} ${pair.base}/${pair.quote}`, lines });

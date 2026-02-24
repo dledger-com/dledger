@@ -10,6 +10,7 @@ export const binanceTradePreset: CsvPreset = {
   id: "binance-trade",
   name: "Binance Trade History",
   description: "Binance spot trade history CSV with Date(UTC), Pair/Market, Side, Price, Filled/Amount, Total, Fee.",
+  suggestedMainAccount: "Assets:Exchanges:Binance",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -72,14 +73,14 @@ export const binanceTradePreset: CsvPreset = {
       if (side === "BUY") {
         // Buy: receive base, spend quote
         lines.push(
-          { account: `Assets:Binance:${pair.base}`, currency: pair.base, amount: filled.toString() },
-          { account: `Assets:Binance:${pair.quote}`, currency: pair.quote, amount: (-total).toString() },
+          { account: `Assets:Exchanges:Binance:${pair.base}`, currency: pair.base, amount: filled.toString() },
+          { account: `Assets:Exchanges:Binance:${pair.quote}`, currency: pair.quote, amount: (-total).toString() },
         );
       } else {
         // Sell: spend base, receive quote
         lines.push(
-          { account: `Assets:Binance:${pair.base}`, currency: pair.base, amount: (-filled).toString() },
-          { account: `Assets:Binance:${pair.quote}`, currency: pair.quote, amount: total.toString() },
+          { account: `Assets:Exchanges:Binance:${pair.base}`, currency: pair.base, amount: (-filled).toString() },
+          { account: `Assets:Exchanges:Binance:${pair.quote}`, currency: pair.quote, amount: total.toString() },
         );
       }
 
@@ -95,8 +96,8 @@ export const binanceTradePreset: CsvPreset = {
       // Fee
       if (!isNaN(fee) && fee > 0) {
         lines.push(
-          { account: "Expenses:Binance:Fees", currency: feeCoin, amount: fee.toString() },
-          { account: `Assets:Binance:${feeCoin}`, currency: feeCoin, amount: (-fee).toString() },
+          { account: "Expenses:Exchanges:Binance:Fees", currency: feeCoin, amount: fee.toString() },
+          { account: `Assets:Exchanges:Binance:${feeCoin}`, currency: feeCoin, amount: (-fee).toString() },
         );
       }
 

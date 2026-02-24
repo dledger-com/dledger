@@ -84,7 +84,7 @@ describe("laBanquePostalePreset", () => {
 
     it("uses EUR currency and LaBanquePostale account from preamble", () => {
       const records = laBanquePostalePreset.transform(metadataHeaders, rows)!;
-      expect(records[0].lines[0].account).toBe("Assets:Bank:LaBanquePostale:CCP");
+      expect(records[0].lines[0].account).toBe("Assets:Banks:LaBanquePostale:CCP");
       expect(records[0].lines[0].currency).toBe("EUR");
     });
 
@@ -144,7 +144,7 @@ describe("laBanquePostalePreset", () => {
       const result = laBanquePostalePreset.parseFileHeader!(metadataHeaders, preambleRows);
       expect(result).not.toBeNull();
       expect(result!.accountMetadata).toEqual({ accountID: "1234567X020" });
-      expect(result!.mainAccount).toBe("Assets:Bank:LaBanquePostale:CCP");
+      expect(result!.mainAccount).toBe("Assets:Banks:LaBanquePostale:CCP");
       expect(result!.balanceDate).toBe("2026-02-24");
       expect(result!.balanceAmount).toBe("707.39");
       expect(result!.balanceCurrency).toBe("EUR");
@@ -170,7 +170,7 @@ describe("laBanquePostalePreset", () => {
       const result = laBanquePostalePreset.parseFileHeader!(metadataHeaders, partialRows);
       expect(result).not.toBeNull();
       expect(result!.accountMetadata).toEqual({ accountID: "1234567X020" });
-      expect(result!.mainAccount).toBe("Assets:Bank:LaBanquePostale:CCP");
+      expect(result!.mainAccount).toBe("Assets:Banks:LaBanquePostale:CCP");
       expect(result!.balanceDate).toBe("2026-02-24");
       expect(result!.balanceAmount).toBeUndefined();
       expect(result!.balanceCurrency).toBe("EUR");

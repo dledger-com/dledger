@@ -46,12 +46,12 @@ describe("bankStatementPreset", () => {
       expect(records!).toHaveLength(2);
 
       // First: expense (negative amount)
-      expect(records![0].lines[0].account).toBe("Assets:Bank:Import");
+      expect(records![0].lines[0].account).toBe("Assets:Banks:Import");
       expect(parseFloat(records![0].lines[0].amount)).toBe(-5);
       expect(records![0].lines[1].account).toBe("Expenses:Uncategorized");
 
       // Second: income (positive amount)
-      expect(records![1].lines[0].account).toBe("Assets:Bank:Import");
+      expect(records![1].lines[0].account).toBe("Assets:Banks:Import");
       expect(parseFloat(records![1].lines[0].amount)).toBe(3000);
       expect(records![1].lines[1].account).toBe("Income:Uncategorized");
     });

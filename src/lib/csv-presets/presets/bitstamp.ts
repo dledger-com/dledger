@@ -22,6 +22,7 @@ export const bitstampPreset: CsvPreset = {
   id: "bitstamp",
   name: "Bitstamp",
   description: "Bitstamp transaction exports, combined orders, and legacy transaction history.",
+  suggestedMainAccount: "Assets:Exchanges:Bitstamp",
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -83,26 +84,26 @@ function transformExport(headers: string[], rows: string[][]): CsvRecord[] {
     if (typeUpper === "MARKET") {
       const side: "BUY" | "SELL" = subtype.toUpperCase() === "BUY" ? "BUY" : "SELL";
       if (!isNaN(value) && value > 0 && valueCurr) {
-        lines.push(...makeTradeLines("Bitstamp", currency, valueCurr, side, amount, value));
+        lines.push(...makeTradeLines("Exchanges:Bitstamp", currency, valueCurr, side, amount, value));
       } else {
         lines.push(
           { account: `Assets:Bitstamp:${currency}`, currency, amount: (side === "BUY" ? amount : -amount).toString() },
           { account: "Equity:Trading", currency, amount: (side === "BUY" ? -amount : amount).toString() },
         );
       }
-      if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
+      if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Exchanges:Bitstamp", feeCurr, fee));
 
       records.push({ date, description: `Bitstamp ${side.toLowerCase()} ${currency}${valueCurr ? `/${valueCurr}` : ""}`, lines });
     } else if (typeUpper === "DEPOSIT") {
-      lines.push(...makeTransferLines("Bitstamp", currency, amount));
-      if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
+      lines.push(...makeTransferLines("Exchanges:Bitstamp", currency, amount));
+      if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Exchanges:Bitstamp", feeCurr, fee));
       records.push({ date, description: `Bitstamp deposit: ${currency}`, lines });
     } else if (typeUpper === "WITHDRAWAL") {
-      lines.push(...makeTransferLines("Bitstamp", currency, -amount));
-      if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
+      lines.push(...makeTransferLines("Exchanges:Bitstamp", currency, -amount));
+      if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Exchanges:Bitstamp", feeCurr, fee));
       records.push({ date, description: `Bitstamp withdrawal: ${currency}`, lines });
     } else {
-      lines.push(...makeTransferLines("Bitstamp", currency, amount));
+      lines.push(...makeTransferLines("Exchanges:Bitstamp", currency, amount));
       records.push({ date, description: `Bitstamp ${type.toLowerCase()}: ${currency}`, lines });
     }
   }
@@ -152,24 +153,24 @@ function transformAll(headers: string[], rows: string[][]): CsvRecord[] {
     if (type === "MARKET") {
       const side: "BUY" | "SELL" = subtype === "BUY" ? "BUY" : "SELL";
       if (valParsed && valParsed.amount > 0) {
-        lines.push(...makeTradeLines("Bitstamp", amtParsed.currency, valParsed.currency, side, amtParsed.amount, valParsed.amount));
+        lines.push(...makeTradeLines("Exchanges:Bitstamp", amtParsed.currency, valParsed.currency, side, amtParsed.amount, valParsed.amount));
       } else {
         lines.push(
           { account: `Assets:Bitstamp:${amtParsed.currency}`, currency: amtParsed.currency, amount: (side === "BUY" ? amtParsed.amount : -amtParsed.amount).toString() },
           { account: "Equity:Trading", currency: amtParsed.currency, amount: (side === "BUY" ? -amtParsed.amount : amtParsed.amount).toString() },
         );
       }
-      if (feeParsed && feeParsed.amount > 0) lines.push(...makeFeeLines("Bitstamp", feeParsed.currency, feeParsed.amount));
+      if (feeParsed && feeParsed.amount > 0) lines.push(...makeFeeLines("Exchanges:Bitstamp", feeParsed.currency, feeParsed.amount));
       records.push({ date, description: `Bitstamp ${side.toLowerCase()} ${amtParsed.currency}${valParsed ? `/${valParsed.currency}` : ""}`, lines });
     } else if (type === "DEPOSIT") {
-      lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, amtParsed.amount));
+      lines.push(...makeTransferLines("Exchanges:Bitstamp", amtParsed.currency, amtParsed.amount));
       records.push({ date, description: `Bitstamp deposit: ${amtParsed.currency}`, lines });
     } else if (type === "WITHDRAWAL") {
-      lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, -amtParsed.amount));
-      if (feeParsed && feeParsed.amount > 0) lines.push(...makeFeeLines("Bitstamp", feeParsed.currency, feeParsed.amount));
+      lines.push(...makeTransferLines("Exchanges:Bitstamp", amtParsed.currency, -amtParsed.amount));
+      if (feeParsed && feeParsed.amount > 0) lines.push(...makeFeeLines("Exchanges:Bitstamp", feeParsed.currency, feeParsed.amount));
       records.push({ date, description: `Bitstamp withdrawal: ${amtParsed.currency}`, lines });
     } else {
-      lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, amtParsed.amount));
+      lines.push(...makeTransferLines("Exchanges:Bitstamp", amtParsed.currency, amtParsed.amount));
       records.push({ date, description: `Bitstamp ${type.toLowerCase()}: ${amtParsed.currency}`, lines });
     }
   }
@@ -203,7 +204,7 @@ function transformOrders(headers: string[], rows: string[][]): CsvRecord[] {
     const value = parseFloat((row[valIdx] ?? "0").replace(/,/g, ""));
     if (isNaN(amount) || isNaN(value) || amount === 0) continue;
 
-    const lines = makeTradeLines("Bitstamp", base, quote, side, amount, value);
+    const lines = makeTradeLines("Exchanges:Bitstamp", base, quote, side, amount, value);
 
     records.push({ date, description: `Bitstamp ${side.toLowerCase()} ${base}/${quote}`, lines });
   }

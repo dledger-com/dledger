@@ -20,6 +20,7 @@ export interface CsvPreset {
   id: string;
   name: string;
   description: string;
+  suggestedMainAccount?: string;
   detect(headers: string[], sampleRows: string[][]): number; // 0-100
   getDefaultMapping(headers: string[]): Partial<CsvImportOptions>;
   transform(headers: string[], rows: string[][]): CsvRecord[] | null;

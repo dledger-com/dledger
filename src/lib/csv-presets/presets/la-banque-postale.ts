@@ -124,7 +124,7 @@ export const laBanquePostalePreset: CsvPreset = {
 
     const currency = fields.currencyLabel ? currencyLabelToCode(fields.currencyLabel) : "EUR";
     const accountType = fields.accountType ?? currency;
-    result.mainAccount = `Assets:Bank:LaBanquePostale:${accountType}`;
+    result.mainAccount = `Assets:Banks:LaBanquePostale:${accountType}`;
 
     if (fields.balanceDate) {
       const parsed = parseDate(fields.balanceDate, "DD/MM/YYYY");
@@ -181,7 +181,7 @@ export const laBanquePostalePreset: CsvPreset = {
     const records: CsvRecord[] = [];
     const currency = "EUR";
     // Use preamble-derived main account if available, otherwise fallback
-    const mainAccount = fileHeader?.mainAccount ?? `Assets:La Banque Postale:${currency}`;
+    const mainAccount = fileHeader?.mainAccount ?? `Assets:Banks:LaBanquePostale:${currency}`;
 
     for (const row of dataRows) {
       if (row.length === 0 || (row.length === 1 && row[0] === "")) continue;

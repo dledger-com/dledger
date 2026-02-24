@@ -139,8 +139,8 @@ describe("Retroactive Consolidation", () => {
     amount: string,
     type: "deposit" | "withdrawal",
   ): Promise<{ entry: JournalEntry; items: LineItem[] }> {
-    const assetAccount = `Assets:${exchangeName}:${asset}`;
-    const externalAccount = `Equity:${exchangeName}:External`;
+    const assetAccount = `Assets:Exchanges:${exchangeName}:${asset}`;
+    const externalAccount = `Equity:Exchanges:${exchangeName}:External`;
 
     for (const fullName of [assetAccount, externalAccount]) {
       const parts = fullName.split(":");
@@ -230,10 +230,10 @@ describe("Retroactive Consolidation", () => {
     const meta = await backend.getMetadata(newEntry![0].id);
     expect(meta["cex_linked"]).toBe("kraken");
 
-    // The new entry should have Assets:Kraken:ETH instead of Equity:*:External:*
+    // The new entry should have Assets:Exchanges:Kraken:ETH instead of Equity:*:External:*
     const accounts = await backend.listAccounts();
     const itemAccounts = newEntry![1].map((item) => getAccountName(accounts, item.account_id));
-    expect(itemAccounts).toContain("Assets:Kraken:ETH");
+    expect(itemAccounts).toContain("Assets:Exchanges:Kraken:ETH");
     // Should not contain Equity:Ethereum:External:*
     expect(itemAccounts.some((a) => a?.includes("External:0x"))).toBe(false);
   });
@@ -308,7 +308,7 @@ describe("Retroactive Consolidation", () => {
 
     const accounts = await backend.listAccounts();
     const itemAccounts = newEntry![1].map((item) => getAccountName(accounts, item.account_id));
-    expect(itemAccounts).toContain("Assets:Kraken:ETH");
+    expect(itemAccounts).toContain("Assets:Exchanges:Kraken:ETH");
   });
 
   it("skips pairs where CEX entry has no asset account", async () => {
@@ -317,8 +317,8 @@ describe("Retroactive Consolidation", () => {
     await seedEtherscanEntry(txid, "2024-03-01", "W1", "1", "out");
 
     // Create a CEX entry with only equity accounts (no Assets:*)
-    // Ensure Equity:Kraken:External exists
-    const parentNames = ["Equity", "Equity:Kraken", "Equity:Kraken:External"];
+    // Ensure Equity:Exchanges:Kraken:External exists
+    const parentNames = ["Equity", "Equity:Exchanges", "Equity:Exchanges:Kraken", "Equity:Exchanges:Kraken:External"];
     let parentId: string | null = null;
     let equityAccId = "";
     for (const pName of parentNames) {
@@ -384,8 +384,8 @@ describe("Retroactive Consolidation", () => {
       amount: string,
       type: "deposit" | "withdrawal",
     ): Promise<{ entry: JournalEntry; items: LineItem[] }> {
-      const assetAccount = `Assets:${exchangeName}:${asset}`;
-      const externalAccount = `Equity:${exchangeName}:External`;
+      const assetAccount = `Assets:Exchanges:${exchangeName}:${asset}`;
+      const externalAccount = `Equity:Exchanges:${exchangeName}:External`;
 
       for (const fullName of [assetAccount, externalAccount]) {
         const parts = fullName.split(":");
@@ -469,7 +469,7 @@ describe("Retroactive Consolidation", () => {
 
       const accounts = await backend.listAccounts();
       const itemAccounts = consolidated![1].map((item) => getAccountName(accounts, item.account_id));
-      expect(itemAccounts).toContain("Assets:Kraken:ETH");
+      expect(itemAccounts).toContain("Assets:Exchanges:Kraken:ETH");
       expect(itemAccounts.some((a) => a?.includes("External:0x"))).toBe(false);
     });
 

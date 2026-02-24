@@ -17,6 +17,7 @@ export const yieldAppPreset: CsvPreset = {
   id: "yield-app",
   name: "Yield App",
   description: "Yield App full transaction history CSV.",
+  suggestedMainAccount: "Assets:Exchanges:YieldApp",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -64,25 +65,25 @@ export const yieldAppPreset: CsvPreset = {
       if (type === "interest" || type === "referral reward") {
         // Income
         lines.push(
-          { account: `Assets:YieldApp:${currency}`, currency, amount: amount.toString() },
-          { account: `Income:YieldApp:${type === "interest" ? "Interest" : "Referral"}`, currency, amount: (-amount).toString() },
+          { account: `Assets:Exchanges:YieldApp:${currency}`, currency, amount: amount.toString() },
+          { account: `Income:Exchanges:YieldApp:${type === "interest" ? "Interest" : "Referral"}`, currency, amount: (-amount).toString() },
         );
         records.push({ date, description: `Yield App ${type}: ${currency}`, lines });
       } else if (type === "withdrawal") {
         // Withdrawal: amount is positive in data, negate for outflow
-        lines.push(...makeTransferLines("YieldApp", currency, -amount));
+        lines.push(...makeTransferLines("Exchanges:YieldApp", currency, -amount));
         records.push({ date, description: `Yield App withdrawal: ${currency}`, lines });
       } else if (type === "deposit") {
-        lines.push(...makeTransferLines("YieldApp", currency, amount));
+        lines.push(...makeTransferLines("Exchanges:YieldApp", currency, amount));
         records.push({ date, description: `Yield App deposit: ${currency}`, lines });
       } else if (type === "redeem" || type === "redemption") {
         // Redeem: receiving capital back
-        lines.push(...makeTransferLines("YieldApp", currency, amount));
+        lines.push(...makeTransferLines("Exchanges:YieldApp", currency, amount));
         records.push({ date, description: `Yield App redeem: ${currency}`, lines });
       } else {
         // Fallback
         lines.push(
-          { account: `Assets:YieldApp:${currency}`, currency, amount: amount.toString() },
+          { account: `Assets:Exchanges:YieldApp:${currency}`, currency, amount: amount.toString() },
           { account: "Equity:External", currency, amount: (-amount).toString() },
         );
         records.push({ date, description: `Yield App ${type}: ${currency}`, lines });

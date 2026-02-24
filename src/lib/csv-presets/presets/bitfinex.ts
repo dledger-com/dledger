@@ -23,6 +23,7 @@ export const bitfinexPreset: CsvPreset = {
   id: "bitfinex",
   name: "Bitfinex",
   description: "Bitfinex trades, ledgers, and movements CSV exports.",
+  suggestedMainAccount: "Assets:Exchanges:Bitfinex",
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -76,11 +77,11 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     const baseAmt = Math.abs(amount);
     const quoteAmt = baseAmt * price;
 
-    const lines = makeTradeLines("Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
+    const lines = makeTradeLines("Exchanges:Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
 
     const fee = feeIdx >= 0 ? Math.abs(parseFloat((row[feeIdx] ?? "0").replace(/,/g, ""))) : 0;
     const feeCurr = feeCurrIdx >= 0 ? (row[feeCurrIdx] ?? "").trim().toUpperCase() : pair.quote;
-    if (fee > 0) lines.push(...makeFeeLines("Bitfinex", feeCurr, fee));
+    if (fee > 0) lines.push(...makeFeeLines("Exchanges:Bitfinex", feeCurr, fee));
 
     records.push({
       date,
@@ -119,7 +120,7 @@ function transformTradesOld(headers: string[], rows: string[][]): CsvRecord[] {
     const baseAmt = Math.abs(amount);
     const quoteAmt = baseAmt * price;
 
-    const lines = makeTradeLines("Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
+    const lines = makeTradeLines("Exchanges:Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
 
     records.push({
       date,
@@ -203,10 +204,10 @@ function transformMovements(headers: string[], rows: string[][]): CsvRecord[] {
     if (!currency || isNaN(amount) || amount === 0) continue;
 
     const type = amount > 0 ? "deposit" : "withdrawal";
-    const lines: CsvRecord["lines"] = makeTransferLines("Bitfinex", currency, amount);
+    const lines: CsvRecord["lines"] = makeTransferLines("Exchanges:Bitfinex", currency, amount);
 
     const fees = feesIdx >= 0 ? Math.abs(parseFloat((row[feesIdx] ?? "0").replace(/,/g, ""))) : 0;
-    if (fees > 0) lines.push(...makeFeeLines("Bitfinex", currency, fees));
+    if (fees > 0) lines.push(...makeFeeLines("Exchanges:Bitfinex", currency, fees));
 
     records.push({ date, description: `Bitfinex ${type}: ${currency}`, lines });
   }

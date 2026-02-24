@@ -8,9 +8,9 @@ describe("deriveTradeRate", () => {
     // Buy 1500 USDC for 1 ETH on CEX
     // Equity:Trading:ETH has +1 ETH (sold), Equity:Trading:USDC has -1500 USDC (bought)
     const items: TradeRateItem[] = [
-      { account_name: "Assets:Kraken:ETH", currency: "ETH", amount: "-1" },
+      { account_name: "Assets:Exchanges:Kraken:ETH", currency: "ETH", amount: "-1" },
       { account_name: "Equity:Trading:ETH", currency: "ETH", amount: "1" },
-      { account_name: "Assets:Kraken:USDC", currency: "USDC", amount: "1500" },
+      { account_name: "Assets:Exchanges:Kraken:USDC", currency: "USDC", amount: "1500" },
       { account_name: "Equity:Trading:USDC", currency: "USDC", amount: "-1500" },
     ];
     const result = deriveTradeRate(items);
@@ -23,12 +23,12 @@ describe("deriveTradeRate", () => {
   it("derives correct rate even with fee items", () => {
     // Buy 1500 USDC for 1 ETH, plus a 0.01 ETH fee
     const items: TradeRateItem[] = [
-      { account_name: "Assets:Kraken:ETH", currency: "ETH", amount: "-1" },
+      { account_name: "Assets:Exchanges:Kraken:ETH", currency: "ETH", amount: "-1" },
       { account_name: "Equity:Trading:ETH", currency: "ETH", amount: "1" },
-      { account_name: "Assets:Kraken:USDC", currency: "USDC", amount: "1500" },
+      { account_name: "Assets:Exchanges:Kraken:USDC", currency: "USDC", amount: "1500" },
       { account_name: "Equity:Trading:USDC", currency: "USDC", amount: "-1500" },
-      { account_name: "Expenses:Kraken:Fees", currency: "ETH", amount: "0.01" },
-      { account_name: "Assets:Kraken:ETH", currency: "ETH", amount: "-0.01" },
+      { account_name: "Expenses:Exchanges:Kraken:Fees", currency: "ETH", amount: "0.01" },
+      { account_name: "Assets:Exchanges:Kraken:ETH", currency: "ETH", amount: "-0.01" },
     ];
     const result = deriveTradeRate(items);
     expect(result).not.toBeNull();

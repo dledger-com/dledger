@@ -40,8 +40,8 @@ describe("bybitTradePreset", () => {
       expect(records!).toHaveLength(1);
 
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Bybit:BTC" && parseFloat(l.amount) === 0.5)).toBe(true);
-      expect(lines.some((l) => l.account === "Assets:Bybit:USDT" && parseFloat(l.amount) === -21000)).toBe(true);
+      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:BTC" && parseFloat(l.amount) === 0.5)).toBe(true);
+      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:USDT" && parseFloat(l.amount) === -21000)).toBe(true);
     });
 
     it("transforms sell trades", () => {
@@ -52,8 +52,8 @@ describe("bybitTradePreset", () => {
 
       const records = bybitTradePreset.transform(headers, rows);
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Bybit:ETH" && parseFloat(l.amount) === -2)).toBe(true);
-      expect(lines.some((l) => l.account === "Assets:Bybit:USDT" && parseFloat(l.amount) === 5000)).toBe(true);
+      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:ETH" && parseFloat(l.amount) === -2)).toBe(true);
+      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:USDT" && parseFloat(l.amount) === 5000)).toBe(true);
     });
 
     it("handles fees", () => {
@@ -64,7 +64,7 @@ describe("bybitTradePreset", () => {
 
       const records = bybitTradePreset.transform(headers, rows);
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Bybit:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === "Expenses:Exchanges:Bybit:Fees")).toBe(true);
     });
 
     it("returns null for invalid headers", () => {

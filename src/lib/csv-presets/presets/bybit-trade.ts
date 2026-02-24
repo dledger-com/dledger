@@ -9,6 +9,7 @@ export const bybitTradePreset: CsvPreset = {
   id: "bybit-trade",
   name: "Bybit Trade History",
   description: "Bybit spot trade history CSV with Date, Pair/Symbol, Side, Avg. Price, Filled/Qty, Total, Fee.",
+  suggestedMainAccount: "Assets:Exchanges:Bybit",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -70,13 +71,13 @@ export const bybitTradePreset: CsvPreset = {
 
       if (side === "BUY") {
         lines.push(
-          { account: `Assets:Bybit:${pair.base}`, currency: pair.base, amount: filled.toString() },
-          { account: `Assets:Bybit:${pair.quote}`, currency: pair.quote, amount: (-total).toString() },
+          { account: `Assets:Exchanges:Bybit:${pair.base}`, currency: pair.base, amount: filled.toString() },
+          { account: `Assets:Exchanges:Bybit:${pair.quote}`, currency: pair.quote, amount: (-total).toString() },
         );
       } else {
         lines.push(
-          { account: `Assets:Bybit:${pair.base}`, currency: pair.base, amount: (-filled).toString() },
-          { account: `Assets:Bybit:${pair.quote}`, currency: pair.quote, amount: total.toString() },
+          { account: `Assets:Exchanges:Bybit:${pair.base}`, currency: pair.base, amount: (-filled).toString() },
+          { account: `Assets:Exchanges:Bybit:${pair.quote}`, currency: pair.quote, amount: total.toString() },
         );
       }
 
@@ -92,8 +93,8 @@ export const bybitTradePreset: CsvPreset = {
       // Fee
       if (!isNaN(fee) && fee > 0) {
         lines.push(
-          { account: "Expenses:Bybit:Fees", currency: feeCoin, amount: fee.toString() },
-          { account: `Assets:Bybit:${feeCoin}`, currency: feeCoin, amount: (-fee).toString() },
+          { account: "Expenses:Exchanges:Bybit:Fees", currency: feeCoin, amount: fee.toString() },
+          { account: `Assets:Exchanges:Bybit:${feeCoin}`, currency: feeCoin, amount: (-fee).toString() },
         );
       }
 

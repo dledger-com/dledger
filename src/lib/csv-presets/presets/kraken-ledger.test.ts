@@ -33,7 +33,7 @@ describe("krakenLedgerPreset", () => {
 
       const deposit = records!.find((r) => r.description.includes("deposit"));
       expect(deposit).toBeDefined();
-      expect(deposit!.lines[0].account).toBe("Assets:Kraken:BTC");
+      expect(deposit!.lines[0].account).toBe("Assets:Exchanges:Kraken:BTC");
       expect(deposit!.lines[0].currency).toBe("BTC");
     });
 
@@ -78,7 +78,7 @@ describe("krakenLedgerPreset", () => {
       const records = krakenLedgerPreset.transform(headers, rows);
       expect(records).not.toBeNull();
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Kraken:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === "Expenses:Exchanges:Kraken:Fees")).toBe(true);
     });
 
     it("handles staking rewards", () => {
@@ -91,7 +91,7 @@ describe("krakenLedgerPreset", () => {
       expect(records).not.toBeNull();
       expect(records!.length).toBeGreaterThanOrEqual(1);
       const staking = records![0];
-      expect(staking.lines.some((l) => l.account === "Income:Kraken:Staking")).toBe(true);
+      expect(staking.lines.some((l) => l.account === "Income:Exchanges:Kraken:Staking")).toBe(true);
     });
 
     it("handles withdrawals", () => {
@@ -104,7 +104,7 @@ describe("krakenLedgerPreset", () => {
       expect(records).not.toBeNull();
       const wd = records!.find((r) => r.description.includes("withdrawal"));
       expect(wd).toBeDefined();
-      expect(wd!.lines[0].account).toBe("Assets:Kraken:BTC");
+      expect(wd!.lines[0].account).toBe("Assets:Exchanges:Kraken:BTC");
     });
 
     it("returns null for invalid headers", () => {

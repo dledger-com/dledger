@@ -25,6 +25,7 @@ export const poloniexPreset: CsvPreset = {
   id: "poloniex",
   name: "Poloniex",
   description: "Poloniex trade history, deposits, and withdrawals CSV exports.",
+  suggestedMainAccount: "Assets:Exchanges:Poloniex",
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -74,7 +75,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     const total = parseFloat((row[totalIdx] ?? "0").replace(/,/g, ""));
     if (isNaN(amount) || isNaN(total) || amount === 0) continue;
 
-    const lines = makeTradeLines("Poloniex", pair.base, pair.quote, side, amount, total);
+    const lines = makeTradeLines("Exchanges:Poloniex", pair.base, pair.quote, side, amount, total);
 
     // Fee is percentage string like "0.25%"
     if (feeIdx >= 0) {
@@ -85,11 +86,11 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
         if (side === "SELL") {
           // Fee on received quote
           const feeAmt = total * pctFrac;
-          lines.push(...makeFeeLines("Poloniex", pair.quote, feeAmt));
+          lines.push(...makeFeeLines("Exchanges:Poloniex", pair.quote, feeAmt));
         } else {
           // Fee on received base
           const feeAmt = amount * pctFrac;
-          lines.push(...makeFeeLines("Poloniex", pair.base, feeAmt));
+          lines.push(...makeFeeLines("Exchanges:Poloniex", pair.base, feeAmt));
         }
       }
     }
@@ -122,7 +123,7 @@ function transformDeposits(headers: string[], rows: string[][]): CsvRecord[] {
     const amount = parseFloat((row[amtIdx] ?? "0").replace(/,/g, ""));
     if (!currency || isNaN(amount) || amount === 0) continue;
 
-    const lines = makeTransferLines("Poloniex", currency, amount);
+    const lines = makeTransferLines("Exchanges:Poloniex", currency, amount);
     records.push({ date, description: `Poloniex deposit: ${currency}`, lines });
   }
 
@@ -152,10 +153,10 @@ function transformWithdrawals(headers: string[], rows: string[][]): CsvRecord[] 
     const amount = parseFloat((row[amtIdx] ?? "0").replace(/,/g, ""));
     if (!currency || isNaN(amount) || amount === 0) continue;
 
-    const lines = makeTransferLines("Poloniex", currency, -amount);
+    const lines = makeTransferLines("Exchanges:Poloniex", currency, -amount);
 
     const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
-    if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Poloniex", currency, fee));
+    if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Exchanges:Poloniex", currency, fee));
 
     records.push({ date, description: `Poloniex withdrawal: ${currency}`, lines });
   }

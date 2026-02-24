@@ -17,6 +17,7 @@ export const revolutPreset: CsvPreset = {
   id: "revolut",
   name: "Revolut",
   description: "Revolut bank statement CSV export with Type, Product, Started/Completed Date, Amount, Currency, State.",
+  suggestedMainAccount: "Assets:Banks:Revolut",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -91,7 +92,7 @@ export const revolutPreset: CsvPreset = {
 
       const fee = feeIdx >= 0 ? parseAmount(row[feeIdx] ?? "", european) : null;
 
-      const mainAccount = `Assets:Revolut:${currency}`;
+      const mainAccount = `Assets:Banks:Revolut:${currency}`;
       const lines: CsvRecord["lines"] = [];
 
       // Main amount
@@ -121,7 +122,7 @@ export const revolutPreset: CsvPreset = {
       // Fee line
       if (fee && Math.abs(fee) > 0) {
         lines.push({
-          account: "Expenses:Revolut:Fees",
+          account: "Expenses:Banks:Revolut:Fees",
           currency,
           amount: Math.abs(fee).toString(),
         });

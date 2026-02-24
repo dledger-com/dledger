@@ -26,6 +26,7 @@ export const cryptoComExchangePreset: CsvPreset = {
   id: "crypto-com-exchange",
   name: "Crypto.com Exchange",
   description: "Crypto.com Exchange deposit and withdrawal CSV (French/Italian headers).",
+  suggestedMainAccount: "Assets:Exchanges:CryptoComExchange",
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -83,18 +84,18 @@ export const cryptoComExchangePreset: CsvPreset = {
       const lines: CsvRecord["lines"] = [];
 
       if (isDeposit) {
-        lines.push(...makeTransferLines("CryptoComExchange", currency, quantity));
+        lines.push(...makeTransferLines("Exchanges:CryptoComExchange", currency, quantity));
         const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
-        if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("CryptoComExchange", currency, fee));
+        if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Exchanges:CryptoComExchange", currency, fee));
         records.push({ date, description: `Crypto.com Exchange deposit: ${currency}`, lines });
       } else if (isWithdrawal) {
-        lines.push(...makeTransferLines("CryptoComExchange", currency, -quantity));
+        lines.push(...makeTransferLines("Exchanges:CryptoComExchange", currency, -quantity));
         const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
-        if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("CryptoComExchange", currency, fee));
+        if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Exchanges:CryptoComExchange", currency, fee));
         records.push({ date, description: `Crypto.com Exchange withdrawal: ${currency}`, lines });
       } else {
         // Unknown type → generic
-        lines.push(...makeTransferLines("CryptoComExchange", currency, quantity));
+        lines.push(...makeTransferLines("Exchanges:CryptoComExchange", currency, quantity));
         records.push({ date, description: `Crypto.com Exchange ${typeStr}: ${currency}`, lines });
       }
     }

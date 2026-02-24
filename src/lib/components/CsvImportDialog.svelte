@@ -81,7 +81,7 @@
   let amountColumn = $state("");
   let debitAmountColumn = $state("");
   let creditAmountColumn = $state("");
-  let mainAccount = $state("Assets:Bank:Import");
+  let mainAccount = $state("Assets:Banks:Import");
   let counterAccount = $state("Expenses:Uncategorized");
   let europeanNumbers = $state(false);
   let skipLines = $state(0);
@@ -186,6 +186,9 @@
       if (bestPreset.preset.parseFileHeader) {
         fileHeader = bestPreset.preset.parseFileHeader(headers, rows);
         if (fileHeader?.mainAccount) mainAccount = fileHeader.mainAccount;
+      }
+      if (!fileHeader?.mainAccount && bestPreset.preset.suggestedMainAccount) {
+        mainAccount = bestPreset.preset.suggestedMainAccount;
       }
     }
 
@@ -446,6 +449,9 @@
                     } else {
                       fileHeader = null;
                     }
+                    if (!fileHeader?.mainAccount && pr.preset.suggestedMainAccount) {
+                      mainAccount = pr.preset.suggestedMainAccount;
+                    }
                   }}
                 >
                   {pr.preset.name} ({pr.confidence}%)
@@ -455,7 +461,7 @@
                 size="sm"
                 variant={!usePreset ? "default" : "outline"}
                 class="text-xs h-7"
-                onclick={() => { usePreset = false; }}
+                onclick={() => { usePreset = false; mainAccount = "Assets:Banks:Import"; }}
               >
                 Manual Mapping
               </Button>
@@ -500,7 +506,7 @@
         {#if usePreset}
           <div class="space-y-1">
             <label for="d-presetMainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Banks:Import" />
           </div>
         {/if}
 
@@ -656,7 +662,7 @@
                 </div>
                 <div class="space-y-1">
                   <label for="d-mainAcct" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Banks:Import" />
                 </div>
                 <div class="space-y-1">
                   <label for="d-counterAcct" class="text-sm font-medium">Counter Account</label>
@@ -693,7 +699,7 @@
                 </div>
                 <div class="space-y-1">
                   <label for="d-mainAcct2" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Banks:Import" />
                 </div>
                 <div class="space-y-1">
                   <label for="d-counterAcct2" class="text-sm font-medium">Counter Account</label>

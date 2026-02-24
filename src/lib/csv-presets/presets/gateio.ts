@@ -30,6 +30,7 @@ export const gateioPreset: CsvPreset = {
   id: "gateio",
   name: "Gate.io",
   description: "Gate.io spot trades, deposits, and withdrawals CSV exports.",
+  suggestedMainAccount: "Assets:Exchanges:Gateio",
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -81,11 +82,11 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     if (isNaN(amount) || isNaN(price) || amount === 0) continue;
 
     const quoteAmt = amount * price;
-    const lines = makeTradeLines("Gateio", pair.base, pair.quote, side, amount, quoteAmt);
+    const lines = makeTradeLines("Exchanges:Gateio", pair.base, pair.quote, side, amount, quoteAmt);
 
     const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
     const feeCurr = feeCurrIdx >= 0 ? (row[feeCurrIdx] ?? "").trim().toUpperCase() : pair.base;
-    if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Gateio", feeCurr, fee));
+    if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Exchanges:Gateio", feeCurr, fee));
 
     records.push({ date, description: `Gate.io ${side.toLowerCase()} ${pair.base}/${pair.quote}`, lines });
   }
@@ -115,7 +116,7 @@ function transformDeposits(headers: string[], rows: string[][]): CsvRecord[] {
     const amount = parseFloat((row[amtIdx] ?? "0").replace(/,/g, ""));
     if (!currency || isNaN(amount) || amount === 0) continue;
 
-    const lines = makeTransferLines("Gateio", currency, amount);
+    const lines = makeTransferLines("Exchanges:Gateio", currency, amount);
     records.push({ date, description: `Gate.io deposit: ${currency}`, lines });
   }
 
@@ -148,10 +149,10 @@ function transformWithdrawals(headers: string[], rows: string[][]): CsvRecord[] 
     const amount = parseFloat((row[amtIdx] ?? "0").replace(/,/g, ""));
     if (!currency || isNaN(amount) || amount === 0) continue;
 
-    const lines = makeTransferLines("Gateio", currency, -amount);
+    const lines = makeTransferLines("Exchanges:Gateio", currency, -amount);
 
     const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
-    if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Gateio", currency, fee));
+    if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Exchanges:Gateio", currency, fee));
 
     records.push({ date, description: `Gate.io withdrawal: ${currency}`, lines });
   }
