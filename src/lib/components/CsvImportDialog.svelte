@@ -18,6 +18,8 @@
     detectColumns,
     transformGeneric,
     importRecords,
+    buildDedupIndex,
+    isDuplicate,
     DATE_FORMATS,
     setBankStatementRules,
     setRevolutRules,
@@ -29,6 +31,7 @@
     type CsvRecord,
     type CsvFileHeader,
     type CsvCategorizationRule,
+    type DedupIndex,
   } from "$lib/csv-presets/index.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
@@ -101,6 +104,9 @@
   let previewWarnings = $state<string[]>([]);
   let importing = $state(false);
   let importResult = $state<CsvImportResult | null>(null);
+  let duplicateFlags = $state<boolean[]>([]);
+  let duplicateCount = $derived(duplicateFlags.filter(Boolean).length);
+  let nonDuplicateCount = $derived(previewRecords.length - duplicateCount);
 
   // Load rules from settings
   $effect(() => {
@@ -198,7 +204,7 @@
     rows = parsed.rows;
   }
 
-  function generatePreview() {
+  async function generatePreview() {
     if (usePreset && selectedPresetId) {
       const preset = presetRegistry.getById(selectedPresetId);
       if (preset) {
@@ -215,6 +221,7 @@
           }
           previewRecords = records;
           previewWarnings = [];
+          await detectDuplicates(records);
           step = 3;
           return;
         } else {
@@ -241,7 +248,20 @@
 
     previewRecords = result.records;
     previewWarnings = result.warnings;
+    await detectDuplicates(result.records);
     step = 3;
+  }
+
+  async function detectDuplicates(records: CsvRecord[]) {
+    try {
+      const backend = getBackend();
+      const presetId = usePreset && selectedPresetId ? selectedPresetId : undefined;
+      const index = await buildDedupIndex(backend, records, presetId);
+      duplicateFlags = records.map((rec) => isDuplicate(rec, presetId, index));
+    } catch {
+      // Dedup detection is non-critical; proceed without it
+      duplicateFlags = records.map(() => false);
+    }
   }
 
   async function doImport() {
@@ -288,7 +308,8 @@
       }
 
       importResult = result;
-      toast.success(`Imported ${importResult.entries_created} entries`);
+      const skipMsg = result.duplicates_skipped > 0 ? `, ${result.duplicates_skipped} duplicates skipped` : "";
+      toast.success(`Imported ${importResult.entries_created} entries${skipMsg}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -336,6 +357,7 @@
     skipLines = 0;
     previewRecords = [];
     previewWarnings = [];
+    duplicateFlags = [];
     importResult = null;
   }
 
@@ -821,10 +843,14 @@
           <!-- Import Results -->
           <div class="rounded-md border bg-muted/50 p-4 space-y-3">
             <h4 class="text-sm font-semibold">Import Complete</h4>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-4 gap-4">
               <div class="text-center">
                 <p class="text-2xl font-bold">{importResult.entries_created}</p>
                 <p class="text-xs text-muted-foreground">Entries</p>
+              </div>
+              <div class="text-center">
+                <p class="text-2xl font-bold">{importResult.duplicates_skipped}</p>
+                <p class="text-xs text-muted-foreground">Duplicates Skipped</p>
               </div>
               <div class="text-center">
                 <p class="text-2xl font-bold">{importResult.accounts_created}</p>
@@ -859,7 +885,10 @@
           <!-- Preview -->
           <div class="flex items-center justify-between">
             <p class="text-sm">
-              <strong>{previewRecords.length}</strong> entries to import
+              <strong>{nonDuplicateCount}</strong> entries to import
+              {#if duplicateCount > 0}
+                <Badge variant="secondary" class="ml-2">{duplicateCount} duplicates (will skip)</Badge>
+              {/if}
               {#if previewWarnings.length > 0}
                 <Badge variant="destructive" class="ml-2">{previewWarnings.length} warnings</Badge>
               {/if}
@@ -889,12 +918,16 @@
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {#each previewRecords.slice(0, 50) as rec}
+                {#each previewRecords.slice(0, 50) as rec, recIdx}
                   {@const sum = rec.lines.reduce((s, l) => s + parseFloat(l.amount), 0)}
                   {@const balanced = Math.abs(sum) < 0.0001}
-                  <Table.Row>
+                  {@const dup = duplicateFlags[recIdx] ?? false}
+                  <Table.Row class={dup ? "opacity-40" : ""}>
                     <Table.Cell class="font-mono text-xs">{rec.date}</Table.Cell>
-                    <Table.Cell class="text-xs max-w-[200px] truncate">{rec.description}</Table.Cell>
+                    <Table.Cell class="text-xs max-w-[200px] truncate">
+                      {rec.description}
+                      {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
+                    </Table.Cell>
                     <Table.Cell class="text-xs">
                       {#each rec.lines.slice(0, 4) as line}
                         <div class="flex gap-1">
@@ -930,8 +963,8 @@
 
           <div class="flex justify-between">
             <Button variant="outline" onclick={() => { step = 2; }}>Back</Button>
-            <Button onclick={doImport} disabled={importing || previewRecords.length === 0}>
-              {importing ? "Importing..." : `Import ${previewRecords.length} entries`}
+            <Button onclick={doImport} disabled={importing || nonDuplicateCount === 0}>
+              {importing ? "Importing..." : `Import ${nonDuplicateCount} entries`}
             </Button>
           </div>
         {/if}

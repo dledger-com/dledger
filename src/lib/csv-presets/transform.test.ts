@@ -209,4 +209,156 @@ describe("importRecords", () => {
     const result = await importRecords(backend, []);
     expect(result.entries_created).toBe(0);
   });
+
+  it("skips duplicates on re-import (fingerprint-based)", async () => {
+    const records = [
+      {
+        date: "2024-01-15",
+        description: "Coffee",
+        lines: [
+          { account: "Expenses:Food", currency: "USD", amount: "5" },
+          { account: "Assets:Bank", currency: "USD", amount: "-5" },
+        ],
+      },
+      {
+        date: "2024-01-16",
+        description: "Grocery",
+        lines: [
+          { account: "Expenses:Food", currency: "USD", amount: "25" },
+          { account: "Assets:Bank", currency: "USD", amount: "-25" },
+        ],
+      },
+    ];
+
+    // First import
+    const result1 = await importRecords(backend, records);
+    expect(result1.entries_created).toBe(2);
+    expect(result1.duplicates_skipped).toBe(0);
+
+    // Re-import same records
+    const result2 = await importRecords(backend, records);
+    expect(result2.entries_created).toBe(0);
+    expect(result2.duplicates_skipped).toBe(2);
+  });
+
+  it("skips duplicates on re-import (source-based)", async () => {
+    const records = [
+      {
+        date: "2024-01-15",
+        description: "Trade",
+        lines: [
+          { account: "Expenses:Food", currency: "USD", amount: "50" },
+          { account: "Assets:Bank", currency: "USD", amount: "-50" },
+        ],
+        sourceKey: "tx-001",
+      },
+    ];
+
+    const result1 = await importRecords(backend, records, "kraken-ledger");
+    expect(result1.entries_created).toBe(1);
+
+    const result2 = await importRecords(backend, records, "kraken-ledger");
+    expect(result2.entries_created).toBe(0);
+    expect(result2.duplicates_skipped).toBe(1);
+  });
+
+  it("imports partial new records when some are duplicates", async () => {
+    const records1 = [
+      {
+        date: "2024-01-15",
+        description: "Coffee",
+        lines: [
+          { account: "Expenses:Food", currency: "USD", amount: "5" },
+          { account: "Assets:Bank", currency: "USD", amount: "-5" },
+        ],
+      },
+    ];
+    await importRecords(backend, records1);
+
+    // Second import has one existing + one new
+    const records2 = [
+      ...records1,
+      {
+        date: "2024-01-16",
+        description: "Grocery",
+        lines: [
+          { account: "Expenses:Food", currency: "USD", amount: "25" },
+          { account: "Assets:Bank", currency: "USD", amount: "-25" },
+        ],
+      },
+    ];
+
+    const result = await importRecords(backend, records2);
+    expect(result.entries_created).toBe(1);
+    expect(result.duplicates_skipped).toBe(1);
+  });
+
+  it("skips voided entries during dedup (allows re-import)", async () => {
+    const records = [
+      {
+        date: "2024-01-15",
+        description: "Coffee",
+        lines: [
+          { account: "Expenses:Food", currency: "USD", amount: "5" },
+          { account: "Assets:Bank", currency: "USD", amount: "-5" },
+        ],
+      },
+    ];
+
+    await importRecords(backend, records);
+
+    // Void the entry
+    const entries = await backend.queryJournalEntries({});
+    await backend.voidJournalEntry(entries[0][0].id);
+
+    // Re-import — should succeed since original was voided
+    const result = await importRecords(backend, records);
+    expect(result.entries_created).toBe(1);
+    expect(result.duplicates_skipped).toBe(0);
+  });
+
+  it("handles intra-batch dedup (identical records in same batch)", async () => {
+    const rec = {
+      date: "2024-01-15",
+      description: "Coffee",
+      lines: [
+        { account: "Expenses:Food", currency: "USD", amount: "5" },
+        { account: "Assets:Bank", currency: "USD", amount: "-5" },
+      ],
+    };
+    const records = [rec, { ...rec }]; // two identical records
+
+    const result = await importRecords(backend, records);
+    expect(result.entries_created).toBe(1);
+    expect(result.duplicates_skipped).toBe(1);
+  });
+
+  it("detects duplicate even with different account names (fingerprint excludes accounts)", async () => {
+    const records1 = [
+      {
+        date: "2024-01-15",
+        description: "Coffee",
+        lines: [
+          { account: "Assets:Bank:Checking", currency: "USD", amount: "5" },
+          { account: "Expenses:Food", currency: "USD", amount: "-5" },
+        ],
+      },
+    ];
+    await importRecords(backend, records1);
+
+    // Same data but different account names
+    const records2 = [
+      {
+        date: "2024-01-15",
+        description: "Coffee",
+        lines: [
+          { account: "Assets:Bank:Savings", currency: "USD", amount: "5" },
+          { account: "Expenses:Dining", currency: "USD", amount: "-5" },
+        ],
+      },
+    ];
+    const result = await importRecords(backend, records2);
+    expect(result.entries_created).toBe(0);
+    expect(result.duplicates_skipped).toBe(1);
+  });
 });

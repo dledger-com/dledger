@@ -5,6 +5,7 @@ import type { CsvImportResult } from "$lib/utils/csv-import.js";
 import type { CsvRecord } from "./types.js";
 import { parseDate, type DateFormatId } from "./parse-date.js";
 import { parseAmount } from "./parse-amount.js";
+import { buildDedupIndex, isDuplicate, computeRecordFingerprint } from "./dedup.js";
 
 export interface TransformOptions {
   dateColumn: string;
@@ -188,9 +189,13 @@ export async function importRecords(
     currencies_created: 0,
     warnings: [],
     transaction_currency_dates: [],
+    duplicates_skipped: 0,
   };
 
   if (records.length === 0) return result;
+
+  // Build dedup index from existing entries
+  const dedupIndex = await buildDedupIndex(backend, records, presetId);
 
   const existingCurrencies = new Set((await backend.listCurrencies()).map((c) => c.code));
   const existingAccounts = new Map<string, Account>();
@@ -215,12 +220,24 @@ export async function importRecords(
 
   // Process ungrouped records individually
   for (const rec of ungrouped) {
+    if (isDuplicate(rec, presetId, dedupIndex)) {
+      result.duplicates_skipped++;
+      continue;
+    }
     const entryResult = await postRecord(
       backend, rec, presetId, existingCurrencies, existingAccounts,
       counters, currencyDateSet,
     );
-    if (entryResult) result.entries_created++;
-    else result.warnings.push(`Skipped: "${rec.description}" on ${rec.date}`);
+    if (entryResult) {
+      result.entries_created++;
+      // Add to index for intra-batch dedup
+      dedupIndex.fingerprints.add(computeRecordFingerprint(rec));
+      if (rec.sourceKey && presetId) {
+        dedupIndex.sources.add(`csv-import:${presetId}:${rec.sourceKey}`);
+      }
+    } else {
+      result.warnings.push(`Skipped: "${rec.description}" on ${rec.date}`);
+    }
   }
 
   // Process grouped records: merge lines into a single entry
@@ -231,12 +248,23 @@ export async function importRecords(
       lines: group.flatMap((r) => r.lines),
       sourceKey: group[0].sourceKey,
     };
+    if (isDuplicate(merged, presetId, dedupIndex)) {
+      result.duplicates_skipped++;
+      continue;
+    }
     const entryResult = await postRecord(
       backend, merged, presetId, existingCurrencies, existingAccounts,
       counters, currencyDateSet,
     );
-    if (entryResult) result.entries_created++;
-    else result.warnings.push(`Skipped grouped: "${merged.description}" on ${merged.date}`);
+    if (entryResult) {
+      result.entries_created++;
+      dedupIndex.fingerprints.add(computeRecordFingerprint(merged));
+      if (merged.sourceKey && presetId) {
+        dedupIndex.sources.add(`csv-import:${presetId}:${merged.sourceKey}`);
+      }
+    } else {
+      result.warnings.push(`Skipped grouped: "${merged.description}" on ${merged.date}`);
+    }
   }
 
   result.accounts_created = counters.accounts;

@@ -1,0 +1,95 @@
+import type { Backend } from "$lib/backend.js";
+import type { JournalEntry, LineItem } from "$lib/types/index.js";
+import type { CsvRecord } from "./types.js";
+
+export interface DedupIndex {
+  sources: Set<string>;
+  fingerprints: Set<string>;
+}
+
+/**
+ * Compute a deterministic fingerprint from a CsvRecord.
+ * Format: "date:lowercased_description:sorted currency:amount pairs"
+ * Intentionally excludes account names so re-importing with a different
+ * main account still detects duplicates.
+ */
+export function computeRecordFingerprint(rec: CsvRecord): string {
+  const pairs = rec.lines
+    .map((l) => `${l.currency}:${l.amount}`)
+    .sort();
+  return `${rec.date}:${rec.description.toLowerCase().trim()}:${pairs.join("|")}`;
+}
+
+/**
+ * Compute the same fingerprint format from an existing DB entry + line items.
+ */
+export function computeEntryFingerprint(entry: JournalEntry, items: LineItem[]): string {
+  const pairs = items
+    .map((li) => `${li.currency}:${li.amount}`)
+    .sort();
+  return `${entry.date}:${entry.description.toLowerCase().trim()}:${pairs.join("|")}`;
+}
+
+/**
+ * Build a dedup index by querying existing entries whose dates overlap
+ * the CSV records' date range. Skips voided entries.
+ */
+export async function buildDedupIndex(
+  backend: Backend,
+  records: CsvRecord[],
+  presetId?: string,
+): Promise<DedupIndex> {
+  const sources = new Set<string>();
+  const fingerprints = new Set<string>();
+
+  if (records.length === 0) return { sources, fingerprints };
+
+  // Find min/max date from records
+  let minDate = records[0].date;
+  let maxDate = records[0].date;
+  for (const rec of records) {
+    if (rec.date < minDate) minDate = rec.date;
+    if (rec.date > maxDate) maxDate = rec.date;
+  }
+
+  // Query existing entries in the date range
+  const entries = await backend.queryJournalEntries({
+    from_date: minDate,
+    to_date: maxDate,
+  });
+
+  for (const [entry, items] of entries) {
+    // Skip voided entries
+    if (entry.voided_by !== null) continue;
+
+    // Add source for source-based matching
+    if (entry.source) {
+      sources.add(entry.source);
+    }
+
+    // Add fingerprint for fingerprint-based matching
+    fingerprints.add(computeEntryFingerprint(entry, items));
+  }
+
+  return { sources, fingerprints };
+}
+
+/**
+ * Check if a record is a duplicate based on source match (fast, exact)
+ * or fingerprint match (universal).
+ */
+export function isDuplicate(
+  rec: CsvRecord,
+  presetId: string | undefined,
+  index: DedupIndex,
+): boolean {
+  // Source-based check (fast, exact) — only when sourceKey is present
+  if (rec.sourceKey && presetId) {
+    const source = `csv-import:${presetId}:${rec.sourceKey}`;
+    if (index.sources.has(source)) return true;
+  }
+
+  // Fingerprint-based check (universal)
+  const fp = computeRecordFingerprint(rec);
+  return index.fingerprints.has(fp);
+}

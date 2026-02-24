@@ -26,6 +26,7 @@ export interface CsvImportResult {
   warnings: string[];
   transaction_currency_dates: [string, string][];
   balance_assertion_created?: boolean;
+  duplicates_skipped: number;
 }
 
 function parseCsvRow(line: string, delimiter: string): string[] {
@@ -119,7 +120,7 @@ export async function importCsv(
 
   const { headers, rows } = parseCsv(content, delimiter);
   if (headers.length === 0) {
-    return { entries_created: 0, accounts_created: 0, currencies_created: 0, warnings: ["Empty CSV file"], transaction_currency_dates: [] };
+    return { entries_created: 0, accounts_created: 0, currencies_created: 0, warnings: ["Empty CSV file"], transaction_currency_dates: [], duplicates_skipped: 0 };
   }
 
   const colIndex = new Map<string, number>();
@@ -130,7 +131,7 @@ export async function importCsv(
     return {
       entries_created: 0, accounts_created: 0, currencies_created: 0,
       warnings: [`Date column "${options.dateColumn}" not found`],
-      transaction_currency_dates: [],
+      transaction_currency_dates: [], duplicates_skipped: 0,
     };
   }
   const descIdx = options.descriptionColumn ? colIndex.get(options.descriptionColumn) : undefined;
