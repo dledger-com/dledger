@@ -23,6 +23,7 @@
   import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
   import X from "lucide-svelte/icons/x";
   import Pencil from "lucide-svelte/icons/pencil";
+  import { readFileAsText } from "$lib/utils/read-file-text.js";
   import {
     syncExchangeRates,
     fetchSingleRate,
@@ -66,18 +67,14 @@
     }
   });
 
-  function handleCsvDrop(e: DragEvent) {
+  async function handleCsvDrop(e: DragEvent) {
     e.preventDefault();
     dragCounter = 0;
     const file = e.dataTransfer?.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      csvInitialContent = reader.result as string;
-      csvInitialFileName = file.name;
-      csvDialogOpen = true;
-    };
-    reader.readAsText(file);
+    csvInitialContent = await readFileAsText(file);
+    csvInitialFileName = file.name;
+    csvDialogOpen = true;
   }
 
   const handlerRegistry = getDefaultRegistry();
@@ -427,17 +424,13 @@
   });
 
   // -- Ledger file handlers --
-  function handleFileSelect(event: Event) {
+  async function handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
 
     fileName = file.name;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      fileContent = (e.target?.result as string) ?? "";
-    };
-    reader.readAsText(file);
+    fileContent = await readFileAsText(file);
   }
 
   async function handleImport() {

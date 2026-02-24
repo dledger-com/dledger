@@ -70,6 +70,12 @@ describe("laBanquePostalePreset", () => {
       expect(records!).toHaveLength(2);
     });
 
+    it("uses Libellé column values as description", () => {
+      const records = laBanquePostalePreset.transform(metadataHeaders, rows)!;
+      expect(records[0].description).toBe("PRELEVEMENT DE EXAMPLE TELCO");
+      expect(records[1].description).toBe("VIREMENT EN VOTRE FAVEUR");
+    });
+
     it("parses DD/MM/YYYY dates correctly", () => {
       const records = laBanquePostalePreset.transform(metadataHeaders, rows)!;
       expect(records[0].date).toBe("2026-02-16");
@@ -215,6 +221,16 @@ describe("laBanquePostalePreset", () => {
 
       const records = laBanquePostalePreset.transform(headers, rows);
       expect(records![0].description).toBe("La Banque Postale transaction");
+    });
+
+    it("falls back to libell prefix when é is mangled by encoding", () => {
+      // Simulates the column header after UTF-8 misread of ISO-8859-1
+      const headers = ["Date", "Libell\uFFFD", "Montant(EUROS)"];
+      const rows = [["16/02/2026", "PRELEVEMENT DE EXAMPLE TELCO", "-24,99"]];
+
+      const records = laBanquePostalePreset.transform(headers, rows);
+      expect(records).not.toBeNull();
+      expect(records![0].description).toBe("PRELEVEMENT DE EXAMPLE TELCO");
     });
   });
 });

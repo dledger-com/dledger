@@ -12,6 +12,7 @@
   import { v7 as uuidv7 } from "uuid";
   import { parseCsv, detectDelimiter } from "$lib/utils/csv-import.js";
   import type { CsvImportResult } from "$lib/utils/csv-import.js";
+  import { readFileAsText } from "$lib/utils/read-file-text.js";
   import {
     getDefaultPresetRegistry,
     detectColumns,
@@ -114,16 +115,12 @@
     setN26Rules(rules);
   }
 
-  function handleFileChange(e: Event) {
+  async function handleFileChange(e: Event) {
     const target = e.target as HTMLInputElement;
     const file = target.files?.[0];
     if (!file) return;
     fileName = file.name;
-    const reader = new FileReader();
-    reader.onload = () => {
-      rawContent = reader.result as string;
-    };
-    reader.readAsText(file);
+    rawContent = await readFileAsText(file);
   }
 
   function handleParse() {

@@ -165,7 +165,7 @@ export const laBanquePostalePreset: CsvPreset = {
     };
 
     const dateIdx = col("date");
-    const descIdx = col("libellé");
+    const descIdx = col("libellé") >= 0 ? col("libellé") : lower.findIndex((c) => c.startsWith("libell"));
     const amtIdx = col("montant");
 
     if (dateIdx === -1 || amtIdx === -1) return null;
