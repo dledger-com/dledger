@@ -14,6 +14,12 @@ import { detectFormat, type LedgerFormat } from "./ledger-format.js";
 
 // ---- Helpers ----
 
+/** Return the number of decimal places in a numeric string (e.g. "129.35" → 2). */
+function decimalPlaces(s: string): number {
+  const dot = s.indexOf(".");
+  return dot < 0 ? 0 : s.length - dot - 1;
+}
+
 /** Parse YYYY-MM-DD or YYYY/MM/DD date prefix, normalize to YYYY-MM-DD. */
 function tryParseDatePrefix(s: string): string | null {
   if (s.length < 10) return null;
@@ -401,7 +407,7 @@ export async function importLedger(
           if (costTokens.length >= 2) {
             lotCost = {
               price: stripThousands(costTokens[0]),
-              commodity: costTokens[1],
+              commodity: costTokens[1].replace(/,+$/, ""),
             };
           }
         }
@@ -652,9 +658,9 @@ export async function importLedger(
       for (const p of postings) {
         if (p.amount === undefined) continue;
         if (p.costPrice) {
-          const costTotal = new Decimal(p.amount).times(
-            new Decimal(p.costPrice.price),
-          );
+          const costTotal = new Decimal(p.amount)
+            .times(new Decimal(p.costPrice.price))
+            .toDecimalPlaces(decimalPlaces(p.costPrice.price));
           const cur =
             sums.get(p.costPrice.commodity) ?? new Decimal(0);
           sums.set(p.costPrice.commodity, cur.plus(costTotal));
@@ -694,6 +700,21 @@ export async function importLedger(
           });
         }
       }
+    }
+
+    // Filter out zero-amount postings (valid in beancount/hledger but carry no accounting info)
+    for (let pi = postings.length - 1; pi >= 0; pi--) {
+      const pa = postings[pi].amount;
+      if (pa !== undefined && new Decimal(pa).isZero()) {
+        postings.splice(pi, 1);
+      }
+    }
+
+    if (postings.length === 0) {
+      result.warnings.push(
+        `line ${startIdx + 1}: skipped transaction with only zero-amount postings`,
+      );
+      return consumed;
     }
 
     // Build journal entry and line items
@@ -739,9 +760,9 @@ export async function importLedger(
           lot_id: null,
         });
 
-        const costTotal = new Decimal(amount).times(
-          new Decimal(p.lotCost.price),
-        );
+        const costTotal = new Decimal(amount)
+          .times(new Decimal(p.lotCost.price))
+          .toDecimalPlaces(decimalPlaces(p.lotCost.price));
         items.push({
           id: uuidv7(),
           journal_entry_id: entryId,
@@ -779,9 +800,9 @@ export async function importLedger(
         });
 
         // Add cost total in cost commodity
-        const costTotal = new Decimal(amount).times(
-          new Decimal(p.costPrice.price),
-        );
+        const costTotal = new Decimal(amount)
+          .times(new Decimal(p.costPrice.price))
+          .toDecimalPlaces(decimalPlaces(p.costPrice.price));
         items.push({
           id: uuidv7(),
           journal_entry_id: entryId,

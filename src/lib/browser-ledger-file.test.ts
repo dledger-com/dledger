@@ -287,6 +287,40 @@ describe("browser-ledger-file", () => {
       expect(trading).toBeDefined();
     });
 
+    it("parses {cost COMMODITY, date} lot syntax", async () => {
+      const content = `
+2024-01-01 open Assets:US:ETrade:Cash
+2024-01-01 open Assets:US:ETrade:GLD
+2024-01-01 open Expenses:Financial:Commissions
+
+2024-10-04 * "Buy shares of GLD"
+  Assets:US:ETrade:Cash    -1616.79 USD
+  Assets:US:ETrade:GLD     16 GLD {100.49 USD, 2024-10-04}
+  Expenses:Financial:Commissions  8.95 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      const trading = accounts.find((a) => a.full_name === "Equity:Trading:GLD");
+      expect(trading).toBeDefined();
+    });
+
+    it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
+      // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
+      // beancount allows this rounding; we round cost total to price's decimal places
+      const content = `
+2024-01-01 open Assets:US:Vanguard:Cash
+2024-01-01 open Assets:US:Vanguard:VBMPX
+
+2024-01-08 * "Investing 40% of cash in VBMPX"
+  Assets:US:Vanguard:VBMPX  3.711 VBMPX {129.35 USD, 2024-01-08}
+  Assets:US:Vanguard:Cash  -480.02 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+    });
+
     it("parses transaction metadata", async () => {
       const content = `
 2024-01-01 open Assets:Bank
@@ -390,6 +424,37 @@ plugin "beancount.plugins.auto_accounts"
 
       const entries = await backend.queryJournalEntries({});
       expect(entries[0][0].date).toBe("2024-01-01");
+    });
+
+    it("skips zero-amount postings", async () => {
+      const content = `
+2024-01-15 * "Mixed zero and non-zero"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+  Assets:Promo  0 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      expect(items).toHaveLength(2);
+      expect(items.every((i: { amount: string }) => i.amount !== "0")).toBe(true);
+    });
+
+    it("skips transaction with only zero-amount postings", async () => {
+      const content = `
+2024-01-15 * "All zero"
+  Assets:A  0 USD
+  Assets:B  0 USD
+
+2024-01-16 * "Normal"
+  Expenses:Food  30 USD
+  Assets:Bank  -30 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.warnings.some((w: string) => w.includes("zero-amount"))).toBe(true);
     });
   });
 
