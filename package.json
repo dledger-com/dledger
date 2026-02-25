@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "tauri": "tauri",
-    "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/sql-wasm.wasm"
+    "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/sql-wasm.wasm && cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs static/pdf.worker.min.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -27,6 +27,7 @@
     "layerchart": "^2.0.0-next.46",
     "lucide-svelte": "^0.563.0",
     "mode-watcher": "^1.1.0",
+    "pdfjs-dist": "^4.9.155",
     "sql.js": "^1.14.0",
     "tailwindcss": "^4.1.18",
     "uuid": "^13.0.0"

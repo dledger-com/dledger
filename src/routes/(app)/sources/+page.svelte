@@ -53,6 +53,7 @@
   import Link2 from "lucide-svelte/icons/link-2";
   import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
   import OfxImportDialog from "$lib/components/OfxImportDialog.svelte";
+  import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
 
   let csvDialogOpen = $state(false);
   let csvInitialContent = $state("");
@@ -66,6 +67,12 @@
   let ofxDragCounter = $state(0);
   let draggingOfx = $derived(ofxDragCounter > 0);
 
+  let pdfDialogOpen = $state(false);
+  let pdfInitialFile = $state<File | null>(null);
+  let pdfInitialFileName = $state("");
+  let pdfDragCounter = $state(0);
+  let draggingPdf = $derived(pdfDragCounter > 0);
+
   // Clear initial content when dialog closes
   $effect(() => {
     if (!csvDialogOpen) {
@@ -78,6 +85,13 @@
     if (!ofxDialogOpen) {
       ofxInitialContent = "";
       ofxInitialFileName = "";
+    }
+  });
+
+  $effect(() => {
+    if (!pdfDialogOpen) {
+      pdfInitialFile = null;
+      pdfInitialFileName = "";
     }
   });
 
@@ -99,6 +113,16 @@
     ofxInitialContent = await readFileAsText(file);
     ofxInitialFileName = file.name;
     ofxDialogOpen = true;
+  }
+
+  function handlePdfDrop(e: DragEvent) {
+    e.preventDefault();
+    pdfDragCounter = 0;
+    const file = e.dataTransfer?.files[0];
+    if (!file) return;
+    pdfInitialFile = file;
+    pdfInitialFileName = file.name;
+    pdfDialogOpen = true;
   }
 
   const handlerRegistry = getDefaultRegistry();
@@ -1033,6 +1057,36 @@
     bind:open={ofxDialogOpen}
     initialContent={ofxInitialContent}
     initialFileName={ofxInitialFileName}
+  />
+
+  <!-- PDF Import -->
+  <Card.Root
+    class={draggingPdf ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors" : "transition-colors"}
+    ondragenter={(e: DragEvent) => { e.preventDefault(); pdfDragCounter++; }}
+    ondragover={(e: DragEvent) => { e.preventDefault(); }}
+    ondragleave={() => { pdfDragCounter--; }}
+    ondrop={handlePdfDrop}
+  >
+    <Card.Header>
+      <Card.Title>PDF Import</Card.Title>
+      <Card.Description>Import transactions from PDF bank statements (La Banque Postale).</Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <div class="flex items-center gap-3">
+        <Button onclick={() => { pdfDialogOpen = true; }}>
+          <Upload class="mr-2 h-4 w-4" /> Import PDF
+        </Button>
+        {#if draggingPdf}
+          <p class="text-sm text-muted-foreground">Drop PDF file to import...</p>
+        {/if}
+      </div>
+    </Card.Content>
+  </Card.Root>
+
+  <PdfImportDialog
+    bind:open={pdfDialogOpen}
+    initialFile={pdfInitialFile}
+    initialFileName={pdfInitialFileName}
   />
 
   <!-- Blockchain Sync -->
