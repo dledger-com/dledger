@@ -157,4 +157,14 @@ describe("suggestMainAccount", () => {
     const stmt = makeStatement({ accountNumber: null, iban: null });
     expect(suggestMainAccount(stmt)).toBe("Assets:Banks:LaBanquePostale:Unknown");
   });
+
+  it("suggests N26 account when bankId is n26", () => {
+    const stmt = makeStatement();
+    expect(suggestMainAccount(stmt, "n26")).toBe("Assets:Banks:N26");
+  });
+
+  it("preserves LBP behavior when bankId is lbp", () => {
+    const stmt = makeStatement();
+    expect(suggestMainAccount(stmt, "lbp")).toBe("Assets:Banks:LaBanquePostale:X000");
+  });
 });

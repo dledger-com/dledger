@@ -22,6 +22,7 @@
   import {
     extractPdfPages,
     parseLbpStatement,
+    parseN26Statement,
     convertPdfToRecords,
     suggestMainAccount,
     type PdfStatement,
@@ -55,7 +56,8 @@
 
   // -- Parsed PDF data --
   let statement = $state<PdfStatement | null>(null);
-  let mainAccount = $state("Assets:Banks:LaBanquePostale:Import");
+  let detectedBank = $state<"lbp" | "n26" | null>(null);
+  let mainAccount = $state("Assets:Banks:Import");
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
@@ -104,14 +106,26 @@
       const buffer = await file.arrayBuffer();
       const data = new Uint8Array(buffer);
       const pages = await extractPdfPages(data);
-      statement = parseLbpStatement(pages);
 
-      if (statement.transactions.length === 0) {
+      // Auto-detect bank by trying both parsers
+      const n26Result = parseN26Statement(pages);
+      const lbpResult = parseLbpStatement(pages);
+
+      if (n26Result.transactions.length > 0 && n26Result.transactions.length >= lbpResult.transactions.length) {
+        statement = n26Result;
+        detectedBank = "n26";
+      } else if (lbpResult.transactions.length > 0) {
+        statement = lbpResult;
+        detectedBank = "lbp";
+      } else {
+        // Both failed — show the one with fewer warnings
+        statement = n26Result.warnings.length <= lbpResult.warnings.length ? n26Result : lbpResult;
+        detectedBank = null;
         toast.error(statement.warnings[0] ?? "No transactions found in PDF");
         return;
       }
 
-      mainAccount = suggestMainAccount(statement);
+      mainAccount = suggestMainAccount(statement, detectedBank);
     } catch (err) {
       toast.error(`Failed to parse PDF: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -135,11 +149,13 @@
     step = 2;
   }
 
+  let presetId = $derived(detectedBank === "n26" ? "pdf-n26" : "pdf-lbp");
+
   async function detectDuplicates(records: CsvRecord[]) {
     try {
       const backend = getBackend();
-      const index = await buildDedupIndex(backend, records, "pdf-lbp");
-      duplicateFlags = records.map((rec) => isDuplicate(rec, "pdf-lbp", index));
+      const index = await buildDedupIndex(backend, records, presetId);
+      duplicateFlags = records.map((rec) => isDuplicate(rec, presetId, index));
     } catch {
       duplicateFlags = records.map(() => false);
     }
@@ -150,7 +166,7 @@
     importResult = null;
     try {
       const backend = getBackend();
-      const result = await importRecords(backend, previewRecords, "pdf-lbp");
+      const result = await importRecords(backend, previewRecords, presetId);
 
       // Store account metadata from file header if available
       if (fileHeader?.accountMetadata && mainAccount) {
@@ -227,7 +243,8 @@
     fileName = "";
     parsing = false;
     statement = null;
-    mainAccount = "Assets:Banks:LaBanquePostale:Import";
+    detectedBank = null;
+    mainAccount = "Assets:Banks:Import";
     fileHeader = null;
     previewRecords = [];
     previewWarnings = [];
@@ -261,7 +278,7 @@
       </Dialog.Title>
       <Dialog.Description>
         {#if step === 1}
-          Upload a PDF bank statement (La Banque Postale).
+          Upload a PDF bank statement.{#if detectedBank === "n26"} Detected: N26.{:else if detectedBank === "lbp"} Detected: La Banque Postale.{/if}
         {:else}
           Review entries before importing.
         {/if}
