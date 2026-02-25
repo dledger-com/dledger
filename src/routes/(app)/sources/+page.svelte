@@ -1012,7 +1012,7 @@
       <Card.Description>
         Import transactions from CSV files.
         <span class="mt-1.5 flex flex-wrap gap-1">
-          {#each ["Kraken", "Binance", "Coinbase", "Bybit", "Bitfinex", "Bitstamp", "Bisq", "Bittrex", "CoinList", "Crypto.com", "Gate.io", "Nexo", "Poloniex", "Revolut", "N26", "La Banque Postale", "Yield App"] as name}
+          {#each ["Binance", "Bisq", "Bitfinex", "Bitstamp", "Bittrex", "Bybit", "Coinbase", "CoinList", "Crypto.com", "Gate.io", "Kraken", "La Banque Postale", "N26", "Nexo", "Poloniex", "Revolut", "Yield App"] as name}
             <Badge variant="outline">{name}</Badge>
           {/each}
         </span>
