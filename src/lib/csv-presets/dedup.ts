@@ -5,6 +5,7 @@ import type { CsvRecord } from "./types.js";
 export interface DedupIndex {
   sources: Set<string>;
   fingerprints: Set<string>;
+  amountFingerprints: Set<string>;
 }
 
 /**
@@ -31,6 +32,28 @@ export function computeEntryFingerprint(entry: JournalEntry, items: LineItem[]):
 }
 
 /**
+ * Compute an amount-only fingerprint from a CsvRecord.
+ * Format: "date:sorted currency:amount pairs" (no description).
+ * Used for cross-format dedup where date + amounts match but descriptions differ.
+ */
+export function computeAmountFingerprint(rec: CsvRecord): string {
+  const pairs = rec.lines
+    .map((l) => `${l.currency}:${l.amount}`)
+    .sort();
+  return `${rec.date}:${pairs.join("|")}`;
+}
+
+/**
+ * Compute the same amount-only fingerprint from an existing DB entry + line items.
+ */
+export function computeEntryAmountFingerprint(entry: JournalEntry, items: LineItem[]): string {
+  const pairs = items
+    .map((li) => `${li.currency}:${li.amount}`)
+    .sort();
+  return `${entry.date}:${pairs.join("|")}`;
+}
+
+/**
  * Build a dedup index by querying existing entries whose dates overlap
  * the CSV records' date range. Skips voided entries.
  */
@@ -41,8 +64,9 @@ export async function buildDedupIndex(
 ): Promise<DedupIndex> {
   const sources = new Set<string>();
   const fingerprints = new Set<string>();
+  const amountFingerprints = new Set<string>();
 
-  if (records.length === 0) return { sources, fingerprints };
+  if (records.length === 0) return { sources, fingerprints, amountFingerprints };
 
   // Find min/max date from records
   let minDate = records[0].date;
@@ -69,9 +93,12 @@ export async function buildDedupIndex(
 
     // Add fingerprint for fingerprint-based matching
     fingerprints.add(computeEntryFingerprint(entry, items));
+
+    // Add amount fingerprint for cross-format matching
+    amountFingerprints.add(computeEntryAmountFingerprint(entry, items));
   }
 
-  return { sources, fingerprints };
+  return { sources, fingerprints, amountFingerprints };
 }
 
 /**
@@ -91,5 +118,9 @@ export function isDuplicate(
 
   // Fingerprint-based check (universal)
   const fp = computeRecordFingerprint(rec);
-  return index.fingerprints.has(fp);
+  if (index.fingerprints.has(fp)) return true;
+
+  // Amount-based check (cross-format — ignores description)
+  const afp = computeAmountFingerprint(rec);
+  return index.amountFingerprints.has(afp);
 }

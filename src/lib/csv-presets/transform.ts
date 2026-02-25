@@ -5,7 +5,7 @@ import type { CsvImportResult } from "$lib/utils/csv-import.js";
 import type { CsvRecord } from "./types.js";
 import { parseDate, type DateFormatId } from "./parse-date.js";
 import { parseAmount } from "./parse-amount.js";
-import { buildDedupIndex, isDuplicate, computeRecordFingerprint } from "./dedup.js";
+import { buildDedupIndex, isDuplicate, computeRecordFingerprint, computeAmountFingerprint } from "./dedup.js";
 
 export interface TransformOptions {
   dateColumn: string;
@@ -232,6 +232,7 @@ export async function importRecords(
       result.entries_created++;
       // Add to index for intra-batch dedup
       dedupIndex.fingerprints.add(computeRecordFingerprint(rec));
+      dedupIndex.amountFingerprints.add(computeAmountFingerprint(rec));
       if (rec.sourceKey && presetId) {
         dedupIndex.sources.add(`csv-import:${presetId}:${rec.sourceKey}`);
       }
@@ -259,6 +260,7 @@ export async function importRecords(
     if (entryResult) {
       result.entries_created++;
       dedupIndex.fingerprints.add(computeRecordFingerprint(merged));
+      dedupIndex.amountFingerprints.add(computeAmountFingerprint(merged));
       if (merged.sourceKey && presetId) {
         dedupIndex.sources.add(`csv-import:${presetId}:${merged.sourceKey}`);
       }
