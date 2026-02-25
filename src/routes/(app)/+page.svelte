@@ -307,6 +307,7 @@
           <div class="h-48">
             <PieChart
               data={expenseData}
+              key="category"
               value="amount"
               series={expenseData.map((d) => ({
                 key: d.category,
