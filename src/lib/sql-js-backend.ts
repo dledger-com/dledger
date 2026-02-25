@@ -187,7 +187,9 @@ CREATE TABLE IF NOT EXISTS balance_assertion (
     currency TEXT NOT NULL REFERENCES currency(code),
     expected_balance TEXT NOT NULL,
     is_passing INTEGER NOT NULL DEFAULT 1,
-    actual_balance TEXT
+    actual_balance TEXT,
+    is_strict INTEGER NOT NULL DEFAULT 0,
+    include_subaccounts INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_balance_assertion_account ON balance_assertion(account_id);
 
@@ -418,7 +420,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (account_id, key)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-    db.exec("INSERT INTO schema_version (version) VALUES (14)");
+    db.exec("INSERT INTO schema_version (version) VALUES (15)");
     return backend;
   }
 
@@ -443,7 +445,7 @@ export class SqlJsBackend implements Backend {
         PRIMARY KEY (account_id, key)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-      db.exec("INSERT INTO schema_version (version) VALUES (14)");
+      db.exec("INSERT INTO schema_version (version) VALUES (15)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -597,9 +599,13 @@ export class SqlJsBackend implements Backend {
           )`);
           db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
         }
-        if (currentVersion < 14) {
+        if (currentVersion < 15) {
+          db.exec("ALTER TABLE balance_assertion ADD COLUMN is_strict INTEGER NOT NULL DEFAULT 0");
+          db.exec("ALTER TABLE balance_assertion ADD COLUMN include_subaccounts INTEGER NOT NULL DEFAULT 0");
+        }
+        if (currentVersion < 15) {
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (14)");
+          db.exec("INSERT INTO schema_version (version) VALUES (15)");
         }
       }
     }
@@ -2103,11 +2109,11 @@ export class SqlJsBackend implements Backend {
 
   // ---- Backend: Ledger file import/export ----
 
-  async importLedgerFile(content: string): Promise<LedgerImportResult> {
+  async importLedgerFile(content: string, format?: import("./ledger-format.js").LedgerFormat): Promise<LedgerImportResult> {
     const { importLedger } = await import("./browser-ledger-file.js");
     this.beginTransaction();
     try {
-      const result = await importLedger(this, content);
+      const result = await importLedger(this, content, format);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -2116,9 +2122,9 @@ export class SqlJsBackend implements Backend {
     }
   }
 
-  async exportLedgerFile(): Promise<string> {
+  async exportLedgerFile(format?: import("./ledger-format.js").LedgerFormat): Promise<string> {
     const { exportLedger } = await import("./browser-ledger-file.js");
-    return exportLedger(this);
+    return exportLedger(this, format);
   }
 
   // ---- Backend: Metadata ----
@@ -2404,14 +2410,14 @@ export class SqlJsBackend implements Backend {
       new Decimal(actualAmount).eq(new Decimal(assertion.expected_balance));
 
     this.run(
-      "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.expected_balance, isPassing ? 1 : 0, actualAmount],
+      "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.expected_balance, isPassing ? 1 : 0, actualAmount, assertion.is_strict ? 1 : 0, assertion.include_subaccounts ? 1 : 0],
     );
     this.scheduleSave();
   }
 
   async listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]> {
-    let sql = "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance FROM balance_assertion";
+    let sql = "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion";
     const params: unknown[] = [];
     if (accountId) {
       sql += " WHERE account_id = ?";
@@ -2426,6 +2432,8 @@ export class SqlJsBackend implements Backend {
       expected_balance: row.expected_balance as string,
       is_passing: (row.is_passing as number) !== 0,
       actual_balance: row.actual_balance as string | null,
+      is_strict: (row.is_strict as number) !== 0,
+      include_subaccounts: (row.include_subaccounts as number) !== 0,
     }));
   }
 

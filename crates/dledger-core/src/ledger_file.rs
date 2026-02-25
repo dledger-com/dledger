@@ -9,6 +9,119 @@ use uuid::Uuid;
 use crate::ledger::LedgerEngine;
 use crate::models::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LedgerFormat {
+    Dledger,
+    Beancount,
+    Hledger,
+}
+
+impl LedgerFormat {
+    pub fn from_str_opt(s: &str) -> Option<Self> {
+        match s {
+            "dledger" => Some(Self::Dledger),
+            "beancount" => Some(Self::Beancount),
+            "hledger" => Some(Self::Hledger),
+            _ => None,
+        }
+    }
+}
+
+/// Auto-detect the format of a ledger file by scoring the first ~50 non-empty, non-comment lines.
+pub fn detect_format(content: &str) -> LedgerFormat {
+    let mut bc: i32 = 0;
+    let mut hl: i32 = 0;
+    let mut scanned = 0;
+
+    for raw_line in content.lines() {
+        if scanned >= 50 {
+            break;
+        }
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
+            continue;
+        }
+        scanned += 1;
+
+        // Beancount signals
+        if is_date_then_word(line, "txn") {
+            bc += 5;
+        }
+        if line.starts_with("option \"") || line.starts_with("plugin \"") {
+            bc += 5;
+        }
+        if is_date_then_quoted(line) {
+            bc += 3;
+        }
+        if is_date_then_directive(line) {
+            bc += 2;
+        }
+
+        // hledger signals
+        if is_slash_date(line) {
+            hl += 3;
+        }
+        if line.starts_with("account ") {
+            hl += 5;
+        }
+        if line.starts_with("commodity ") {
+            hl += 3;
+        }
+        // Inline balance assertion in posting
+        if raw_line.starts_with(' ') || raw_line.starts_with('\t') {
+            if line.contains(" = ") || line.contains(" == ") {
+                hl += 5;
+            }
+        }
+    }
+
+    if bc > hl && bc >= 3 {
+        LedgerFormat::Beancount
+    } else if hl > bc && hl >= 3 {
+        LedgerFormat::Hledger
+    } else {
+        LedgerFormat::Dledger
+    }
+}
+
+fn is_date_then_word(line: &str, word: &str) -> bool {
+    if line.len() < 12 {
+        return false;
+    }
+    let after = &line[10..].trim_start();
+    after.starts_with(word) && after[word.len()..].starts_with(|c: char| c.is_whitespace() || c == '"')
+}
+
+fn is_date_then_quoted(line: &str) -> bool {
+    if line.len() < 14 {
+        return false;
+    }
+    let after = line[10..].trim_start();
+    // After date + optional status marker
+    let rest = if after.starts_with("* ") || after.starts_with("! ") {
+        after[2..].trim_start()
+    } else {
+        after
+    };
+    rest.starts_with('"')
+}
+
+fn is_date_then_directive(line: &str) -> bool {
+    if line.len() < 14 {
+        return false;
+    }
+    let after = line[10..].trim_start();
+    after.starts_with("open ") || after.starts_with("close ") || after.starts_with("balance ")
+}
+
+fn is_slash_date(line: &str) -> bool {
+    line.len() >= 10 && line.as_bytes()[4] == b'/' && line.as_bytes()[7] == b'/'
+        && line[..4].chars().all(|c| c.is_ascii_digit())
+        && line[5..7].chars().all(|c| c.is_ascii_digit())
+        && line[8..10].chars().all(|c| c.is_ascii_digit())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerImportResult {
     pub accounts_created: usize,
@@ -21,8 +134,26 @@ pub struct LedgerImportResult {
     pub transaction_currency_dates: Vec<(String, String)>,
 }
 
-/// Import a beancount-like ledger file into the engine.
+/// Import a ledger file into the engine, auto-detecting format if not specified.
 pub fn import_ledger(engine: &LedgerEngine, content: &str) -> Result<LedgerImportResult, String> {
+    import_ledger_with_format(engine, content, None)
+}
+
+/// Import a ledger file with explicit format.
+pub fn import_ledger_with_format(
+    engine: &LedgerEngine,
+    content: &str,
+    format: Option<LedgerFormat>,
+) -> Result<LedgerImportResult, String> {
+    let fmt = format.unwrap_or_else(|| detect_format(content));
+    import_ledger_internal(engine, content, fmt)
+}
+
+fn import_ledger_internal(
+    engine: &LedgerEngine,
+    content: &str,
+    fmt: LedgerFormat,
+) -> Result<LedgerImportResult, String> {
     let mut result = LedgerImportResult {
         accounts_created: 0,
         currencies_created: 0,
@@ -35,10 +166,27 @@ pub fn import_ledger(engine: &LedgerEngine, content: &str) -> Result<LedgerImpor
 
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
+    let mut in_block_comment = false;
 
     while i < lines.len() {
         let line = lines[i];
         let trimmed = line.trim();
+
+        // hledger: block comments
+        if fmt == LedgerFormat::Hledger {
+            if in_block_comment {
+                if trimmed == "end comment" {
+                    in_block_comment = false;
+                }
+                i += 1;
+                continue;
+            }
+            if trimmed == "comment" {
+                in_block_comment = true;
+                i += 1;
+                continue;
+            }
+        }
 
         // Skip empty lines and comments
         if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with('#') {
@@ -52,9 +200,40 @@ pub fn import_ledger(engine: &LedgerEngine, content: &str) -> Result<LedgerImpor
             continue;
         }
 
+        // Beancount: skip option, plugin, note, document, event, custom, include directives
+        if fmt == LedgerFormat::Beancount {
+            if trimmed.starts_with("option ") || trimmed.starts_with("plugin ")
+                || trimmed.starts_with("note ") || trimmed.starts_with("document ")
+                || trimmed.starts_with("event ") || trimmed.starts_with("custom ")
+                || trimmed.starts_with("include ")
+            {
+                i += 1;
+                continue;
+            }
+        }
+
+        // hledger: skip include, commodity directives
+        if fmt == LedgerFormat::Hledger {
+            if trimmed.starts_with("include ") || trimmed.starts_with("commodity ") {
+                i += 1;
+                continue;
+            }
+        }
+
+        // hledger: `account` directive (no date prefix)
+        if fmt == LedgerFormat::Hledger && trimmed.starts_with("account ") {
+            let account_name = trimmed[8..].trim().split_whitespace().next().unwrap_or("");
+            if !account_name.is_empty() {
+                let fallback_date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+                ensure_account(engine, account_name, vec![], fallback_date, &mut result)?;
+            }
+            i += 1;
+            continue;
+        }
+
         // Price directive: P YYYY-MM-DD COMMODITY AMOUNT COMMODITY
         if trimmed.starts_with("P ") {
-            parse_price_directive(engine, trimmed, &mut result, i + 1)?;
+            parse_price_directive(engine, trimmed, &mut result, i + 1, fmt)?;
             i += 1;
             continue;
         }
@@ -88,9 +267,19 @@ pub fn import_ledger(engine: &LedgerEngine, content: &str) -> Result<LedgerImpor
                 continue;
             }
 
+            // Beancount: skip date-prefixed note, document, event, custom directives
+            if fmt == LedgerFormat::Beancount {
+                if rest.starts_with("note ") || rest.starts_with("document ")
+                    || rest.starts_with("event ") || rest.starts_with("custom ")
+                {
+                    i += 1;
+                    continue;
+                }
+            }
+
             // Transaction block
             let (consumed, _) =
-                parse_transaction(engine, date, rest, &lines, i, &mut result)?;
+                parse_transaction(engine, date, rest, &lines, i, &mut result, fmt)?;
             i += consumed;
             continue;
         }
@@ -102,8 +291,13 @@ pub fn import_ledger(engine: &LedgerEngine, content: &str) -> Result<LedgerImpor
     Ok(result)
 }
 
-/// Export all ledger data as a beancount-like text file.
+/// Export all ledger data as a beancount-like text file (dledger format).
 pub fn export_ledger(engine: &LedgerEngine) -> Result<String, String> {
+    export_ledger_with_format(engine, LedgerFormat::Dledger)
+}
+
+/// Export all ledger data in the specified format.
+pub fn export_ledger_with_format(engine: &LedgerEngine, format: LedgerFormat) -> Result<String, String> {
     let mut out = String::new();
     out.push_str("; Generated by dLedger\n\n");
 
@@ -111,19 +305,23 @@ pub fn export_ledger(engine: &LedgerEngine) -> Result<String, String> {
     let mut sorted_accounts = accounts.clone();
     sorted_accounts.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.full_name.cmp(&b.full_name)));
 
-    // Open directives
+    // Account declarations
     for acc in &sorted_accounts {
-        let commodities = if acc.allowed_currencies.is_empty() {
-            String::new()
+        if format == LedgerFormat::Hledger {
+            out.push_str(&format!("account {}\n", acc.full_name));
         } else {
-            format!("  {}", acc.allowed_currencies.join(","))
-        };
-        out.push_str(&format!(
-            "{} open {}{}\n",
-            acc.created_at.format("%Y-%m-%d"),
-            acc.full_name,
-            commodities,
-        ));
+            let commodities = if acc.allowed_currencies.is_empty() {
+                String::new()
+            } else {
+                format!("  {}", acc.allowed_currencies.join(","))
+            };
+            out.push_str(&format!(
+                "{} open {}{}\n",
+                acc.created_at.format("%Y-%m-%d"),
+                acc.full_name,
+                commodities,
+            ));
+        }
     }
     out.push('\n');
 
@@ -144,12 +342,21 @@ pub fn export_ledger(engine: &LedgerEngine) -> Result<String, String> {
             JournalEntryStatus::Pending => " !",
             JournalEntryStatus::Voided => unreachable!(),
         };
-        out.push_str(&format!(
-            "{}{} {}\n",
-            entry.date.format("%Y-%m-%d"),
-            status_marker,
-            entry.description,
-        ));
+        if format == LedgerFormat::Beancount {
+            out.push_str(&format!(
+                "{}{} \"{}\"\n",
+                entry.date.format("%Y-%m-%d"),
+                status_marker,
+                entry.description,
+            ));
+        } else {
+            out.push_str(&format!(
+                "{}{} {}\n",
+                entry.date.format("%Y-%m-%d"),
+                status_marker,
+                entry.description,
+            ));
+        }
         for item in items {
             let acc_name = accounts
                 .iter()
@@ -189,7 +396,10 @@ fn try_parse_date_prefix(s: &str) -> Option<NaiveDate> {
     if s.len() < 10 {
         return None;
     }
-    NaiveDate::parse_from_str(&s[..10], "%Y-%m-%d").ok()
+    // Try YYYY-MM-DD first, then YYYY/MM/DD
+    NaiveDate::parse_from_str(&s[..10], "%Y-%m-%d")
+        .or_else(|_| NaiveDate::parse_from_str(&s[..10], "%Y/%m/%d"))
+        .ok()
 }
 
 fn infer_account_type(full_name: &str) -> Result<AccountType, String> {
@@ -379,6 +589,8 @@ fn parse_balance_directive(
         expected_balance: amount,
         is_passing: false,
         actual_balance: None,
+        is_strict: false,
+        include_subaccounts: false,
     };
     let passing = engine
         .check_balance_assertion(&assertion)
@@ -397,13 +609,15 @@ fn parse_price_directive(
     line: &str,
     result: &mut LedgerImportResult,
     line_num: usize,
+    _fmt: LedgerFormat,
 ) -> Result<(), String> {
-    // P YYYY-MM-DD COMMODITY AMOUNT COMMODITY
+    // P YYYY-MM-DD COMMODITY AMOUNT COMMODITY (also accepts YYYY/MM/DD)
     let tokens: Vec<&str> = line.split_whitespace().collect();
     if tokens.len() < 5 {
         return Err(format!("line {}: malformed price directive", line_num));
     }
     let date = NaiveDate::parse_from_str(tokens[1], "%Y-%m-%d")
+        .or_else(|_| NaiveDate::parse_from_str(tokens[1], "%Y/%m/%d"))
         .map_err(|e| format!("line {}: bad date '{}': {}", line_num, tokens[1], e))?;
     let from_commodity = tokens[2];
     let rate = Decimal::from_str(tokens[3])
@@ -442,10 +656,14 @@ fn parse_transaction(
     lines: &[&str],
     start_idx: usize,
     result: &mut LedgerImportResult,
+    fmt: LedgerFormat,
 ) -> Result<(usize, ()), String> {
-    // Parse header: [*|!] [(CODE)] [PAYEE |] DESCRIPTION
+    // Parse header: [txn|*|!] [(CODE)] [PAYEE |] DESCRIPTION
     let mut rest = header_rest;
-    let status = if rest.starts_with("* ") || rest.starts_with("*\t") {
+    let status = if rest.starts_with("txn ") || rest.starts_with("txn\t") || rest == "txn" {
+        rest = if rest.len() > 3 { rest[3..].trim_start() } else { "" };
+        JournalEntryStatus::Confirmed
+    } else if rest.starts_with("* ") || rest.starts_with("*\t") {
         rest = rest[2..].trim_start();
         JournalEntryStatus::Confirmed
     } else if rest.starts_with("! ") || rest.starts_with("!\t") {
@@ -463,9 +681,11 @@ fn parse_transaction(
             rest = after;
             // Prepend code to description
             if !rest.is_empty() {
-                let description = format!("({}) {}", code, rest);
-                // We need to handle payee inside the description string
-                // Parse it below after extracting rest
+                let mut description = format!("({}) {}", code, rest);
+                // Beancount: strip quotes from description
+                if fmt == LedgerFormat::Beancount {
+                    description = strip_beancount_quotes(&description);
+                }
                 return parse_transaction_body(
                     engine, date, status, &description, lines, start_idx, result,
                 );
@@ -473,8 +693,22 @@ fn parse_transaction(
         }
     }
 
-    let description = rest.to_string();
+    let mut description = rest.to_string();
+    // Beancount: strip quotes from description
+    if fmt == LedgerFormat::Beancount {
+        description = strip_beancount_quotes(&description);
+    }
     parse_transaction_body(engine, date, status, &description, lines, start_idx, result)
+}
+
+fn strip_beancount_quotes(s: &str) -> String {
+    let s = s.trim();
+    if s.starts_with('"') {
+        if let Some(end) = s[1..].find('"') {
+            return s[1..end + 1].to_string();
+        }
+    }
+    s.to_string()
 }
 
 fn parse_transaction_body(

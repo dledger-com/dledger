@@ -194,6 +194,10 @@ pub struct BalanceAssertion {
     pub expected_balance: Decimal,
     pub is_passing: bool,
     pub actual_balance: Option<Decimal>,
+    #[serde(default)]
+    pub is_strict: bool,
+    #[serde(default)]
+    pub include_subaccounts: bool,
 }
 
 /// Extensible key-value metadata on a journal entry.

@@ -1459,6 +1459,8 @@ fn test_balance_assertion_passing() {
         expected_balance: dec!(3000),
         is_passing: false,
         actual_balance: None,
+        is_strict: false,
+        include_subaccounts: false,
     };
 
     let result = engine.check_balance_assertion(&assertion).unwrap();
@@ -1489,6 +1491,8 @@ fn test_balance_assertion_failing() {
         expected_balance: dec!(5000), // Wrong!
         is_passing: false,
         actual_balance: None,
+        is_strict: false,
+        include_subaccounts: false,
     };
 
     let result = engine.check_balance_assertion(&assertion).unwrap();

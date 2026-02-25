@@ -299,6 +299,8 @@
               expected_balance: fileHeader.balanceAmount,
               is_passing: true,
               actual_balance: null,
+              is_strict: false,
+              include_subaccounts: false,
             });
             result.balance_assertion_created = true;
           }

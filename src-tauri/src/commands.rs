@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use tauri::State;
 use uuid::Uuid;
 
-use dledger_core::ledger_file::{self, LedgerImportResult};
+use dledger_core::ledger_file::{self, LedgerFormat, LedgerImportResult};
 use dledger_core::models::*;
 use dledger_core::reports;
 use dledger_core::LedgerEngine;
@@ -241,15 +241,19 @@ pub fn gain_loss_report(
 pub fn import_ledger_file(
     state: State<'_, AppState>,
     content: String,
+    format: Option<String>,
 ) -> Result<LedgerImportResult, String> {
-    ledger_file::import_ledger(&state.engine, &content)
+    let fmt = format.and_then(|s| LedgerFormat::from_str_opt(&s));
+    ledger_file::import_ledger_with_format(&state.engine, &content, fmt)
 }
 
 #[tauri::command]
 pub fn export_ledger_file(
     state: State<'_, AppState>,
+    format: Option<String>,
 ) -> Result<String, String> {
-    ledger_file::export_ledger(&state.engine)
+    let fmt = format.and_then(|s| LedgerFormat::from_str_opt(&s)).unwrap_or(LedgerFormat::Dledger);
+    ledger_file::export_ledger_with_format(&state.engine, fmt)
 }
 
 // -- Currency origins --

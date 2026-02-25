@@ -24,6 +24,9 @@
   import X from "lucide-svelte/icons/x";
   import Pencil from "lucide-svelte/icons/pencil";
   import { readFileAsText } from "$lib/utils/read-file-text.js";
+  import { detectFormat, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
+  import { resolveIncludes, filterLedgerFiles } from "$lib/ledger-include.js";
+  import { unzipSync, strFromU8 } from "fflate";
   import {
     syncExchangeRates,
     fetchSingleRate,
@@ -135,6 +138,10 @@
   let submitting = $state(false);
   let result = $state<LedgerImportResult | null>(null);
   let fileName = $state<string | null>(null);
+  let fileCount = $state(0);
+  let detectedFormat = $derived<LedgerFormat | null>(
+    fileContent.trim() ? detectFormat(fileContent) : null,
+  );
   let previewLines = $derived(
     fileContent
       ? fileContent.split("\n").slice(0, 10).filter((l) => l.trim())
@@ -474,11 +481,60 @@
   // -- Ledger file handlers --
   async function handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+    const files = input.files;
+    if (!files || files.length === 0) return;
 
-    fileName = file.name;
-    fileContent = await readFileAsText(file);
+    if (files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")) {
+      // Zip archive: decompress and resolve includes
+      const file = files[0];
+      fileName = file.name;
+      try {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const entries = unzipSync(buf);
+        const fileMap = new Map<string, string>();
+        for (const [name, data] of Object.entries(entries)) {
+          fileMap.set(name, strFromU8(data));
+        }
+        const ledgerFiles = filterLedgerFiles(fileMap);
+        fileCount = ledgerFiles.length;
+        if (ledgerFiles.length === 0) {
+          toast.error("No ledger files found in archive");
+          fileContent = "";
+          return;
+        }
+        // Resolve includes and concatenate
+        const parts: string[] = [];
+        for (const [name, content] of ledgerFiles) {
+          parts.push(resolveIncludes(content, fileMap));
+        }
+        fileContent = parts.join("\n\n");
+      } catch (err) {
+        toast.error(`Failed to read zip: ${err}`);
+        fileContent = "";
+      }
+    } else if (files.length > 1) {
+      // Multiple files: sort by name, concatenate
+      const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name));
+      fileName = `${sorted[0].name} +${sorted.length - 1}`;
+      fileCount = sorted.length;
+      const fileMap = new Map<string, string>();
+      const parts: string[] = [];
+      for (const f of sorted) {
+        const text = await readFileAsText(f);
+        fileMap.set(f.name, text);
+        parts.push(text);
+      }
+      // Resolve includes across all files
+      fileContent = parts
+        .map((content) => resolveIncludes(content, fileMap))
+        .join("\n\n");
+    } else {
+      // Single file
+      const file = files[0];
+      fileName = file.name;
+      fileCount = 1;
+      fileContent = await readFileAsText(file);
+    }
   }
 
   async function handleImport() {
@@ -492,7 +548,7 @@
     missingRateRequests = [];
 
     try {
-      result = await getBackend().importLedgerFile(fileContent);
+      result = await getBackend().importLedgerFile(fileContent, detectedFormat ?? undefined);
       toast.success("Ledger file imported successfully");
 
       // Check for missing historical rates
@@ -869,7 +925,7 @@
     <Card.Header>
       <Card.Title>Ledger File</Card.Title>
       <Card.Description
-        >Select a ledger file or paste the content directly.</Card.Description
+        >Select ledger files, a zip archive, or paste the content directly.</Card.Description
       >
     </Card.Header>
     <Card.Content class="space-y-4">
@@ -881,7 +937,8 @@
           <span>Choose file</span>
           <input
             type="file"
-            accept=".ledger,.beancount,.journal,.txt"
+            accept=".ledger,.beancount,.journal,.hledger,.txt,.zip"
+            multiple
             class="hidden"
             onchange={handleFileSelect}
           />
@@ -891,6 +948,12 @@
             <FileText class="h-4 w-4" />
             {fileName}
           </span>
+          {#if fileCount > 1}
+            <Badge variant="secondary">{fileCount} files</Badge>
+          {/if}
+        {/if}
+        {#if detectedFormat}
+          <Badge variant="outline">{formatLabel(detectedFormat)}</Badge>
         {/if}
       </div>
 

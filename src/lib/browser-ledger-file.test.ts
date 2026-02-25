@@ -1,7 +1,49 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { importLedger, exportLedger } from "./browser-ledger-file.js";
+import { detectFormat } from "./ledger-format.js";
 import { createTestBackend } from "../test/helpers.js";
 import type { SqlJsBackend } from "./sql-js-backend.js";
+
+describe("detectFormat", () => {
+  it("detects beancount by txn keyword", () => {
+    const content = `2024-01-01 txn "Payment"\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n`;
+    expect(detectFormat(content)).toBe("beancount");
+  });
+
+  it("detects beancount by option directive", () => {
+    const content = `option "operating_currency" "USD"\n2024-01-01 open Assets:Bank\n`;
+    expect(detectFormat(content)).toBe("beancount");
+  });
+
+  it("detects beancount by quoted description", () => {
+    const content = `2024-01-01 * "Payment"\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n`;
+    expect(detectFormat(content)).toBe("beancount");
+  });
+
+  it("detects hledger by account directive", () => {
+    const content = `account Assets:Bank\naccount Expenses:Food\n2024-01-01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n`;
+    expect(detectFormat(content)).toBe("hledger");
+  });
+
+  it("detects hledger by slash dates", () => {
+    const content = `2024/01/01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n2024/01/02 * Rent\n  Assets:Bank  -500 USD\n  Expenses:Rent  500 USD\n`;
+    expect(detectFormat(content)).toBe("hledger");
+  });
+
+  it("detects hledger by inline balance assertion", () => {
+    const content = `2024-01-01 * Payment\n  Assets:Bank  -100 USD = 900 USD\n  Expenses:Food  100 USD\n`;
+    expect(detectFormat(content)).toBe("hledger");
+  });
+
+  it("defaults to dledger for ambiguous content", () => {
+    const content = `2024-01-01 open Assets:Bank\n2024-01-01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n`;
+    expect(detectFormat(content)).toBe("dledger");
+  });
+
+  it("defaults to dledger for empty content", () => {
+    expect(detectFormat("")).toBe("dledger");
+  });
+});
 
 describe("browser-ledger-file", () => {
   let backend: SqlJsBackend;
@@ -10,7 +52,7 @@ describe("browser-ledger-file", () => {
     backend = await createTestBackend();
   });
 
-  describe("importLedger", () => {
+  describe("importLedger (dledger format)", () => {
     it("parses open directive", async () => {
       const content = `2024-01-01 open Assets:Bank USD EUR\n`;
       const result = await importLedger(backend, content);
@@ -138,23 +180,11 @@ describe("browser-ledger-file", () => {
 2024-01-01 open Assets:BankUSD
 2024-01-01 open Assets:BankEUR
 
-2024-01-01 * "Currency exchange"
-  Assets:BankEUR  100 EUR
-  Assets:BankUSD  -110 USD
-`;
-      // Multi-currency: each currency must balance. This will fail unless
-      // we handle it through elision or trading accounts.
-      // Actually the parser will try to balance per currency and this won't work
-      // as-is. Let's test it with a trading setup:
-      const content2 = `
-2024-01-01 open Assets:BankUSD
-2024-01-01 open Assets:BankEUR
-
 2024-01-01 * "Buy EUR"
   Assets:BankEUR  100 EUR @ 1.10 USD
   Assets:BankUSD  -110 USD
 `;
-      const result = await importLedger(backend, content2);
+      const result = await importLedger(backend, content);
       expect(result.transactions_imported).toBe(1);
     });
 
@@ -169,8 +199,325 @@ describe("browser-ledger-file", () => {
     });
   });
 
+  describe("importLedger (beancount format)", () => {
+    it("parses txn keyword", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 txn "Grocery Store"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      expect(entries[0][0].description).toBe("Grocery Store");
+    });
+
+    it("parses quoted description", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Fancy Grocery Store"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      expect(entries[0][0].description).toBe("Fancy Grocery Store");
+    });
+
+    it("strips tags and links, stores as metadata", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Payment" #groceries ^invoice-001
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      expect(entries[0][0].description).toBe("Payment");
+
+      const meta = await backend.getMetadata(entries[0][0].id);
+      expect(meta.tags).toBe("#groceries");
+      expect(meta.links).toBe("^invoice-001");
+    });
+
+    it("parses @@ total cost", async () => {
+      const content = `
+2024-01-01 open Assets:Stocks
+2024-01-01 open Assets:Bank
+
+2024-01-15 * "Buy Shares"
+  Assets:Stocks  10 AAPL @@ 1500 USD
+  Assets:Bank  -1500 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      // Should create Equity:Trading:AAPL
+      const accounts = await backend.listAccounts();
+      const trading = accounts.find((a) => a.full_name === "Equity:Trading:AAPL");
+      expect(trading).toBeDefined();
+    });
+
+    it("parses {cost} lot syntax", async () => {
+      const content = `
+2024-01-01 open Assets:Stocks
+2024-01-01 open Assets:Bank
+
+2024-01-15 * "Buy Shares"
+  Assets:Stocks  10 AAPL {150 USD}
+  Assets:Bank  -1500 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      const trading = accounts.find((a) => a.full_name === "Equity:Trading:AAPL");
+      expect(trading).toBeDefined();
+    });
+
+    it("parses transaction metadata", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Payment"
+  invoice-id: "INV-001"
+  recipient: "Acme"
+  Expenses:Food  500 USD
+  Assets:Bank  -500 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      const meta = await backend.getMetadata(entries[0][0].id);
+      expect(meta["invoice-id"]).toBe("INV-001");
+      expect(meta["recipient"]).toBe("Acme");
+    });
+
+    it("parses account metadata on open directive", async () => {
+      const content = `
+2024-01-01 open Assets:Bank USD
+  bank-name: "Chase"
+  routing: "021000021"
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.accounts_created).toBeGreaterThanOrEqual(1);
+
+      const accounts = await backend.listAccounts();
+      const bank = accounts.find((a) => a.full_name === "Assets:Bank")!;
+      const meta = await backend.getAccountMetadata(bank.id);
+      expect(meta["bank-name"]).toBe("Chase");
+      expect(meta["routing"]).toBe("021000021");
+    });
+
+    it("skips option and plugin directives", async () => {
+      const content = `
+option "operating_currency" "USD"
+plugin "beancount.plugins.auto_accounts"
+
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-01 * "Opening"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      // Should not throw or warn about option/plugin
+    });
+
+    it("skips note, document, event, custom directives", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+
+2024-01-15 note Assets:Bank "Updated contact info"
+2024-01-15 document Assets:Bank "/path/to/doc.pdf"
+2024-01-15 event "location" "New York"
+2024-01-15 custom "budget" Assets:Bank "monthly" 1000 USD
+
+2024-01-15 * "Payment"
+  Assets:Bank  -50 USD
+  Expenses:Food  50 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+    });
+
+    it("handles slash dates in beancount", async () => {
+      const content = `
+2024/01/01 open Assets:Bank
+2024/01/01 open Equity:Opening
+
+2024/01/01 * "Opening"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      expect(entries[0][0].date).toBe("2024-01-01");
+    });
+  });
+
+  describe("importLedger (hledger format)", () => {
+    it("parses account directive", async () => {
+      const content = `
+account Assets:Bank
+account Expenses:Food
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      expect(accounts.find((a) => a.full_name === "Assets:Bank")).toBeDefined();
+      expect(accounts.find((a) => a.full_name === "Expenses:Food")).toBeDefined();
+    });
+
+    it("parses slash date format", async () => {
+      const content = `
+2024/01/15 * Groceries
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      expect(entries[0][0].date).toBe("2024-01-15");
+    });
+
+    it("handles prefix currency ($100.00)", async () => {
+      const content = `
+2024-01-15 * Groceries
+  Expenses:Food  $50.00
+  Assets:Bank  $-50.00
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      const food = accounts.find((a) => a.full_name === "Expenses:Food")!;
+      const balance = await backend.getAccountBalance(food.id);
+      expect(parseFloat(balance[0].amount)).toBe(50);
+      expect(balance[0].currency).toBe("USD");
+    });
+
+    it("handles named prefix currency (EUR 100.00)", async () => {
+      const content = `
+2024-01-15 * Groceries
+  Expenses:Food  EUR 50.00
+  Assets:Bank  EUR -50.00
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      const food = accounts.find((a) => a.full_name === "Expenses:Food")!;
+      const balance = await backend.getAccountBalance(food.id);
+      expect(parseFloat(balance[0].amount)).toBe(50);
+      expect(balance[0].currency).toBe("EUR");
+    });
+
+    it("handles thousands separators (1,234.56)", async () => {
+      const content = `
+2024-01-15 * Big Purchase
+  Expenses:Shopping  1,234.56 USD
+  Assets:Bank  -1,234.56 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      const shopping = accounts.find((a) => a.full_name === "Expenses:Shopping")!;
+      const balance = await backend.getAccountBalance(shopping.id);
+      expect(balance[0].amount).toBe("1234.56");
+    });
+
+    it("skips virtual postings", async () => {
+      const content = `
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+  (Assets:Budget:Food)  -50 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.warnings.some((w) => w.includes("virtual posting"))).toBe(true);
+    });
+
+    it("handles block comments", async () => {
+      const content = `
+comment
+This is a block comment.
+It spans multiple lines.
+end comment
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+    });
+
+    it("skips commodity directive", async () => {
+      const content = `
+commodity USD
+commodity EUR
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(1);
+    });
+
+    it("parses inline balance assertion (=)", async () => {
+      const content = `
+2024-01-01 * Opening
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD = 950 USD
+`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.transactions_imported).toBe(2);
+    });
+
+    it("handles price directive with slash dates", async () => {
+      const content = `P 2024/01/01 EUR 1.10 USD\n`;
+      const result = await importLedger(backend, content, "hledger");
+      expect(result.prices_imported).toBe(1);
+
+      const rate = await backend.getExchangeRate("EUR", "USD", "2024-01-01");
+      expect(rate).toBe("1.10");
+    });
+  });
+
   describe("exportLedger", () => {
-    it("exports round-trip", async () => {
+    it("exports round-trip (dledger)", async () => {
       const input = `
 2024-01-01 open Assets:Bank
 2024-01-01 open Equity:Opening
@@ -189,6 +536,108 @@ P 2024-01-01 EUR 1.10 USD
       expect(exported).toContain("Opening balance");
       expect(exported).toContain("1000 USD");
       expect(exported).toContain("P 2024-01-01 EUR 1.10 USD");
+    });
+
+    it("exports beancount format with quoted descriptions", async () => {
+      const input = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-01 * "Opening balance"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+`;
+      await importLedger(backend, input);
+      const exported = await exportLedger(backend, "beancount");
+
+      // Beancount format should have quoted description
+      expect(exported).toContain('"Opening balance"');
+      // Should have open directives
+      expect(exported).toContain("open Assets:Bank");
+    });
+
+    it("exports hledger format with account directives", async () => {
+      const input = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-01 * "Opening balance"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+`;
+      await importLedger(backend, input);
+      const exported = await exportLedger(backend, "hledger");
+
+      // hledger format should have `account` directives, not `open`
+      expect(exported).toContain("account Assets:Bank");
+      expect(exported).toContain("account Equity:Opening");
+      expect(exported).not.toContain("open Assets:Bank");
+      // Description should not be quoted
+      expect(exported).toContain("Opening balance");
+      expect(exported).not.toContain('"Opening balance"');
+    });
+
+    it("exports beancount metadata", async () => {
+      const input = `
+2024-01-01 open Assets:Bank USD
+  bank-name: "Chase"
+
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Payment"
+  invoice-id: "INV-001"
+  Expenses:Food  500 USD
+  Assets:Bank  -500 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "beancount");
+
+      expect(exported).toContain('bank-name: "Chase"');
+      expect(exported).toContain('invoice-id: "INV-001"');
+    });
+
+    it("round-trips beancount import → export → reimport", async () => {
+      const input = `
+2024-01-01 open Assets:Bank USD
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Grocery Store"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+
+P 2024-01-01 EUR 1.10 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "beancount");
+
+      // Reimport into a fresh backend
+      const backend2 = await createTestBackend();
+      const result2 = await importLedger(backend2, exported, "beancount");
+      expect(result2.transactions_imported).toBe(1);
+      expect(result2.prices_imported).toBe(1);
+
+      const entries2 = await backend2.queryJournalEntries({});
+      expect(entries2[0][0].description).toBe("Grocery Store");
+    });
+
+    it("round-trips hledger import → export → reimport", async () => {
+      const input = `
+account Assets:Bank
+account Expenses:Food
+
+2024-01-15 * Grocery Store
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+
+P 2024-01-01 EUR 1.10 USD
+`;
+      await importLedger(backend, input, "hledger");
+      const exported = await exportLedger(backend, "hledger");
+
+      const backend2 = await createTestBackend();
+      const result2 = await importLedger(backend2, exported, "hledger");
+      expect(result2.transactions_imported).toBe(1);
+      expect(result2.prices_imported).toBe(1);
     });
   });
 });

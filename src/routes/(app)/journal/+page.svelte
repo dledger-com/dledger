@@ -12,6 +12,7 @@
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import Pagination from "$lib/components/Pagination.svelte";
@@ -21,6 +22,7 @@
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(store.entries, hidden));
   let exporting = $state(false);
+  let exportFormat = $state<LedgerFormat>("dledger");
   let searchTerm = $state("");
   let showDuplicates = $state(false);
 
@@ -91,12 +93,12 @@
   async function handleExport() {
     exporting = true;
     try {
-      const content = await getBackend().exportLedgerFile();
+      const content = await getBackend().exportLedgerFile(exportFormat);
       const blob = new Blob([content], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "dledger-export.ledger";
+      a.download = `dledger-export${formatExtension(exportFormat)}`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Ledger file exported");
@@ -119,6 +121,14 @@
       <Button variant="outline" size="sm" class="hidden sm:inline-flex" onclick={async () => { await store.loadAll(); showDuplicates = true; }}>
         Detect Duplicates
       </Button>
+      <select
+        class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+        bind:value={exportFormat}
+      >
+        <option value="dledger">dLedger (.ledger)</option>
+        <option value="beancount">Beancount (.beancount)</option>
+        <option value="hledger">hledger (.journal)</option>
+      </select>
       <Button variant="outline" size="sm" onclick={handleExport} disabled={exporting}>
         {exporting ? "Exporting..." : "Export"}
       </Button>

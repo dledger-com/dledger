@@ -20,6 +20,7 @@ import type {
   Budget,
 } from "./types/index.js";
 import type { ExchangeAccount } from "./cex/types.js";
+import type { LedgerFormat } from "./ledger-format.js";
 
 export interface Reconciliation {
   id: string;
@@ -111,8 +112,8 @@ export interface Backend {
   listExchangeRates(from?: string, to?: string): Promise<ExchangeRate[]>;
 
   // Ledger file import/export
-  importLedgerFile(content: string): Promise<LedgerImportResult>;
-  exportLedgerFile(): Promise<string>;
+  importLedgerFile(content: string, format?: LedgerFormat): Promise<LedgerImportResult>;
+  exportLedgerFile(format?: LedgerFormat): Promise<string>;
 
   // Etherscan
   listEtherscanAccounts(): Promise<EtherscanAccount[]>;
@@ -343,11 +344,11 @@ class TauriBackend implements Backend {
   }
 
   // Ledger file import/export
-  async importLedgerFile(content: string): Promise<LedgerImportResult> {
-    return this.invoke("import_ledger_file", { content });
+  async importLedgerFile(content: string, format?: LedgerFormat): Promise<LedgerImportResult> {
+    return this.invoke("import_ledger_file", { content, format: format ?? null });
   }
-  async exportLedgerFile(): Promise<string> {
-    return this.invoke("export_ledger_file");
+  async exportLedgerFile(format?: LedgerFormat): Promise<string> {
+    return this.invoke("export_ledger_file", { format: format ?? null });
   }
 
   // Metadata

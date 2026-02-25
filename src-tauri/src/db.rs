@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -843,8 +843,8 @@ impl Storage for SqliteStorage {
     fn insert_balance_assertion(&self, assertion: &BalanceAssertion) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 assertion.id.to_string(),
                 assertion.account_id.to_string(),
@@ -853,6 +853,8 @@ impl Storage for SqliteStorage {
                 assertion.expected_balance.to_string(),
                 assertion.is_passing as i32,
                 assertion.actual_balance.map(|d| d.to_string()),
+                assertion.is_strict as i32,
+                assertion.include_subaccounts as i32,
             ],
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -889,12 +891,12 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let (sql, param_val) = match account_id {
             Some(id) => (
-                "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance
+                "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts
                  FROM balance_assertion WHERE account_id = ?1 ORDER BY date",
                 Some(id.to_string()),
             ),
             None => (
-                "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance
+                "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts
                  FROM balance_assertion ORDER BY date",
                 None,
             ),
@@ -1883,6 +1885,11 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
             storage.execute_sql(MIGRATION_V14)?;
             storage.set_schema_version(14)?;
         }
+        if current < 15 {
+            // Add extended balance assertion columns (idempotent)
+            let _ = storage.execute_sql(MIGRATION_V15);
+            storage.set_schema_version(15)?;
+        }
     }
     Ok(())
 }
@@ -2135,6 +2142,13 @@ fn row_to_balance_assertion(row: &rusqlite::Row<'_>) -> StorageResult<BalanceAss
         .get(6)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
+    let is_strict: i32 = row
+        .get(7)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let include_subaccounts: i32 = row
+        .get(8)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+
     Ok(BalanceAssertion {
         id: parse_uuid(&id_str)?,
         account_id: parse_uuid(&account_id_str)?,
@@ -2146,6 +2160,8 @@ fn row_to_balance_assertion(row: &rusqlite::Row<'_>) -> StorageResult<BalanceAss
             .as_deref()
             .map(parse_decimal)
             .transpose()?,
+        is_strict: is_strict != 0,
+        include_subaccounts: include_subaccounts != 0,
     })
 }
 
@@ -2906,6 +2922,8 @@ mod tests {
             expected_balance: dec!(1000),
             is_passing: true,
             actual_balance: Some(dec!(1000)),
+            is_strict: false,
+            include_subaccounts: false,
         };
         s.insert_balance_assertion(&assertion).unwrap();
 
@@ -2929,6 +2947,8 @@ mod tests {
             expected_balance: dec!(1000),
             is_passing: true,
             actual_balance: None,
+            is_strict: false,
+            include_subaccounts: false,
         };
         s.insert_balance_assertion(&assertion).unwrap();
 
@@ -2960,6 +2980,8 @@ mod tests {
                 expected_balance: dec!(0),
                 is_passing: true,
                 actual_balance: Some(dec!(0)),
+                is_strict: false,
+                include_subaccounts: false,
             };
             s.insert_balance_assertion(&assertion).unwrap();
         }
@@ -3585,7 +3607,7 @@ mod tests {
 
         apply_migrations(&storage).unwrap();
 
-        assert_eq!(storage.get_schema_version().unwrap(), 13);
+        assert_eq!(storage.get_schema_version().unwrap(), 15);
 
         // Verify budget table exists
         storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();

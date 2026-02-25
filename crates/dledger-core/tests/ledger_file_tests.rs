@@ -9,7 +9,10 @@ use rust_decimal_macros::dec;
 use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
-use dledger_core::ledger_file::{export_ledger, import_ledger};
+use dledger_core::ledger_file::{
+    detect_format, export_ledger, export_ledger_with_format, import_ledger,
+    import_ledger_with_format, LedgerFormat,
+};
 use dledger_core::models::*;
 use dledger_core::schema::{SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
@@ -1404,10 +1407,12 @@ fn test_parse_close_directive() {
 }
 
 #[test]
+#[ignore = "requires tmp/demo.ledger file"]
 fn test_import_demo_ledger() {
     let engine = new_engine();
-    let content = include_str!("../../../tmp/demo.ledger");
-    let result = import_ledger(&engine, content).unwrap();
+    let content = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tmp/demo.ledger"))
+        .expect("tmp/demo.ledger not found — place a beancount demo file there to run this test");
+    let result = import_ledger(&engine, &content).unwrap();
 
     // Should have created accounts
     assert!(
@@ -1551,4 +1556,301 @@ not-a-date * Bad transaction
     // This shouldn't cause an error — just 0 transactions imported from that block.
     let result = import_ledger(&engine, content).unwrap();
     assert_eq!(result.transactions_imported, 0);
+}
+
+// ============================================================================
+// Format detection tests
+// ============================================================================
+
+#[test]
+fn test_detect_format_beancount_txn() {
+    let content = "2024-01-01 txn \"Payment\"\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n";
+    assert_eq!(detect_format(content), LedgerFormat::Beancount);
+}
+
+#[test]
+fn test_detect_format_beancount_option() {
+    let content = "option \"operating_currency\" \"USD\"\n2024-01-01 open Assets:Bank\n";
+    assert_eq!(detect_format(content), LedgerFormat::Beancount);
+}
+
+#[test]
+fn test_detect_format_hledger_account() {
+    let content = "account Assets:Bank\naccount Expenses:Food\n2024-01-01 * Payment\n  Assets:Bank  -100 USD\n";
+    assert_eq!(detect_format(content), LedgerFormat::Hledger);
+}
+
+#[test]
+fn test_detect_format_hledger_slash_dates() {
+    let content = "2024/01/01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n2024/01/02 * Rent\n  Assets:Bank  -500 USD\n";
+    assert_eq!(detect_format(content), LedgerFormat::Hledger);
+}
+
+#[test]
+fn test_detect_format_dledger_default() {
+    let content = "2024-01-01 open Assets:Bank\n2024-01-01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n";
+    assert_eq!(detect_format(content), LedgerFormat::Dledger);
+}
+
+// ============================================================================
+// Beancount format import tests
+// ============================================================================
+
+#[test]
+fn test_beancount_txn_keyword() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 txn \"Grocery Store\"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Beancount)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    assert_eq!(entries[0].0.description, "Grocery Store");
+}
+
+#[test]
+fn test_beancount_quoted_description() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 * \"Fancy Grocery\"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Beancount)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    assert_eq!(entries[0].0.description, "Fancy Grocery");
+}
+
+#[test]
+fn test_beancount_skip_option_plugin() {
+    let engine = new_engine();
+    let content = "\
+option \"operating_currency\" \"USD\"
+plugin \"beancount.plugins.auto\"
+
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-01 * \"Opening\"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Beancount)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+}
+
+#[test]
+fn test_beancount_skip_date_directives() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 note Assets:Bank \"Updated\"
+2024-01-15 document Assets:Bank \"/path/doc.pdf\"
+2024-01-15 event \"location\" \"NYC\"
+2024-01-15 custom \"budget\" Assets:Bank \"monthly\" 1000 USD
+
+2024-01-15 * \"Payment\"
+  Assets:Bank  -50 USD
+  Expenses:Food  50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Beancount)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+}
+
+#[test]
+fn test_beancount_slash_dates() {
+    let engine = new_engine();
+    let content = "\
+2024/01/01 open Assets:Bank
+2024/01/01 open Equity:Opening
+
+2024/01/01 * \"Opening\"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Beancount)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    assert_eq!(entries[0].0.date, NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
+}
+
+// ============================================================================
+// hledger format import tests
+// ============================================================================
+
+#[test]
+fn test_hledger_account_directive() {
+    let engine = new_engine();
+    let content = "\
+account Assets:Bank
+account Expenses:Food
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Hledger)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+
+    let accounts = engine.list_accounts().unwrap();
+    assert!(accounts.iter().any(|a| a.full_name == "Assets:Bank"));
+    assert!(accounts.iter().any(|a| a.full_name == "Expenses:Food"));
+}
+
+#[test]
+fn test_hledger_slash_dates() {
+    let engine = new_engine();
+    let content = "\
+2024/01/15 * Groceries
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Hledger)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    assert_eq!(entries[0].0.date, NaiveDate::from_ymd_opt(2024, 1, 15).unwrap());
+}
+
+#[test]
+fn test_hledger_block_comments() {
+    let engine = new_engine();
+    let content = "\
+comment
+This is a block comment.
+It spans multiple lines.
+end comment
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Hledger)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+}
+
+#[test]
+fn test_hledger_commodity_directive_skip() {
+    let engine = new_engine();
+    let content = "\
+commodity USD
+commodity EUR
+
+2024-01-15 * Payment
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Hledger)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+}
+
+#[test]
+fn test_hledger_price_with_slash_dates() {
+    let engine = new_engine();
+    let content = "P 2024/01/01 EUR 1.10 USD\n";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Hledger)).unwrap();
+    assert_eq!(result.prices_imported, 1);
+
+    let rate = engine.get_exchange_rate("EUR", "USD", NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()).unwrap();
+    assert_eq!(rate, Some(dec!(1.10)));
+}
+
+// ============================================================================
+// Export format tests
+// ============================================================================
+
+#[test]
+fn test_export_beancount_quoted() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-01 * Opening balance
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+";
+    import_ledger(&engine, content).unwrap();
+    let exported = export_ledger_with_format(&engine, LedgerFormat::Beancount).unwrap();
+    assert!(exported.contains("\"Opening balance\""));
+    assert!(exported.contains("open Assets:Bank"));
+}
+
+#[test]
+fn test_export_hledger_account() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-01 * Opening balance
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+";
+    import_ledger(&engine, content).unwrap();
+    let exported = export_ledger_with_format(&engine, LedgerFormat::Hledger).unwrap();
+    assert!(exported.contains("account Assets:Bank"));
+    assert!(exported.contains("account Equity:Opening"));
+    assert!(!exported.contains("open Assets:Bank"));
+    // Description should NOT be quoted
+    assert!(!exported.contains("\"Opening balance\""));
+    assert!(exported.contains("Opening balance"));
+}
+
+#[test]
+fn test_beancount_roundtrip() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank USD
+2024-01-01 open Expenses:Food
+
+2024-01-15 * \"Grocery Store\"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+
+P 2024-01-01 EUR 1.10 USD
+";
+    import_ledger_with_format(&engine, content, Some(LedgerFormat::Beancount)).unwrap();
+    let exported = export_ledger_with_format(&engine, LedgerFormat::Beancount).unwrap();
+
+    let engine2 = new_engine();
+    let result2 = import_ledger_with_format(&engine2, &exported, Some(LedgerFormat::Beancount)).unwrap();
+    assert_eq!(result2.transactions_imported, 1);
+    assert_eq!(result2.prices_imported, 1);
+}
+
+#[test]
+fn test_hledger_roundtrip() {
+    let engine = new_engine();
+    let content = "\
+account Assets:Bank
+account Expenses:Food
+
+2024-01-15 * Grocery Store
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+
+P 2024-01-01 EUR 1.10 USD
+";
+    import_ledger_with_format(&engine, content, Some(LedgerFormat::Hledger)).unwrap();
+    let exported = export_ledger_with_format(&engine, LedgerFormat::Hledger).unwrap();
+
+    let engine2 = new_engine();
+    let result2 = import_ledger_with_format(&engine2, &exported, Some(LedgerFormat::Hledger)).unwrap();
+    assert_eq!(result2.transactions_imported, 1);
+    assert_eq!(result2.prices_imported, 1);
 }

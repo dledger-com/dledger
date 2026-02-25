@@ -225,6 +225,8 @@
                   expected_balance: assertionAmount,
                   is_passing: false,
                   actual_balance: null,
+                  is_strict: false,
+                  include_subaccounts: false,
                 };
                 await getBackend().createBalanceAssertion(a);
                 assertions = await getBackend().listBalanceAssertions(accountId);

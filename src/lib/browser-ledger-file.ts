@@ -10,13 +10,17 @@ import type {
   ExchangeRate,
   LedgerImportResult,
 } from "./types/index.js";
+import { detectFormat, type LedgerFormat } from "./ledger-format.js";
 
 // ---- Helpers ----
 
+/** Parse YYYY-MM-DD or YYYY/MM/DD date prefix, normalize to YYYY-MM-DD. */
 function tryParseDatePrefix(s: string): string | null {
   if (s.length < 10) return null;
   const candidate = s.substring(0, 10);
   if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return candidate;
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(candidate))
+    return candidate.replace(/\//g, "-");
   return null;
 }
 
@@ -55,12 +59,33 @@ function splitAccountAmount(line: string): [string, string] {
   return [line.trim(), ""];
 }
 
+/** Strip thousands separators from a number string: "1,234.56" → "1234.56", "1.234,56" → "1234.56". */
+function stripThousands(s: string): string {
+  // European: "1.234,56" — dot thousands, comma decimal
+  if (/\d\.\d{3},/.test(s)) {
+    return s.replace(/\./g, "").replace(",", ".");
+  }
+  // Standard: "1,234.56" — comma thousands, dot decimal
+  if (/\d,\d{3}/.test(s)) {
+    return s.replace(/,/g, "");
+  }
+  return s;
+}
+
+/** Try to parse a string as a Decimal, stripping thousands separators if needed. */
+function parseDecimal(s: string): Decimal {
+  return new Decimal(stripThousands(s));
+}
+
 // ---- Import ----
 
 export async function importLedger(
   backend: Backend,
   content: string,
+  format?: LedgerFormat,
 ): Promise<LedgerImportResult> {
+  const fmt = format ?? detectFormat(content);
+
   const result: LedgerImportResult = {
     accounts_created: 0,
     currencies_created: 0,
@@ -157,7 +182,8 @@ export async function importLedger(
     const tokens = line.split(/\s+/);
     if (tokens.length < 5)
       throw new Error(`line ${lineNum}: malformed price directive`);
-    const date = tokens[1];
+    // Normalize date: P YYYY/MM/DD → YYYY-MM-DD
+    const date = tokens[1].replace(/\//g, "-");
     const fromCommodity = tokens[2];
     const rate = tokens[3];
     const toCommodity = tokens[4];
@@ -187,7 +213,9 @@ export async function importLedger(
     date: string,
     rest: string,
     lineNum: number,
-  ): Promise<void> {
+    allLines: string[],
+    lineIdx: number,
+  ): Promise<number> {
     const tokens = rest.split(/\s+/);
     if (tokens.length === 0)
       throw new Error(
@@ -200,7 +228,18 @@ export async function importLedger(
       await ensureCurrency(code);
     }
 
-    await ensureAccount(accountName, allowed, date);
+    const accountId = await ensureAccount(accountName, allowed, date);
+
+    // Parse beancount metadata lines after the directive
+    if (fmt === "beancount") {
+      const meta = collectBeancountMetadata(allLines, lineIdx + 1);
+      if (Object.keys(meta.entries).length > 0) {
+        await backend.setAccountMetadata(accountId, meta.entries);
+      }
+      return 1 + meta.linesConsumed;
+    }
+
+    return 1;
   }
 
   async function parseCloseDirective(
@@ -234,7 +273,7 @@ export async function importLedger(
         `line ${lineNum}: balance directive needs ACCOUNT AMOUNT COMMODITY`,
       );
     const accountName = tokens[0];
-    const amountStr = tokens[1];
+    const amountStr = stripThousands(tokens[1]);
     const commodity = tokens[2];
 
     try {
@@ -259,6 +298,36 @@ export async function importLedger(
     }
   }
 
+  // ---- Beancount metadata collector ----
+
+  function collectBeancountMetadata(
+    allLines: string[],
+    startIdx: number,
+  ): { entries: Record<string, string>; linesConsumed: number } {
+    const entries: Record<string, string> = {};
+    let consumed = 0;
+    for (let j = startIdx; j < allLines.length; j++) {
+      const raw = allLines[j];
+      if (!raw.startsWith(" ") && !raw.startsWith("\t")) break;
+      const trimmed = raw.trim();
+      if (!trimmed) break;
+      // Beancount metadata: key: value (key starts with lowercase letter)
+      const m = trimmed.match(/^([a-z][a-z0-9_-]*)\s*:\s*(.+)$/);
+      if (m) {
+        // Strip surrounding quotes from value
+        let val = m[2].trim();
+        if (val.startsWith('"') && val.endsWith('"')) {
+          val = val.slice(1, -1);
+        }
+        entries[m[1]] = val;
+        consumed++;
+      } else {
+        break;
+      }
+    }
+    return { entries, linesConsumed: consumed };
+  }
+
   // ---- Posting parser ----
 
   interface ParsedPosting {
@@ -266,21 +335,83 @@ export async function importLedger(
     amount?: string;
     commodity?: string;
     costPrice?: { price: string; commodity: string };
+    lotCost?: { price: string; commodity: string } | { auto: true };
+    balanceAssertion?: {
+      amount: string;
+      commodity: string;
+      isStrict: boolean;
+      includeSubaccounts: boolean;
+    };
   }
 
   function parsePostingLine(
     line: string,
     lineNum: number,
   ): ParsedPosting | null {
-    const [account, rest] = splitAccountAmount(line);
+    // hledger: skip virtual postings (Account) or [Account]
+    if (fmt === "hledger") {
+      const stripped = line.trim();
+      if (stripped.startsWith("(") || stripped.startsWith("[")) {
+        result.warnings.push(
+          `line ${lineNum}: virtual posting skipped`,
+        );
+        return null;
+      }
+    }
+
+    // Strip inline balance assertion before parsing (hledger: ` = AMOUNT COMMODITY`)
+    let balanceAssertion: ParsedPosting["balanceAssertion"] | undefined;
+    let lineForParsing = line;
+    if (fmt === "hledger") {
+      // Match =, ==, =*, ==* assertions
+      const assertionMatch = line.match(
+        /\s+(==?\*?)\s+(-?[\d,.]+)\s+(\S+)\s*$/,
+      );
+      if (assertionMatch) {
+        lineForParsing = line.substring(
+          0,
+          line.length - assertionMatch[0].length,
+        );
+        const op = assertionMatch[1];
+        balanceAssertion = {
+          amount: stripThousands(assertionMatch[2]),
+          commodity: assertionMatch[3],
+          isStrict: op.startsWith("=="),
+          includeSubaccounts: op.endsWith("*"),
+        };
+      }
+    }
+
+    // Strip beancount {cost} before splitting
+    let lotCost: ParsedPosting["lotCost"] | undefined;
+    if (fmt === "beancount") {
+      const costMatch = lineForParsing.match(/\{([^}]*)\}/);
+      if (costMatch) {
+        lineForParsing = lineForParsing.replace(/\{[^}]*\}/, "").replace(/\s{2,}/g, "  ");
+        const costInner = costMatch[1].trim();
+        if (!costInner) {
+          lotCost = { auto: true };
+        } else {
+          const costTokens = costInner.split(/\s+/);
+          if (costTokens.length >= 2) {
+            lotCost = {
+              price: stripThousands(costTokens[0]),
+              commodity: costTokens[1],
+            };
+          }
+        }
+      }
+    }
+
+    const [account, rest] = splitAccountAmount(lineForParsing);
 
     if (!rest) {
-      return { accountName: account };
+      return { accountName: account, balanceAssertion, lotCost };
     }
 
     const tokens = rest.split(/\s+/);
     if (tokens.length === 0) {
-      return { accountName: account };
+      return { accountName: account, balanceAssertion, lotCost };
     }
 
     if (tokens.length >= 2 && tokens[0] === "BOOK") {
@@ -290,8 +421,55 @@ export async function importLedger(
       return null;
     }
 
+    let amount: string;
+    let commodity: string;
+    let costPrice: { price: string; commodity: string } | undefined;
+
+    // hledger: prefix currency — detect $100.00, EUR 100.00, etc.
+    if (fmt === "hledger" && tokens.length >= 1) {
+      const prefixCurrencyMatch = tokens[0].match(/^([\$€£¥])(-?[\d,.]+)$/);
+      if (prefixCurrencyMatch) {
+        // Symbol-prefixed: $100.00
+        commodity = prefixCurrencyMatch[1] === "$" ? "USD" :
+                    prefixCurrencyMatch[1] === "€" ? "EUR" :
+                    prefixCurrencyMatch[1] === "£" ? "GBP" :
+                    prefixCurrencyMatch[1] === "¥" ? "JPY" : prefixCurrencyMatch[1];
+        amount = stripThousands(prefixCurrencyMatch[2]);
+        try {
+          new Decimal(amount);
+        } catch {
+          throw new Error(`line ${lineNum}: bad amount '${amount}'`);
+        }
+        return { accountName: account, amount, commodity, costPrice, lotCost, balanceAssertion };
+      }
+      // Named prefix: EUR 100.00 (first token is non-numeric, uppercase)
+      if (/^[A-Z]{2,}$/.test(tokens[0]) && tokens.length >= 2) {
+        const testAmount = stripThousands(tokens[1]);
+        try {
+          new Decimal(testAmount);
+          // It parsed as a number — this is prefix currency
+          commodity = tokens[0];
+          amount = testAmount;
+          // Check for @ cost after prefix currency
+          if (tokens.length >= 5 && tokens[2] === "@") {
+            try {
+              new Decimal(tokens[3]);
+            } catch {
+              throw new Error(`line ${lineNum}: bad cost price '${tokens[3]}'`);
+            }
+            costPrice = { price: tokens[3], commodity: tokens[4] };
+          }
+          return { accountName: account, amount, commodity, costPrice, lotCost, balanceAssertion };
+        } catch {
+          // Not a number — fall through to standard parsing
+        }
+      }
+    }
+
+    // Standard: AMOUNT COMMODITY
     try {
-      new Decimal(tokens[0]);
+      amount = stripThousands(tokens[0]);
+      new Decimal(amount);
     } catch {
       throw new Error(`line ${lineNum}: bad amount '${tokens[0]}'`);
     }
@@ -302,20 +480,34 @@ export async function importLedger(
       );
     }
 
-    const commodity = tokens[1];
-    let costPrice: { price: string; commodity: string } | undefined;
-    if (tokens.length >= 5 && tokens[2] === "@") {
+    commodity = tokens[1];
+
+    // Handle @@ (total cost) — beancount specific
+    if (tokens.length >= 5 && tokens[2] === "@@") {
       try {
-        new Decimal(tokens[3]);
+        const totalCost = stripThousands(tokens[3]);
+        new Decimal(totalCost);
+        const perUnit = new Decimal(totalCost)
+          .div(new Decimal(amount).abs())
+          .toString();
+        costPrice = { price: perUnit, commodity: tokens[4] };
+      } catch {
+        throw new Error(
+          `line ${lineNum}: bad total cost '${tokens[3]}'`,
+        );
+      }
+    } else if (tokens.length >= 5 && tokens[2] === "@") {
+      try {
+        new Decimal(stripThousands(tokens[3]));
       } catch {
         throw new Error(
           `line ${lineNum}: bad cost price '${tokens[3]}'`,
         );
       }
-      costPrice = { price: tokens[3], commodity: tokens[4] };
+      costPrice = { price: stripThousands(tokens[3]), commodity: tokens[4] };
     }
 
-    return { accountName: account, amount: tokens[0], commodity, costPrice };
+    return { accountName: account, amount, commodity, costPrice, lotCost, balanceAssertion };
   }
 
   // ---- Transaction parser ----
@@ -329,7 +521,11 @@ export async function importLedger(
     let rest = headerRest;
     let status: JournalEntryStatus = "confirmed";
 
-    if (rest.startsWith("* ") || rest.startsWith("*\t")) {
+    // Handle `txn` keyword (beancount)
+    if (rest.startsWith("txn ") || rest.startsWith("txn\t") || rest === "txn") {
+      rest = rest.substring(3).trimStart();
+      status = "confirmed";
+    } else if (rest.startsWith("* ") || rest.startsWith("*\t")) {
       rest = rest.substring(2).trimStart();
       status = "confirmed";
     } else if (rest.startsWith("! ") || rest.startsWith("!\t")) {
@@ -337,7 +533,7 @@ export async function importLedger(
       status = "pending";
     }
 
-    // Handle (CODE)
+    // Handle (CODE) — shared format
     if (rest.startsWith("(")) {
       const end = rest.indexOf(")");
       if (end !== -1) {
@@ -349,10 +545,37 @@ export async function importLedger(
       }
     }
 
+    // Beancount: strip tags (#tag) and links (^link) from the header line
+    // (must happen before quote stripping since tags/links appear outside quotes)
+    let tags = "";
+    let links = "";
+    if (fmt === "beancount") {
+      const tagMatches = rest.match(/#[a-zA-Z0-9_-]+/g);
+      const linkMatches = rest.match(/\^[a-zA-Z0-9_-]+/g);
+      if (tagMatches) tags = tagMatches.join(" ");
+      if (linkMatches) links = linkMatches.join(" ");
+      rest = rest
+        .replace(/#[a-zA-Z0-9_-]+/g, "")
+        .replace(/\^[a-zA-Z0-9_-]+/g, "")
+        .trim();
+    }
+
+    // Beancount: strip quoted description
+    if (fmt === "beancount" && rest.startsWith('"')) {
+      const endQuote = rest.indexOf('"', 1);
+      if (endQuote !== -1) {
+        rest = rest.substring(1, endQuote);
+      }
+    }
+
+    // hledger: payee | narration → combine into description
+    // (just use the combined string as-is, the | is part of the description)
+
     const description = rest;
 
-    // Collect posting lines
+    // Collect posting lines and beancount metadata
     const postings: ParsedPosting[] = [];
+    const txnMetadata: Record<string, string> = {};
     let ii = startIdx + 1;
 
     while (ii < allLines.length) {
@@ -367,6 +590,22 @@ export async function importLedger(
       if (trimmedLine.startsWith("tags ")) {
         ii++;
         continue;
+      }
+
+      // Beancount metadata: indented `key: value` before postings
+      if (fmt === "beancount") {
+        const metaMatch = trimmedLine.match(
+          /^([a-z][a-z0-9_-]*)\s*:\s*(.+)$/,
+        );
+        if (metaMatch) {
+          let val = metaMatch[2].trim();
+          if (val.startsWith('"') && val.endsWith('"')) {
+            val = val.slice(1, -1);
+          }
+          txnMetadata[metaMatch[1]] = val;
+          ii++;
+          continue;
+        }
       }
 
       const commentIdx = trimmedLine.indexOf(";");
@@ -476,7 +715,46 @@ export async function importLedger(
         lot_id: null,
       });
 
-      if (p.costPrice) {
+      // Handle {cost} lot syntax (beancount)
+      if (p.lotCost && !("auto" in p.lotCost)) {
+        await ensureCurrency(p.lotCost.commodity);
+        const tradingAccountName = `Equity:Trading:${commodity}`;
+        const tradingId = await ensureAccount(
+          tradingAccountName,
+          [],
+          date,
+        );
+
+        items.push({
+          id: uuidv7(),
+          journal_entry_id: entryId,
+          account_id: tradingId,
+          currency: commodity,
+          amount: new Decimal(amount).neg().toString(),
+          lot_id: null,
+        });
+
+        const costTotal = new Decimal(amount).times(
+          new Decimal(p.lotCost.price),
+        );
+        items.push({
+          id: uuidv7(),
+          journal_entry_id: entryId,
+          account_id: tradingId,
+          currency: p.lotCost.commodity,
+          amount: costTotal.toString(),
+          lot_id: null,
+        });
+
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date,
+          from_currency: commodity,
+          to_currency: p.lotCost.commodity,
+          rate: p.lotCost.price,
+          source: "transaction",
+        });
+      } else if (p.costPrice) {
         await ensureCurrency(p.costPrice.commodity);
         const tradingAccountName = `Equity:Trading:${commodity}`;
         const tradingId = await ensureAccount(
@@ -518,6 +796,12 @@ export async function importLedger(
           source: "transaction",
         });
       }
+
+      // Handle inline balance assertions (hledger)
+      if (p.balanceAssertion) {
+        const ba = p.balanceAssertion;
+        await ensureCurrency(ba.commodity);
+      }
     }
 
     const entry: JournalEntry = {
@@ -533,6 +817,15 @@ export async function importLedger(
     try {
       await backend.postJournalEntry(entry, items);
       result.transactions_imported++;
+
+      // Store beancount tags/links/metadata
+      if (fmt === "beancount") {
+        if (tags) txnMetadata["tags"] = tags;
+        if (links) txnMetadata["links"] = links;
+      }
+      if (Object.keys(txnMetadata).length > 0) {
+        await backend.setMetadata(entryId, txnMetadata);
+      }
 
       // Collect unique (currency, date) pairs for historical rate backfill
       for (const item of items) {
@@ -554,15 +847,33 @@ export async function importLedger(
 
   const lines = content.split("\n");
   let i = 0;
+  let inBlockComment = false;
 
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
 
+    // hledger block comments: `comment` ... `end comment`
+    if (fmt === "hledger") {
+      if (inBlockComment) {
+        if (trimmed === "end comment") {
+          inBlockComment = false;
+        }
+        i++;
+        continue;
+      }
+      if (trimmed === "comment") {
+        inBlockComment = true;
+        i++;
+        continue;
+      }
+    }
+
     if (
       !trimmed ||
       trimmed.startsWith(";") ||
-      trimmed.startsWith("#")
+      trimmed.startsWith("#") ||
+      trimmed.startsWith("*") && !tryParseDatePrefix(trimmed)
     ) {
       i++;
       continue;
@@ -572,6 +883,39 @@ export async function importLedger(
       trimmed.startsWith("pushtag") ||
       trimmed.startsWith("poptag")
     ) {
+      i++;
+      continue;
+    }
+
+    // Beancount: skip `option`, `plugin`, `note`, `document`, `event`, `custom`, `include` directives
+    if (fmt === "beancount") {
+      if (
+        /^(option|plugin|note|document|event|custom|include)\s/.test(trimmed)
+      ) {
+        i++;
+        continue;
+      }
+    }
+
+    // hledger: skip `include` directive (handled externally), `commodity` directive
+    if (fmt === "hledger") {
+      if (trimmed.startsWith("include ")) {
+        i++;
+        continue;
+      }
+      if (trimmed.startsWith("commodity ")) {
+        i++;
+        continue;
+      }
+    }
+
+    // hledger: `account` directive (no date prefix)
+    if (fmt === "hledger" && trimmed.startsWith("account ")) {
+      const accountName = trimmed.substring(8).trim().split(/\s+/)[0];
+      if (accountName) {
+        // Use a fallback date for undated account declarations
+        await ensureAccount(accountName, [], "1970-01-01");
+      }
       i++;
       continue;
     }
@@ -587,12 +931,14 @@ export async function importLedger(
       const rest = trimmed.substring(10).trim();
 
       if (rest.startsWith("open ")) {
-        await parseOpenDirective(
+        const consumed = await parseOpenDirective(
           date,
           rest.substring(5).trim(),
           i + 1,
+          lines,
+          i,
         );
-        i++;
+        i += consumed;
         continue;
       }
 
@@ -617,6 +963,16 @@ export async function importLedger(
         continue;
       }
 
+      // Beancount: skip `note`, `document`, `event`, `custom` directives with date prefix
+      if (fmt === "beancount") {
+        if (
+          /^(note|document|event|custom)\s/.test(rest)
+        ) {
+          i++;
+          continue;
+        }
+      }
+
       // Transaction block
       const consumed = await parseTransaction(
         date,
@@ -636,7 +992,10 @@ export async function importLedger(
 
 // ---- Export ----
 
-export async function exportLedger(backend: Backend): Promise<string> {
+export async function exportLedger(
+  backend: Backend,
+  format: LedgerFormat = "dledger",
+): Promise<string> {
   let out = "; Generated by dLedger\n\n";
 
   const accounts = await backend.listAccounts();
@@ -648,19 +1007,38 @@ export async function exportLedger(backend: Backend): Promise<string> {
   });
 
   for (const acc of sorted) {
-    const commodities =
-      acc.allowed_currencies.length > 0
-        ? `  ${acc.allowed_currencies.join(",")}`
-        : "";
-    out += `${acc.created_at} open ${acc.full_name}${commodities}\n`;
-    // Emit account metadata as comments
-    try {
-      const meta = await backend.getAccountMetadata(acc.id);
-      for (const [key, value] of Object.entries(meta)) {
-        out += `  ; ${key}: ${value}\n`;
+    if (format === "hledger") {
+      // hledger: `account Acct`
+      out += `account ${acc.full_name}\n`;
+      // Account metadata as comments
+      try {
+        const meta = await backend.getAccountMetadata(acc.id);
+        for (const [key, value] of Object.entries(meta)) {
+          out += `  ; ${key}: ${value}\n`;
+        }
+      } catch {
+        // skip on error
       }
-    } catch {
-      // Account metadata is optional, skip on error
+    } else {
+      // dledger / beancount: `YYYY-MM-DD open Acct`
+      const commodities =
+        acc.allowed_currencies.length > 0
+          ? `  ${acc.allowed_currencies.join(",")}`
+          : "";
+      out += `${acc.created_at} open ${acc.full_name}${commodities}\n`;
+      // Account metadata
+      try {
+        const meta = await backend.getAccountMetadata(acc.id);
+        for (const [key, value] of Object.entries(meta)) {
+          if (format === "beancount") {
+            out += `  ${key}: "${value}"\n`;
+          } else {
+            out += `  ; ${key}: ${value}\n`;
+          }
+        }
+      } catch {
+        // skip on error
+      }
     }
   }
   out += "\n";
@@ -673,7 +1051,36 @@ export async function exportLedger(backend: Backend): Promise<string> {
   for (const [entry, items] of sortedEntries) {
     if (entry.status === "voided") continue;
     const statusMarker = entry.status === "confirmed" ? " *" : " !";
-    out += `${entry.date}${statusMarker} ${entry.description}\n`;
+
+    if (format === "beancount") {
+      // Beancount: quoted description
+      out += `${entry.date}${statusMarker} "${entry.description}"\n`;
+      // Emit transaction metadata
+      try {
+        const meta = await backend.getMetadata(entry.id);
+        for (const [key, value] of Object.entries(meta)) {
+          if (key === "tags" || key === "links") continue;
+          out += `  ${key}: "${value}"\n`;
+        }
+      } catch {
+        // skip on error
+      }
+    } else if (format === "hledger") {
+      out += `${entry.date}${statusMarker} ${entry.description}\n`;
+      // Emit transaction metadata as comments
+      try {
+        const meta = await backend.getMetadata(entry.id);
+        for (const [key, value] of Object.entries(meta)) {
+          if (key === "tags" || key === "links") continue;
+          out += `  ; ${key}: ${value}\n`;
+        }
+      } catch {
+        // skip on error
+      }
+    } else {
+      out += `${entry.date}${statusMarker} ${entry.description}\n`;
+    }
+
     for (const item of items) {
       const accName =
         accounts.find((a) => a.id === item.account_id)?.full_name ??

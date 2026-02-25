@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 14;
+pub const SCHEMA_VERSION: u32 = 15;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -120,7 +120,9 @@ CREATE TABLE IF NOT EXISTS balance_assertion (
     currency TEXT NOT NULL REFERENCES currency(code),
     expected_balance TEXT NOT NULL,
     is_passing INTEGER NOT NULL DEFAULT 1,
-    actual_balance TEXT
+    actual_balance TEXT,
+    is_strict INTEGER NOT NULL DEFAULT 0,
+    include_subaccounts INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_balance_assertion_account ON balance_assertion(account_id);
 
@@ -247,6 +249,11 @@ CREATE TABLE IF NOT EXISTS budget (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value);
+"#;
+
+pub const MIGRATION_V15: &str = r#"
+ALTER TABLE balance_assertion ADD COLUMN is_strict INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE balance_assertion ADD COLUMN include_subaccounts INTEGER NOT NULL DEFAULT 0;
 "#;
 
 pub const MIGRATION_V14: &str = r#"

@@ -92,6 +92,8 @@ export interface BalanceAssertion {
   expected_balance: string;
   is_passing: boolean;
   actual_balance: string | null;
+  is_strict: boolean;
+  include_subaccounts: boolean;
 }
 
 export interface BalanceAssertionResult {
