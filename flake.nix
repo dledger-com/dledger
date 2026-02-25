@@ -33,15 +33,17 @@
       fenixPkgs = inputs.fenix.packages.${prev.stdenv.hostPlatform.system};
     in {
       rustToolchain = fenixPkgs.combine (
-        with fenixPkgs.stable; [
-          clippy
-          rustc
-          cargo
-          rustfmt
-          rust-src
-        ] ++ [
-          fenixPkgs.targets.wasm32-wasip2.stable.rust-std
-        ]
+        with fenixPkgs.stable;
+          [
+            clippy
+            rustc
+            cargo
+            rustfmt
+            rust-src
+          ]
+          ++ [
+            fenixPkgs.targets.wasm32-wasip2.stable.rust-std
+          ]
       );
     };
 
@@ -65,6 +67,11 @@
           openssl
           pango
           webkitgtk_4_1
+
+          # Reference ledger tools
+          beancount
+          hledger
+          ledger
         ];
       in {
         default = pkgs.mkShell {
