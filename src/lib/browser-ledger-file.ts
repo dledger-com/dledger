@@ -273,6 +273,15 @@ export async function importLedger(
     }
   }
 
+  // Deferred balance assertions — checked after all transactions are imported
+  const deferredBalanceAssertions: {
+    date: string;
+    accountName: string;
+    amountStr: string;
+    commodity: string;
+    lineNum: number;
+  }[] = [];
+
   async function parseBalanceDirective(
     date: string,
     rest: string,
@@ -296,17 +305,7 @@ export async function importLedger(
     await ensureCurrency(commodity);
     await ensureAccount(accountName, [], date);
 
-    const acc = existingAccounts.get(accountName)!;
-    const balances = await backend.getAccountBalance(acc.id, date);
-    const actual = balances.find((b) => b.currency === commodity);
-    const actualAmount = actual ? new Decimal(actual.amount) : new Decimal(0);
-    const expected = new Decimal(amountStr);
-
-    if (!actualAmount.eq(expected)) {
-      result.warnings.push(
-        `line ${lineNum}: balance assertion failed for ${accountName} ${commodity} ${date} (expected ${amountStr}, actual ${actualAmount.toString()})`,
-      );
-    }
+    deferredBalanceAssertions.push({ date, accountName, amountStr, commodity, lineNum });
   }
 
   // ---- Beancount metadata collector ----
@@ -989,6 +988,50 @@ export async function importLedger(
         continue;
       }
 
+      // Beancount: `price` directive → exchange rate
+      if (rest.startsWith("price ")) {
+        const priceTokens = rest.split(/\s+/);
+        if (priceTokens.length >= 4) {
+          const fromCommodity = priceTokens[1];
+          const rate = priceTokens[2];
+          const toCommodity = priceTokens[3];
+          try {
+            new Decimal(rate);
+            await ensureCurrency(fromCommodity);
+            await ensureCurrency(toCommodity);
+            await backend.recordExchangeRate({
+              id: uuidv7(),
+              date,
+              from_currency: fromCommodity,
+              to_currency: toCommodity,
+              rate,
+              source: "ledger-file",
+            });
+            result.prices_imported++;
+          } catch {
+            result.warnings.push(
+              `line ${i + 1}: malformed price directive`,
+            );
+          }
+        }
+        i++;
+        continue;
+      }
+
+      // Beancount: `commodity` directive → ensure currency exists, skip metadata lines
+      if (rest.startsWith("commodity ")) {
+        const code = rest.substring(10).trim().split(/\s+/)[0];
+        if (code) {
+          await ensureCurrency(code);
+        }
+        // Skip following metadata lines (indented)
+        i++;
+        while (i < lines.length && /^\s+\S/.test(lines[i])) {
+          i++;
+        }
+        continue;
+      }
+
       // Beancount: skip `note`, `document`, `event`, `custom` directives with date prefix
       if (fmt === "beancount") {
         if (
@@ -1011,6 +1054,27 @@ export async function importLedger(
     }
 
     i++;
+  }
+
+  // Check deferred balance assertions now that all transactions are imported
+  for (const ba of deferredBalanceAssertions) {
+    const acc = existingAccounts.get(ba.accountName);
+    if (!acc) {
+      result.warnings.push(
+        `line ${ba.lineNum}: balance assertion for unknown account '${ba.accountName}'`,
+      );
+      continue;
+    }
+    const balances = await backend.getAccountBalance(acc.id, ba.date);
+    const actual = balances.find((b) => b.currency === ba.commodity);
+    const actualAmount = actual ? new Decimal(actual.amount) : new Decimal(0);
+    const expected = new Decimal(ba.amountStr);
+
+    if (!actualAmount.eq(expected)) {
+      result.warnings.push(
+        `line ${ba.lineNum}: balance assertion failed for ${ba.accountName} ${ba.commodity} ${ba.date} (expected ${ba.amountStr}, actual ${actualAmount.toString()})`,
+      );
+    }
   }
 
   return result;

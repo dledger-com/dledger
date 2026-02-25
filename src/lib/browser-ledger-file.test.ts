@@ -456,6 +456,65 @@ plugin "beancount.plugins.auto_accounts"
       expect(result.transactions_imported).toBe(1);
       expect(result.warnings.some((w: string) => w.includes("zero-amount"))).toBe(true);
     });
+
+    it("parses commodity directive as currency definition", async () => {
+      const content = `
+1792-01-01 commodity USD
+  name: "US Dollar"
+  export: "CASH"
+
+1995-09-18 commodity VBMPX
+  name: "Vanguard Total Bond Market"
+  price: "USD:google/MUTF:VBMPX"
+
+2024-01-01 open Assets:Bank
+
+2024-01-15 * "Payment"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      // commodity directives should not produce warnings
+      expect(result.warnings.filter((w: string) => w.includes("commodity"))).toHaveLength(0);
+
+      const currencies = await backend.listCurrencies();
+      expect(currencies.find((c) => c.code === "VBMPX")).toBeDefined();
+    });
+
+    it("parses price directive as exchange rate", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+
+2024-01-05 price VBMPX 129.35 USD
+2024-01-05 price GLD 92.98 USD
+
+2024-01-15 * "Payment"
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.prices_imported).toBe(2);
+      expect(result.transactions_imported).toBe(1);
+    });
+
+    it("defers balance assertions until after all transactions", async () => {
+      // Balance assertion appears before the deposit transaction in file order,
+      // but the deposit predates the assertion date — should pass
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:Opening
+
+2024-01-02 balance Assets:Bank 100 USD
+
+2024-01-01 * "Opening Balance"
+  Assets:Bank  100 USD
+  Equity:Opening  -100 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.warnings.filter((w: string) => w.includes("balance assertion failed"))).toHaveLength(0);
+    });
   });
 
   describe("importLedger (hledger format)", () => {
