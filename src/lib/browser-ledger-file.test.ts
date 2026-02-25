@@ -357,6 +357,25 @@ plugin "beancount.plugins.auto_accounts"
       expect(result.transactions_imported).toBe(1);
     });
 
+    it("handles single-space between account and amount", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:OpeningBalance
+
+2024-01-01 * "Opening Balance"
+  Assets:Bank 1000.00 USD
+  Equity:OpeningBalance -1000.00 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      expect(entries).toHaveLength(1);
+      expect(entries[0][1]).toHaveLength(2);
+      expect(entries[0][1][0].amount).toBe("1000.00");
+      expect(entries[0][1][1].amount).toBe("-1000.00");
+    });
+
     it("handles slash dates in beancount", async () => {
       const content = `
 2024/01/01 open Assets:Bank

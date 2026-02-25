@@ -1033,6 +1033,15 @@ fn split_account_amount(line: &str) -> (&str, &str) {
         }
         i += 1;
     }
+    // Fallback: single space before a number/sign (for beancount single-space postings)
+    // Account names contain colons and never start with digits, so we look for
+    // a non-whitespace token followed by whitespace and a numeric amount.
+    if let Some(pos) = line.find(|c: char| c == ' ' || c == '\t') {
+        let rest = line[pos..].trim_start();
+        if rest.starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '+') {
+            return (line[..pos].trim(), rest);
+        }
+    }
     // No separator found — entire line is account name (elided amount)
     (line.trim(), "")
 }

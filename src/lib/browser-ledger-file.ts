@@ -56,6 +56,11 @@ function splitAccountAmount(line: string): [string, string] {
       return [line.substring(0, i).trim(), line.substring(i).trim()];
     }
   }
+  // Fallback: single space before a number/sign (for beancount single-space postings)
+  const m = line.match(/^(\S+)\s+([-+]?\d.*)$/);
+  if (m) {
+    return [m[1].trim(), m[2].trim()];
+  }
   return [line.trim(), ""];
 }
 

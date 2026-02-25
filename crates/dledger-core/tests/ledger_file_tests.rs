@@ -1688,6 +1688,26 @@ fn test_beancount_slash_dates() {
     assert_eq!(entries[0].0.date, NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
 }
 
+#[test]
+fn test_beancount_single_space_posting() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 open Assets:Bank
+2024-01-01 open Equity:OpeningBalance
+
+2024-01-01 * \"Opening Balance\"
+  Assets:Bank 1000.00 USD
+  Equity:OpeningBalance -1000.00 USD
+";
+    let result = import_ledger(&engine, content).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+    let entries = engine.query_journal_entries(&Default::default()).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].1.len(), 2);
+    assert_eq!(entries[0].1[0].amount, dec!(1000.00));
+    assert_eq!(entries[0].1[1].amount, dec!(-1000.00));
+}
+
 // ============================================================================
 // hledger format import tests
 // ============================================================================
