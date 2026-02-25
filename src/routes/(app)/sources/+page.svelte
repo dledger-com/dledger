@@ -1079,7 +1079,7 @@
       <Card.Description>
         Import transactions from PDF bank statements.
         <span class="mt-1.5 flex flex-wrap gap-1">
-          {#each ["La Banque Postale", "N26", "Nuri/Bitwala"] as name}
+          {#each ["Deblock", "La Banque Postale", "N26", "Nuri/Bitwala"] as name}
             <Badge variant="outline">{name}</Badge>
           {/each}
         </span>

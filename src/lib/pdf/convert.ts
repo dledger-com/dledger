@@ -6,7 +6,7 @@ import type { PdfStatement } from "./types.js";
 export interface PdfConvertOptions {
   mainAccount: string;
   rules: CsvCategorizationRule[];
-  bankId?: "lbp" | "n26" | "nuri";
+  bankId?: "lbp" | "n26" | "nuri" | "deblock";
 }
 
 export interface PdfConvertResult {
@@ -84,12 +84,15 @@ export function convertPdfToRecords(
 /**
  * Suggest a main account name from PDF statement info.
  */
-export function suggestMainAccount(statement: PdfStatement, bankId?: "lbp" | "n26" | "nuri"): string {
+export function suggestMainAccount(statement: PdfStatement, bankId?: "lbp" | "n26" | "nuri" | "deblock"): string {
   if (bankId === "n26") {
     return "Assets:Banks:N26";
   }
   if (bankId === "nuri") {
     return "Assets:Banks:Nuri";
+  }
+  if (bankId === "deblock") {
+    return "Assets:Banks:Deblock";
   }
   const acctNum = statement.accountNumber ?? statement.iban;
   const last4 = acctNum?.replace(/\s/g, "").slice(-4) ?? "Unknown";

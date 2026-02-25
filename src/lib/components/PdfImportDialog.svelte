@@ -24,6 +24,7 @@
     parseLbpStatement,
     parseN26Statement,
     parseNuriStatement,
+    parseDeblockStatement,
     convertPdfToRecords,
     suggestMainAccount,
     type PdfStatement,
@@ -57,7 +58,7 @@
 
   // -- Parsed PDF data --
   let statement = $state<PdfStatement | null>(null);
-  let detectedBank = $state<"lbp" | "n26" | "nuri" | null>(null);
+  let detectedBank = $state<"lbp" | "n26" | "nuri" | "deblock" | null>(null);
   let mainAccount = $state("Assets:Banks:Import");
 
   // -- Categorization rules --
@@ -112,12 +113,14 @@
       const n26Result = parseN26Statement(pages);
       const lbpResult = parseLbpStatement(pages);
       const nuriResult = parseNuriStatement(pages);
+      const deblockResult = parseDeblockStatement(pages);
 
       // Pick the parser that produces the most transactions
-      const candidates: { result: PdfStatement; bank: "n26" | "lbp" | "nuri" }[] = [
+      const candidates: { result: PdfStatement; bank: "n26" | "lbp" | "nuri" | "deblock" }[] = [
         { result: n26Result, bank: "n26" },
         { result: lbpResult, bank: "lbp" },
         { result: nuriResult, bank: "nuri" },
+        { result: deblockResult, bank: "deblock" },
       ];
       const best = candidates
         .filter((c) => c.result.transactions.length > 0)
@@ -159,7 +162,7 @@
     step = 2;
   }
 
-  let presetId = $derived(detectedBank === "n26" ? "pdf-n26" : detectedBank === "nuri" ? "pdf-nuri" : "pdf-lbp");
+  let presetId = $derived(detectedBank === "n26" ? "pdf-n26" : detectedBank === "nuri" ? "pdf-nuri" : detectedBank === "deblock" ? "pdf-deblock" : "pdf-lbp");
 
   async function detectDuplicates(records: CsvRecord[]) {
     try {
@@ -288,7 +291,7 @@
       </Dialog.Title>
       <Dialog.Description>
         {#if step === 1}
-          Upload a PDF bank statement.{#if detectedBank === "n26"} Detected: N26.{:else if detectedBank === "lbp"} Detected: La Banque Postale.{:else if detectedBank === "nuri"} Detected: Nuri/Bitwala.{/if}
+          Upload a PDF bank statement.{#if detectedBank === "n26"} Detected: N26.{:else if detectedBank === "lbp"} Detected: La Banque Postale.{:else if detectedBank === "nuri"} Detected: Nuri/Bitwala.{:else if detectedBank === "deblock"} Detected: Deblock.{/if}
         {:else}
           Review entries before importing.
         {/if}
