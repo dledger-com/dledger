@@ -23,6 +23,7 @@
     extractPdfPages,
     parseLbpStatement,
     parseN26Statement,
+    parseNuriStatement,
     convertPdfToRecords,
     suggestMainAccount,
     type PdfStatement,
@@ -56,7 +57,7 @@
 
   // -- Parsed PDF data --
   let statement = $state<PdfStatement | null>(null);
-  let detectedBank = $state<"lbp" | "n26" | null>(null);
+  let detectedBank = $state<"lbp" | "n26" | "nuri" | null>(null);
   let mainAccount = $state("Assets:Banks:Import");
 
   // -- Categorization rules --
@@ -107,19 +108,28 @@
       const data = new Uint8Array(buffer);
       const pages = await extractPdfPages(data);
 
-      // Auto-detect bank by trying both parsers
+      // Auto-detect bank by trying all parsers
       const n26Result = parseN26Statement(pages);
       const lbpResult = parseLbpStatement(pages);
+      const nuriResult = parseNuriStatement(pages);
 
-      if (n26Result.transactions.length > 0 && n26Result.transactions.length >= lbpResult.transactions.length) {
-        statement = n26Result;
-        detectedBank = "n26";
-      } else if (lbpResult.transactions.length > 0) {
-        statement = lbpResult;
-        detectedBank = "lbp";
+      // Pick the parser that produces the most transactions
+      const candidates: { result: PdfStatement; bank: "n26" | "lbp" | "nuri" }[] = [
+        { result: n26Result, bank: "n26" },
+        { result: lbpResult, bank: "lbp" },
+        { result: nuriResult, bank: "nuri" },
+      ];
+      const best = candidates
+        .filter((c) => c.result.transactions.length > 0)
+        .sort((a, b) => b.result.transactions.length - a.result.transactions.length)[0];
+
+      if (best) {
+        statement = best.result;
+        detectedBank = best.bank;
       } else {
-        // Both failed — show the one with fewer warnings
-        statement = n26Result.warnings.length <= lbpResult.warnings.length ? n26Result : lbpResult;
+        // All failed — show the one with fewest warnings
+        const fallback = candidates.sort((a, b) => a.result.warnings.length - b.result.warnings.length)[0];
+        statement = fallback.result;
         detectedBank = null;
         toast.error(statement.warnings[0] ?? "No transactions found in PDF");
         return;
@@ -149,7 +159,7 @@
     step = 2;
   }
 
-  let presetId = $derived(detectedBank === "n26" ? "pdf-n26" : "pdf-lbp");
+  let presetId = $derived(detectedBank === "n26" ? "pdf-n26" : detectedBank === "nuri" ? "pdf-nuri" : "pdf-lbp");
 
   async function detectDuplicates(records: CsvRecord[]) {
     try {
@@ -278,7 +288,7 @@
       </Dialog.Title>
       <Dialog.Description>
         {#if step === 1}
-          Upload a PDF bank statement.{#if detectedBank === "n26"} Detected: N26.{:else if detectedBank === "lbp"} Detected: La Banque Postale.{/if}
+          Upload a PDF bank statement.{#if detectedBank === "n26"} Detected: N26.{:else if detectedBank === "lbp"} Detected: La Banque Postale.{:else if detectedBank === "nuri"} Detected: Nuri/Bitwala.{/if}
         {:else}
           Review entries before importing.
         {/if}

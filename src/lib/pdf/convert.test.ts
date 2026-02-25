@@ -167,4 +167,9 @@ describe("suggestMainAccount", () => {
     const stmt = makeStatement();
     expect(suggestMainAccount(stmt, "lbp")).toBe("Assets:Banks:LaBanquePostale:X000");
   });
+
+  it("suggests Nuri account when bankId is nuri", () => {
+    const stmt = makeStatement();
+    expect(suggestMainAccount(stmt, "nuri")).toBe("Assets:Banks:Nuri");
+  });
 });
