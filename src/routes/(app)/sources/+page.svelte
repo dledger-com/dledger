@@ -1009,7 +1009,14 @@
   >
     <Card.Header>
       <Card.Title>CSV Import</Card.Title>
-      <Card.Description>Import transactions from CSV files — bank statements, exchange exports, and more.</Card.Description>
+      <Card.Description>
+        Import transactions from CSV files.
+        <span class="mt-1.5 flex flex-wrap gap-1">
+          {#each ["Kraken", "Binance", "Coinbase", "Bybit", "Bitfinex", "Bitstamp", "Bisq", "Bittrex", "CoinList", "Crypto.com", "Gate.io", "Nexo", "Poloniex", "Revolut", "N26", "La Banque Postale", "Yield App"] as name}
+            <Badge variant="outline">{name}</Badge>
+          {/each}
+        </span>
+      </Card.Description>
     </Card.Header>
     <Card.Content>
       <div class="flex items-center gap-3">
@@ -1069,7 +1076,14 @@
   >
     <Card.Header>
       <Card.Title>PDF Import</Card.Title>
-      <Card.Description>Import transactions from PDF bank statements (La Banque Postale).</Card.Description>
+      <Card.Description>
+        Import transactions from PDF bank statements.
+        <span class="mt-1.5 flex flex-wrap gap-1">
+          {#each ["La Banque Postale", "N26", "Nuri/Bitwala"] as name}
+            <Badge variant="outline">{name}</Badge>
+          {/each}
+        </span>
+      </Card.Description>
     </Card.Header>
     <Card.Content>
       <div class="flex items-center gap-3">
