@@ -57,6 +57,16 @@ describe("sgmlToXml", () => {
     expect(xml).toContain("<NAME>  Some Store</NAME>");
   });
 
+  it("closes leaf tags in single-line SGML (no newlines)", () => {
+    const sgml = "<TRNTYPE>PAYMENT<DTPOSTED>20260216<TRNAMT>-24.99<FITID>20260216001<NAME>Some Store";
+    const xml = sgmlToXml(sgml);
+    expect(xml).toContain("<TRNTYPE>PAYMENT</TRNTYPE>");
+    expect(xml).toContain("<DTPOSTED>20260216</DTPOSTED>");
+    expect(xml).toContain("<TRNAMT>-24.99</TRNAMT>");
+    expect(xml).toContain("<FITID>20260216001</FITID>");
+    expect(xml).toContain("<NAME>Some Store</NAME>");
+  });
+
   it("does not break container tags", () => {
     const sgml = "<BANKACCTFROM>\n<BANKID>123456\n<ACCTID>9999\n</BANKACCTFROM>\n";
     const xml = sgmlToXml(sgml);
@@ -395,5 +405,49 @@ VERSION:102
 
     const result = parseOfx(ofx);
     expect(result.statements[0].transactions[0].checkNum).toBe("1234");
+  });
+
+  it("parses single-line SGML bank statement", () => {
+    // Modeled on La Banque Postale exports where the entire SGML body is on a single line
+    const txLines = Array.from({ length: 19 }, (_, i) => {
+      const day = String(i + 1).padStart(2, "0");
+      const amt = (-(10 + i * 2.5)).toFixed(2);
+      return `<STMTTRN><TRNTYPE>PAYMENT<DTPOSTED>202602${day}<TRNAMT>${amt}<FITID>2026${day}${String(i).padStart(3, "0")}<NAME>Tx ${i + 1}</STMTTRN>`;
+    }).join("");
+
+    const ofx =
+      `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\n` +
+      `<OFX>` +
+      `<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0<SEVERITY>INFO</STATUS><DTSERVER>20260220<LANGUAGE>FRA</SONRS></SIGNONMSGSRSV1>` +
+      `<BANKMSGSRSV1><STMTTRNRS><STMTRS>` +
+      `<CURDEF>EUR` +
+      `<BANKACCTFROM><BANKID>20041<ACCTID>1234567X020<ACCTTYPE>CHECKING</BANKACCTFROM>` +
+      `<BANKTRANLIST><DTSTART>20260201<DTEND>20260220` +
+      txLines +
+      `</BANKTRANLIST>` +
+      `<LEDGERBAL><BALAMT>707.39<DTASOF>20260220</LEDGERBAL>` +
+      `</STMTRS></STMTTRNRS></BANKMSGSRSV1>` +
+      `</OFX>`;
+
+    const result = parseOfx(ofx);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.statements).toHaveLength(1);
+
+    const stmt = result.statements[0];
+    expect(stmt.currency).toBe("EUR");
+    expect(stmt.account.bankId).toBe("20041");
+    expect(stmt.account.acctId).toBe("1234567X020");
+    expect(stmt.account.acctType).toBe("CHECKING");
+    expect(stmt.transactions).toHaveLength(19);
+
+    // Spot-check first and last
+    expect(stmt.transactions[0].trnType).toBe("PAYMENT");
+    expect(stmt.transactions[0].trnAmt).toBe("-10.00");
+    expect(stmt.transactions[0].name).toBe("Tx 1");
+    expect(stmt.transactions[18].trnAmt).toBe("-55.00");
+    expect(stmt.transactions[18].name).toBe("Tx 19");
+
+    expect(stmt.ledgerBalance).toBeDefined();
+    expect(stmt.ledgerBalance!.balAmt).toBe("707.39");
   });
 });

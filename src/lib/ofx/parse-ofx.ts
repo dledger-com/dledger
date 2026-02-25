@@ -62,13 +62,14 @@ export function sgmlToXml(sgml: string): string {
 
   // Step 2: Close leaf elements. A leaf element is a tag whose value is on the
   // same line (not followed by another opening tag on the same line).
-  // Pattern: <TAG>value (where value is non-empty, not another tag)
-  xml = xml.replace(/<(\w+)>([^<\n]+)\n/g, (_, tag, value) => {
-    return `<${tag}>${value.trimEnd()}</${tag}>\n`;
-  });
-
-  // Handle leaf elements at EOF (no trailing newline)
-  xml = xml.replace(/<(\w+)>([^<\n]+)$/gm, (_, tag, value) => {
+  // Pattern: <TAG>value terminated by the next tag or end-of-string.
+  // Uses lazy match + lookahead to handle both newline-separated and single-line SGML.
+  xml = xml.replace(/<(\w+)>([^<]+?)(?=<|$)/g, (match, tag, value, offset, str) => {
+    // Skip container tags (value is only whitespace between opening tag and child)
+    if (!value.trim()) return match;
+    // Don't double-close tags that already have a closing tag
+    const afterPos = offset + match.length;
+    if (str.startsWith(`</${tag}>`, afterPos)) return match;
     return `<${tag}>${value.trimEnd()}</${tag}>`;
   });
 
