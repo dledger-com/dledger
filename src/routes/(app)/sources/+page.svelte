@@ -52,6 +52,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import Link2 from "lucide-svelte/icons/link-2";
   import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
+  import OfxImportDialog from "$lib/components/OfxImportDialog.svelte";
 
   let csvDialogOpen = $state(false);
   let csvInitialContent = $state("");
@@ -59,11 +60,24 @@
   let dragCounter = $state(0);
   let draggingCsv = $derived(dragCounter > 0);
 
+  let ofxDialogOpen = $state(false);
+  let ofxInitialContent = $state("");
+  let ofxInitialFileName = $state("");
+  let ofxDragCounter = $state(0);
+  let draggingOfx = $derived(ofxDragCounter > 0);
+
   // Clear initial content when dialog closes
   $effect(() => {
     if (!csvDialogOpen) {
       csvInitialContent = "";
       csvInitialFileName = "";
+    }
+  });
+
+  $effect(() => {
+    if (!ofxDialogOpen) {
+      ofxInitialContent = "";
+      ofxInitialFileName = "";
     }
   });
 
@@ -75,6 +89,16 @@
     csvInitialContent = await readFileAsText(file);
     csvInitialFileName = file.name;
     csvDialogOpen = true;
+  }
+
+  async function handleOfxDrop(e: DragEvent) {
+    e.preventDefault();
+    ofxDragCounter = 0;
+    const file = e.dataTransfer?.files[0];
+    if (!file) return;
+    ofxInitialContent = await readFileAsText(file);
+    ofxInitialFileName = file.name;
+    ofxDialogOpen = true;
   }
 
   const handlerRegistry = getDefaultRegistry();
@@ -979,6 +1003,36 @@
     bind:open={csvDialogOpen}
     initialContent={csvInitialContent}
     initialFileName={csvInitialFileName}
+  />
+
+  <!-- OFX Import -->
+  <Card.Root
+    class={draggingOfx ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors" : "transition-colors"}
+    ondragenter={(e: DragEvent) => { e.preventDefault(); ofxDragCounter++; }}
+    ondragover={(e: DragEvent) => { e.preventDefault(); }}
+    ondragleave={() => { ofxDragCounter--; }}
+    ondrop={handleOfxDrop}
+  >
+    <Card.Header>
+      <Card.Title>OFX Import</Card.Title>
+      <Card.Description>Import transactions from OFX/QFX/QBO files — supported by most banks.</Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <div class="flex items-center gap-3">
+        <Button onclick={() => { ofxDialogOpen = true; }}>
+          <Upload class="mr-2 h-4 w-4" /> Import OFX
+        </Button>
+        {#if draggingOfx}
+          <p class="text-sm text-muted-foreground">Drop OFX file to import...</p>
+        {/if}
+      </div>
+    </Card.Content>
+  </Card.Root>
+
+  <OfxImportDialog
+    bind:open={ofxDialogOpen}
+    initialContent={ofxInitialContent}
+    initialFileName={ofxInitialFileName}
   />
 
   <!-- Blockchain Sync -->
