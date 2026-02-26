@@ -36,6 +36,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
+  import AccountCombobox from "./AccountCombobox.svelte";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
   import Trash2 from "lucide-svelte/icons/trash-2";
@@ -118,6 +119,27 @@
   let mlClassifying = $state(false);
   let mlEnabled = $derived(settings.settings.mlClassificationEnabled ?? false);
   let mlThreshold = $derived(settings.settings.mlConfidenceThreshold ?? 0.5);
+
+  // -- Account list for inline editing --
+  let accountPaths = $state<string[]>([]);
+
+  async function fetchAccountPaths() {
+    try {
+      const backend = getBackend();
+      const accounts = await backend.listAccounts();
+      accountPaths = accounts.map((a) => a.full_name);
+    } catch {
+      accountPaths = [];
+    }
+  }
+
+  function updateLineAccount(recIdx: number, lineIdx: number, newAccount: string) {
+    const updated = [...previewRecords];
+    const rec = { ...updated[recIdx], lines: [...updated[recIdx].lines] };
+    rec.lines[lineIdx] = { ...rec.lines[lineIdx], account: newAccount };
+    updated[recIdx] = rec;
+    previewRecords = updated;
+  }
 
   async function runMlClassification() {
     if (mlClassifying || previewRecords.length === 0) return;
@@ -309,6 +331,7 @@
           previewRecords = records;
           previewWarnings = [];
           await detectDuplicates(records);
+          fetchAccountPaths();
           step = 3;
           return;
         } else {
@@ -336,6 +359,7 @@
     previewRecords = result.records;
     previewWarnings = result.warnings;
     await detectDuplicates(result.records);
+    fetchAccountPaths();
     step = 3;
   }
 
@@ -451,6 +475,7 @@
     mlSuggestions = new Map();
     mlAccepted = new Set();
     mlClassifying = false;
+    accountPaths = [];
   }
 
   // Reset on close
@@ -1043,9 +1068,13 @@
                       {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
                     </Table.Cell>
                     <Table.Cell class="text-xs">
-                      {#each rec.lines.slice(0, 4) as line}
-                        <div class="flex gap-1">
-                          <span class="font-mono text-muted-foreground truncate max-w-[160px]">{line.account}</span>
+                      {#each rec.lines.slice(0, 4) as line, lineIdx}
+                        <div class="flex gap-1 items-center">
+                          <AccountCombobox
+                            value={line.account}
+                            accounts={accountPaths}
+                            onchange={(v) => updateLineAccount(recIdx, lineIdx, v)}
+                          />
                           <span class={parseFloat(line.amount) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                             {parseFloat(line.amount) >= 0 ? "+" : ""}{line.amount} {line.currency}
                           </span>
