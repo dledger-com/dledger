@@ -11,6 +11,10 @@ import type {
   LedgerImportResult,
 } from "./types/index.js";
 import { detectFormat, type LedgerFormat } from "./ledger-format.js";
+import {
+  computeEntryFingerprint,
+  computeEntryAmountFingerprint,
+} from "./csv-presets/dedup.js";
 
 // ---- Helpers ----
 
@@ -108,6 +112,7 @@ export async function importLedger(
     transactions_imported: 0,
     prices_imported: 0,
     warnings: [],
+    duplicates_skipped: 0,
     transaction_currency_dates: [],
   };
 
@@ -120,6 +125,16 @@ export async function importLedger(
   const existingAccounts = new Map<string, Account>();
   for (const acc of await backend.listAccounts()) {
     existingAccounts.set(acc.full_name, acc);
+  }
+
+  // Build dedup index from existing entries
+  const fingerprints = new Set<string>();
+  const amountFingerprints = new Set<string>();
+  const existingEntries = await backend.queryJournalEntries({});
+  for (const [entry, items] of existingEntries) {
+    if (entry.voided_by !== null) continue;
+    fingerprints.add(computeEntryFingerprint(entry, items));
+    amountFingerprints.add(computeEntryAmountFingerprint(entry, items));
   }
 
   async function ensureCurrency(code: string): Promise<void> {
@@ -851,9 +866,21 @@ export async function importLedger(
       created_at: date,
     };
 
+    // Dedup check — skip if fingerprint or amount fingerprint already exists
+    const fp = computeEntryFingerprint(entry, items);
+    const afp = computeEntryAmountFingerprint(entry, items);
+    if (fingerprints.has(fp) || amountFingerprints.has(afp)) {
+      result.duplicates_skipped++;
+      return consumed;
+    }
+
     try {
       await backend.postJournalEntry(entry, items);
       result.transactions_imported++;
+
+      // Add to dedup sets for intra-batch dedup
+      fingerprints.add(fp);
+      amountFingerprints.add(afp);
 
       // Store beancount tags/links/metadata
       if (fmt === "beancount") {

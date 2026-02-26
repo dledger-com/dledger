@@ -129,6 +129,8 @@ pub struct LedgerImportResult {
     pub transactions_imported: usize,
     pub prices_imported: usize,
     pub warnings: Vec<String>,
+    #[serde(default)]
+    pub duplicates_skipped: usize,
     /// Unique (currency, date) pairs from imported transactions for historical rate backfill.
     #[serde(default)]
     pub transaction_currency_dates: Vec<(String, String)>,
@@ -160,6 +162,7 @@ fn import_ledger_internal(
         transactions_imported: 0,
         prices_imported: 0,
         warnings: Vec::new(),
+        duplicates_skipped: 0,
         transaction_currency_dates: Vec::new(),
     };
 

@@ -122,7 +122,11 @@
 
     try {
       result = await getBackend().importLedgerFile(fileContent, effectiveFormat ?? undefined);
-      toast.success("Ledger file imported successfully");
+      const parts = [`${result.transactions_imported} transaction(s) imported`];
+      if (result.duplicates_skipped > 0) {
+        parts.push(`${result.duplicates_skipped} duplicate(s) skipped`);
+      }
+      toast.success(parts.join(", "));
 
       if (result.transaction_currency_dates && result.transaction_currency_dates.length > 0) {
         const currencyDates = result.transaction_currency_dates.map(([currency, date]) => ({ currency, date }));
@@ -297,7 +301,7 @@
         <!-- Import Results -->
         <div class="rounded-md border bg-muted/50 p-4 space-y-3">
           <h4 class="text-sm font-semibold">Import Complete</h4>
-          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-5">
             <div class="text-center">
               <p class="text-2xl font-bold">{result.accounts_created}</p>
               <p class="text-xs text-muted-foreground">Accounts</p>
@@ -313,6 +317,10 @@
             <div class="text-center">
               <p class="text-2xl font-bold">{result.prices_imported}</p>
               <p class="text-xs text-muted-foreground">Prices</p>
+            </div>
+            <div class="text-center">
+              <p class="text-2xl font-bold">{result.duplicates_skipped}</p>
+              <p class="text-xs text-muted-foreground">Duplicates Skipped</p>
             </div>
           </div>
 
