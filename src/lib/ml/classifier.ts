@@ -59,8 +59,8 @@ export class TransactionClassifier {
     this.worker.onmessage = (event) => {
       const { type, id, data, error, progress } = event.data;
 
-      if (type === "progress" && onProgress) {
-        onProgress(progress);
+      if (type === "progress") {
+        if (onProgress) onProgress(progress);
         return;
       }
 
@@ -111,8 +111,8 @@ export class TransactionClassifier {
     this.worker.onmessage = (event) => {
       const { type, id, data, error, progress } = event.data;
 
-      if (type === "progress" && onProgress) {
-        onProgress(progress);
+      if (type === "progress") {
+        if (onProgress) onProgress(progress);
         return;
       }
 
