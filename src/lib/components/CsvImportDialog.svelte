@@ -123,13 +123,13 @@
     if (mlClassifying || previewRecords.length === 0) return;
     mlClassifying = true;
 
-    const classifier = new TransactionClassifier();
-    try {
-      const taskId = taskQueue.enqueue({
-        key: "ml-classify",
-        label: "Classifying transactions...",
-        description: "Using ML to suggest account categories for uncategorized transactions",
-        run: async (ctx) => {
+    const taskId = taskQueue.enqueue({
+      key: "ml-classify",
+      label: "Classifying transactions...",
+      description: "Using ML to suggest account categories for uncategorized transactions",
+      run: async (ctx) => {
+        const classifier = new TransactionClassifier();
+        try {
           await classifier.init(ctx.reportProgress, true);
 
           // Get all account paths from the backend
@@ -152,17 +152,16 @@
           const total = previewRecords.length;
           const classified = suggestions.size;
           return { summary: `Classified ${classified}/${total} transactions` };
-        },
-      });
+        } finally {
+          classifier.dispose();
+          mlClassifying = false;
+        }
+      },
+    });
 
-      if (!taskId) {
-        toast.error("ML classification is already running");
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
+    if (!taskId) {
       mlClassifying = false;
-      classifier.dispose();
+      toast.error("ML classification is already running");
     }
   }
 
