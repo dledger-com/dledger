@@ -393,6 +393,103 @@ describe("SqlJsBackend", () => {
       expect(parseFloat(rate!)).toBeCloseTo(1 / 1.1, 6);
     });
 
+    it("derives transitive rate via shared base currency", async () => {
+      await backend.createCurrency({ code: "GLD", name: "Gold", decimal_places: 4, is_base: false });
+      // EUR→USD and GLD→USD on same date
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "GLD", to_currency: "USD",
+        rate: "2000", source: "api",
+      });
+      // EUR→GLD = (EUR→USD) * (1 / GLD→USD) = 1.10 / 2000 = 0.00055
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).not.toBeNull();
+      expect(parseFloat(rate!)).toBeCloseTo(1.10 / 2000, 8);
+    });
+
+    it("derives transitive rate with inverse second leg", async () => {
+      await backend.createCurrency({ code: "GLD", name: "Gold", decimal_places: 4, is_base: false });
+      // EUR→USD and USD→GLD on same date
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "USD", to_currency: "GLD",
+        rate: "0.0005", source: "api",
+      });
+      // EUR→GLD = (EUR→USD) * (USD→GLD) = 1.10 * 0.0005 = 0.00055
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).not.toBeNull();
+      expect(parseFloat(rate!)).toBeCloseTo(1.10 * 0.0005, 8);
+    });
+
+    it("prefers direct rate over transitive", async () => {
+      await backend.createCurrency({ code: "GLD", name: "Gold", decimal_places: 4, is_base: false });
+      // Direct EUR→GLD rate
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "GLD",
+        rate: "0.00060", source: "manual",
+      });
+      // Also set up transitive path EUR→USD→GLD
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "USD", to_currency: "GLD",
+        rate: "0.0005", source: "api",
+      });
+      // Direct rate should be used, not transitive
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).toBe("0.00060");
+    });
+
+    it("does not derive transitive rate across different dates", async () => {
+      await backend.createCurrency({ code: "GLD", name: "Gold", decimal_places: 4, is_base: false });
+      // EUR→USD on 2024-01-15, GLD→USD on 2024-01-10 (different dates)
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-10",
+        from_currency: "GLD", to_currency: "USD",
+        rate: "2000", source: "api",
+      });
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).toBeNull();
+    });
+
+    it("does not derive transitive rate when no path exists", async () => {
+      await backend.createCurrency({ code: "GBP", name: "British Pound", decimal_places: 2, is_base: false });
+      await backend.createCurrency({ code: "JPY", name: "Yen", decimal_places: 0, is_base: false });
+      // EUR→USD exists, JPY→GBP exists — no path from EUR to GBP
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "JPY", to_currency: "GBP",
+        rate: "0.005", source: "api",
+      });
+      const rate = await backend.getExchangeRate("EUR", "GBP", "2024-01-15");
+      expect(rate).toBeNull();
+    });
+
     it("respects source priority", async () => {
       // First record API rate
       await backend.recordExchangeRate({

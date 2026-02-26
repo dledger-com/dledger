@@ -695,17 +695,119 @@ impl Storage for SqliteStorage {
             .optional()
             .map_err(|e| StorageError::Internal(e.to_string()))?;
 
-        match inv_result {
-            Some(s) => {
-                let rate = parse_decimal(&s)?;
+        if let Some(s) = inv_result {
+            let rate = parse_decimal(&s)?;
+            if rate.is_zero() {
+                return Ok(None);
+            }
+            return Ok(Some(Decimal::ONE / rate));
+        }
+
+        // Transitive fallback: A→X→B via single intermediate, same-date only
+        // Collect (currency, rate, date) pairs where from→X exists on or before `date`
+        let mut from_legs: std::collections::HashMap<String, Vec<(Decimal, String)>> =
+            std::collections::HashMap::new();
+
+        // Direct: from→X
+        {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT to_currency, rate, date FROM exchange_rate
+                     WHERE from_currency = ?1 AND date <= ?2
+                     ORDER BY date DESC",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let rows = stmt
+                .query_map(params![from, &date_str], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            for row in rows {
+                let (currency, rate_str, d) =
+                    row.map_err(|e| StorageError::Internal(e.to_string()))?;
+                let rate = parse_decimal(&rate_str)?;
+                from_legs.entry(currency).or_default().push((rate, d));
+            }
+        }
+
+        // Inverse: X→from (so from→X = 1/rate)
+        {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT from_currency, rate, date FROM exchange_rate
+                     WHERE to_currency = ?1 AND date <= ?2
+                     ORDER BY date DESC",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let rows = stmt
+                .query_map(params![from, &date_str], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            for row in rows {
+                let (currency, rate_str, d) =
+                    row.map_err(|e| StorageError::Internal(e.to_string()))?;
+                let rate = parse_decimal(&rate_str)?;
                 if rate.is_zero() {
-                    Ok(None)
-                } else {
-                    Ok(Some(Decimal::ONE / rate))
+                    continue;
+                }
+                from_legs
+                    .entry(currency)
+                    .or_default()
+                    .push((Decimal::ONE / rate, d));
+            }
+        }
+
+        // For each intermediate X, check if X→to (or to→X) exists on the same date
+        for (_x, legs) in &from_legs {
+            for (leg_rate, leg_date) in legs {
+                // Direct: X→to on leg_date
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT rate FROM exchange_rate
+                         WHERE from_currency = ?1 AND to_currency = ?2 AND date = ?3",
+                    )
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+                let x_to_direct = stmt
+                    .query_row(params![_x, to, leg_date], |row| row.get::<_, String>(0))
+                    .optional()
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+                if let Some(s) = x_to_direct {
+                    let second_rate = parse_decimal(&s)?;
+                    return Ok(Some(*leg_rate * second_rate));
+                }
+
+                // Inverse: to→X on leg_date (so X→to = 1/rate)
+                let mut inv_stmt = conn
+                    .prepare(
+                        "SELECT rate FROM exchange_rate
+                         WHERE from_currency = ?1 AND to_currency = ?2 AND date = ?3",
+                    )
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+                let x_to_inverse = inv_stmt
+                    .query_row(params![to, _x, leg_date], |row| row.get::<_, String>(0))
+                    .optional()
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+                if let Some(s) = x_to_inverse {
+                    let inv_rate = parse_decimal(&s)?;
+                    if !inv_rate.is_zero() {
+                        return Ok(Some(*leg_rate * (Decimal::ONE / inv_rate)));
+                    }
                 }
             }
-            None => Ok(None),
         }
+
+        Ok(None)
     }
 
     fn get_exchange_rate_source(
@@ -2831,6 +2933,135 @@ mod tests {
         // Non-existent pair
         let none = s.get_exchange_rate_source("USD", "BTC", date).unwrap();
         assert!(none.is_none());
+    }
+
+    #[test]
+    fn test_transitive_rate_via_shared_base() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
+
+        let date = make_date(2024, 1, 15);
+        // EUR→USD and GLD→USD on same date
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "EUR".into(), to_currency: "USD".into(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "GLD".into(), to_currency: "USD".into(),
+            rate: dec!(2000), source: "api".into(),
+        }).unwrap();
+
+        // EUR→GLD = (EUR→USD) * (1 / GLD→USD) = 1.10 / 2000 = 0.00055
+        let rate = s.get_exchange_rate("EUR", "GLD", date).unwrap().unwrap();
+        assert_eq!(rate, dec!(1.10) / dec!(2000));
+    }
+
+    #[test]
+    fn test_transitive_rate_inverse_second_leg() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
+
+        let date = make_date(2024, 1, 15);
+        // EUR→USD and USD→GLD on same date
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "EUR".into(), to_currency: "USD".into(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "USD".into(), to_currency: "GLD".into(),
+            rate: dec!(0.0005), source: "api".into(),
+        }).unwrap();
+
+        // EUR→GLD = (EUR→USD) * (USD→GLD) = 1.10 * 0.0005 = 0.00055
+        let rate = s.get_exchange_rate("EUR", "GLD", date).unwrap().unwrap();
+        assert_eq!(rate, dec!(1.10) * dec!(0.0005));
+    }
+
+    #[test]
+    fn test_direct_rate_preferred_over_transitive() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
+
+        let date = make_date(2024, 1, 15);
+        // Direct EUR→GLD
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "EUR".into(), to_currency: "GLD".into(),
+            rate: dec!(0.00060), source: "manual".into(),
+        }).unwrap();
+        // Transitive path EUR→USD→GLD
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "EUR".into(), to_currency: "USD".into(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "USD".into(), to_currency: "GLD".into(),
+            rate: dec!(0.0005), source: "api".into(),
+        }).unwrap();
+
+        // Direct rate should be used
+        let rate = s.get_exchange_rate("EUR", "GLD", date).unwrap().unwrap();
+        assert_eq!(rate, dec!(0.00060));
+    }
+
+    #[test]
+    fn test_no_transitive_across_different_dates() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
+
+        // EUR→USD on 2024-01-15, GLD→USD on 2024-01-10
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date: make_date(2024, 1, 15),
+            from_currency: "EUR".into(), to_currency: "USD".into(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date: make_date(2024, 1, 10),
+            from_currency: "GLD".into(), to_currency: "USD".into(),
+            rate: dec!(2000), source: "api".into(),
+        }).unwrap();
+
+        let rate = s.get_exchange_rate("EUR", "GLD", make_date(2024, 1, 15)).unwrap();
+        assert_eq!(rate, None);
+    }
+
+    #[test]
+    fn test_no_transitive_when_no_path() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GBP", "British Pound", 2, false)).unwrap();
+        s.create_currency(&make_currency("JPY", "Yen", 0, false)).unwrap();
+
+        let date = make_date(2024, 1, 15);
+        // EUR→USD exists, JPY→GBP exists — no path from EUR to GBP
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "EUR".into(), to_currency: "USD".into(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date,
+            from_currency: "JPY".into(), to_currency: "GBP".into(),
+            rate: dec!(0.005), source: "api".into(),
+        }).unwrap();
+
+        let rate = s.get_exchange_rate("EUR", "GBP", date).unwrap();
+        assert_eq!(rate, None);
     }
 
     // ---------------------------------------------------------------

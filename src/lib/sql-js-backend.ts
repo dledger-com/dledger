@@ -2010,6 +2010,61 @@ export class SqlJsBackend implements Backend {
       return new Decimal(1).div(invRate).toString();
     }
 
+    // Transitive fallback: A→X→B via single intermediate, same-date only
+    const fromLegs = new Map<string, { rate: Decimal; date: string }[]>();
+
+    // Direct: from→X
+    const directLegs = this.query(
+      "SELECT to_currency, rate, date FROM exchange_rate WHERE from_currency = ? AND date <= ? ORDER BY date DESC",
+      [from, date],
+      (row) => ({ currency: row.to_currency as string, rate: row.rate as string, date: row.date as string }),
+    );
+    for (const r of directLegs) {
+      if (!fromLegs.has(r.currency)) fromLegs.set(r.currency, []);
+      fromLegs.get(r.currency)!.push({ rate: new Decimal(r.rate), date: r.date });
+    }
+
+    // Inverse: X→from (so from→X = 1/rate)
+    const inverseLegs = this.query(
+      "SELECT from_currency, rate, date FROM exchange_rate WHERE to_currency = ? AND date <= ? ORDER BY date DESC",
+      [from, date],
+      (row) => ({ currency: row.from_currency as string, rate: row.rate as string, date: row.date as string }),
+    );
+    for (const r of inverseLegs) {
+      const d = new Decimal(r.rate);
+      if (d.isZero()) continue;
+      if (!fromLegs.has(r.currency)) fromLegs.set(r.currency, []);
+      fromLegs.get(r.currency)!.push({ rate: new Decimal(1).div(d), date: r.date });
+    }
+
+    // For each intermediate X, check if X→to (or to→X) exists on the same date
+    for (const [x, legs] of fromLegs) {
+      for (const leg of legs) {
+        // Direct: X→to on leg.date
+        const xToDirect = this.queryOne(
+          "SELECT rate FROM exchange_rate WHERE from_currency = ? AND to_currency = ? AND date = ?",
+          [x, to, leg.date],
+          (row) => row.rate as string,
+        );
+        if (xToDirect !== null) {
+          return leg.rate.times(new Decimal(xToDirect)).toString();
+        }
+
+        // Inverse: to→X on leg.date (so X→to = 1/rate)
+        const xToInverse = this.queryOne(
+          "SELECT rate FROM exchange_rate WHERE from_currency = ? AND to_currency = ? AND date = ?",
+          [to, x, leg.date],
+          (row) => row.rate as string,
+        );
+        if (xToInverse !== null) {
+          const inv = new Decimal(xToInverse);
+          if (!inv.isZero()) {
+            return leg.rate.times(new Decimal(1).div(inv)).toString();
+          }
+        }
+      }
+    }
+
     return null;
   }
 
