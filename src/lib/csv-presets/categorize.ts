@@ -58,15 +58,19 @@ export async function classifyTransactions(
   }
 
   if (debug) {
-    console.log(`[ML classify] Input: ${records.length} records, threshold=${threshold}`);
+    console.group("ML classify");
+    console.log(`Input: ${records.length} records, threshold=${threshold}`);
     console.log(
-      `[ML classify] Filter: ${uncategorizedDescriptions.length} uncategorized, ` +
+      `Filter: ${uncategorizedDescriptions.length} uncategorized, ` +
       `${ruledOut} ruled out, ${emptyDescription} empty description, ` +
       `${notUncategorized} not uncategorized → ${uncategorizedDescriptions.length} to classify`,
     );
   }
 
-  if (uncategorizedDescriptions.length === 0) return new Map();
+  if (uncategorizedDescriptions.length === 0) {
+    if (debug) console.groupEnd();
+    return new Map();
+  }
 
   // Filter accounts to only leaf accounts that aren't Uncategorized
   const candidateAccounts = accounts.filter(
@@ -74,10 +78,13 @@ export async function classifyTransactions(
   );
 
   if (debug) {
-    console.log(`[ML classify] Candidate accounts: ${candidateAccounts.length}`);
+    console.log(`Candidate accounts: ${candidateAccounts.length}`);
   }
 
-  if (candidateAccounts.length === 0) return new Map();
+  if (candidateAccounts.length === 0) {
+    if (debug) console.groupEnd();
+    return new Map();
+  }
 
   const results = await classifier.classifyBatch(
     uncategorizedDescriptions,
@@ -88,7 +95,7 @@ export async function classifyTransactions(
   const map = new Map<number, ClassificationResult>();
   let aboveThreshold = 0;
 
-  if (debug) console.log("[ML classify] Raw results:");
+  if (debug) console.log("Raw results:");
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
@@ -107,7 +114,8 @@ export async function classifyTransactions(
   }
 
   if (debug) {
-    console.log(`[ML classify] Result: ${aboveThreshold}/${results.length} above threshold`);
+    console.log(`Result: ${aboveThreshold}/${results.length} above threshold`);
+    console.groupEnd();
   }
 
   return map;
