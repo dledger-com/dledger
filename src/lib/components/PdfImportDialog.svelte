@@ -106,6 +106,7 @@
 
           const suggestions = await classifyTransactions(
             previewRecords, rules, accountPaths, classifier, mlThreshold,
+            settings.settings.debugMode,
           );
           mlSuggestions = suggestions;
           mlAccepted = new Set(suggestions.keys());

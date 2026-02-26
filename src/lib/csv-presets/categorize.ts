@@ -36,21 +36,34 @@ export async function classifyTransactions(
   accounts: string[],
   classifier: TransactionClassifier,
   threshold = 0.5,
+  debug = false,
 ): Promise<Map<number, ClassificationResult>> {
   const uncategorizedIndices: number[] = [];
   const uncategorizedDescriptions: string[] = [];
 
+  let notUncategorized = 0;
+  let ruledOut = 0;
+  let emptyDescription = 0;
+
   for (let i = 0; i < records.length; i++) {
     const rec = records[i];
-    // Check if any line uses an Uncategorized account
     const hasUncategorized = rec.lines.some((l) => l.account.endsWith(UNCATEGORIZED_SUFFIX));
-    // Also verify that rules don't match (double-check)
+    if (!hasUncategorized) { notUncategorized++; continue; }
     const ruleMatch = matchRule(rec.description, rules);
+    if (ruleMatch) { ruledOut++; continue; }
+    if (!rec.description) { emptyDescription++; continue; }
 
-    if (hasUncategorized && !ruleMatch && rec.description) {
-      uncategorizedIndices.push(i);
-      uncategorizedDescriptions.push(rec.description);
-    }
+    uncategorizedIndices.push(i);
+    uncategorizedDescriptions.push(rec.description);
+  }
+
+  if (debug) {
+    console.log(`[ML classify] Input: ${records.length} records, threshold=${threshold}`);
+    console.log(
+      `[ML classify] Filter: ${uncategorizedDescriptions.length} uncategorized, ` +
+      `${ruledOut} ruled out, ${emptyDescription} empty description, ` +
+      `${notUncategorized} not uncategorized → ${uncategorizedDescriptions.length} to classify`,
+    );
   }
 
   if (uncategorizedDescriptions.length === 0) return new Map();
@@ -59,6 +72,10 @@ export async function classifyTransactions(
   const candidateAccounts = accounts.filter(
     (a) => !a.endsWith(UNCATEGORIZED_SUFFIX) && a.includes(":"),
   );
+
+  if (debug) {
+    console.log(`[ML classify] Candidate accounts: ${candidateAccounts.length}`);
+  }
 
   if (candidateAccounts.length === 0) return new Map();
 
@@ -69,11 +86,28 @@ export async function classifyTransactions(
   );
 
   const map = new Map<number, ClassificationResult>();
+  let aboveThreshold = 0;
+
+  if (debug) console.log("[ML classify] Raw results:");
+
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
-    if (result.account && result.confidence >= threshold) {
+    const pass = result.account && result.confidence >= threshold;
+    if (pass) {
       map.set(uncategorizedIndices[i], result);
+      aboveThreshold++;
     }
+    if (debug) {
+      const mark = pass ? "✓" : "✗ below threshold";
+      console.log(
+        `  "${uncategorizedDescriptions[i]}" → ${result.account || "(none)"} ` +
+        `(${result.confidence.toFixed(2)}, ${result.method}) ${mark}`,
+      );
+    }
+  }
+
+  if (debug) {
+    console.log(`[ML classify] Result: ${aboveThreshold}/${results.length} above threshold`);
   }
 
   return map;

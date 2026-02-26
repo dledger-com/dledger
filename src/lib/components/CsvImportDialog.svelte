@@ -143,6 +143,7 @@
             accountPaths,
             classifier,
             mlThreshold,
+            settings.settings.debugMode,
           );
 
           mlSuggestions = suggestions;
