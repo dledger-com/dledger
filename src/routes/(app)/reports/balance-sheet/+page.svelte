@@ -81,7 +81,7 @@
 
   function renderTotals(section: ReportSection): string {
     const totals = filterHiddenBalances(section.totals, settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
-    if (totals.length === 0) return formatCurrency(0);
+    if (totals.length === 0) return formatCurrency(0, settings.currency);
     return totals.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
 

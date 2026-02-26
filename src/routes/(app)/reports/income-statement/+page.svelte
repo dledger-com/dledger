@@ -80,7 +80,7 @@
 
   function renderTotals(section: ReportSection): string {
     const totals = filterHiddenBalances(section.totals, settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
-    if (totals.length === 0) return formatCurrency(0);
+    if (totals.length === 0) return formatCurrency(0, settings.currency);
     return totals.map((b) => formatCurrency(Math.abs(parseFloat(b.amount)), b.currency)).join(", ");
   }
 
@@ -196,7 +196,7 @@
         <Card.Description>Net Income</Card.Description>
         <Card.Title class="text-2xl">
           {filterHiddenBalances(report.net_income, hidden).length === 0
-            ? formatCurrency(0)
+            ? formatCurrency(0, settings.currency)
             : filterHiddenBalances(report.net_income, hidden).map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
           {#if convertToBase && netIncomeSummary}
             <span class="ml-2 text-lg text-primary">({renderConvertedTotal(netIncomeSummary)})</span>

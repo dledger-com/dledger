@@ -7,6 +7,9 @@
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import { convertBalances } from "$lib/utils/currency-convert.js";
+  import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
+  import type { CurrencyBalance } from "$lib/types/index.js";
   import { filterHiddenEntries } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { getBackend } from "$lib/backend.js";
@@ -89,6 +92,77 @@
       return n > 0 ? sum + n : sum;
     }, 0);
   }
+
+  function debitsByCurrency(items: { amount: string; currency: string }[]): CurrencyBalance[] {
+    const map = new Map<string, number>();
+    for (const item of items) {
+      const n = parseFloat(item.amount);
+      if (n > 0) map.set(item.currency, (map.get(item.currency) ?? 0) + n);
+    }
+    return [...map].map(([currency, amount]) => ({ currency, amount: String(amount) }));
+  }
+
+  function formatDebitTotal(items: { amount: string; currency: string }[]): string {
+    const byCode = debitsByCurrency(items);
+    if (byCode.length === 0) return formatCurrency(0, settings.currency);
+    return byCode.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
+  }
+
+  let convertedTotals = $state(new Map<string, string>());
+  let conversionGen = 0;
+
+  $effect(() => {
+    const entries = filteredEntries;
+    const baseCurrency = settings.currency;
+    if (!baseCurrency || entries.length === 0) {
+      convertedTotals = new Map();
+      return;
+    }
+
+    const gen = ++conversionGen;
+    const cache = new ExchangeRateCache(getBackend());
+    const results = new Map<string, string>();
+
+    // Sync pass: entries where all debits are already in base currency
+    const asyncEntries: [string, CurrencyBalance[], string][] = [];
+    for (const [entry, items] of entries) {
+      const debits = debitsByCurrency(items);
+      if (debits.length === 0) {
+        results.set(entry.id, formatCurrency(0, baseCurrency));
+      } else if (debits.every((b) => b.currency === baseCurrency)) {
+        const total = debits.reduce((s, b) => s + parseFloat(b.amount), 0);
+        results.set(entry.id, formatCurrency(total, baseCurrency));
+      } else {
+        asyncEntries.push([entry.id, debits, entry.date]);
+      }
+    }
+    convertedTotals = new Map(results);
+
+    // Async pass: entries with foreign currencies
+    if (asyncEntries.length > 0) {
+      (async () => {
+        for (const [id, debits, date] of asyncEntries) {
+          if (gen !== conversionGen) return;
+          const summary = await convertBalances(debits, baseCurrency, date, cache);
+          if (gen !== conversionGen) return;
+
+          let formatted: string;
+          if (summary.unconverted.length === 0) {
+            formatted = formatCurrency(summary.total, baseCurrency);
+          } else {
+            const parts: string[] = [];
+            if (summary.total !== 0) parts.push(formatCurrency(summary.total, baseCurrency));
+            for (const u of summary.unconverted) {
+              parts.push(formatCurrency(u.amount, u.currency));
+            }
+            formatted = parts.join(" + ");
+          }
+          results.set(id, formatted);
+          convertedTotals = new Map(results);
+        }
+      })();
+    }
+  });
 
   async function handleExport() {
     exporting = true;
@@ -191,7 +265,7 @@
                 </Badge>
               </Table.Cell>
               <Table.Cell class="text-right font-mono">
-                {formatCurrency(totalDebits(items))}
+                {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
               </Table.Cell>
             </Table.Row>
           {/each}
@@ -242,7 +316,7 @@
                   <a href="/journal/{entry.id}" class="hover:underline">{entry.description}</a>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="font-mono text-xs">{formatCurrency(totalDebits(items))}</span>
+                  <span class="font-mono text-xs">{convertedTotals.get(entry.id) ?? formatDebitTotal(items)}</span>
                   <Badge variant="outline" class="text-xs">{entry.status}</Badge>
                   {#if entry.status !== "voided"}
                     <Button variant="ghost" size="sm" class="h-6 text-xs text-destructive hover:text-destructive"

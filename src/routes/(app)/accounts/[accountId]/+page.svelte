@@ -173,7 +173,7 @@
           <Card.Description>Current Balance</Card.Description>
           <Card.Title class="text-2xl">
             {#if filteredBalances.length === 0}
-              {formatCurrency(0)}
+              {formatCurrency(0, settings.currency)}
             {:else}
               {filteredBalances.map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
             {/if}

@@ -77,7 +77,7 @@
   }
 
   function sumBalances(balances: { currency: string; amount: string }[]): string {
-    if (balances.length === 0) return formatCurrency(0);
+    if (balances.length === 0) return formatCurrency(0, settings.currency);
     return balances
       .map((b) => formatCurrency(b.amount, b.currency))
       .join(", ");
