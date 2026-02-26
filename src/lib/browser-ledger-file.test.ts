@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { importLedger, exportLedger } from "./browser-ledger-file.js";
-import { detectFormat } from "./ledger-format.js";
+import { detectFormat, detectFormatFromFilename } from "./ledger-format.js";
 import { createTestBackend } from "../test/helpers.js";
 import type { SqlJsBackend } from "./sql-js-backend.js";
 
@@ -42,6 +42,41 @@ describe("detectFormat", () => {
 
   it("defaults to ledger for empty content", () => {
     expect(detectFormat("")).toBe("ledger");
+  });
+});
+
+describe("detectFormatFromFilename", () => {
+  it("detects beancount from .beancount", () => {
+    expect(detectFormatFromFilename("main.beancount")).toBe("beancount");
+  });
+
+  it("detects hledger from .journal", () => {
+    expect(detectFormatFromFilename("2024.journal")).toBe("hledger");
+  });
+
+  it("detects hledger from .hledger", () => {
+    expect(detectFormatFromFilename("my-accounts.hledger")).toBe("hledger");
+  });
+
+  it("detects ledger from .dat", () => {
+    expect(detectFormatFromFilename("ledger.dat")).toBe("ledger");
+  });
+
+  it("detects ledger from .ledger", () => {
+    expect(detectFormatFromFilename("finances.ledger")).toBe("ledger");
+  });
+
+  it("returns null for .txt", () => {
+    expect(detectFormatFromFilename("notes.txt")).toBeNull();
+  });
+
+  it("returns null for unknown extensions", () => {
+    expect(detectFormatFromFilename("data.csv")).toBeNull();
+  });
+
+  it("is case-insensitive", () => {
+    expect(detectFormatFromFilename("Main.Beancount")).toBe("beancount");
+    expect(detectFormatFromFilename("FILE.LEDGER")).toBe("ledger");
   });
 });
 

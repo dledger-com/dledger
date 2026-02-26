@@ -9,7 +9,7 @@
   import { toast } from "svelte-sonner";
   import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
   import { readFileAsText } from "$lib/utils/read-file-text.js";
-  import { detectFormat, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
+  import { detectFormat, detectFormatFromFilename, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
   import { resolveIncludes, filterLedgerFiles } from "$lib/ledger-include.js";
   import { unzipSync, strFromU8 } from "fflate";
   import {
@@ -47,7 +47,8 @@
   const fetchingMissingRates = $derived(taskQueue.isActive("rate-backfill:missing"));
 
   let detectedFormat = $derived<LedgerFormat | null>(
-    fileContent.trim() ? detectFormat(fileContent) : null,
+    fileName ? detectFormatFromFilename(fileName) ?? (fileContent.trim() ? detectFormat(fileContent) : null)
+             : fileContent.trim() ? detectFormat(fileContent) : null,
   );
   let effectiveFormat = $derived(formatOverride ?? detectedFormat);
   let previewLines = $derived(

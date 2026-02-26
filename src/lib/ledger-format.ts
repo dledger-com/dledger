@@ -66,6 +66,19 @@ export function detectFormat(content: string): LedgerFormat {
   return "ledger";
 }
 
+/** Infer format from file extension, or null if unknown. */
+export function detectFormatFromFilename(filename: string): LedgerFormat | null {
+  const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  switch (ext) {
+    case ".beancount": return "beancount";
+    case ".journal":
+    case ".hledger":  return "hledger";
+    case ".dat":
+    case ".ledger":   return "ledger";
+    default:          return null;
+  }
+}
+
 /** Return the conventional file extension for a format. */
 export function formatExtension(format: LedgerFormat): string {
   switch (format) {
