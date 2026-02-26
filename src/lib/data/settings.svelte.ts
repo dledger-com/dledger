@@ -20,6 +20,8 @@ export interface AppSettings {
     fiatCurrencies?: string[];       // override defaults
   };
   csvCategorizationRules?: CsvCategorizationRule[];
+  mlClassificationEnabled?: boolean;
+  mlConfidenceThreshold?: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

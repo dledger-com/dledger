@@ -625,6 +625,78 @@
     </Card.Content>
   </Card.Root>
 
+  <!-- ML Classification -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>ML Classification</Card.Title>
+      <Card.Description>Use in-browser machine learning to auto-classify imported transactions.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Enable ML-powered classification</p>
+          <p class="text-sm text-muted-foreground">Shows a "Classify with AI" button in import dialogs.</p>
+        </div>
+        <Switch
+          checked={settings.settings.mlClassificationEnabled ?? false}
+          onCheckedChange={(v) => settings.update({ mlClassificationEnabled: v })}
+        />
+      </div>
+      {#if settings.settings.mlClassificationEnabled}
+        <Separator />
+        <div class="space-y-2">
+          <label for="ml-threshold" class="text-sm font-medium">
+            Confidence threshold: {Math.round((settings.settings.mlConfidenceThreshold ?? 0.5) * 100)}%
+          </label>
+          <input
+            id="ml-threshold"
+            type="range"
+            min="0.3"
+            max="0.9"
+            step="0.05"
+            value={settings.settings.mlConfidenceThreshold ?? 0.5}
+            oninput={(e) => {
+              const v = parseFloat((e.target as HTMLInputElement).value);
+              settings.update({ mlConfidenceThreshold: v });
+            }}
+            class="w-full accent-primary"
+          />
+          <p class="text-xs text-muted-foreground">
+            Suggestions below this confidence are discarded. Higher = fewer but more accurate suggestions.
+          </p>
+        </div>
+        <Separator />
+        <div class="space-y-2">
+          <p class="text-xs text-muted-foreground">
+            Models (~70 MB total) are downloaded from HuggingFace on first use and cached in the browser.
+            Classification runs entirely in your browser — no data is sent to external servers.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onclick={async () => {
+              try {
+                const cacheNames = await caches.keys();
+                let deleted = 0;
+                for (const name of cacheNames) {
+                  if (name.includes("transformers")) {
+                    await caches.delete(name);
+                    deleted++;
+                  }
+                }
+                toast.success(deleted > 0 ? "Cached models cleared" : "No cached models found");
+              } catch {
+                toast.error("Failed to clear cached models");
+              }
+            }}
+          >
+            Clear cached models
+          </Button>
+        </div>
+      {/if}
+    </Card.Content>
+  </Card.Root>
+
   <!-- Data Management -->
   <Card.Root>
     <Card.Header>

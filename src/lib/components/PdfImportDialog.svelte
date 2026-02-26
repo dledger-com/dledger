@@ -29,6 +29,9 @@
     suggestMainAccount,
     type PdfStatement,
   } from "$lib/pdf/index.js";
+  import { taskQueue } from "$lib/task-queue.svelte.js";
+  import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
+  import { classifyTransactions } from "$lib/csv-presets/categorize.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
   import Trash2 from "lucide-svelte/icons/trash-2";
@@ -36,6 +39,7 @@
   import Plus from "lucide-svelte/icons/plus";
   import Check from "lucide-svelte/icons/check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
+  import BrainCircuit from "lucide-svelte/icons/brain-circuit";
 
   let {
     open = $bindable(false),
@@ -76,6 +80,70 @@
   let duplicateFlags = $state<boolean[]>([]);
   let duplicateCount = $derived(duplicateFlags.filter(Boolean).length);
   let nonDuplicateCount = $derived(previewRecords.length - duplicateCount);
+
+  // -- ML classification state --
+  let mlSuggestions = $state<Map<number, ClassificationResult>>(new Map());
+  let mlAccepted = $state<Set<number>>(new Set());
+  let mlClassifying = $state(false);
+  let mlEnabled = $derived(settings.settings.mlClassificationEnabled ?? false);
+  let mlThreshold = $derived(settings.settings.mlConfidenceThreshold ?? 0.5);
+
+  async function runMlClassification() {
+    if (mlClassifying || previewRecords.length === 0) return;
+    mlClassifying = true;
+
+    const classifier = new TransactionClassifier();
+    try {
+      const taskId = taskQueue.enqueue({
+        key: "ml-classify",
+        label: "Classifying transactions...",
+        description: "Using ML to suggest account categories for uncategorized transactions",
+        run: async (ctx) => {
+          await classifier.init(ctx.reportProgress, true);
+          const backend = getBackend();
+          const accounts = await backend.listAccounts();
+          const accountPaths = accounts.map((a) => a.full_name);
+
+          const suggestions = await classifyTransactions(
+            previewRecords, rules, accountPaths, classifier, mlThreshold,
+          );
+          mlSuggestions = suggestions;
+          mlAccepted = new Set(suggestions.keys());
+          return { summary: `Classified ${suggestions.size}/${previewRecords.length} transactions` };
+        },
+      });
+      if (!taskId) toast.error("ML classification is already running");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      mlClassifying = false;
+      classifier.dispose();
+    }
+  }
+
+  function toggleMlAccept(recIdx: number) {
+    const next = new Set(mlAccepted);
+    if (next.has(recIdx)) next.delete(recIdx); else next.add(recIdx);
+    mlAccepted = next;
+  }
+
+  function applyMlSuggestions() {
+    const updated = [...previewRecords];
+    for (const [idx, suggestion] of mlSuggestions) {
+      if (!mlAccepted.has(idx)) continue;
+      const rec = { ...updated[idx], lines: [...updated[idx].lines] };
+      for (let j = 0; j < rec.lines.length; j++) {
+        if (rec.lines[j].account.endsWith(":Uncategorized")) {
+          rec.lines[j] = { ...rec.lines[j], account: suggestion.account };
+        }
+      }
+      updated[idx] = rec;
+    }
+    previewRecords = updated;
+    mlSuggestions = new Map();
+    mlAccepted = new Set();
+    toast.success("ML suggestions applied");
+  }
 
   // -- Derived info --
   let txCount = $derived(statement?.transactions.length ?? 0);
@@ -265,6 +333,9 @@
     previewWarnings = [];
     duplicateFlags = [];
     importResult = null;
+    mlSuggestions = new Map();
+    mlAccepted = new Set();
+    mlClassifying = false;
   }
 
   // Reset on close
@@ -510,6 +581,26 @@
                 <Badge variant="destructive" class="ml-2">{previewWarnings.length} warnings</Badge>
               {/if}
             </p>
+            <div class="flex items-center gap-2">
+              {#if mlSuggestions.size > 0}
+                <Badge variant="outline" class="text-xs">{mlSuggestions.size} ML suggestions</Badge>
+                <Button size="sm" variant="default" class="h-7 text-xs" onclick={applyMlSuggestions}>
+                  Accept {mlAccepted.size} suggestions
+                </Button>
+              {/if}
+              {#if mlEnabled}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  class="h-7 text-xs"
+                  onclick={runMlClassification}
+                  disabled={mlClassifying || taskQueue.isActive("ml-classify")}
+                >
+                  <BrainCircuit class="h-3 w-3 mr-1" />
+                  {mlClassifying ? "Classifying..." : "Classify with AI"}
+                </Button>
+              {/if}
+            </div>
           </div>
 
           {#if previewWarnings.length > 0}
@@ -539,6 +630,8 @@
                   {@const sum = rec.lines.reduce((s, l) => s + parseFloat(l.amount), 0)}
                   {@const balanced = Math.abs(sum) < 0.0001}
                   {@const dup = duplicateFlags[recIdx] ?? false}
+                  {@const mlSuggestion = mlSuggestions.get(recIdx)}
+                  {@const mlIsAccepted = mlAccepted.has(recIdx)}
                   <Table.Row class={dup ? "opacity-40" : ""}>
                     <Table.Cell class="font-mono text-xs">{rec.date}</Table.Cell>
                     <Table.Cell class="text-xs max-w-[200px] truncate">
@@ -556,6 +649,17 @@
                       {/each}
                       {#if rec.lines.length > 4}
                         <span class="text-muted-foreground text-xs">+{rec.lines.length - 4} more</span>
+                      {/if}
+                      {#if mlSuggestion}
+                        <button
+                          class="flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs cursor-pointer {mlIsAccepted ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-muted text-muted-foreground line-through'}"
+                          onclick={() => toggleMlAccept(recIdx)}
+                          title={mlIsAccepted ? "Click to reject suggestion" : "Click to accept suggestion"}
+                        >
+                          <BrainCircuit class="h-3 w-3" />
+                          <span class="font-mono truncate max-w-[140px]">{mlSuggestion.account}</span>
+                          <Badge variant="outline" class="text-[10px] px-1 py-0 h-4">{Math.round(mlSuggestion.confidence * 100)}%</Badge>
+                        </button>
                       {/if}
                     </Table.Cell>
                     <Table.Cell class="text-center">
