@@ -33,18 +33,23 @@ function tryParseDatePrefix(s: string): string | null {
 function inferAccountType(fullName: string): AccountType {
   const first = fullName.split(":")[0];
   switch (first) {
+    case "assets":
     case "Assets":
     case "Asset":
       return "asset";
+    case "liabilities":
     case "Liabilities":
     case "Liability":
       return "liability";
+    case "equity":
     case "Equity":
     case "Exchange":
       return "equity";
+    case "income":
     case "Income":
     case "Revenue":
       return "revenue";
+    case "expenses":
     case "Expenses":
     case "Expense":
       return "expense";
