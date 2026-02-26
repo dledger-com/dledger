@@ -252,7 +252,7 @@ pub fn export_ledger_file(
     state: State<'_, AppState>,
     format: Option<String>,
 ) -> Result<String, String> {
-    let fmt = format.and_then(|s| LedgerFormat::from_str_opt(&s)).unwrap_or(LedgerFormat::Dledger);
+    let fmt = format.and_then(|s| LedgerFormat::from_str_opt(&s)).unwrap_or(LedgerFormat::Ledger);
     ledger_file::export_ledger_with_format(&state.engine, fmt)
 }
 

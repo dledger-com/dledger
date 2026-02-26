@@ -35,13 +35,13 @@ describe("detectFormat", () => {
     expect(detectFormat(content)).toBe("hledger");
   });
 
-  it("defaults to dledger for ambiguous content", () => {
+  it("defaults to ledger for ambiguous content", () => {
     const content = `2024-01-01 open Assets:Bank\n2024-01-01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n`;
-    expect(detectFormat(content)).toBe("dledger");
+    expect(detectFormat(content)).toBe("ledger");
   });
 
-  it("defaults to dledger for empty content", () => {
-    expect(detectFormat("")).toBe("dledger");
+  it("defaults to ledger for empty content", () => {
+    expect(detectFormat("")).toBe("ledger");
   });
 });
 
@@ -52,7 +52,7 @@ describe("browser-ledger-file", () => {
     backend = await createTestBackend();
   });
 
-  describe("importLedger (dledger format)", () => {
+  describe("importLedger (ledger format)", () => {
     it("parses open directive", async () => {
       const content = `2024-01-01 open Assets:Bank USD EUR\n`;
       const result = await importLedger(backend, content);
@@ -660,7 +660,7 @@ commodity EUR
   });
 
   describe("exportLedger", () => {
-    it("exports round-trip (dledger)", async () => {
+    it("exports round-trip (ledger)", async () => {
       const input = `
 2024-01-01 open Assets:Bank
 2024-01-01 open Equity:Opening

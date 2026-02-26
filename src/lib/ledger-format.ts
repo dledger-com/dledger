@@ -1,8 +1,8 @@
-export type LedgerFormat = "dledger" | "beancount" | "hledger";
+export type LedgerFormat = "ledger" | "beancount" | "hledger";
 
 /**
  * Auto-detect ledger file format by scoring the first ~50 non-empty, non-comment lines.
- * Returns "beancount" or "hledger" if confident, otherwise "dledger" (the default).
+ * Returns "beancount" or "hledger" if confident, otherwise "ledger" (the default).
  */
 export function detectFormat(content: string): LedgerFormat {
   let bc = 0;
@@ -63,7 +63,7 @@ export function detectFormat(content: string): LedgerFormat {
 
   if (bc > hl && bc >= 3) return "beancount";
   if (hl > bc && hl >= 3) return "hledger";
-  return "dledger";
+  return "ledger";
 }
 
 /** Return the conventional file extension for a format. */
@@ -73,7 +73,7 @@ export function formatExtension(format: LedgerFormat): string {
       return ".beancount";
     case "hledger":
       return ".journal";
-    case "dledger":
+    case "ledger":
       return ".ledger";
   }
 }
@@ -85,7 +85,7 @@ export function formatLabel(format: LedgerFormat): string {
       return "Beancount";
     case "hledger":
       return "hledger";
-    case "dledger":
-      return "dLedger";
+    case "ledger":
+      return "Ledger";
   }
 }

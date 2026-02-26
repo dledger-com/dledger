@@ -1587,9 +1587,9 @@ fn test_detect_format_hledger_slash_dates() {
 }
 
 #[test]
-fn test_detect_format_dledger_default() {
+fn test_detect_format_ledger_default() {
     let content = "2024-01-01 open Assets:Bank\n2024-01-01 * Payment\n  Assets:Bank  -100 USD\n  Expenses:Food  100 USD\n";
-    assert_eq!(detect_format(content), LedgerFormat::Dledger);
+    assert_eq!(detect_format(content), LedgerFormat::Ledger);
 }
 
 // ============================================================================

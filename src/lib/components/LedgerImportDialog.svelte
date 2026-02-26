@@ -34,6 +34,8 @@
 
   const settings = new SettingsStore();
 
+  const ALL_FORMATS: LedgerFormat[] = ["ledger", "beancount", "hledger"];
+
   // -- State --
   let fileContent = $state("");
   let fileName = $state<string | null>(null);
@@ -41,11 +43,13 @@
   let submitting = $state(false);
   let result = $state<LedgerImportResult | null>(null);
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
+  let formatOverride = $state<LedgerFormat | null>(null);
   const fetchingMissingRates = $derived(taskQueue.isActive("rate-backfill:missing"));
 
   let detectedFormat = $derived<LedgerFormat | null>(
     fileContent.trim() ? detectFormat(fileContent) : null,
   );
+  let effectiveFormat = $derived(formatOverride ?? detectedFormat);
   let previewLines = $derived(
     fileContent
       ? fileContent.split("\n").slice(0, 10).filter((l: string) => l.trim())
@@ -116,7 +120,7 @@
     missingRateRequests = [];
 
     try {
-      result = await getBackend().importLedgerFile(fileContent, detectedFormat ?? undefined);
+      result = await getBackend().importLedgerFile(fileContent, effectiveFormat ?? undefined);
       toast.success("Ledger file imported successfully");
 
       if (result.transaction_currency_dates && result.transaction_currency_dates.length > 0) {
@@ -184,7 +188,14 @@
     fileCount = 0;
     result = null;
     missingRateRequests = [];
+    formatOverride = null;
   }
+
+  // Reset format override when file content changes (new file loaded)
+  $effect(() => {
+    fileContent;
+    untrack(() => { formatOverride = null; });
+  });
 
   // Reset on close
   $effect(() => {
@@ -235,10 +246,25 @@
               <Badge variant="secondary">{fileCount} files</Badge>
             {/if}
           {/if}
-          {#if detectedFormat}
-            <Badge variant="outline">{formatLabel(detectedFormat)}</Badge>
-          {/if}
         </div>
+
+        {#if detectedFormat}
+          <div class="flex items-center gap-3 rounded-md border p-3">
+            <span class="text-sm text-muted-foreground">Detected format: <strong>{formatLabel(detectedFormat)}</strong></span>
+            <div class="flex gap-1">
+              {#each ALL_FORMATS as fmt}
+                <Button
+                  size="sm"
+                  class="text-xs h-7"
+                  variant={effectiveFormat === fmt ? "default" : "outline"}
+                  onclick={() => { formatOverride = fmt === detectedFormat ? null : fmt; }}
+                >
+                  {formatLabel(fmt)}
+                </Button>
+              {/each}
+            </div>
+          </div>
+        {/if}
 
         <!-- Textarea for paste -->
         <textarea

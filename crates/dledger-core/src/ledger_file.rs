@@ -12,7 +12,7 @@ use crate::models::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LedgerFormat {
-    Dledger,
+    Ledger,
     Beancount,
     Hledger,
 }
@@ -20,7 +20,7 @@ pub enum LedgerFormat {
 impl LedgerFormat {
     pub fn from_str_opt(s: &str) -> Option<Self> {
         match s {
-            "dledger" => Some(Self::Dledger),
+            "ledger" => Some(Self::Ledger),
             "beancount" => Some(Self::Beancount),
             "hledger" => Some(Self::Hledger),
             _ => None,
@@ -81,7 +81,7 @@ pub fn detect_format(content: &str) -> LedgerFormat {
     } else if hl > bc && hl >= 3 {
         LedgerFormat::Hledger
     } else {
-        LedgerFormat::Dledger
+        LedgerFormat::Ledger
     }
 }
 
@@ -293,7 +293,7 @@ fn import_ledger_internal(
 
 /// Export all ledger data as a beancount-like text file (dledger format).
 pub fn export_ledger(engine: &LedgerEngine) -> Result<String, String> {
-    export_ledger_with_format(engine, LedgerFormat::Dledger)
+    export_ledger_with_format(engine, LedgerFormat::Ledger)
 }
 
 /// Export all ledger data in the specified format.

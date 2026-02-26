@@ -22,7 +22,7 @@
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(store.entries, hidden));
   let exporting = $state(false);
-  let exportFormat = $state<LedgerFormat>("dledger");
+  let exportFormat = $state<LedgerFormat>("ledger");
   let searchTerm = $state("");
   let showDuplicates = $state(false);
 
@@ -125,7 +125,7 @@
         class="h-8 rounded-md border border-input bg-background px-2 text-xs"
         bind:value={exportFormat}
       >
-        <option value="dledger">dLedger (.ledger)</option>
+        <option value="ledger">Ledger (.ledger)</option>
         <option value="beancount">Beancount (.beancount)</option>
         <option value="hledger">hledger (.journal)</option>
       </select>
