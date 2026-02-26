@@ -77,6 +77,7 @@ async function handleInit(msg: InitMessage) {
     };
     // @ts-expect-error — pipeline() overload union is too complex for TS; result is cast explicitly
     embedder = (await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
+      dtype: "q8",
       progress_callback: embeddingProgressCb,
     })) as FeatureExtractionPipeline;
 
@@ -89,6 +90,7 @@ async function handleInit(msg: InitMessage) {
         }
       };
       zeroShot = (await pipeline("zero-shot-classification", "Xenova/nli-deberta-v3-xsmall", {
+        dtype: "q8",
         progress_callback: zsProgressCb,
       })) as ZeroShotClassificationPipeline;
     }
