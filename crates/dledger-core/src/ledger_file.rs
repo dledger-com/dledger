@@ -167,6 +167,7 @@ fn import_ledger_internal(
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
     let mut in_block_comment = false;
+    let mut default_commodity: Option<String> = None;
 
     while i < lines.len() {
         let line = lines[i];
@@ -210,6 +211,16 @@ fn import_ledger_internal(
                 i += 1;
                 continue;
             }
+        }
+
+        // ledger: `commodity` directive sets default commodity
+        if fmt == LedgerFormat::Ledger && trimmed.starts_with("commodity ") {
+            let code = trimmed[10..].trim().split_whitespace().next().unwrap_or("");
+            if !code.is_empty() && default_commodity.is_none() {
+                default_commodity = Some(code.to_string());
+            }
+            i += 1;
+            continue;
         }
 
         // hledger: skip include, commodity directives
@@ -279,7 +290,7 @@ fn import_ledger_internal(
 
             // Transaction block
             let (consumed, _) =
-                parse_transaction(engine, date, rest, &lines, i, &mut result, fmt)?;
+                parse_transaction(engine, date, rest, &lines, i, &mut result, fmt, &mut default_commodity)?;
             i += consumed;
             continue;
         }
@@ -657,6 +668,7 @@ fn parse_transaction(
     start_idx: usize,
     result: &mut LedgerImportResult,
     fmt: LedgerFormat,
+    default_commodity: &mut Option<String>,
 ) -> Result<(usize, ()), String> {
     // Parse header: [txn|*|!] [(CODE)] [PAYEE |] DESCRIPTION
     let mut rest = header_rest;
@@ -687,7 +699,7 @@ fn parse_transaction(
                     description = strip_beancount_quotes(&description);
                 }
                 return parse_transaction_body(
-                    engine, date, status, &description, lines, start_idx, result,
+                    engine, date, status, &description, lines, start_idx, result, default_commodity,
                 );
             }
         }
@@ -698,7 +710,7 @@ fn parse_transaction(
     if fmt == LedgerFormat::Beancount {
         description = strip_beancount_quotes(&description);
     }
-    parse_transaction_body(engine, date, status, &description, lines, start_idx, result)
+    parse_transaction_body(engine, date, status, &description, lines, start_idx, result, default_commodity)
 }
 
 fn strip_beancount_quotes(s: &str) -> String {
@@ -719,6 +731,7 @@ fn parse_transaction_body(
     lines: &[&str],
     start_idx: usize,
     result: &mut LedgerImportResult,
+    default_commodity: &mut Option<String>,
 ) -> Result<(usize, ()), String> {
     // Collect posting lines (indented lines following the header)
     let mut postings: Vec<ParsedPosting> = Vec::new();
@@ -759,7 +772,7 @@ fn parse_transaction_body(
 
         // Parse posting: ACCOUNT [AMOUNT COMMODITY [@ PRICE COMMODITY]]
         // or: ACCOUNT BOOK COMMODITY (skip with warning)
-        let posting = parse_posting_line(without_comment, i + 1, result)?;
+        let posting = parse_posting_line(without_comment, i + 1, result, default_commodity)?;
         if let Some(p) = posting {
             postings.push(p);
         }
@@ -948,6 +961,7 @@ fn parse_posting_line(
     line: &str,
     line_num: usize,
     result: &mut LedgerImportResult,
+    default_commodity: &mut Option<String>,
 ) -> Result<Option<ParsedPosting>, String> {
     // Tokenize carefully: account name can contain hyphens and special chars
     // The account is the first whitespace-separated token(s) before a numeric amount or end of line
@@ -992,7 +1006,13 @@ fn parse_posting_line(
     })?;
 
     let commodity = if tokens.len() >= 2 {
-        tokens[1].to_string()
+        let c = tokens[1].to_string();
+        if default_commodity.is_none() {
+            *default_commodity = Some(c.clone());
+        }
+        c
+    } else if let Some(ref dc) = default_commodity {
+        dc.clone()
     } else {
         return Err(format!(
             "line {}: posting has amount but no commodity",

@@ -485,12 +485,19 @@ export async function importLedger(
     }
 
     if (tokens.length < 2) {
-      throw new Error(
-        `line ${lineNum}: posting has amount but no commodity`,
-      );
+      if (defaultCommodity) {
+        commodity = defaultCommodity;
+      } else {
+        throw new Error(
+          `line ${lineNum}: posting has amount but no commodity`,
+        );
+      }
+    } else {
+      commodity = tokens[1];
+      if (!defaultCommodity) {
+        defaultCommodity = commodity;
+      }
     }
-
-    commodity = tokens[1];
 
     // Handle @@ (total cost) — beancount specific
     if (tokens.length >= 5 && tokens[2] === "@@") {
@@ -870,6 +877,8 @@ export async function importLedger(
 
   // ---- Main parse loop ----
 
+  let defaultCommodity: string | null = null;
+
   const lines = content.split("\n");
   let i = 0;
   let inBlockComment = false;
@@ -920,6 +929,16 @@ export async function importLedger(
         i++;
         continue;
       }
+    }
+
+    // ledger: `commodity` directive sets default commodity
+    if (fmt === "ledger" && trimmed.startsWith("commodity ")) {
+      const code = trimmed.substring(10).trim().split(/\s+/)[0];
+      if (code && !defaultCommodity) {
+        defaultCommodity = code;
+      }
+      i++;
+      continue;
     }
 
     // hledger: skip `include` directive (handled externally), `commodity` directive

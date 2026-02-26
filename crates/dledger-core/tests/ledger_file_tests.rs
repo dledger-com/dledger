@@ -1874,3 +1874,83 @@ P 2024-01-01 EUR 1.10 USD
     assert_eq!(result2.transactions_imported, 1);
     assert_eq!(result2.prices_imported, 1);
 }
+
+// ============================================================================
+// Bare amount (no commodity) tests — ledger format
+// ============================================================================
+
+#[test]
+fn test_bare_amounts_use_first_seen_commodity() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 * Opening
+  Assets:Bank  100 USD
+  Equity:Opening  -100 USD
+
+2024-01-15 * Groceries
+  Expenses:Food  50
+  Assets:Bank  -50
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Ledger)).unwrap();
+    assert_eq!(result.transactions_imported, 2);
+
+    // Verify the bare-amount posting got USD from first-seen
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    let groceries_tx = entries.iter().find(|(je, _)| je.description == "Groceries").unwrap();
+    assert_eq!(groceries_tx.1[0].currency, "USD");
+    assert_eq!(groceries_tx.1[1].currency, "USD");
+}
+
+#[test]
+fn test_commodity_directive_sets_default() {
+    let engine = new_engine();
+    let content = "\
+commodity EUR
+
+2024-01-01 * Opening
+  Assets:Bank  100
+  Equity:Opening  -100
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Ledger)).unwrap();
+    assert_eq!(result.transactions_imported, 1);
+
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    assert_eq!(entries[0].1[0].currency, "EUR");
+}
+
+#[test]
+fn test_commodity_directive_takes_priority_over_first_seen() {
+    let engine = new_engine();
+    let content = "\
+commodity EUR
+
+2024-01-01 * Opening
+  Assets:Bank  100 USD
+  Equity:Opening  -100 USD
+
+2024-01-15 * Groceries
+  Expenses:Food  50
+  Assets:Bank  -50
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Ledger)).unwrap();
+    assert_eq!(result.transactions_imported, 2);
+
+    let entries = engine.query_journal_entries(&TransactionFilter::default()).unwrap();
+    // Find the "Groceries" transaction (bare amounts should use EUR from directive)
+    let groceries_tx = entries.iter().find(|(je, _)| je.description == "Groceries").unwrap();
+    assert_eq!(groceries_tx.1[0].currency, "EUR");
+    assert_eq!(groceries_tx.1[1].currency, "EUR");
+}
+
+#[test]
+fn test_bare_amount_errors_when_no_commodity_available() {
+    let engine = new_engine();
+    let content = "\
+2024-01-01 * Opening
+  Assets:Bank  100
+  Equity:Opening  -100
+";
+    let result = import_ledger_with_format(&engine, content, Some(LedgerFormat::Ledger));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("posting has amount but no commodity"));
+}

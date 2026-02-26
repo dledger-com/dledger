@@ -197,6 +197,78 @@ describe("browser-ledger-file", () => {
       const padWarnings = result.warnings.filter((w) => w.includes("pad"));
       expect(padWarnings).toHaveLength(1);
     });
+
+    it("bare amounts use first-seen commodity as default", async () => {
+      const content = `
+2024-01-01 * Opening
+  Assets:Bank  100 USD
+  Equity:Opening  -100 USD
+
+2024-01-15 * Groceries
+  Expenses:Food  50
+  Assets:Bank  -50
+`;
+      const result = await importLedger(backend, content, "ledger");
+      expect(result.transactions_imported).toBe(2);
+
+      const accounts = await backend.listAccounts();
+      const food = accounts.find((a) => a.full_name === "Expenses:Food")!;
+      const balance = await backend.getAccountBalance(food.id);
+      expect(balance).toHaveLength(1);
+      expect(balance[0].currency).toBe("USD");
+      expect(balance[0].amount).toBe("50");
+    });
+
+    it("commodity directive sets default commodity", async () => {
+      const content = `
+commodity EUR
+
+2024-01-01 * Opening
+  Assets:Bank  100
+  Equity:Opening  -100
+`;
+      const result = await importLedger(backend, content, "ledger");
+      expect(result.transactions_imported).toBe(1);
+
+      const accounts = await backend.listAccounts();
+      const bank = accounts.find((a) => a.full_name === "Assets:Bank")!;
+      const balance = await backend.getAccountBalance(bank.id);
+      expect(balance).toHaveLength(1);
+      expect(balance[0].currency).toBe("EUR");
+    });
+
+    it("commodity directive takes priority over first-seen", async () => {
+      const content = `
+commodity EUR
+
+2024-01-01 * Opening
+  Assets:Bank  100 USD
+  Equity:Opening  -100 USD
+
+2024-01-15 * Groceries
+  Expenses:Food  50
+  Assets:Bank  -50
+`;
+      const result = await importLedger(backend, content, "ledger");
+      expect(result.transactions_imported).toBe(2);
+
+      const accounts = await backend.listAccounts();
+      const food = accounts.find((a) => a.full_name === "Expenses:Food")!;
+      const balance = await backend.getAccountBalance(food.id);
+      expect(balance).toHaveLength(1);
+      expect(balance[0].currency).toBe("EUR");
+    });
+
+    it("errors when no commodity available for bare amount", async () => {
+      const content = `
+2024-01-01 * Opening
+  Assets:Bank  100
+  Equity:Opening  -100
+`;
+      await expect(importLedger(backend, content, "ledger")).rejects.toThrow(
+        "posting has amount but no commodity",
+      );
+    });
   });
 
   describe("importLedger (beancount format)", () => {
