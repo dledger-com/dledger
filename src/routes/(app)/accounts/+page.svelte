@@ -81,16 +81,37 @@
       : false,
   );
 
-  // Suggestions: same-type accounts excluding the one being edited
+  // Suggestions: sibling accounts + text matches, excluding the one being edited
   const editSuggestions = $derived.by(() => {
     if (!editingId) return [];
     const account = store.accounts.find((a) => a.id === editingId);
     if (!account) return [];
     const trimmed = editFullName.trim().toLowerCase();
     if (!trimmed) return [];
-    return store.active
-      .filter((a) => a.id !== editingId && a.account_type === account.account_type && a.full_name.toLowerCase().includes(trimmed))
-      .slice(0, 10);
+
+    const lastColon = trimmed.lastIndexOf(":");
+    const parentPrefix = lastColon >= 0 ? trimmed.substring(0, lastColon + 1) : "";
+
+    const sameType = store.active.filter((a) => a.id !== editingId && a.account_type === account.account_type);
+
+    // Siblings: same parent prefix
+    const siblings = parentPrefix
+      ? sameType.filter((a) => a.full_name.toLowerCase().startsWith(parentPrefix))
+      : [];
+
+    // Text matches (existing behavior)
+    const textMatches = sameType.filter((a) => a.full_name.toLowerCase().includes(trimmed));
+
+    // Combine: siblings first, then text matches, deduplicated
+    const seen = new Set<string>();
+    const result: typeof sameType = [];
+    for (const a of [...siblings, ...textMatches]) {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        result.push(a);
+      }
+    }
+    return result.slice(0, 10);
   });
 
   // Detect if editFullName matches an existing same-type account (for merge)
@@ -341,7 +362,7 @@
                         <Popover.Content class="w-[320px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                           <Command.Root shouldFilter={false}>
                             <Command.List class="max-h-[200px]">
-                              <Command.Group heading="Same-type accounts">
+                              <Command.Group heading="Suggestions">
                                 {#each editSuggestions as suggestion}
                                   <Command.Item
                                     value={suggestion.full_name}
