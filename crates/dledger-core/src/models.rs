@@ -237,6 +237,8 @@ pub struct TransactionFilter {
     pub description_search: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+    pub order_by: Option<String>,
+    pub order_direction: Option<String>,
 }
 
 /// Lot booking method.

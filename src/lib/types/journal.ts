@@ -29,6 +29,8 @@ export interface TransactionFilter {
   description_search?: string;
   limit?: number;
   offset?: number;
+  order_by?: "date" | "description" | "status";
+  order_direction?: "asc" | "desc";
 }
 
 export interface JournalEntryWithItems {

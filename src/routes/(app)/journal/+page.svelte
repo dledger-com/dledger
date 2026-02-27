@@ -18,6 +18,7 @@
   import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import type { TransactionFilter } from "$lib/types/index.js";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import Pagination from "$lib/components/Pagination.svelte";
@@ -84,9 +85,17 @@
   let debounceTimer: ReturnType<typeof setTimeout>;
   $effect(() => {
     const term = searchTerm.trim();
+    const orderBy = sort.key !== "amount" ? sort.key : null;
+    const orderDir = sort.direction;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      store.load(term ? { description_search: term } : {});
+      const filter: TransactionFilter = {};
+      if (term) filter.description_search = term;
+      if (orderBy && orderDir) {
+        filter.order_by = orderBy;
+        filter.order_direction = orderDir;
+      }
+      store.load(filter);
     }, 300);
     return () => clearTimeout(debounceTimer);
   });
@@ -258,13 +267,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {@const journalAccessors = {
-            date: ([entry]: [any, any]) => entry.date,
-            description: ([entry]: [any, any]) => entry.description,
-            status: ([entry]: [any, any]) => entry.status,
-            amount: ([, items]: [any, any]) => totalDebits(items),
-          }}
-          {@const sortedEntries = sort.key && sort.direction ? sortItems(filteredEntries, journalAccessors[sort.key as JournalSortKey], sort.direction) : filteredEntries}
+          {@const sortedEntries = sort.key === "amount" && sort.direction ? sortItems(filteredEntries, ([, items]: [any, any]) => totalDebits(items), sort.direction) : filteredEntries}
           {#each sortedEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>

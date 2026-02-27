@@ -1676,7 +1676,18 @@ export class SqlJsBackend implements Backend {
     if (conditions.length > 0) {
       sql += " WHERE " + conditions.join(" AND ");
     }
-    sql += " ORDER BY je.date DESC, je.created_at DESC";
+    const allowedColumns: Record<string, string> = {
+      date: "je.date",
+      description: "je.description",
+      status: "je.status",
+    };
+    const col = filter.order_by && allowedColumns[filter.order_by];
+    const dir = filter.order_direction === "asc" ? "ASC" : "DESC";
+    if (col) {
+      sql += ` ORDER BY ${col} ${dir}, je.created_at ${dir}`;
+    } else {
+      sql += " ORDER BY je.date DESC, je.created_at DESC";
+    }
     if (filter.limit !== undefined) {
       sql += " LIMIT ?";
       params.push(filter.limit);

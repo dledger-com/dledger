@@ -408,7 +408,20 @@ impl Storage for SqliteStorage {
             sql.push_str(&conditions.join(" AND "));
         }
 
-        sql.push_str(" ORDER BY je.date DESC, je.created_at DESC");
+        let order_clause = match (filter.order_by.as_deref(), filter.order_direction.as_deref()) {
+            (Some(col), dir) => {
+                let mapped = match col {
+                    "date" => "je.date",
+                    "description" => "je.description",
+                    "status" => "je.status",
+                    _ => "je.date",
+                };
+                let d = if dir == Some("asc") { "ASC" } else { "DESC" };
+                format!(" ORDER BY {} {}, je.created_at {}", mapped, d, d)
+            }
+            _ => " ORDER BY je.date DESC, je.created_at DESC".to_string(),
+        };
+        sql.push_str(&order_clause);
 
         if let Some(limit) = filter.limit {
             param_values.push(limit.to_string());
