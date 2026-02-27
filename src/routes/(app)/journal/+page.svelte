@@ -256,8 +256,8 @@
           {#each filteredEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
-              <Table.Cell>
-                <a href="/journal/{entry.id}" class="font-medium hover:underline">{entry.description}</a>
+              <Table.Cell class="max-w-[300px]">
+                <a href="/journal/{entry.id}" class="font-medium hover:underline truncate block" title={entry.description}>{entry.description}</a>
               </Table.Cell>
               <Table.Cell class="hidden md:table-cell">
                 <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
