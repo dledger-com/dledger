@@ -67,11 +67,11 @@ describe("CEX Pipeline", () => {
       expect(entry.date).toBe("2024-03-15");
 
       // Verify line items (merged by account+currency):
-      // Assets:Exchanges:Kraken:EUR = -10000 + -2.50 (fee) = -10002.5
+      // Assets:Crypto:Exchange:Kraken:EUR = -10000 + -2.50 (fee) = -10002.5
       // Equity:Trading:EUR = 10000
-      // Assets:Exchanges:Kraken:BTC = +0.5
+      // Assets:Crypto:Exchange:Kraken:BTC = +0.5
       // Equity:Trading:BTC = -0.5
-      // Expenses:Exchanges:Kraken:Fees EUR = 2.5
+      // Expenses:Crypto:Fees:Trading:Kraken EUR = 2.5
       const accounts = await backend.listAccounts();
       const acctMap = new Map(accounts.map((a) => [a.id, a.full_name]));
 
@@ -83,7 +83,7 @@ describe("CEX Pipeline", () => {
 
       // Check asset EUR debit (trade + fee merged)
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:EUR",
+        account: "Assets:Crypto:Exchange:Kraken:EUR",
         currency: "EUR",
         amount: "-10002.5",
       });
@@ -97,7 +97,7 @@ describe("CEX Pipeline", () => {
 
       // Check asset BTC credit (+0.5)
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:BTC",
+        account: "Assets:Crypto:Exchange:Kraken:BTC",
         currency: "BTC",
         amount: "0.5",
       });
@@ -111,7 +111,7 @@ describe("CEX Pipeline", () => {
 
       // Check fee
       expect(itemDetails).toContainEqual({
-        account: "Expenses:Exchanges:Kraken:Fees",
+        account: "Expenses:Crypto:Fees:Trading:Kraken",
         currency: "EUR",
         amount: "2.5",
       });
@@ -141,21 +141,21 @@ describe("CEX Pipeline", () => {
 
       // ETH leaves
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:ETH",
+        account: "Assets:Crypto:Exchange:Kraken:ETH",
         currency: "ETH",
         amount: "-2",
       });
 
       // EUR arrives (trade + fee merged: 6000 - 1.80 = 5998.2)
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:EUR",
+        account: "Assets:Crypto:Exchange:Kraken:EUR",
         currency: "EUR",
         amount: "5998.2",
       });
 
       // Fee on EUR
       expect(itemDetails).toContainEqual({
-        account: "Expenses:Exchanges:Kraken:Fees",
+        account: "Expenses:Crypto:Fees:Trading:Kraken",
         currency: "EUR",
         amount: "1.8",
       });
@@ -202,12 +202,12 @@ describe("CEX Pipeline", () => {
       }));
 
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:ETH",
+        account: "Assets:Crypto:Exchange:Kraken:ETH",
         currency: "ETH",
         amount: "5",
       });
       expect(itemDetails).toContainEqual({
-        account: "Equity:Exchanges:Kraken:External",
+        account: "Equity:Crypto:Exchange:Kraken:External",
         currency: "ETH",
         amount: "-5",
       });
@@ -238,21 +238,21 @@ describe("CEX Pipeline", () => {
 
       // BTC leaves exchange
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:BTC",
+        account: "Assets:Crypto:Exchange:Kraken:BTC",
         currency: "BTC",
         amount: "-0.5",
       });
 
       // External receives (minus fee)
       expect(itemDetails).toContainEqual({
-        account: "Equity:Exchanges:Kraken:External",
+        account: "Equity:Crypto:Exchange:Kraken:External",
         currency: "BTC",
         amount: "0.4995",
       });
 
       // Fee
       expect(itemDetails).toContainEqual({
-        account: "Expenses:Exchanges:Kraken:Fees",
+        account: "Expenses:Crypto:Fees:Trading:Kraken",
         currency: "BTC",
         amount: "0.0005",
       });
@@ -282,12 +282,12 @@ describe("CEX Pipeline", () => {
       }));
 
       expect(itemDetails).toContainEqual({
-        account: "Assets:Exchanges:Kraken:DOT",
+        account: "Assets:Crypto:Exchange:Kraken:DOT",
         currency: "DOT",
         amount: "1.5",
       });
       expect(itemDetails).toContainEqual({
-        account: "Income:Exchanges:Kraken:Staking",
+        account: "Income:Crypto:Staking:Kraken",
         currency: "DOT",
         amount: "-1.5",
       });
@@ -603,7 +603,7 @@ describe("CEX Pipeline", () => {
       const remapped = allEntries.find(([e]) => e.source === "binance:BD01" && !e.voided_by);
       expect(remapped).toBeTruthy();
 
-      // The remapped entry should have Assets:Exchanges:Kraken:ETH instead of Equity:Exchanges:Binance:External
+      // The remapped entry should have Assets:Crypto:Exchange:Kraken:ETH instead of Equity:Crypto:Exchange:Binance:External
       const accounts = await backend.listAccounts();
       const acctMap = new Map(accounts.map((a) => [a.id, a.full_name]));
       const remappedItems = remapped![1].map((i) => ({
@@ -614,13 +614,13 @@ describe("CEX Pipeline", () => {
 
       // Binance deposit asset account remains
       expect(remappedItems).toContainEqual({
-        account: "Assets:Exchanges:Binance:ETH",
+        account: "Assets:Crypto:Exchange:Binance:ETH",
         currency: "ETH",
         amount: "5",
       });
       // External account is remapped to Kraken asset
       expect(remappedItems).toContainEqual({
-        account: "Assets:Exchanges:Kraken:ETH",
+        account: "Assets:Crypto:Exchange:Kraken:ETH",
         currency: "ETH",
         amount: "-5",
       });
@@ -663,10 +663,10 @@ describe("CEX Pipeline", () => {
       const accounts = await backend.listAccounts();
       const names = accounts.map((a) => a.full_name);
 
-      expect(names).toContain("Assets:Exchanges:Kraken:ETH");
-      expect(names).toContain("Assets:Exchanges:Kraken");
-      expect(names).toContain("Equity:Exchanges:Kraken:External");
-      expect(names).toContain("Equity:Exchanges:Kraken");
+      expect(names).toContain("Assets:Crypto:Exchange:Kraken:ETH");
+      expect(names).toContain("Assets:Crypto:Exchange:Kraken");
+      expect(names).toContain("Equity:Crypto:Exchange:Kraken:External");
+      expect(names).toContain("Equity:Crypto:Exchange:Kraken");
     });
   });
 

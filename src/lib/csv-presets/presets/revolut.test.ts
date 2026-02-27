@@ -61,7 +61,7 @@ describe("revolutPreset", () => {
       const records = revolutPreset.transform(headers, rows);
       expect(records).not.toBeNull();
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Banks:Revolut:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === "Expenses:Bank:Fees:Revolut")).toBe(true);
     });
 
     it("uses categorization rules", () => {

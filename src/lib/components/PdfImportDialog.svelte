@@ -32,6 +32,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
+  import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
   import AccountCombobox from "./AccountCombobox.svelte";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
@@ -64,7 +65,7 @@
   // -- Parsed PDF data --
   let statement = $state<PdfStatement | null>(null);
   let detectedBank = $state<"lbp" | "n26" | "nuri" | "deblock" | null>(null);
-  let mainAccount = $state("Assets:Bank:Import");
+  let mainAccount = $state(ASSETS_BANK_IMPORT);
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
@@ -353,7 +354,7 @@
     parsing = false;
     statement = null;
     detectedBank = null;
-    mainAccount = "Assets:Bank:Import";
+    mainAccount = ASSETS_BANK_IMPORT;
     fileHeader = null;
     previewRecords = [];
     previewWarnings = [];
@@ -460,7 +461,7 @@
           <!-- Main Account -->
           <div class="space-y-1">
             <label for="pdf-mainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="pdf-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:LaBanquePostale:0020" />
+            <Input id="pdf-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
           </div>
 
           <!-- Categorization Rules -->

@@ -34,32 +34,32 @@ const PROTOCOL_MAP: Record<string, ProtocolDef> = {
   aave: {
     displayName: "Aave",
     patterns: [
-      { account: /^Liabilities:Aave:Borrow$/, category: "borrows" },
-      { account: /^Income:Aave:Rewards$/, category: "rewards" },
-      { account: /^Income:Aave:Interest$/, category: "rewards" },
-      { account: /^Expenses:Aave:Interest$/, category: "borrows" },
-      { account: /^Assets:Aave:Supply$/, category: "supplies" },
+      { account: /^Liabilities:Crypto:DeFi:Aave:Borrow$/, category: "borrows" },
+      { account: /^Income:Crypto:DeFi:Aave:Rewards$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:Aave:Interest$/, category: "rewards" },
+      { account: /^Expenses:Crypto:DeFi:Aave:Interest$/, category: "borrows" },
+      { account: /^Assets:Crypto:DeFi:Aave:Supply$/, category: "supplies" },
     ],
   },
   compound: {
     displayName: "Compound",
     patterns: [
-      { account: /^Liabilities:Compound:Borrow$/, category: "borrows" },
-      { account: /^Income:Compound:Rewards$/, category: "rewards" },
+      { account: /^Liabilities:Crypto:DeFi:Compound:Borrow$/, category: "borrows" },
+      { account: /^Income:Crypto:DeFi:Compound:Rewards$/, category: "rewards" },
       { currency: /^c[A-Z]/, category: "supplies" },
     ],
   },
   uniswap: {
     displayName: "Uniswap",
     patterns: [
-      { account: /^Income:Uniswap:Fees$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:Uniswap:Fees$/, category: "rewards" },
       { currency: /^UNI-V[23]/, category: "supplies" },
     ],
   },
   curve: {
     displayName: "Curve",
     patterns: [
-      { account: /^Income:Curve:Rewards$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:Curve:Rewards$/, category: "rewards" },
       { currency: /^crv/, category: "supplies" },
     ],
   },
@@ -72,36 +72,36 @@ const PROTOCOL_MAP: Record<string, ProtocolDef> = {
   pendle: {
     displayName: "Pendle",
     patterns: [
-      { account: /^Income:Pendle:Rewards$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:Pendle:Rewards$/, category: "rewards" },
       { currency: /^(PT-|YT-|SY-)/, category: "supplies" },
     ],
   },
   yearn: {
     displayName: "Yearn",
     patterns: [
-      { account: /^Income:Yearn:Rewards$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:Yearn:Rewards$/, category: "rewards" },
       { currency: /^yv[A-Z]/, category: "supplies" },
     ],
   },
   balancer: {
     displayName: "Balancer",
     patterns: [
-      { account: /^Income:Balancer:Rewards$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:Balancer:Rewards$/, category: "rewards" },
       { currency: /^B-/, category: "supplies" },
     ],
   },
   maker: {
     displayName: "MakerDAO/Spark",
     patterns: [
-      { account: /^Liabilities:Spark:Borrow$/, category: "borrows" },
-      { account: /^Income:Spark:Rewards$/, category: "rewards" },
+      { account: /^Liabilities:Crypto:DeFi:Spark:Borrow$/, category: "borrows" },
+      { account: /^Income:Crypto:DeFi:Spark:Rewards$/, category: "rewards" },
       { currency: /^(sDAI|sp[A-Z])/, category: "supplies" },
     ],
   },
   eigenlayer: {
     displayName: "EigenLayer",
     patterns: [
-      { account: /^Income:EigenLayer:Rewards$/, category: "rewards" },
+      { account: /^Income:Crypto:DeFi:EigenLayer:Rewards$/, category: "rewards" },
     ],
   },
 };

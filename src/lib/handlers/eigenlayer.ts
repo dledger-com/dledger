@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { EIGENLAYER, isEigenLayerContract } from "./addresses.js";
+import { defiIncome } from "../accounts/paths.js";
 
 // ---- Action classification ----
 
@@ -165,7 +166,7 @@ export const eigenLayerHandler: TransactionHandler = {
     // Reclassify counterparty accounts based on action
     if (action === "CLAIM_REWARDS") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:EigenLayer:Rewards" },
+        { from: "Equity:*:External:*", to: defiIncome("EigenLayer", "Rewards") },
       ]);
     }
 

@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { CURVE, ZERO_ADDRESS } from "./addresses.js";
+import { defiIncome } from "../accounts/paths.js";
 
 // ---- Token detection ----
 
@@ -192,7 +193,7 @@ export const curveHandler: TransactionHandler = {
     // Reclassify counterparty accounts for CRV claims
     if (action === "CLAIM_CRV") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Curve:Rewards" },
+        { from: "Equity:*:External:*", to: defiIncome("Curve", "Rewards") },
       ]);
     }
 

@@ -3,6 +3,7 @@ import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
 import { matchRule, type CsvCategorizationRule } from "../categorize.js";
+import { bankAssets, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 
 let _rules: CsvCategorizationRule[] = [];
 
@@ -124,7 +125,7 @@ export const laBanquePostalePreset: CsvPreset = {
 
     const currency = fields.currencyLabel ? currencyLabelToCode(fields.currencyLabel) : "EUR";
     const accountType = fields.accountType ?? currency;
-    result.mainAccount = `Assets:Bank:LaBanquePostale:${accountType}`;
+    result.mainAccount = bankAssets("LaBanquePostale", accountType);
 
     if (fields.balanceDate) {
       const parsed = parseDate(fields.balanceDate, "DD/MM/YYYY");
@@ -181,7 +182,7 @@ export const laBanquePostalePreset: CsvPreset = {
     const records: CsvRecord[] = [];
     const currency = "EUR";
     // Use preamble-derived main account if available, otherwise fallback
-    const mainAccount = fileHeader?.mainAccount ?? `Assets:Bank:LaBanquePostale:${currency}`;
+    const mainAccount = fileHeader?.mainAccount ?? bankAssets("LaBanquePostale", currency);
 
     for (const row of dataRows) {
       if (row.length === 0 || (row.length === 1 && row[0] === "")) continue;
@@ -199,7 +200,7 @@ export const laBanquePostalePreset: CsvPreset = {
       if (rule) {
         counterAccount = rule.account;
       } else {
-        counterAccount = amount < 0 ? "Expenses:Uncategorized" : "Income:Uncategorized";
+        counterAccount = amount < 0 ? EXPENSES_UNCATEGORIZED : INCOME_UNCATEGORIZED;
       }
 
       records.push({

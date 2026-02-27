@@ -3,6 +3,7 @@ import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { matchRule } from "$lib/csv-presets/categorize.js";
 import type { OfxStatement, OfxTransaction } from "./parse-ofx.js";
 import { parseOfxDate } from "./parse-ofx.js";
+import { INCOME_UNCATEGORIZED, EXPENSES_UNCATEGORIZED, creditCard, bankAssets } from "$lib/accounts/paths.js";
 
 export interface OfxConvertOptions {
   mainAccount: string;
@@ -56,7 +57,7 @@ export function convertOfxToRecords(
     } else {
       // Positive amount = money in (income), negative = money out (expense)
       // In OFX: positive = credit to account, negative = debit from account
-      counterAccount = amount > 0 ? "Income:Uncategorized" : "Expenses:Uncategorized";
+      counterAccount = amount > 0 ? INCOME_UNCATEGORIZED : EXPENSES_UNCATEGORIZED;
     }
 
     records.push({
@@ -110,8 +111,8 @@ export function convertOfxToRecords(
 export function suggestMainAccount(statement: OfxStatement): string {
   const last4 = statement.account.acctId?.slice(-4) ?? "Unknown";
   if (statement.account.accountType === "creditcard") {
-    return `Liabilities:CreditCards:${last4}`;
+    return creditCard(last4);
   }
   const type = statement.account.acctType ?? "Checking";
-  return `Assets:Bank:${type}:${last4}`;
+  return bankAssets(type, last4);
 }

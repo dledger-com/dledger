@@ -1,6 +1,13 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { colIdx, parsePair, makeTradeLines, makeTransferLines, makeFeeLines } from "./shared.js";
+import {
+  exchangeAssets,
+  exchangeAssetsCurrency,
+  exchangeFees,
+  EQUITY_EXTERNAL,
+  EQUITY_TRADING,
+} from "$lib/accounts/paths.js";
 
 type Variant = "trades" | "trades-old" | "ledgers" | "movements";
 
@@ -23,7 +30,7 @@ export const bitfinexPreset: CsvPreset = {
   id: "bitfinex",
   name: "Bitfinex",
   description: "Bitfinex trades, ledgers, and movements CSV exports.",
-  suggestedMainAccount: "Assets:Exchanges:Bitfinex",
+  suggestedMainAccount: exchangeAssets("Bitfinex"),
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -77,11 +84,11 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     const baseAmt = Math.abs(amount);
     const quoteAmt = baseAmt * price;
 
-    const lines = makeTradeLines("Exchanges:Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
+    const lines = makeTradeLines("Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
 
     const fee = feeIdx >= 0 ? Math.abs(parseFloat((row[feeIdx] ?? "0").replace(/,/g, ""))) : 0;
     const feeCurr = feeCurrIdx >= 0 ? (row[feeCurrIdx] ?? "").trim().toUpperCase() : pair.quote;
-    if (fee > 0) lines.push(...makeFeeLines("Exchanges:Bitfinex", feeCurr, fee));
+    if (fee > 0) lines.push(...makeFeeLines("Bitfinex", feeCurr, fee));
 
     records.push({
       date,
@@ -120,7 +127,7 @@ function transformTradesOld(headers: string[], rows: string[][]): CsvRecord[] {
     const baseAmt = Math.abs(amount);
     const quoteAmt = baseAmt * price;
 
-    const lines = makeTradeLines("Exchanges:Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
+    const lines = makeTradeLines("Bitfinex", pair.base, pair.quote, side, baseAmt, quoteAmt);
 
     records.push({
       date,
@@ -154,19 +161,19 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
 
     const desc = (row[descIdx] ?? "").toLowerCase();
 
-    let counterAccount = "Equity:External";
+    let counterAccount = EQUITY_EXTERNAL;
     if (desc.includes("exchange") || desc.includes("trading")) {
-      counterAccount = "Equity:Trading";
+      counterAccount = EQUITY_TRADING;
     }
 
     const isFee = desc.includes("fee") && amount < 0;
     const lines: CsvRecord["lines"] = isFee
       ? [
-          { account: "Expenses:Bitfinex:Fees", currency, amount: Math.abs(amount).toString() },
-          { account: `Assets:Bitfinex:${currency}`, currency, amount: amount.toString() },
+          { account: exchangeFees("Bitfinex"), currency, amount: Math.abs(amount).toString() },
+          { account: exchangeAssetsCurrency("Bitfinex", currency), currency, amount: amount.toString() },
         ]
       : [
-          { account: `Assets:Bitfinex:${currency}`, currency, amount: amount.toString() },
+          { account: exchangeAssetsCurrency("Bitfinex", currency), currency, amount: amount.toString() },
           { account: counterAccount, currency, amount: (-amount).toString() },
         ];
 
@@ -204,10 +211,10 @@ function transformMovements(headers: string[], rows: string[][]): CsvRecord[] {
     if (!currency || isNaN(amount) || amount === 0) continue;
 
     const type = amount > 0 ? "deposit" : "withdrawal";
-    const lines: CsvRecord["lines"] = makeTransferLines("Exchanges:Bitfinex", currency, amount);
+    const lines: CsvRecord["lines"] = makeTransferLines("Bitfinex", currency, amount);
 
     const fees = feesIdx >= 0 ? Math.abs(parseFloat((row[feesIdx] ?? "0").replace(/,/g, ""))) : 0;
-    if (fees > 0) lines.push(...makeFeeLines("Exchanges:Bitfinex", currency, fees));
+    if (fees > 0) lines.push(...makeFeeLines("Bitfinex", currency, fees));
 
     records.push({ date, description: `Bitfinex ${type}: ${currency}`, lines });
   }

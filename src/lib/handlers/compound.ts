@@ -16,6 +16,7 @@ import {
   formatTokenAmount,
 } from "./item-builder.js";
 import { ZERO_ADDRESS, isCompoundContract } from "./addresses.js";
+import { defiLiabilities, defiIncome } from "../accounts/paths.js";
 
 // ---- Token detection ----
 
@@ -145,11 +146,11 @@ export const compoundHandler: TransactionHandler = {
     // Reclassify counterparty accounts based on action
     if (action === "BORROW") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Liabilities:Compound:Borrow" },
+        { from: "Equity:*:External:*", to: defiLiabilities("Compound", "Borrow") },
       ]);
     } else if (action === "CLAIM_COMP") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Compound:Rewards" },
+        { from: "Equity:*:External:*", to: defiIncome("Compound", "Rewards") },
       ]);
     }
 

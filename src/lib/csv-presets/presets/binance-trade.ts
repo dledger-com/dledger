@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { parsePair } from "./shared.js";
+import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
 // Binance trade history headers (spot trade)
 const REQUIRED_HEADERS_V1 = ["Date(UTC)", "Pair", "Side", "Price", "Filled", "Total", "Fee", "Fee Coin"];
@@ -10,7 +11,7 @@ export const binanceTradePreset: CsvPreset = {
   id: "binance-trade",
   name: "Binance Trade History",
   description: "Binance spot trade history CSV with Date(UTC), Pair/Market, Side, Price, Filled/Amount, Total, Fee.",
-  suggestedMainAccount: "Assets:Exchanges:Binance",
+  suggestedMainAccount: exchangeAssets("Binance"),
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -73,21 +74,21 @@ export const binanceTradePreset: CsvPreset = {
       if (side === "BUY") {
         // Buy: receive base, spend quote
         lines.push(
-          { account: `Assets:Exchanges:Binance:${pair.base}`, currency: pair.base, amount: filled.toString() },
-          { account: `Assets:Exchanges:Binance:${pair.quote}`, currency: pair.quote, amount: (-total).toString() },
+          { account: exchangeAssetsCurrency("Binance", pair.base), currency: pair.base, amount: filled.toString() },
+          { account: exchangeAssetsCurrency("Binance", pair.quote), currency: pair.quote, amount: (-total).toString() },
         );
       } else {
         // Sell: spend base, receive quote
         lines.push(
-          { account: `Assets:Exchanges:Binance:${pair.base}`, currency: pair.base, amount: (-filled).toString() },
-          { account: `Assets:Exchanges:Binance:${pair.quote}`, currency: pair.quote, amount: total.toString() },
+          { account: exchangeAssetsCurrency("Binance", pair.base), currency: pair.base, amount: (-filled).toString() },
+          { account: exchangeAssetsCurrency("Binance", pair.quote), currency: pair.quote, amount: total.toString() },
         );
       }
 
       // Balance with Equity:Trading
       for (const l of [...lines]) {
         lines.push({
-          account: "Equity:Trading",
+          account: EQUITY_TRADING,
           currency: l.currency,
           amount: (-parseFloat(l.amount)).toString(),
         });
@@ -96,8 +97,8 @@ export const binanceTradePreset: CsvPreset = {
       // Fee
       if (!isNaN(fee) && fee > 0) {
         lines.push(
-          { account: "Expenses:Exchanges:Binance:Fees", currency: feeCoin, amount: fee.toString() },
-          { account: `Assets:Exchanges:Binance:${feeCoin}`, currency: feeCoin, amount: (-fee).toString() },
+          { account: exchangeFees("Binance"), currency: feeCoin, amount: fee.toString() },
+          { account: exchangeAssetsCurrency("Binance", feeCoin), currency: feeCoin, amount: (-fee).toString() },
         );
       }
 

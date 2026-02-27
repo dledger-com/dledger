@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { bybitTradePreset } from "./bybit-trade.js";
+import { exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
 describe("bybitTradePreset", () => {
   describe("detect", () => {
@@ -40,8 +41,8 @@ describe("bybitTradePreset", () => {
       expect(records!).toHaveLength(1);
 
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:BTC" && parseFloat(l.amount) === 0.5)).toBe(true);
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:USDT" && parseFloat(l.amount) === -21000)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Bybit", "BTC") && parseFloat(l.amount) === 0.5)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Bybit", "USDT") && parseFloat(l.amount) === -21000)).toBe(true);
     });
 
     it("transforms sell trades", () => {
@@ -52,8 +53,8 @@ describe("bybitTradePreset", () => {
 
       const records = bybitTradePreset.transform(headers, rows);
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:ETH" && parseFloat(l.amount) === -2)).toBe(true);
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Bybit:USDT" && parseFloat(l.amount) === 5000)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Bybit", "ETH") && parseFloat(l.amount) === -2)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Bybit", "USDT") && parseFloat(l.amount) === 5000)).toBe(true);
     });
 
     it("handles fees", () => {
@@ -64,7 +65,7 @@ describe("bybitTradePreset", () => {
 
       const records = bybitTradePreset.transform(headers, rows);
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Exchanges:Bybit:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === exchangeFees("Bybit"))).toBe(true);
     });
 
     it("returns null for invalid headers", () => {
@@ -93,7 +94,7 @@ describe("bybitTradePreset", () => {
 
       const records = bybitTradePreset.transform(headers, rows);
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Equity:Trading")).toBe(true);
+      expect(allLines.some((l) => l.account === EQUITY_TRADING)).toBe(true);
     });
 
     it("handles Symbol column (V2)", () => {

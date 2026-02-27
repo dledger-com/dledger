@@ -17,6 +17,7 @@ import {
   shortAddr,
 } from "../browser-etherscan.js";
 import { ZERO_ADDRESS } from "./addresses.js";
+import { walletAssets, walletExternal, chainFees } from "../accounts/paths.js";
 
 // ---- Core accumulator type ----
 
@@ -40,27 +41,27 @@ export function buildNormalTxItems(
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();
   const chainName = chain.name;
-  const ourAccount = `Assets:${chainName}:${label}`;
+  const ourAccount = walletAssets(chainName, label);
   const items: ItemAccum[] = [];
   const curr = chain.native_currency;
 
   if (from === addr && to === addr) {
     if (!gasFee.isZero()) {
-      items.push({ account: `Expenses:${chainName}:Gas`, currency: curr, amount: gasFee });
+      items.push({ account: chainFees(chainName), currency: curr, amount: gasFee });
       items.push({ account: ourAccount, currency: curr, amount: gasFee.neg() });
     }
   } else if (!to) {
     if (!gasFee.isZero()) {
-      items.push({ account: `Expenses:${chainName}:ContractCreation`, currency: curr, amount: gasFee });
+      items.push({ account: chainFees(chainName), currency: curr, amount: gasFee });
       items.push({ account: ourAccount, currency: curr, amount: gasFee.neg() });
     }
   } else if (from === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+    const extAccount = walletExternal(chainName, shortAddr(to));
     if (!value.isZero()) {
       items.push({ account: extAccount, currency: curr, amount: value });
     }
     if (!gasFee.isZero()) {
-      items.push({ account: `Expenses:${chainName}:Gas`, currency: curr, amount: gasFee });
+      items.push({ account: chainFees(chainName), currency: curr, amount: gasFee });
     }
     const totalOut = value.plus(gasFee);
     if (!totalOut.isZero()) {
@@ -68,7 +69,7 @@ export function buildNormalTxItems(
     }
   } else if (to === addr) {
     if (!value.isZero()) {
-      const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+      const extAccount = walletExternal(chainName, shortAddr(from));
       items.push({ account: ourAccount, currency: curr, amount: value });
       items.push({ account: extAccount, currency: curr, amount: value.neg() });
     }
@@ -89,18 +90,18 @@ export function buildInternalTxItems(
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();
   const chainName = chain.name;
-  const ourAccount = `Assets:${chainName}:${label}`;
+  const ourAccount = walletAssets(chainName, label);
   const items: ItemAccum[] = [];
   const curr = chain.native_currency;
 
   if (from === addr && to === addr) {
     // Self-transfer: no net effect
   } else if (from === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+    const extAccount = walletExternal(chainName, shortAddr(to));
     items.push({ account: extAccount, currency: curr, amount: value });
     items.push({ account: ourAccount, currency: curr, amount: value.neg() });
   } else if (to === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+    const extAccount = walletExternal(chainName, shortAddr(from));
     items.push({ account: ourAccount, currency: curr, amount: value });
     items.push({ account: extAccount, currency: curr, amount: value.neg() });
   }
@@ -125,17 +126,17 @@ export async function buildErc20TxItems(
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();
   const chainName = chain.name;
-  const ourAccount = `Assets:${chainName}:${label}`;
+  const ourAccount = walletAssets(chainName, label);
   const items: ItemAccum[] = [];
 
   if (from === addr && to === addr) {
     // Self-transfer: no net effect
   } else if (from === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+    const extAccount = walletExternal(chainName, shortAddr(to));
     items.push({ account: extAccount, currency, amount: value });
     items.push({ account: ourAccount, currency, amount: value.neg() });
   } else if (to === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+    const extAccount = walletExternal(chainName, shortAddr(from));
     items.push({ account: ourAccount, currency, amount: value });
     items.push({ account: extAccount, currency, amount: value.neg() });
   }
@@ -157,17 +158,17 @@ export async function buildErc721TxItems(
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();
   const chainName = chain.name;
-  const ourAccount = `Assets:${chainName}:${label}`;
+  const ourAccount = walletAssets(chainName, label);
   const items: ItemAccum[] = [];
 
   if (from === addr && to === addr) {
     // Self-transfer: no net effect
   } else if (from === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+    const extAccount = walletExternal(chainName, shortAddr(to));
     items.push({ account: extAccount, currency, amount: value });
     items.push({ account: ourAccount, currency, amount: value.neg() });
   } else if (to === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+    const extAccount = walletExternal(chainName, shortAddr(from));
     items.push({ account: ourAccount, currency, amount: value });
     items.push({ account: extAccount, currency, amount: value.neg() });
   }
@@ -196,17 +197,17 @@ export async function buildErc1155TxItems(
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();
   const chainName = chain.name;
-  const ourAccount = `Assets:${chainName}:${label}`;
+  const ourAccount = walletAssets(chainName, label);
   const items: ItemAccum[] = [];
 
   if (from === addr && to === addr) {
     // Self-transfer: no net effect
   } else if (from === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(to)}`;
+    const extAccount = walletExternal(chainName, shortAddr(to));
     items.push({ account: extAccount, currency, amount: value });
     items.push({ account: ourAccount, currency, amount: value.neg() });
   } else if (to === addr) {
-    const extAccount = `Equity:${chainName}:External:${shortAddr(from)}`;
+    const extAccount = walletExternal(chainName, shortAddr(from));
     items.push({ account: ourAccount, currency, amount: value });
     items.push({ account: extAccount, currency, amount: value.neg() });
   }

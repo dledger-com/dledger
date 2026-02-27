@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { KRAKEN_ASSET_MAP } from "$lib/cex/kraken.js";
+import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, exchangeStaking, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS = ["refid", "time", "type", "aclass", "asset", "amount", "fee", "balance"];
 
@@ -19,7 +20,7 @@ export const krakenLedgerPreset: CsvPreset = {
   id: "kraken-ledger",
   name: "Kraken Ledger Export",
   description: "Kraken exchange ledger CSV export with refid, time, type, asset, amount, fee, balance.",
-  suggestedMainAccount: "Assets:Exchanges:Kraken",
+  suggestedMainAccount: exchangeAssets("Kraken"),
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -91,18 +92,18 @@ export const krakenLedgerPreset: CsvPreset = {
         for (const e of entries) {
           assets.push(e.asset);
           lines.push({
-            account: `Assets:Exchanges:Kraken:${e.asset}`,
+            account: exchangeAssetsCurrency("Kraken", e.asset),
             currency: e.asset,
             amount: e.amount.toString(),
           });
           if (Math.abs(e.fee) > 0) {
             lines.push({
-              account: `Expenses:Exchanges:Kraken:Fees`,
+              account: exchangeFees("Kraken"),
               currency: e.asset,
               amount: Math.abs(e.fee).toString(),
             });
             lines.push({
-              account: `Assets:Exchanges:Kraken:${e.asset}`,
+              account: exchangeAssetsCurrency("Kraken", e.asset),
               currency: e.asset,
               amount: (-Math.abs(e.fee)).toString(),
             });
@@ -121,7 +122,7 @@ export const krakenLedgerPreset: CsvPreset = {
         for (const [currency, sum] of currencySums) {
           if (Math.abs(sum) > 0.00000001) {
             lines.push({
-              account: "Equity:Trading",
+              account: EQUITY_TRADING,
               currency,
               amount: (-sum).toString(),
             });
@@ -139,12 +140,12 @@ export const krakenLedgerPreset: CsvPreset = {
         for (const e of entries) {
           const lines: CsvRecord["lines"] = [
             {
-              account: `Assets:Exchanges:Kraken:${e.asset}`,
+              account: exchangeAssetsCurrency("Kraken", e.asset),
               currency: e.asset,
               amount: e.amount.toString(),
             },
             {
-              account: "Equity:External",
+              account: EQUITY_EXTERNAL,
               currency: e.asset,
               amount: (-e.amount).toString(),
             },
@@ -152,12 +153,12 @@ export const krakenLedgerPreset: CsvPreset = {
 
           if (Math.abs(e.fee) > 0) {
             lines.push({
-              account: `Expenses:Exchanges:Kraken:Fees`,
+              account: exchangeFees("Kraken"),
               currency: e.asset,
               amount: Math.abs(e.fee).toString(),
             });
             lines.push({
-              account: `Assets:Exchanges:Kraken:${e.asset}`,
+              account: exchangeAssetsCurrency("Kraken", e.asset),
               currency: e.asset,
               amount: (-Math.abs(e.fee)).toString(),
             });
@@ -178,12 +179,12 @@ export const krakenLedgerPreset: CsvPreset = {
             description: `Kraken staking reward: ${e.asset}`,
             lines: [
               {
-                account: `Assets:Exchanges:Kraken:${e.asset}`,
+                account: exchangeAssetsCurrency("Kraken", e.asset),
                 currency: e.asset,
                 amount: e.amount.toString(),
               },
               {
-                account: `Income:Exchanges:Kraken:Staking`,
+                account: exchangeStaking("Kraken"),
                 currency: e.asset,
                 amount: (-e.amount).toString(),
               },
@@ -199,12 +200,12 @@ export const krakenLedgerPreset: CsvPreset = {
             description: `Kraken ${type}: ${e.asset}`,
             lines: [
               {
-                account: `Assets:Exchanges:Kraken:${e.asset}`,
+                account: exchangeAssetsCurrency("Kraken", e.asset),
                 currency: e.asset,
                 amount: e.amount.toString(),
               },
               {
-                account: "Equity:External",
+                account: EQUITY_EXTERNAL,
                 currency: e.asset,
                 amount: (-e.amount).toString(),
               },

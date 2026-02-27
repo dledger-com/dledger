@@ -281,14 +281,14 @@ describe("remapCounterpartyAccounts", () => {
   it("remaps Equity:*:External:* wildcard pattern", () => {
     const items: ItemAccum[] = [
       { account: "Assets:Wallet", currency: "ETH", amount: new Decimal("1") },
-      { account: "Equity:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("-1") },
+      { account: "Equity:Crypto:Wallet:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("-1") },
     ];
     const result = remapCounterpartyAccounts(items, [
-      { from: "Equity:*:External:*", to: "Income:Aave:Rewards" },
+      { from: "Equity:*:External:*", to: "Income:Crypto:DeFi:Aave:Rewards" },
     ]);
     expect(result).toHaveLength(2);
     expect(result[0].account).toBe("Assets:Wallet");
-    expect(result[1].account).toBe("Income:Aave:Rewards");
+    expect(result[1].account).toBe("Income:Crypto:DeFi:Aave:Rewards");
   });
 
   it("does not remap non-matching accounts", () => {
@@ -297,7 +297,7 @@ describe("remapCounterpartyAccounts", () => {
       { account: "Expenses:Gas", currency: "ETH", amount: new Decimal("-0.01") },
     ];
     const result = remapCounterpartyAccounts(items, [
-      { from: "Equity:*:External:*", to: "Liabilities:Aave:Borrow" },
+      { from: "Equity:*:External:*", to: "Liabilities:Crypto:DeFi:Aave:Borrow" },
     ]);
     expect(result[0].account).toBe("Assets:Wallet");
     expect(result[1].account).toBe("Expenses:Gas");
@@ -315,7 +315,7 @@ describe("remapCounterpartyAccounts", () => {
 
   it("applies first matching remap only", () => {
     const items: ItemAccum[] = [
-      { account: "Equity:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("-1") },
+      { account: "Equity:Crypto:Wallet:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("-1") },
     ];
     const result = remapCounterpartyAccounts(items, [
       { from: "Equity:*:External:*", to: "Income:First" },
@@ -326,7 +326,7 @@ describe("remapCounterpartyAccounts", () => {
 
   it("preserves amount and currency", () => {
     const items: ItemAccum[] = [
-      { account: "Equity:Ethereum:External:0xabc", currency: "USDC", amount: new Decimal("42.5") },
+      { account: "Equity:Crypto:Wallet:Ethereum:External:0xabc", currency: "USDC", amount: new Decimal("42.5") },
     ];
     const result = remapCounterpartyAccounts(items, [
       { from: "Equity:*:External:*", to: "Liabilities:Compound:Borrow" },
@@ -344,9 +344,9 @@ describe("remapCounterpartyAccounts", () => {
 
   it("handles empty remaps", () => {
     const items: ItemAccum[] = [
-      { account: "Equity:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("1") },
+      { account: "Equity:Crypto:Wallet:Ethereum:External:0xabc", currency: "ETH", amount: new Decimal("1") },
     ];
     const result = remapCounterpartyAccounts(items, []);
-    expect(result[0].account).toBe("Equity:Ethereum:External:0xabc");
+    expect(result[0].account).toBe("Equity:Crypto:Wallet:Ethereum:External:0xabc");
   });
 });

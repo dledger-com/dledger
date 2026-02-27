@@ -11,6 +11,7 @@ import type {
   LedgerImportResult,
 } from "./types/index.js";
 import { detectFormat, type LedgerFormat } from "./ledger-format.js";
+import { tradingAccount } from "./accounts/paths.js";
 import {
   computeEntryFingerprint,
   computeEntryAmountFingerprint,
@@ -770,7 +771,7 @@ export async function importLedger(
       // Handle {cost} lot syntax (beancount)
       if (p.lotCost && !("auto" in p.lotCost)) {
         await ensureCurrency(p.lotCost.commodity);
-        const tradingAccountName = `Equity:Trading:${commodity}`;
+        const tradingAccountName = tradingAccount(commodity);
         const tradingId = await ensureAccount(
           tradingAccountName,
           [],
@@ -808,7 +809,7 @@ export async function importLedger(
         });
       } else if (p.costPrice) {
         await ensureCurrency(p.costPrice.commodity);
-        const tradingAccountName = `Equity:Trading:${commodity}`;
+        const tradingAccountName = tradingAccount(commodity);
         const tradingId = await ensureAccount(
           tradingAccountName,
           [],

@@ -3,6 +3,7 @@ import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
 import { matchRule, type CsvCategorizationRule } from "../categorize.js";
+import { bankAssets, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 
 let _rules: CsvCategorizationRule[] = [];
 
@@ -28,7 +29,7 @@ export const n26Preset: CsvPreset = {
   id: "n26",
   name: "N26",
   description: "N26 bank statement CSV export with Booking Date, Partner Name, Amount (EUR), comma-delimited, ISO dates.",
-  suggestedMainAccount: "Assets:Bank:N26",
+  suggestedMainAccount: bankAssets("N26"),
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -69,7 +70,7 @@ export const n26Preset: CsvPreset = {
     const amtSamples = rows.slice(0, 20).map((r) => r[amtIdx] ?? "").filter(Boolean);
     const { european } = detectNumberFormat(amtSamples);
 
-    const mainAccount = `Assets:Bank:N26:${currency}`;
+    const mainAccount = bankAssets("N26", currency);
     const records: CsvRecord[] = [];
 
     for (const row of rows) {
@@ -93,7 +94,7 @@ export const n26Preset: CsvPreset = {
       if (rule) {
         counterAccount = rule.account;
       } else {
-        counterAccount = amount < 0 ? "Expenses:Uncategorized" : "Income:Uncategorized";
+        counterAccount = amount < 0 ? EXPENSES_UNCATEGORIZED : INCOME_UNCATEGORIZED;
       }
 
       records.push({

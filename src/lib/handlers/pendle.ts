@@ -14,6 +14,7 @@ import {
   buildHandlerEntry,
 } from "./item-builder.js";
 import { ZERO_ADDRESS } from "./addresses.js";
+import { defiIncome } from "../accounts/paths.js";
 
 // ---- Constants ----
 
@@ -243,7 +244,7 @@ export const pendleHandler: TransactionHandler = {
     // Reclassify counterparty accounts for reward claims
     if (action === "CLAIM_REWARDS") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Pendle:Rewards" },
+        { from: "Equity:*:External:*", to: defiIncome("Pendle", "Rewards") },
       ]);
     }
 

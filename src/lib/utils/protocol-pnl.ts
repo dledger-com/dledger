@@ -1,5 +1,6 @@
 import type { Backend } from "$lib/backend.js";
 import type { Account } from "$lib/types/index.js";
+import { defiIncomePrefix, defiExpensePrefix } from "$lib/accounts/paths.js";
 
 export interface ProtocolPnLLine {
   currency: string;
@@ -22,26 +23,26 @@ const PROTOCOL_PATTERNS: {
   displayName: string;
   type: "revenue" | "expense";
 }[] = [
-  { prefix: "Income:Aave:", protocol: "aave", displayName: "Aave", type: "revenue" },
-  { prefix: "Income:Compound:", protocol: "compound", displayName: "Compound", type: "revenue" },
-  { prefix: "Income:Uniswap:", protocol: "uniswap", displayName: "Uniswap", type: "revenue" },
-  { prefix: "Income:Curve:", protocol: "curve", displayName: "Curve", type: "revenue" },
-  { prefix: "Income:Pendle:", protocol: "pendle", displayName: "Pendle", type: "revenue" },
-  { prefix: "Income:Lido:", protocol: "lido", displayName: "Lido", type: "revenue" },
-  { prefix: "Expenses:Aave:", protocol: "aave", displayName: "Aave", type: "expense" },
-  { prefix: "Expenses:Compound:", protocol: "compound", displayName: "Compound", type: "expense" },
-  { prefix: "Expenses:Uniswap:", protocol: "uniswap", displayName: "Uniswap", type: "expense" },
-  { prefix: "Expenses:Curve:", protocol: "curve", displayName: "Curve", type: "expense" },
-  { prefix: "Expenses:Pendle:", protocol: "pendle", displayName: "Pendle", type: "expense" },
-  { prefix: "Expenses:Lido:", protocol: "lido", displayName: "Lido", type: "expense" },
-  { prefix: "Income:Yearn:", protocol: "yearn", displayName: "Yearn", type: "revenue" },
-  { prefix: "Expenses:Yearn:", protocol: "yearn", displayName: "Yearn", type: "expense" },
-  { prefix: "Income:Balancer:", protocol: "balancer", displayName: "Balancer", type: "revenue" },
-  { prefix: "Expenses:Balancer:", protocol: "balancer", displayName: "Balancer", type: "expense" },
-  { prefix: "Income:Spark:", protocol: "maker", displayName: "MakerDAO/Spark", type: "revenue" },
-  { prefix: "Expenses:Spark:", protocol: "maker", displayName: "MakerDAO/Spark", type: "expense" },
-  { prefix: "Income:EigenLayer:", protocol: "eigenlayer", displayName: "EigenLayer", type: "revenue" },
-  { prefix: "Expenses:EigenLayer:", protocol: "eigenlayer", displayName: "EigenLayer", type: "expense" },
+  { prefix: defiIncomePrefix("Aave"), protocol: "aave", displayName: "Aave", type: "revenue" },
+  { prefix: defiIncomePrefix("Compound"), protocol: "compound", displayName: "Compound", type: "revenue" },
+  { prefix: defiIncomePrefix("Uniswap"), protocol: "uniswap", displayName: "Uniswap", type: "revenue" },
+  { prefix: defiIncomePrefix("Curve"), protocol: "curve", displayName: "Curve", type: "revenue" },
+  { prefix: defiIncomePrefix("Pendle"), protocol: "pendle", displayName: "Pendle", type: "revenue" },
+  { prefix: defiIncomePrefix("Lido"), protocol: "lido", displayName: "Lido", type: "revenue" },
+  { prefix: defiExpensePrefix("Aave"), protocol: "aave", displayName: "Aave", type: "expense" },
+  { prefix: defiExpensePrefix("Compound"), protocol: "compound", displayName: "Compound", type: "expense" },
+  { prefix: defiExpensePrefix("Uniswap"), protocol: "uniswap", displayName: "Uniswap", type: "expense" },
+  { prefix: defiExpensePrefix("Curve"), protocol: "curve", displayName: "Curve", type: "expense" },
+  { prefix: defiExpensePrefix("Pendle"), protocol: "pendle", displayName: "Pendle", type: "expense" },
+  { prefix: defiExpensePrefix("Lido"), protocol: "lido", displayName: "Lido", type: "expense" },
+  { prefix: defiIncomePrefix("Yearn"), protocol: "yearn", displayName: "Yearn", type: "revenue" },
+  { prefix: defiExpensePrefix("Yearn"), protocol: "yearn", displayName: "Yearn", type: "expense" },
+  { prefix: defiIncomePrefix("Balancer"), protocol: "balancer", displayName: "Balancer", type: "revenue" },
+  { prefix: defiExpensePrefix("Balancer"), protocol: "balancer", displayName: "Balancer", type: "expense" },
+  { prefix: defiIncomePrefix("Spark"), protocol: "maker", displayName: "MakerDAO/Spark", type: "revenue" },
+  { prefix: defiExpensePrefix("Spark"), protocol: "maker", displayName: "MakerDAO/Spark", type: "expense" },
+  { prefix: defiIncomePrefix("EigenLayer"), protocol: "eigenlayer", displayName: "EigenLayer", type: "revenue" },
+  { prefix: defiExpensePrefix("EigenLayer"), protocol: "eigenlayer", displayName: "EigenLayer", type: "expense" },
 ];
 
 interface ProtocolAccountMatch {

@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { MAKER, isMakerContract, ZERO_ADDRESS } from "./addresses.js";
+import { defiLiabilities } from "../accounts/paths.js";
 
 // ---- Token detection ----
 
@@ -165,7 +166,7 @@ export const makerHandler: TransactionHandler = {
     // Reclassify counterparty accounts based on action
     if (action === "SPARK_BORROW") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Liabilities:Spark:Borrow" },
+        { from: "Equity:*:External:*", to: defiLiabilities("Spark", "Borrow") },
       ]);
     }
 

@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { colIdx, parseNamedMonthDate, makeTradeLines, makeTransferLines, makeFeeLines } from "./shared.js";
+import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const TRADE_HEADERS = ["Trade ID", "Date/Time", "Market", "Price", "Amount in BTC", "Offer type", "Status"];
 const TX_HEADERS = ["Date/Time", "Details", "Transaction ID", "Amount in BTC"];
@@ -24,7 +25,7 @@ export const bisqPreset: CsvPreset = {
   id: "bisq",
   name: "Bisq",
   description: "Bisq DEX trade history and transaction exports.",
-  suggestedMainAccount: "Assets:Exchanges:Bisq",
+  suggestedMainAccount: exchangeAssets("Bisq"),
 
   detect(headers: string[]): number {
     return detectVariant(headers) ? 85 : 0;
@@ -81,10 +82,10 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 
     if (baseAmt === 0 && quoteAmt === 0) continue;
 
-    const lines = makeTradeLines("Exchanges:Bisq", base, quote, side, baseAmt, quoteAmt);
+    const lines = makeTradeLines("Bisq", base, quote, side, baseAmt, quoteAmt);
 
     const feeBtc = feeBtcIdx >= 0 ? parseEurNum(row[feeBtcIdx] ?? "0") : 0;
-    if (feeBtc > 0) lines.push(...makeFeeLines("Exchanges:Bisq", "BTC", feeBtc));
+    if (feeBtc > 0) lines.push(...makeFeeLines("Bisq", "BTC", feeBtc));
 
     records.push({ date, description: `Bisq ${side.toLowerCase()} ${base}/${quote}`, lines });
   }
@@ -110,7 +111,7 @@ function transformTx(headers: string[], rows: string[][]): CsvRecord[] {
     if (isNaN(amount) || amount === 0) continue;
 
     const type = amount > 0 ? "deposit" : "withdrawal";
-    const lines = makeTransferLines("Exchanges:Bisq", "BTC", amount);
+    const lines = makeTransferLines("Bisq", "BTC", amount);
 
     records.push({ date, description: `Bisq ${type}: BTC`, lines });
   }

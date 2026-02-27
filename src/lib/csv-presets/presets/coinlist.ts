@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { colIdx, parseNamedMonthDate } from "./shared.js";
+import { exchangeAssets, exchangeAssetsCurrency, exchangeStaking, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS = ["Date", "Description", "Asset", "Amount", "Balance"];
 
@@ -8,7 +9,7 @@ export const coinlistPreset: CsvPreset = {
   id: "coinlist",
   name: "CoinList",
   description: "CoinList wallet transaction statement CSV.",
-  suggestedMainAccount: "Assets:Exchanges:CoinList",
+  suggestedMainAccount: exchangeAssets("CoinList"),
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -46,30 +47,30 @@ export const coinlistPreset: CsvPreset = {
 
       if (descLower.includes("staking reward")) {
         lines.push(
-          { account: `Assets:Exchanges:CoinList:${asset}`, currency: asset, amount: amount.toString() },
-          { account: "Income:Exchanges:CoinList:Staking", currency: asset, amount: (-amount).toString() },
+          { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
+          { account: exchangeStaking("CoinList"), currency: asset, amount: (-amount).toString() },
         );
       } else if (descLower.startsWith("sold ")) {
         // Trade: paired rows balance via Equity:Trading
         lines.push(
-          { account: `Assets:Exchanges:CoinList:${asset}`, currency: asset, amount: amount.toString() },
-          { account: "Equity:Trading", currency: asset, amount: (-amount).toString() },
+          { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
+          { account: EQUITY_TRADING, currency: asset, amount: (-amount).toString() },
         );
       } else if (descLower.includes("deposit")) {
         lines.push(
-          { account: `Assets:Exchanges:CoinList:${asset}`, currency: asset, amount: amount.toString() },
-          { account: "Equity:External", currency: asset, amount: (-amount).toString() },
+          { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
+          { account: EQUITY_EXTERNAL, currency: asset, amount: (-amount).toString() },
         );
       } else if (descLower.includes("withdrawal")) {
         lines.push(
-          { account: `Assets:Exchanges:CoinList:${asset}`, currency: asset, amount: amount.toString() },
-          { account: "Equity:External", currency: asset, amount: (-amount).toString() },
+          { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
+          { account: EQUITY_EXTERNAL, currency: asset, amount: (-amount).toString() },
         );
       } else {
         // Hold, Release, and other types → transfer
         lines.push(
-          { account: `Assets:Exchanges:CoinList:${asset}`, currency: asset, amount: amount.toString() },
-          { account: "Equity:External", currency: asset, amount: (-amount).toString() },
+          { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
+          { account: EQUITY_EXTERNAL, currency: asset, amount: (-amount).toString() },
         );
       }
 

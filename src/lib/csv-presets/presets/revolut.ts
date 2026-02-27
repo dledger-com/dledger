@@ -3,6 +3,7 @@ import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
 import { matchRule, type CsvCategorizationRule } from "../categorize.js";
+import { bankAssets, bankFees, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 
 let _rules: CsvCategorizationRule[] = [];
 
@@ -17,7 +18,7 @@ export const revolutPreset: CsvPreset = {
   id: "revolut",
   name: "Revolut",
   description: "Revolut bank statement CSV export with Type, Product, Started/Completed Date, Amount, Currency, State.",
-  suggestedMainAccount: "Assets:Bank:Revolut",
+  suggestedMainAccount: bankAssets("Revolut"),
 
   detect(headers: string[]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
@@ -92,7 +93,7 @@ export const revolutPreset: CsvPreset = {
 
       const fee = feeIdx >= 0 ? parseAmount(row[feeIdx] ?? "", european) : null;
 
-      const mainAccount = `Assets:Bank:Revolut:${currency}`;
+      const mainAccount = bankAssets("Revolut", currency);
       const lines: CsvRecord["lines"] = [];
 
       // Main amount
@@ -109,8 +110,8 @@ export const revolutPreset: CsvPreset = {
         counterAccount = rule.account;
       } else {
         counterAccount = amount < 0
-          ? "Expenses:Uncategorized"
-          : "Income:Uncategorized";
+          ? EXPENSES_UNCATEGORIZED
+          : INCOME_UNCATEGORIZED;
       }
 
       lines.push({
@@ -122,7 +123,7 @@ export const revolutPreset: CsvPreset = {
       // Fee line
       if (fee && Math.abs(fee) > 0) {
         lines.push({
-          account: "Expenses:Banks:Revolut:Fees",
+          account: bankFees("Revolut"),
           currency,
           amount: Math.abs(fee).toString(),
         });

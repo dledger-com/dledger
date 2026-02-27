@@ -31,6 +31,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
+  import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
   import AccountCombobox from "./AccountCombobox.svelte";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
@@ -63,7 +64,7 @@
   // -- Parsed OFX data --
   let parseResult = $state<OfxParseResult | null>(null);
   let selectedStatement = $state<OfxStatement | null>(null);
-  let mainAccount = $state("Assets:Bank:Import");
+  let mainAccount = $state(ASSETS_BANK_IMPORT);
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
@@ -328,7 +329,7 @@
     fileName = "";
     parseResult = null;
     selectedStatement = null;
-    mainAccount = "Assets:Bank:Import";
+    mainAccount = ASSETS_BANK_IMPORT;
     fileHeader = null;
     previewRecords = [];
     previewWarnings = [];

@@ -1,6 +1,7 @@
 import Decimal from "decimal.js-light";
 import { v7 as uuidv7 } from "uuid";
 import type { Backend } from "../backend.js";
+import { EQUITY_TRADING_PREFIX } from "../accounts/paths.js";
 
 export interface TradeRateItem {
   account_name: string;
@@ -27,7 +28,7 @@ export interface DerivedRate {
 export function deriveTradeRate(items: TradeRateItem[]): DerivedRate | null {
   // Try Equity:Trading first
   const tradingResult = deriveFromAccounts(
-    items.filter((i) => i.account_name.startsWith("Equity:Trading:")),
+    items.filter((i) => i.account_name.startsWith(EQUITY_TRADING_PREFIX)),
     true,
   );
   if (tradingResult) return tradingResult;

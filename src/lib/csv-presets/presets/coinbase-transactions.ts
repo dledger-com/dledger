@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, exchangeRewards, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS = [
   "Timestamp", "Transaction Type", "Asset", "Quantity Transacted",
@@ -22,7 +23,7 @@ export const coinbaseTransactionsPreset: CsvPreset = {
   id: "coinbase-transactions",
   name: "Coinbase Transactions",
   description: "Coinbase transaction history CSV with Timestamp, Transaction Type, Asset, Quantity, Subtotal, Total, Fees.",
-  suggestedMainAccount: "Assets:Exchanges:Coinbase",
+  suggestedMainAccount: exchangeAssets("Coinbase"),
 
   detect(headers: string[]): number {
     const bestMatch = Math.max(
@@ -90,61 +91,61 @@ export const coinbaseTransactionsPreset: CsvPreset = {
       if (typeUpper === "BUY") {
         // Buy: receive crypto, spend fiat
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: qty.toString() },
-          { account: `Equity:Trading`, currency: asset, amount: (-qty).toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
+          { account: EQUITY_TRADING, currency: asset, amount: (-qty).toString() },
         );
         if (!isNaN(total) && total > 0) {
           lines.push(
-            { account: `Assets:Exchanges:Coinbase:${quoteCurrency}`, currency: quoteCurrency, amount: (-total).toString() },
-            { account: `Equity:Trading`, currency: quoteCurrency, amount: total.toString() },
+            { account: exchangeAssetsCurrency("Coinbase", quoteCurrency), currency: quoteCurrency, amount: (-total).toString() },
+            { account: EQUITY_TRADING, currency: quoteCurrency, amount: total.toString() },
           );
         }
       } else if (typeUpper === "SELL") {
         // Sell: spend crypto, receive fiat
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: (-qty).toString() },
-          { account: `Equity:Trading`, currency: asset, amount: qty.toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: (-qty).toString() },
+          { account: EQUITY_TRADING, currency: asset, amount: qty.toString() },
         );
         if (!isNaN(total) && total > 0) {
           lines.push(
-            { account: `Assets:Exchanges:Coinbase:${quoteCurrency}`, currency: quoteCurrency, amount: total.toString() },
-            { account: `Equity:Trading`, currency: quoteCurrency, amount: (-total).toString() },
+            { account: exchangeAssetsCurrency("Coinbase", quoteCurrency), currency: quoteCurrency, amount: total.toString() },
+            { account: EQUITY_TRADING, currency: quoteCurrency, amount: (-total).toString() },
           );
         }
       } else if (typeUpper === "SEND") {
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: (-qty).toString() },
-          { account: "Equity:External", currency: asset, amount: qty.toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: (-qty).toString() },
+          { account: EQUITY_EXTERNAL, currency: asset, amount: qty.toString() },
         );
       } else if (typeUpper === "RECEIVE") {
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: qty.toString() },
-          { account: "Equity:External", currency: asset, amount: (-qty).toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
+          { account: EQUITY_EXTERNAL, currency: asset, amount: (-qty).toString() },
         );
       } else if (["REWARDS INCOME", "STAKING INCOME", "LEARNING REWARD", "COINBASE EARN"].includes(typeUpper)) {
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: qty.toString() },
-          { account: "Income:Exchanges:Coinbase:Rewards", currency: asset, amount: (-qty).toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
+          { account: exchangeRewards("Coinbase"), currency: asset, amount: (-qty).toString() },
         );
       } else if (typeUpper === "CONVERT") {
         // Conversion: usually qty is what you receive; we'll treat as trade
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: qty.toString() },
-          { account: "Equity:Trading", currency: asset, amount: (-qty).toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
+          { account: EQUITY_TRADING, currency: asset, amount: (-qty).toString() },
         );
       } else {
         // Generic: just record the movement
         lines.push(
-          { account: `Assets:Exchanges:Coinbase:${asset}`, currency: asset, amount: qty.toString() },
-          { account: "Equity:External", currency: asset, amount: (-qty).toString() },
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
+          { account: EQUITY_EXTERNAL, currency: asset, amount: (-qty).toString() },
         );
       }
 
       // Fees
       if (!isNaN(fees) && fees > 0) {
         lines.push(
-          { account: "Expenses:Exchanges:Coinbase:Fees", currency: quoteCurrency, amount: fees.toString() },
-          { account: `Assets:Exchanges:Coinbase:${quoteCurrency}`, currency: quoteCurrency, amount: (-fees).toString() },
+          { account: exchangeFees("Coinbase"), currency: quoteCurrency, amount: fees.toString() },
+          { account: exchangeAssetsCurrency("Coinbase", quoteCurrency), currency: quoteCurrency, amount: (-fees).toString() },
         );
       }
 

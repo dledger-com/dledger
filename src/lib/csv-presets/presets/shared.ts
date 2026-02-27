@@ -1,4 +1,10 @@
 import type { CsvRecord } from "../types.js";
+import {
+  exchangeAssetsCurrency,
+  exchangeFees,
+  EQUITY_TRADING,
+  EQUITY_EXTERNAL,
+} from "$lib/accounts/paths.js";
 
 const DEFAULT_QUOTES = [
   "USDT", "USDC", "BUSD", "TUSD", "FDUSD",
@@ -67,19 +73,19 @@ export function makeTradeLines(
 
   if (side === "BUY") {
     lines.push(
-      { account: `Assets:${exchange}:${base}`, currency: base, amount: baseAmt.toString() },
-      { account: `Assets:${exchange}:${quote}`, currency: quote, amount: (-quoteAmt).toString() },
+      { account: exchangeAssetsCurrency(exchange, base), currency: base, amount: baseAmt.toString() },
+      { account: exchangeAssetsCurrency(exchange, quote), currency: quote, amount: (-quoteAmt).toString() },
     );
   } else {
     lines.push(
-      { account: `Assets:${exchange}:${base}`, currency: base, amount: (-baseAmt).toString() },
-      { account: `Assets:${exchange}:${quote}`, currency: quote, amount: quoteAmt.toString() },
+      { account: exchangeAssetsCurrency(exchange, base), currency: base, amount: (-baseAmt).toString() },
+      { account: exchangeAssetsCurrency(exchange, quote), currency: quote, amount: quoteAmt.toString() },
     );
   }
 
   for (const l of [...lines]) {
     lines.push({
-      account: "Equity:Trading",
+      account: EQUITY_TRADING,
       currency: l.currency,
       amount: (-parseFloat(l.amount)).toString(),
     });
@@ -95,8 +101,8 @@ export function makeTransferLines(
   amount: number,
 ): CsvRecord["lines"] {
   return [
-    { account: `Assets:${exchange}:${currency}`, currency, amount: amount.toString() },
-    { account: "Equity:External", currency, amount: (-amount).toString() },
+    { account: exchangeAssetsCurrency(exchange, currency), currency, amount: amount.toString() },
+    { account: EQUITY_EXTERNAL, currency, amount: (-amount).toString() },
   ];
 }
 
@@ -108,8 +114,8 @@ export function makeFeeLines(
 ): CsvRecord["lines"] {
   if (amount <= 0) return [];
   return [
-    { account: `Expenses:${exchange}:Fees`, currency, amount: amount.toString() },
-    { account: `Assets:${exchange}:${currency}`, currency, amount: (-amount).toString() },
+    { account: exchangeFees(exchange), currency, amount: amount.toString() },
+    { account: exchangeAssetsCurrency(exchange, currency), currency, amount: (-amount).toString() },
   ];
 }
 

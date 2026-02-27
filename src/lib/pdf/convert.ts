@@ -2,6 +2,7 @@ import type { CsvRecord, CsvFileHeader } from "$lib/csv-presets/types.js";
 import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { matchRule } from "$lib/csv-presets/categorize.js";
 import type { PdfStatement } from "./types.js";
+import { INCOME_UNCATEGORIZED, EXPENSES_UNCATEGORIZED, bankAssets } from "$lib/accounts/paths.js";
 
 export interface PdfConvertOptions {
   mainAccount: string;
@@ -39,7 +40,7 @@ export function convertPdfToRecords(
       counterAccount = rule.account;
     } else {
       // Positive amount = money in (credit), negative = money out (debit)
-      counterAccount = tx.amount > 0 ? "Income:Uncategorized" : "Expenses:Uncategorized";
+      counterAccount = tx.amount > 0 ? INCOME_UNCATEGORIZED : EXPENSES_UNCATEGORIZED;
     }
 
     const amountStr = tx.amount.toString();
@@ -86,15 +87,15 @@ export function convertPdfToRecords(
  */
 export function suggestMainAccount(statement: PdfStatement, bankId?: "lbp" | "n26" | "nuri" | "deblock"): string {
   if (bankId === "n26") {
-    return "Assets:Bank:N26";
+    return bankAssets("N26");
   }
   if (bankId === "nuri") {
-    return "Assets:Bank:Nuri";
+    return bankAssets("Nuri");
   }
   if (bankId === "deblock") {
-    return "Assets:Bank:Deblock";
+    return bankAssets("Deblock");
   }
   const acctNum = statement.accountNumber ?? statement.iban;
   const last4 = acctNum?.replace(/\s/g, "").slice(-4) ?? "Unknown";
-  return `Assets:Bank:LaBanquePostale:${last4}`;
+  return bankAssets("LaBanquePostale", last4);
 }

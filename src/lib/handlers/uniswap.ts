@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { ZERO_ADDRESS, UNISWAP, isUniswapRouter } from "./addresses.js";
+import { defiIncome } from "../accounts/paths.js";
 
 // ---- Action types ----
 
@@ -214,7 +215,7 @@ export const uniswapHandler: TransactionHandler = {
     // Reclassify counterparty accounts for fee collection
     if (action === "COLLECT_FEES_V3") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Uniswap:Fees" },
+        { from: "Equity:*:External:*", to: defiIncome("Uniswap", "Fees") },
       ]);
     }
 

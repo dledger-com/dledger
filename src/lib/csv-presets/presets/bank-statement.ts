@@ -3,6 +3,7 @@ import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { matchRule, type CsvCategorizationRule } from "../categorize.js";
+import { ASSETS_BANK_IMPORT, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 
 let _rules: CsvCategorizationRule[] = [];
 
@@ -100,7 +101,7 @@ export const bankStatementPreset: CsvPreset = {
     }).filter(Boolean);
     const { european } = detectNumberFormat(amtSamples);
 
-    const bankAccount = "Assets:Bank:Import";
+    const bankAccount = ASSETS_BANK_IMPORT;
     const records: CsvRecord[] = [];
 
     for (const row of rows) {
@@ -132,8 +133,8 @@ export const bankStatementPreset: CsvPreset = {
         counterAccount = rule.account;
       } else {
         counterAccount = amount < 0
-          ? "Expenses:Uncategorized"
-          : "Income:Uncategorized";
+          ? EXPENSES_UNCATEGORIZED
+          : INCOME_UNCATEGORIZED;
       }
 
       // Bank account: negative = money out (debit expense), positive = money in (credit income)

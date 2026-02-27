@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { BALANCER, isBalancerContract, ZERO_ADDRESS } from "./addresses.js";
+import { defiIncome } from "../accounts/paths.js";
 
 // ---- Token detection ----
 
@@ -200,7 +201,7 @@ export const balancerHandler: TransactionHandler = {
     // Reclassify counterparty accounts based on action
     if (action === "CLAIM_REWARDS") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Balancer:Rewards" },
+        { from: "Equity:*:External:*", to: defiIncome("Balancer", "Rewards") },
       ]);
     }
 

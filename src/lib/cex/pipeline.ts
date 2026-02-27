@@ -12,6 +12,7 @@ import type { TxHashGroup } from "../handlers/types.js";
 import type { TaskProgress } from "../task-queue.svelte.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
+import { exchangeAssetsCurrency, exchangeFees, exchangeExternal, exchangeStaking, tradingAccount } from "../accounts/paths.js";
 
 /**
  * Normalize a transaction ID: lowercase and ensure 0x prefix for hex hashes.
@@ -281,14 +282,14 @@ export async function syncCexAccount(
 
       // Asset account movement
       items.push({
-        account: `Assets:Exchanges:${exchangeName}:${record.asset}`,
+        account: exchangeAssetsCurrency(exchangeName, record.asset),
         currency: record.asset,
         amount,
       });
 
       // Equity:Trading counterpart (opposite sign)
       items.push({
-        account: `Equity:Trading:${record.asset}`,
+        account: tradingAccount(record.asset),
         currency: record.asset,
         amount: amount.neg(),
       });
@@ -296,12 +297,12 @@ export async function syncCexAccount(
       // Fee
       if (fee.gt(0)) {
         items.push({
-          account: `Expenses:Exchanges:${exchangeName}:Fees`,
+          account: exchangeFees(exchangeName),
           currency: record.asset,
           amount: fee,
         });
         items.push({
-          account: `Assets:Exchanges:${exchangeName}:${record.asset}`,
+          account: exchangeAssetsCurrency(exchangeName, record.asset),
           currency: record.asset,
           amount: fee.neg(),
         });
@@ -349,7 +350,7 @@ export async function syncCexAccount(
     // Check for automatic cross-source consolidation
     if ((record.type === "deposit" || record.type === "withdrawal") && record.txid) {
       const txidNormalized = normalizeTxid(record.txid);
-      const cexTargetAccount = `Assets:Exchanges:${exchangeName}:${record.asset}`;
+      const cexTargetAccount = exchangeAssetsCurrency(exchangeName, record.asset);
 
       // Try Etherscan source match first
       const etherscanSource = findEtherscanSourceByTxid(existingSources, record.txid);
@@ -406,8 +407,8 @@ export async function syncCexAccount(
     switch (record.type) {
       case "deposit": {
         const items: Array<{ account: string; currency: string; amount: Decimal }> = [
-          { account: `Assets:Exchanges:${exchangeName}:${record.asset}`, currency: record.asset, amount },
-          { account: `Equity:Exchanges:${exchangeName}:External`, currency: record.asset, amount: amount.neg() },
+          { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
+          { account: exchangeExternal(exchangeName), currency: record.asset, amount: amount.neg() },
         ];
         await postEntry(date, `${exchangeName} deposit: ${amount.toFixed()} ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
@@ -420,11 +421,11 @@ export async function syncCexAccount(
       case "withdrawal": {
         const absAmount = amount.abs();
         const items: Array<{ account: string; currency: string; amount: Decimal }> = [
-          { account: `Assets:Exchanges:${exchangeName}:${record.asset}`, currency: record.asset, amount: absAmount.neg() },
-          { account: `Equity:Exchanges:${exchangeName}:External`, currency: record.asset, amount: fee.gt(0) ? absAmount.minus(fee) : absAmount },
+          { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount: absAmount.neg() },
+          { account: exchangeExternal(exchangeName), currency: record.asset, amount: fee.gt(0) ? absAmount.minus(fee) : absAmount },
         ];
         if (fee.gt(0)) {
-          items.push({ account: `Expenses:Exchanges:${exchangeName}:Fees`, currency: record.asset, amount: fee });
+          items.push({ account: exchangeFees(exchangeName), currency: record.asset, amount: fee });
         }
         await postEntry(date, `${exchangeName} withdrawal: ${absAmount.toFixed()} ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
@@ -437,8 +438,8 @@ export async function syncCexAccount(
       case "staking": {
         if (amount.gt(0)) {
           const items: Array<{ account: string; currency: string; amount: Decimal }> = [
-            { account: `Assets:Exchanges:${exchangeName}:${record.asset}`, currency: record.asset, amount },
-            { account: `Income:Exchanges:${exchangeName}:Staking`, currency: record.asset, amount: amount.neg() },
+            { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
+            { account: exchangeStaking(exchangeName), currency: record.asset, amount: amount.neg() },
           ];
           await postEntry(date, `${exchangeName} staking reward: ${amount.toFixed()} ${record.asset}`, source, items, {
             exchange: adapter.exchangeId,
@@ -740,7 +741,7 @@ async function consolidateWithCex(
     const newItems: Array<{ account: string; currency: string; amount: Decimal }> = [];
     for (const item of existingItems) {
       const fullName = getAccountName(item.account_id) ?? item.account_id;
-      // Remap Equity:*:External → cexTargetAccount (CEX external accounts are 4-segment: Equity:Exchanges:<Name>:External)
+      // Remap Equity:*:External → cexTargetAccount (CEX external accounts: Equity:Crypto:Exchange:<Name>:External)
       const remappedName = fullName.match(/^Equity:(?:[^:]+:)+External$/) ? cexTargetAccount : fullName;
       newItems.push({
         account: remappedName,

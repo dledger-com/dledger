@@ -6,6 +6,7 @@ import type { CsvRecord } from "./types.js";
 import { parseDate, type DateFormatId } from "./parse-date.js";
 import { parseAmount } from "./parse-amount.js";
 import { buildDedupIndex, isDuplicate, computeRecordFingerprint, computeAmountFingerprint } from "./dedup.js";
+import { ASSETS_IMPORT, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 
 export interface TransformOptions {
   dateColumn: string;
@@ -90,9 +91,9 @@ export function transformGeneric(
       continue;
     }
 
-    const mainAccount = options.mainAccount ?? "Assets:Import";
+    const mainAccount = options.mainAccount ?? ASSETS_IMPORT;
     const counterAccount = options.counterAccount
-      ?? (amount > 0 ? "Expenses:Uncategorized" : "Income:Uncategorized");
+      ?? (amount > 0 ? EXPENSES_UNCATEGORIZED : INCOME_UNCATEGORIZED);
 
     records.push({
       date,

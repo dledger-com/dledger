@@ -36,6 +36,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
+  import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
   import AccountCombobox from "./AccountCombobox.svelte";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
@@ -90,7 +91,7 @@
   let amountColumn = $state("");
   let debitAmountColumn = $state("");
   let creditAmountColumn = $state("");
-  let mainAccount = $state("Assets:Bank:Import");
+  let mainAccount = $state(ASSETS_BANK_IMPORT);
   let counterAccount = $state("Expenses:Uncategorized");
   let europeanNumbers = $state(false);
   let skipLines = $state(0);
@@ -597,7 +598,7 @@
                 size="sm"
                 variant={!usePreset ? "default" : "outline"}
                 class="text-xs h-7"
-                onclick={() => { usePreset = false; mainAccount = "Assets:Bank:Import"; }}
+                onclick={() => { usePreset = false; mainAccount = ASSETS_BANK_IMPORT; }}
               >
                 Manual Mapping
               </Button>
@@ -642,7 +643,7 @@
         {#if usePreset}
           <div class="space-y-1">
             <label for="d-presetMainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
           </div>
         {/if}
 
@@ -798,7 +799,7 @@
                 </div>
                 <div class="space-y-1">
                   <label for="d-mainAcct" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
                 </div>
                 <div class="space-y-1">
                   <label for="d-counterAcct" class="text-sm font-medium">Counter Account</label>
@@ -835,7 +836,7 @@
                 </div>
                 <div class="space-y-1">
                   <label for="d-mainAcct2" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
+                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
                 </div>
                 <div class="space-y-1">
                   <label for="d-counterAcct2" class="text-sm font-medium">Counter Account</label>

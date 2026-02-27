@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { binanceTradePreset } from "./binance-trade.js";
+import { exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
 describe("binanceTradePreset", () => {
   describe("detect", () => {
@@ -40,8 +41,8 @@ describe("binanceTradePreset", () => {
       expect(records!).toHaveLength(1);
 
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Binance:BTC" && parseFloat(l.amount) === 0.5)).toBe(true);
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Binance:USDT" && parseFloat(l.amount) === -21000)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Binance", "BTC") && parseFloat(l.amount) === 0.5)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Binance", "USDT") && parseFloat(l.amount) === -21000)).toBe(true);
     });
 
     it("transforms sell trades", () => {
@@ -55,8 +56,8 @@ describe("binanceTradePreset", () => {
       expect(records!).toHaveLength(1);
 
       const lines = records![0].lines;
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Binance:ETH" && parseFloat(l.amount) === -2)).toBe(true);
-      expect(lines.some((l) => l.account === "Assets:Exchanges:Binance:USDT" && parseFloat(l.amount) === 5000)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Binance", "ETH") && parseFloat(l.amount) === -2)).toBe(true);
+      expect(lines.some((l) => l.account === exchangeAssetsCurrency("Binance", "USDT") && parseFloat(l.amount) === 5000)).toBe(true);
     });
 
     it("handles fees", () => {
@@ -67,7 +68,7 @@ describe("binanceTradePreset", () => {
 
       const records = binanceTradePreset.transform(headers, rows);
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Expenses:Exchanges:Binance:Fees")).toBe(true);
+      expect(allLines.some((l) => l.account === exchangeFees("Binance"))).toBe(true);
     });
 
     it("handles slash-separated pairs", () => {
@@ -106,7 +107,7 @@ describe("binanceTradePreset", () => {
 
       const records = binanceTradePreset.transform(headers, rows);
       const allLines = records!.flatMap((r) => r.lines);
-      expect(allLines.some((l) => l.account === "Equity:Trading")).toBe(true);
+      expect(allLines.some((l) => l.account === EQUITY_TRADING)).toBe(true);
     });
   });
 });

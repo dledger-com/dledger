@@ -18,6 +18,7 @@ import {
 import { AAVE, isAavePool, ZERO_ADDRESS } from "./addresses.js";
 import { fetchAaveSubgraphData } from "./aave-subgraph.js";
 import { shortAddr } from "../browser-etherscan.js";
+import { defiAssets, defiLiabilities, defiIncome, defiExpense, tradingAccount, walletExternal } from "../accounts/paths.js";
 
 // ---- Token detection ----
 
@@ -169,7 +170,7 @@ async function buildProtocolItems(
         const supplyAmount = underlyingTx
           ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
           : amount;
-        const supplyItem: ItemAccum = { account: "Assets:Aave:Supply", currency: underlying, amount: supplyAmount };
+        const supplyItem: ItemAccum = { account: defiAssets("Aave", "Supply"), currency: underlying, amount: supplyAmount };
         items.push(supplyItem);
         // When underlying never touches the user wallet (adapter/flash loan),
         // add a Trading counterparty to balance the currency.
@@ -177,7 +178,7 @@ async function buildProtocolItems(
           || (underlying === chain.native_currency && hasNativeEthFlow);
         actions.push({ action: "SUPPLY", amount: supplyAmount, currency: underlying, viaAdapter: !hasWalletSideFlow || undefined });
         if (!hasWalletSideFlow) {
-          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: supplyAmount.neg() });
+          items.push({ account: tradingAccount(underlying), currency: underlying, amount: supplyAmount.neg() });
         } else {
           walletConsumptionItems.push(supplyItem);
         }
@@ -192,7 +193,7 @@ async function buildProtocolItems(
           ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
           : amount;
         const supplyBalance = await queryAccountCurrencyBalance(
-          ctx, "Assets:Aave:Supply", timestampToDate(tx.timeStamp), underlying,
+          ctx, defiAssets("Aave", "Supply"), timestampToDate(tx.timeStamp), underlying,
         );
         const interest = supplyBalance.isPositive()
           ? withdrawAmount.minus(supplyBalance).gt(0) ? withdrawAmount.minus(supplyBalance) : new Decimal(0)
@@ -205,17 +206,17 @@ async function buildProtocolItems(
           || (underlying === chain.native_currency && hasNativeEthFlow);
 
         if (!principalPart.isZero()) {
-          const principalItem: ItemAccum = { account: "Assets:Aave:Supply", currency: underlying, amount: principalPart.neg() };
+          const principalItem: ItemAccum = { account: defiAssets("Aave", "Supply"), currency: underlying, amount: principalPart.neg() };
           items.push(principalItem);
           if (hasWalletSideFlow) walletConsumptionItems.push(principalItem);
         }
         if (interest.isPositive()) {
-          const interestItem: ItemAccum = { account: "Income:Aave:Interest", currency: underlying, amount: interest.neg() };
+          const interestItem: ItemAccum = { account: defiIncome("Aave", "Interest"), currency: underlying, amount: interest.neg() };
           items.push(interestItem);
           if (hasWalletSideFlow) walletConsumptionItems.push(interestItem);
         }
         if (!hasWalletSideFlow) {
-          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: withdrawAmount });
+          items.push({ account: tradingAccount(underlying), currency: underlying, amount: withdrawAmount });
         }
         actions.push({ action: "WITHDRAW", amount: withdrawAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined, viaAdapter: !hasWalletSideFlow || undefined });
       } else if (from === addr) {
@@ -226,8 +227,8 @@ async function buildProtocolItems(
         adapterATokenBurns.push({ underlying, amount });
       } else if (to === addr) {
         // aToken transferred in (received aTokens)
-        items.push({ account: "Assets:Aave:Supply", currency: underlying, amount });
-        items.push({ account: `Equity:${chain.name}:External:${shortAddr(from)}`, currency: underlying, amount: amount.neg() });
+        items.push({ account: defiAssets("Aave", "Supply"), currency: underlying, amount });
+        items.push({ account: walletExternal(chain.name, shortAddr(from)), currency: underlying, amount: amount.neg() });
       }
     } else {
       // Debt token transfers (only mint/burn are meaningful)
@@ -244,7 +245,7 @@ async function buildProtocolItems(
         const borrowAmount = underlyingTx
           ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
           : amount;
-        const borrowItem: ItemAccum = { account: "Liabilities:Aave:Borrow", currency: underlying, amount: borrowAmount.neg() };
+        const borrowItem: ItemAccum = { account: defiLiabilities("Aave", "Borrow"), currency: underlying, amount: borrowAmount.neg() };
         items.push(borrowItem);
         // When underlying never touches the user wallet (adapter/flash loan),
         // add a Trading counterparty to balance the currency.
@@ -252,7 +253,7 @@ async function buildProtocolItems(
           || (underlying === chain.native_currency && hasNativeEthFlow);
         actions.push({ action: "BORROW", amount: borrowAmount, currency: underlying, viaAdapter: !hasWalletSideFlow || undefined });
         if (!hasWalletSideFlow) {
-          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: borrowAmount });
+          items.push({ account: tradingAccount(underlying), currency: underlying, amount: borrowAmount });
         } else {
           walletConsumptionItems.push(borrowItem);
         }
@@ -267,7 +268,7 @@ async function buildProtocolItems(
           ? weiToNative(underlyingTx.value, parseInt(underlyingTx.tokenDecimal, 10) || decimals)
           : amount;
         const borrowBalance = await queryAccountCurrencyBalance(
-          ctx, "Liabilities:Aave:Borrow", timestampToDate(tx.timeStamp), underlying,
+          ctx, defiLiabilities("Aave", "Borrow"), timestampToDate(tx.timeStamp), underlying,
         );
         const absBorrowBalance = borrowBalance.abs();
         const interest = absBorrowBalance.isPositive()
@@ -281,17 +282,17 @@ async function buildProtocolItems(
           || (underlying === chain.native_currency && hasNativeEthFlow);
 
         if (!principalPart.isZero()) {
-          const principalItem: ItemAccum = { account: "Liabilities:Aave:Borrow", currency: underlying, amount: principalPart };
+          const principalItem: ItemAccum = { account: defiLiabilities("Aave", "Borrow"), currency: underlying, amount: principalPart };
           items.push(principalItem);
           if (hasWalletSideFlow) walletConsumptionItems.push(principalItem);
         }
         if (interest.isPositive()) {
-          const interestItem: ItemAccum = { account: "Expenses:Aave:Interest", currency: underlying, amount: interest };
+          const interestItem: ItemAccum = { account: defiExpense("Aave", "Interest"), currency: underlying, amount: interest };
           items.push(interestItem);
           if (hasWalletSideFlow) walletConsumptionItems.push(interestItem);
         }
         if (!hasWalletSideFlow) {
-          items.push({ account: `Equity:Trading:${underlying}`, currency: underlying, amount: repayAmount.neg() });
+          items.push({ account: tradingAccount(underlying), currency: underlying, amount: repayAmount.neg() });
         }
         actions.push({ action: "REPAY", amount: repayAmount, currency: underlying, interest: interest.isPositive() ? interest : undefined, viaAdapter: !hasWalletSideFlow || undefined });
       }
@@ -303,17 +304,17 @@ async function buildProtocolItems(
   const hasViaAdapter = actions.some(a => a.viaAdapter);
 
   for (const out of aTokenOutFromUser) {
-    items.push({ account: "Assets:Aave:Supply", currency: out.underlying, amount: out.amount.neg() });
+    items.push({ account: defiAssets("Aave", "Supply"), currency: out.underlying, amount: out.amount.neg() });
     if (hasViaAdapter) {
       items.push({ account: `Equity:Trading:${out.underlying}`, currency: out.underlying, amount: out.amount });
     } else {
-      items.push({ account: `Equity:${chain.name}:External:${shortAddr(out.to)}`, currency: out.underlying, amount: out.amount });
+      items.push({ account: walletExternal(chain.name, shortAddr(out.to)), currency: out.underlying, amount: out.amount });
     }
   }
 
   for (const burn of adapterATokenBurns) {
     if (hasViaAdapter) {
-      items.push({ account: "Assets:Aave:Supply", currency: burn.underlying, amount: burn.amount.neg() });
+      items.push({ account: defiAssets("Aave", "Supply"), currency: burn.underlying, amount: burn.amount.neg() });
       items.push({ account: `Equity:Trading:${burn.underlying}`, currency: burn.underlying, amount: burn.amount });
     }
     // If no viaAdapter, ignore adapter burns (intermediate routing, not a user action)
@@ -424,7 +425,7 @@ export const aaveHandler: TransactionHandler = {
       if (hasOnlyInflows) {
         walletItems = walletItems.map((item) => {
           if (item.account.startsWith("Equity:") && item.account.includes(":External:")) {
-            return { ...item, account: "Income:Aave:Rewards" };
+            return { ...item, account: defiIncome("Aave", "Rewards") };
           }
           return item;
         });
@@ -459,7 +460,7 @@ export const aaveHandler: TransactionHandler = {
     } else {
       // Claim rewards or unknown — check wallet items for inflows
       const rewardItems = walletItems.filter(
-        (i) => i.account === "Income:Aave:Rewards" || (i.account.startsWith("Assets:") && i.amount.isPositive()),
+        (i) => i.account === defiIncome("Aave", "Rewards") || (i.account.startsWith("Assets:") && i.amount.isPositive()),
       );
       if (rewardItems.length > 0) {
         const rewardAsset = rewardItems.find((i) => i.account.startsWith("Assets:"));
@@ -475,7 +476,7 @@ export const aaveHandler: TransactionHandler = {
     // Determine actions for metadata
     let actionSet = protocol.actions.length > 0
       ? [...new Set(protocol.actions.map((a) => a.action))].join(",")
-      : walletItems.some((i) => i.account === "Income:Aave:Rewards")
+      : walletItems.some((i) => i.account === defiIncome("Aave", "Rewards"))
         ? "CLAIM_REWARDS"
         : "UNKNOWN";
 

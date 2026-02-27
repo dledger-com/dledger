@@ -321,7 +321,7 @@ describe("aaveHandler", () => {
 
       // Items should have Assets:Aave:Supply account
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -394,7 +394,7 @@ describe("aaveHandler", () => {
 
       // Items should have Liabilities:Aave:Borrow account
       const accounts = await backend.listAccounts();
-      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Crypto:DeFi:Aave:Borrow");
       expect(borrowAcct).toBeDefined();
       const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
       expect(borrowItem).toBeDefined();
@@ -461,7 +461,7 @@ describe("aaveHandler", () => {
 
       // Should have Assets:Aave:Supply account
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -517,7 +517,7 @@ describe("aaveHandler", () => {
 
       // Should have Liabilities:Aave:Borrow account
       const accounts = await backend.listAccounts();
-      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Crypto:DeFi:Aave:Borrow");
       expect(borrowAcct).toBeDefined();
       const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
       expect(borrowItem).toBeDefined();
@@ -560,7 +560,7 @@ describe("aaveHandler", () => {
 
       // Should have Income:Aave:Rewards account
       const accounts = await backend.listAccounts();
-      const rewardAcct = accounts.find((a) => a.full_name === "Income:Aave:Rewards");
+      const rewardAcct = accounts.find((a) => a.full_name === "Income:Crypto:DeFi:Aave:Rewards");
       expect(rewardAcct).toBeDefined();
       const rewardItem = entry.items.find((i) => i.account_id === rewardAcct!.id);
       expect(rewardItem).toBeDefined();
@@ -617,7 +617,7 @@ describe("aaveHandler", () => {
 
       // Protocol items use WETH, not aEthWETH
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -694,8 +694,8 @@ describe("aaveHandler", () => {
 
       // Has both protocol accounts
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
-      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Crypto:DeFi:Aave:Borrow");
       expect(supplyAcct).toBeDefined();
       expect(borrowAcct).toBeDefined();
 
@@ -747,7 +747,7 @@ describe("aaveHandler", () => {
 
       // Should have Assets:Aave:Supply with negative WETH (supply decreases)
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -897,7 +897,7 @@ describe("aaveHandler", () => {
 
       // Should have Assets:Aave:Supply with ETH
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -1000,7 +1000,7 @@ describe("aaveHandler", () => {
       const accounts = await backend.listAccounts();
 
       // Income:Aave:Interest account should exist with -50 USDC (credit)
-      const interestAcct = accounts.find((a) => a.full_name === "Income:Aave:Interest");
+      const interestAcct = accounts.find((a) => a.full_name === "Income:Crypto:DeFi:Aave:Interest");
       expect(interestAcct).toBeDefined();
       const interestItem = entry.items.find((i) => i.account_id === interestAcct!.id);
       expect(interestItem).toBeDefined();
@@ -1008,7 +1008,7 @@ describe("aaveHandler", () => {
       expect(new Decimal(interestItem!.amount).toFixed(6)).toBe("-50.000000");
 
       // Assets:Aave:Supply should be -1000 (not -1050)
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
       expect(new Decimal(supplyItem!.amount).toFixed(6)).toBe("-1000.000000");
@@ -1119,7 +1119,7 @@ describe("aaveHandler", () => {
       const accounts = await backend.listAccounts();
 
       // Expenses:Aave:Interest should exist with +15 DAI (debit = expense)
-      const interestAcct = accounts.find((a) => a.full_name === "Expenses:Aave:Interest");
+      const interestAcct = accounts.find((a) => a.full_name === "Expenses:Crypto:DeFi:Aave:Interest");
       expect(interestAcct).toBeDefined();
       const interestItem = entry.items.find((i) => i.account_id === interestAcct!.id);
       expect(interestItem).toBeDefined();
@@ -1127,7 +1127,7 @@ describe("aaveHandler", () => {
       expect(new Decimal(interestItem!.amount).toFixed(0)).toBe("15");
 
       // Liabilities:Aave:Borrow should be +500 (not +515)
-      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Aave:Borrow");
+      const borrowAcct = accounts.find((a) => a.full_name === "Liabilities:Crypto:DeFi:Aave:Borrow");
       const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
       expect(borrowItem).toBeDefined();
       expect(new Decimal(borrowItem!.amount).toFixed(0)).toBe("500");
@@ -1188,11 +1188,11 @@ describe("aaveHandler", () => {
       const accounts = await backend.listAccounts();
 
       // No Income:Aave:Interest account should exist (cold start guard)
-      const interestAcct = accounts.find((a) => a.full_name === "Income:Aave:Interest");
+      const interestAcct = accounts.find((a) => a.full_name === "Income:Crypto:DeFi:Aave:Interest");
       expect(interestAcct).toBeUndefined();
 
       // Full amount goes to Assets:Aave:Supply
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -1285,11 +1285,11 @@ describe("aaveHandler", () => {
       const accounts = await backend.listAccounts();
 
       // No Income:Aave:Interest account (no interest detected)
-      const interestAcct = accounts.find((a) => a.full_name === "Income:Aave:Interest");
+      const interestAcct = accounts.find((a) => a.full_name === "Income:Crypto:DeFi:Aave:Interest");
       expect(interestAcct).toBeUndefined();
 
       // Full withdrawal amount goes to Assets:Aave:Supply
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
       expect(new Decimal(supplyItem!.amount).toFixed(6)).toBe("-1000.000000");
@@ -1362,7 +1362,7 @@ describe("aaveHandler", () => {
 
       // Assets:Aave:Supply should use the underlying amount (10.092), not aToken amount (10.097)
       const accounts = await backend.listAccounts();
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItem = entry.items.find((i) => i.account_id === supplyAcct!.id);
       expect(supplyItem).toBeDefined();
@@ -1899,7 +1899,7 @@ describe("aaveHandler", () => {
       expect(tradingUSDC).toBeDefined();
 
       // Assets:Aave:Supply should decrease (adapter burn creates supply debit)
-      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Aave:Supply");
+      const supplyAcct = accounts.find((a) => a.full_name === "Assets:Crypto:DeFi:Aave:Supply");
       expect(supplyAcct).toBeDefined();
       const supplyItems = entry.items.filter((i) => i.account_id === supplyAcct!.id);
       const supplyTotal = supplyItems.reduce((s, i) => s.plus(new Decimal(i.amount)), new Decimal(0));

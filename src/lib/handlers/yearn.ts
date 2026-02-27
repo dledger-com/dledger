@@ -16,6 +16,7 @@ import {
   type TokenFlow,
 } from "./item-builder.js";
 import { ZERO_ADDRESS, isYearnContract } from "./addresses.js";
+import { defiIncome } from "../accounts/paths.js";
 
 // ---- Token detection ----
 
@@ -151,7 +152,7 @@ export const yearnHandler: TransactionHandler = {
     // Reclassify counterparty accounts based on action
     if (action === "HARVEST_REWARDS") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: "Income:Yearn:Rewards" },
+        { from: "Equity:*:External:*", to: defiIncome("Yearn", "Rewards") },
       ]);
     }
 
