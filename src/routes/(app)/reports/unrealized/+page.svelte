@@ -19,6 +19,8 @@
   import type { UnrealizedGainLossReport } from "$lib/types/index.js";
   import Download from "lucide-svelte/icons/download";
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -53,6 +55,19 @@
     }
     return lines;
   });
+
+  type UnrealizedSortKey = "currency" | "protocol" | "account" | "acquired" | "quantity" | "costUnit" | "currentValue" | "unrealizedGL";
+  const sortU = createSortState<UnrealizedSortKey>();
+  const unrealizedAccessors: Record<UnrealizedSortKey, (line: any) => string | number | null> = {
+    currency: (l) => l.currency,
+    protocol: (l) => l.source_handler || "",
+    account: (l) => l.account_name,
+    acquired: (l) => l.acquired_date,
+    quantity: (l) => parseFloat(l.quantity),
+    costUnit: (l) => parseFloat(l.cost_basis_per_unit),
+    currentValue: (l) => parseFloat(l.current_value),
+    unrealizedGL: (l) => parseFloat(l.unrealized_gain_loss),
+  };
 
   async function generate() {
     loading = true;
@@ -158,20 +173,21 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Currency</Table.Head>
+              <SortableHeader active={sortU.key === "currency"} direction={sortU.direction} onclick={() => sortU.toggle("currency")}>Currency</SortableHeader>
               {#if hasProtocols}
-                <Table.Head>Protocol</Table.Head>
+                <SortableHeader active={sortU.key === "protocol"} direction={sortU.direction} onclick={() => sortU.toggle("protocol")}>Protocol</SortableHeader>
               {/if}
-              <Table.Head class="hidden md:table-cell">Account</Table.Head>
-              <Table.Head class="hidden lg:table-cell">Acquired</Table.Head>
-              <Table.Head class="text-right hidden md:table-cell">Quantity</Table.Head>
-              <Table.Head class="text-right hidden sm:table-cell">Cost/Unit</Table.Head>
-              <Table.Head class="text-right hidden sm:table-cell">Current Value</Table.Head>
-              <Table.Head class="text-right">Unrealized G/L</Table.Head>
+              <SortableHeader active={sortU.key === "account"} direction={sortU.direction} onclick={() => sortU.toggle("account")} class="hidden md:table-cell">Account</SortableHeader>
+              <SortableHeader active={sortU.key === "acquired"} direction={sortU.direction} onclick={() => sortU.toggle("acquired")} class="hidden lg:table-cell">Acquired</SortableHeader>
+              <SortableHeader active={sortU.key === "quantity"} direction={sortU.direction} onclick={() => sortU.toggle("quantity")} class="text-right hidden md:table-cell">Quantity</SortableHeader>
+              <SortableHeader active={sortU.key === "costUnit"} direction={sortU.direction} onclick={() => sortU.toggle("costUnit")} class="text-right hidden sm:table-cell">Cost/Unit</SortableHeader>
+              <SortableHeader active={sortU.key === "currentValue"} direction={sortU.direction} onclick={() => sortU.toggle("currentValue")} class="text-right hidden sm:table-cell">Current Value</SortableHeader>
+              <SortableHeader active={sortU.key === "unrealizedGL"} direction={sortU.direction} onclick={() => sortU.toggle("unrealizedGL")} class="text-right">Unrealized G/L</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each filteredLines as line}
+            {@const sortedLines = sortU.key && sortU.direction ? sortItems(filteredLines, unrealizedAccessors[sortU.key], sortU.direction) : filteredLines}
+            {#each sortedLines as line}
               {@const gl = parseFloat(line.unrealized_gain_loss)}
               <Table.Row>
                 <Table.Cell>

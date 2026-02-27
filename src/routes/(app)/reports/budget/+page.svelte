@@ -11,6 +11,8 @@
   import { computeBudgetReport } from "$lib/utils/budget-compare.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import type { BudgetReport } from "$lib/types/index.js";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   const settings = new SettingsStore();
   const now = new Date();
@@ -20,6 +22,17 @@
   let loading = $state(false);
   let report = $state<BudgetReport | null>(null);
   let error = $state<string | null>(null);
+
+  type BudgetSortKey = "accountPattern" | "period" | "budget" | "actual" | "remaining" | "status";
+  const sort = createSortState<BudgetSortKey>();
+  const budgetAccessors: Record<BudgetSortKey, (c: any) => string | number | null> = {
+    accountPattern: (c) => c.budget.account_pattern,
+    period: (c) => c.budget.period_type,
+    budget: (c) => parseFloat(c.budget.amount),
+    actual: (c) => c.actual,
+    remaining: (c) => c.remaining,
+    status: (c) => c.percent_used,
+  };
 
   async function generate() {
     loading = true;
@@ -112,17 +125,18 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Account Pattern</Table.Head>
-            <Table.Head>Period</Table.Head>
-            <Table.Head class="text-right">Budget</Table.Head>
-            <Table.Head class="text-right">Actual</Table.Head>
-            <Table.Head class="text-right">Remaining</Table.Head>
+            <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>Account Pattern</SortableHeader>
+            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>Period</SortableHeader>
+            <SortableHeader active={sort.key === "budget"} direction={sort.direction} onclick={() => sort.toggle("budget")} class="text-right">Budget</SortableHeader>
+            <SortableHeader active={sort.key === "actual"} direction={sort.direction} onclick={() => sort.toggle("actual")} class="text-right">Actual</SortableHeader>
+            <SortableHeader active={sort.key === "remaining"} direction={sort.direction} onclick={() => sort.toggle("remaining")} class="text-right">Remaining</SortableHeader>
             <Table.Head class="w-48">Progress</Table.Head>
-            <Table.Head>Status</Table.Head>
+            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")}>Status</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each report.comparisons as comp (comp.budget.id)}
+          {@const sortedComps = sort.key && sort.direction ? sortItems(report.comparisons, budgetAccessors[sort.key], sort.direction) : report.comparisons}
+          {#each sortedComps as comp (comp.budget.id)}
             {@const status = statusBadge(comp.percent_used)}
             <Table.Row>
               <Table.Cell class="font-mono text-sm">{comp.budget.account_pattern}</Table.Cell>

@@ -20,6 +20,8 @@
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
   import Info from "lucide-svelte/icons/info";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   const settings = new SettingsStore();
 
@@ -34,6 +36,28 @@
   const totalFiat = $derived(report ? parseFloat(report.totalFiatReceived) : 0);
   const finalA = $derived(report ? parseFloat(report.finalAcquisitionCost) : 0);
   const yearEndV = $derived(report ? parseFloat(report.yearEndPortfolioValue) : 0);
+
+  type DispSortKey = "date" | "description" | "crypto" | "fiat" | "portfolio" | "acqCost" | "costFraction" | "plusValue";
+  const sortDisp = createSortState<DispSortKey>();
+  const dispAccessors: Record<DispSortKey, (d: any) => string | number | null> = {
+    date: (d) => d.date,
+    description: (d) => d.description,
+    crypto: (d) => d.cryptoCurrencies.join(","),
+    fiat: (d) => parseFloat(d.fiatReceived),
+    portfolio: (d) => parseFloat(d.portfolioValue),
+    acqCost: (d) => parseFloat(d.acquisitionCostBefore),
+    costFraction: (d) => parseFloat(d.costFraction),
+    plusValue: (d) => parseFloat(d.plusValue),
+  };
+
+  type AcqSortKey = "date" | "description" | "crypto" | "fiatSpent";
+  const sortAcq = createSortState<AcqSortKey>();
+  const acqAccessors: Record<AcqSortKey, (a: any) => string | number | null> = {
+    date: (a) => a.date,
+    description: (a) => a.description,
+    crypto: (a) => a.cryptoCurrencies.join(","),
+    fiatSpent: (a) => parseFloat(a.fiatSpent),
+  };
 
   async function generate() {
     loading = true;
@@ -204,18 +228,19 @@
             <Table.Header>
               <Table.Row>
                 <Table.Head class="w-10">#</Table.Head>
-                <Table.Head>Date</Table.Head>
-                <Table.Head class="hidden sm:table-cell">Description</Table.Head>
-                <Table.Head>Crypto</Table.Head>
-                <Table.Head class="text-right">C (Fiat)</Table.Head>
-                <Table.Head class="text-right hidden md:table-cell">V (Portfolio)</Table.Head>
-                <Table.Head class="text-right hidden md:table-cell">A (Acq. Cost)</Table.Head>
-                <Table.Head class="text-right hidden lg:table-cell">A*C/V</Table.Head>
-                <Table.Head class="text-right">Plus-Value</Table.Head>
+                <SortableHeader active={sortDisp.key === "date"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("date")}>Date</SortableHeader>
+                <SortableHeader active={sortDisp.key === "description"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("description")} class="hidden sm:table-cell">Description</SortableHeader>
+                <SortableHeader active={sortDisp.key === "crypto"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("crypto")}>Crypto</SortableHeader>
+                <SortableHeader active={sortDisp.key === "fiat"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("fiat")} class="text-right">C (Fiat)</SortableHeader>
+                <SortableHeader active={sortDisp.key === "portfolio"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("portfolio")} class="text-right hidden md:table-cell">V (Portfolio)</SortableHeader>
+                <SortableHeader active={sortDisp.key === "acqCost"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("acqCost")} class="text-right hidden md:table-cell">A (Acq. Cost)</SortableHeader>
+                <SortableHeader active={sortDisp.key === "costFraction"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("costFraction")} class="text-right hidden lg:table-cell">A*C/V</SortableHeader>
+                <SortableHeader active={sortDisp.key === "plusValue"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("plusValue")} class="text-right">Plus-Value</SortableHeader>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {#each report.dispositions as d, i (d.entryId)}
+              {@const sortedDisp = sortDisp.key && sortDisp.direction ? sortItems(report.dispositions, dispAccessors[sortDisp.key], sortDisp.direction) : report.dispositions}
+              {#each sortedDisp as d, i (d.entryId)}
                 {@const pv = parseFloat(d.plusValue)}
                 <Table.Row>
                   <Table.Cell class="font-mono text-muted-foreground">{i + 1}</Table.Cell>
@@ -340,14 +365,15 @@
           <Table.Root>
             <Table.Header>
               <Table.Row>
-                <Table.Head>Date</Table.Head>
-                <Table.Head class="hidden sm:table-cell">Description</Table.Head>
-                <Table.Head>Crypto</Table.Head>
-                <Table.Head class="text-right">Fiat Spent (EUR)</Table.Head>
+                <SortableHeader active={sortAcq.key === "date"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("date")}>Date</SortableHeader>
+                <SortableHeader active={sortAcq.key === "description"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("description")} class="hidden sm:table-cell">Description</SortableHeader>
+                <SortableHeader active={sortAcq.key === "crypto"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("crypto")}>Crypto</SortableHeader>
+                <SortableHeader active={sortAcq.key === "fiatSpent"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("fiatSpent")} class="text-right">Fiat Spent (EUR)</SortableHeader>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {#each report.acquisitions as a (a.entryId)}
+              {@const sortedAcq = sortAcq.key && sortAcq.direction ? sortItems(report.acquisitions, acqAccessors[sortAcq.key], sortAcq.direction) : report.acquisitions}
+              {#each sortedAcq as a (a.entryId)}
                 <Table.Row>
                   <Table.Cell class="text-muted-foreground">{a.date}</Table.Cell>
                   <Table.Cell class="hidden sm:table-cell max-w-48 truncate">{a.description}</Table.Cell>

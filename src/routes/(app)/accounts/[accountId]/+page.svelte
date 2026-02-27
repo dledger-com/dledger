@@ -22,6 +22,18 @@
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
   import type { Account, CurrencyBalance, JournalEntry, LineItem, BalanceAssertion } from "$lib/types/index.js";
   import Pagination from "$lib/components/Pagination.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+
+  type AssertionSortKey = "date" | "currency" | "expected" | "actual" | "status";
+  const assertionSort = createSortState<AssertionSortKey>();
+  const assertionAccessors: Record<AssertionSortKey, (a: BalanceAssertion) => string | number | null> = {
+    date: (a) => a.date,
+    currency: (a) => a.currency,
+    expected: (a) => parseFloat(a.expected_balance),
+    actual: (a) => a.actual_balance ? parseFloat(a.actual_balance) : null,
+    status: (a) => a.is_passing ? 1 : 0,
+  };
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -248,15 +260,16 @@
           <Table.Root>
             <Table.Header>
               <Table.Row>
-                <Table.Head>Date</Table.Head>
-                <Table.Head>Currency</Table.Head>
-                <Table.Head class="text-right">Expected</Table.Head>
-                <Table.Head class="text-right">Actual</Table.Head>
-                <Table.Head>Status</Table.Head>
+                <SortableHeader active={assertionSort.key === "date"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("date")}>Date</SortableHeader>
+                <SortableHeader active={assertionSort.key === "currency"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("currency")}>Currency</SortableHeader>
+                <SortableHeader active={assertionSort.key === "expected"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("expected")} class="text-right">Expected</SortableHeader>
+                <SortableHeader active={assertionSort.key === "actual"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("actual")} class="text-right">Actual</SortableHeader>
+                <SortableHeader active={assertionSort.key === "status"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("status")}>Status</SortableHeader>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {#each assertions as a (a.id)}
+              {@const sortedAssertions = assertionSort.key && assertionSort.direction ? sortItems(assertions, assertionAccessors[assertionSort.key], assertionSort.direction) : assertions}
+              {#each sortedAssertions as a (a.id)}
                 <Table.Row>
                   <Table.Cell class="text-muted-foreground">{a.date}</Table.Cell>
                   <Table.Cell>{a.currency}</Table.Cell>

@@ -10,6 +10,8 @@
   import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
   import { getHiddenCurrencySet, markCurrencyHidden, unmarkCurrencyHidden, reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
   import type { Currency, ExchangeRate } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
@@ -185,6 +187,28 @@
   let exchangeRates = $state<ExchangeRate[]>([]);
   let ratesLoading = $state(false);
   let currencySearchTerm = $state("");
+
+  // Sort state for currencies table
+  type CurrencySortKey = "code" | "name" | "decimals" | "base" | "rateSource";
+  const sortCurr = createSortState<CurrencySortKey>();
+  const currencyAccessors: Record<CurrencySortKey, SortAccessor<Currency>> = {
+    code: (c) => c.code,
+    name: (c) => c.name,
+    decimals: (c) => c.decimal_places,
+    base: (c) => c.is_base ? 1 : 0,
+    rateSource: (c) => rateSources.get(c.code)?.rate_source ?? "auto",
+  };
+
+  // Sort state for exchange rates table
+  type RateSortKey = "date" | "from" | "to" | "rate" | "source";
+  const sortRates = createSortState<RateSortKey>();
+  const rateAccessors: Record<RateSortKey, SortAccessor<ExchangeRate>> = {
+    date: (r) => r.date,
+    from: (r) => r.from_currency,
+    to: (r) => r.to_currency,
+    rate: (r) => parseFloat(r.rate),
+    source: (r) => r.source,
+  };
 
   const dateFormats = [
     { value: "YYYY-MM-DD", label: "YYYY-MM-DD (ISO)" },
@@ -529,16 +553,18 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Code</Table.Head>
-              <Table.Head>Name</Table.Head>
-              <Table.Head class="text-right hidden md:table-cell">Decimals</Table.Head>
-              <Table.Head class="hidden sm:table-cell">Base</Table.Head>
-              <Table.Head class="hidden lg:table-cell">Rate Source</Table.Head>
+              <SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")}>Code</SortableHeader>
+              <SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>Name</SortableHeader>
+              <SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden md:table-cell">Decimals</SortableHeader>
+              <SortableHeader active={sortCurr.key === "base"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("base")} class="hidden sm:table-cell">Base</SortableHeader>
+              <SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden lg:table-cell">Rate Source</SortableHeader>
               <Table.Head class="text-right">Actions</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"])) as c}
+            {@const filteredCurrencies = currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"]))}
+            {@const sortedCurrencies = sortCurr.key && sortCurr.direction ? sortItems(filteredCurrencies, currencyAccessors[sortCurr.key], sortCurr.direction) : filteredCurrencies}
+            {#each sortedCurrencies as c}
               {@const rs = rateSources.get(c.code)}
               <Table.Row>
                 <Table.Cell class="font-mono">
@@ -671,15 +697,16 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Date</Table.Head>
-              <Table.Head>From</Table.Head>
-              <Table.Head>To</Table.Head>
-              <Table.Head class="text-right">Rate</Table.Head>
-              <Table.Head>Source</Table.Head>
+              <SortableHeader active={sortRates.key === "date"} direction={sortRates.direction} onclick={() => sortRates.toggle("date")}>Date</SortableHeader>
+              <SortableHeader active={sortRates.key === "from"} direction={sortRates.direction} onclick={() => sortRates.toggle("from")}>From</SortableHeader>
+              <SortableHeader active={sortRates.key === "to"} direction={sortRates.direction} onclick={() => sortRates.toggle("to")}>To</SortableHeader>
+              <SortableHeader active={sortRates.key === "rate"} direction={sortRates.direction} onclick={() => sortRates.toggle("rate")} class="text-right">Rate</SortableHeader>
+              <SortableHeader active={sortRates.key === "source"} direction={sortRates.direction} onclick={() => sortRates.toggle("source")}>Source</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each exchangeRates.slice(0, 50) as rate}
+            {@const sortedRates = sortRates.key && sortRates.direction ? sortItems(exchangeRates, rateAccessors[sortRates.key], sortRates.direction).slice(0, 50) : exchangeRates.slice(0, 50)}
+            {#each sortedRates as rate}
               <Table.Row>
                 <Table.Cell>{rate.date}</Table.Cell>
                 <Table.Cell>{rate.from_currency}</Table.Cell>

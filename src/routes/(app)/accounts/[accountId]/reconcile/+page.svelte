@@ -10,6 +10,8 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { getBackend, type Reconciliation, type UnreconciledLineItem } from "$lib/backend.js";
   import { formatCurrency } from "$lib/utils/format.js";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
   import { computeDifference, isDifferenceZero } from "$lib/utils/reconciliation.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
@@ -31,6 +33,17 @@
 
   // History
   let reconciliations = $state<Reconciliation[]>([]);
+
+  // Sort state for reconciliation history
+  type RecSortKey = "statementDate" | "currency" | "balance" | "items" | "reconciled";
+  const sortRec = createSortState<RecSortKey>();
+  const recAccessors: Record<RecSortKey, SortAccessor<Reconciliation>> = {
+    statementDate: (r) => r.statement_date,
+    currency: (r) => r.currency,
+    balance: (r) => parseFloat(r.statement_balance),
+    items: (r) => r.line_item_count,
+    reconciled: (r) => r.reconciled_at,
+  };
 
   // Existing reconciled balance for this account+currency
   let existingBalance = $state("0");
@@ -262,15 +275,16 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Statement Date</Table.Head>
-              <Table.Head>Currency</Table.Head>
-              <Table.Head class="text-right">Balance</Table.Head>
-              <Table.Head class="text-right">Items</Table.Head>
-              <Table.Head>Reconciled</Table.Head>
+              <SortableHeader active={sortRec.key === "statementDate"} direction={sortRec.direction} onclick={() => sortRec.toggle("statementDate")}>Statement Date</SortableHeader>
+              <SortableHeader active={sortRec.key === "currency"} direction={sortRec.direction} onclick={() => sortRec.toggle("currency")}>Currency</SortableHeader>
+              <SortableHeader active={sortRec.key === "balance"} direction={sortRec.direction} onclick={() => sortRec.toggle("balance")} class="text-right">Balance</SortableHeader>
+              <SortableHeader active={sortRec.key === "items"} direction={sortRec.direction} onclick={() => sortRec.toggle("items")} class="text-right">Items</SortableHeader>
+              <SortableHeader active={sortRec.key === "reconciled"} direction={sortRec.direction} onclick={() => sortRec.toggle("reconciled")}>Reconciled</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each reconciliations as rec (rec.id)}
+            {@const sortedReconciliations = sortRec.key && sortRec.direction ? sortItems(reconciliations, recAccessors[sortRec.key], sortRec.direction) : reconciliations}
+            {#each sortedReconciliations as rec (rec.id)}
               <Table.Row>
                 <Table.Cell>{rec.statement_date}</Table.Cell>
                 <Table.Cell>{rec.currency}</Table.Cell>

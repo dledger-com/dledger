@@ -56,6 +56,8 @@
     import OfxImportDialog from "$lib/components/OfxImportDialog.svelte";
     import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
     import LedgerImportDialog from "$lib/components/LedgerImportDialog.svelte";
+    import SortableHeader from "$lib/components/SortableHeader.svelte";
+    import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
 
     let csvDialogOpen = $state(false);
     let csvInitialContent = $state("");
@@ -230,6 +232,16 @@
 
     // -- CEX state --
     let cexAccounts = $state<ExchangeAccount[]>([]);
+
+    // Sort state for CEX accounts table
+    type CexSortKey = "exchange" | "label" | "lastSync";
+    const sortCex = createSortState<CexSortKey>();
+    const cexAccessors: Record<CexSortKey, SortAccessor<ExchangeAccount>> = {
+        exchange: (a) => a.exchange,
+        label: (a) => a.label,
+        lastSync: (a) => a.last_sync || "",
+    };
+
     let cexNewExchange =
         $state<import("$lib/cex/types.js").ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -1559,16 +1571,15 @@
                 <Table.Root>
                     <Table.Header>
                         <Table.Row>
-                            <Table.Head>Exchange</Table.Head>
-                            <Table.Head>Label</Table.Head>
-                            <Table.Head class="hidden sm:table-cell"
-                                >Last Sync</Table.Head
-                            >
+                            <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>Exchange</SortableHeader>
+                            <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>Label</SortableHeader>
+                            <SortableHeader active={sortCex.key === "lastSync"} direction={sortCex.direction} onclick={() => sortCex.toggle("lastSync")} class="hidden sm:table-cell">Last Sync</SortableHeader>
                             <Table.Head class="text-right">Actions</Table.Head>
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                        {#each cexAccounts as account}
+                        {@const sortedCexAccounts = sortCex.key && sortCex.direction ? sortItems(cexAccounts, cexAccessors[sortCex.key], sortCex.direction) : cexAccounts}
+                        {#each sortedCexAccounts as account}
                             <Table.Row>
                                 <Table.Cell>
                                     <Badge variant="secondary"

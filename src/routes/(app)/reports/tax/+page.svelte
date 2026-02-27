@@ -11,6 +11,8 @@
   import { computeTaxSummary, computeTaxYearDates, type TaxSummary } from "$lib/utils/tax-summary.js";
   import { exportTaxSummaryCsv } from "$lib/utils/csv-export.js";
   import Download from "lucide-svelte/icons/download";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   const settings = new SettingsStore();
 
@@ -34,6 +36,27 @@
   const ltLosses = $derived(summary ? parseFloat(summary.long_term_losses) : 0);
   const totalRealized = $derived(summary ? parseFloat(summary.total_realized) : 0);
   const totalUnrealized = $derived(summary ? parseFloat(summary.total_unrealized) : 0);
+
+  type GLSortKey = "type" | "currency" | "acquired" | "disposed" | "quantity" | "costBasis" | "proceeds" | "gainLoss";
+  const sortGL = createSortState<GLSortKey>();
+  const glAccessors: Record<GLSortKey, (l: any) => string | number | null> = {
+    type: (l) => l.is_long_term ? "LT" : "ST",
+    currency: (l) => l.currency,
+    acquired: (l) => l.acquired_date,
+    disposed: (l) => l.disposed_date,
+    quantity: (l) => parseFloat(l.quantity),
+    costBasis: (l) => parseFloat(l.cost_basis),
+    proceeds: (l) => parseFloat(l.proceeds),
+    gainLoss: (l) => parseFloat(l.gain_loss),
+  };
+
+  type IncSortKey = "account" | "currency" | "amount";
+  const sortInc = createSortState<IncSortKey>();
+  const incAccessors: Record<IncSortKey, (i: any) => string | number | null> = {
+    account: (i) => i.account_name,
+    currency: (i) => i.currency,
+    amount: (i) => parseFloat(i.amount),
+  };
 
   async function generate() {
     loading = true;
@@ -183,18 +206,19 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Type</Table.Head>
-              <Table.Head>Currency</Table.Head>
-              <Table.Head>Acquired</Table.Head>
-              <Table.Head>Disposed</Table.Head>
-              <Table.Head class="text-right">Quantity</Table.Head>
-              <Table.Head class="text-right">Cost Basis</Table.Head>
-              <Table.Head class="text-right">Proceeds</Table.Head>
-              <Table.Head class="text-right">Gain/Loss</Table.Head>
+              <SortableHeader active={sortGL.key === "type"} direction={sortGL.direction} onclick={() => sortGL.toggle("type")}>Type</SortableHeader>
+              <SortableHeader active={sortGL.key === "currency"} direction={sortGL.direction} onclick={() => sortGL.toggle("currency")}>Currency</SortableHeader>
+              <SortableHeader active={sortGL.key === "acquired"} direction={sortGL.direction} onclick={() => sortGL.toggle("acquired")}>Acquired</SortableHeader>
+              <SortableHeader active={sortGL.key === "disposed"} direction={sortGL.direction} onclick={() => sortGL.toggle("disposed")}>Disposed</SortableHeader>
+              <SortableHeader active={sortGL.key === "quantity"} direction={sortGL.direction} onclick={() => sortGL.toggle("quantity")} class="text-right">Quantity</SortableHeader>
+              <SortableHeader active={sortGL.key === "costBasis"} direction={sortGL.direction} onclick={() => sortGL.toggle("costBasis")} class="text-right">Cost Basis</SortableHeader>
+              <SortableHeader active={sortGL.key === "proceeds"} direction={sortGL.direction} onclick={() => sortGL.toggle("proceeds")} class="text-right">Proceeds</SortableHeader>
+              <SortableHeader active={sortGL.key === "gainLoss"} direction={sortGL.direction} onclick={() => sortGL.toggle("gainLoss")} class="text-right">Gain/Loss</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each summary.gain_loss_lines as line (line.lot_id + line.disposed_date)}
+            {@const sortedGL = sortGL.key && sortGL.direction ? sortItems(summary.gain_loss_lines, glAccessors[sortGL.key], sortGL.direction) : summary.gain_loss_lines}
+            {#each sortedGL as line (line.lot_id + line.disposed_date)}
               {@const gl = parseFloat(line.gain_loss)}
               <Table.Row>
                 <Table.Cell>
@@ -237,13 +261,14 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Account</Table.Head>
-              <Table.Head>Currency</Table.Head>
-              <Table.Head class="text-right">Amount</Table.Head>
+              <SortableHeader active={sortInc.key === "account"} direction={sortInc.direction} onclick={() => sortInc.toggle("account")}>Account</SortableHeader>
+              <SortableHeader active={sortInc.key === "currency"} direction={sortInc.direction} onclick={() => sortInc.toggle("currency")}>Currency</SortableHeader>
+              <SortableHeader active={sortInc.key === "amount"} direction={sortInc.direction} onclick={() => sortInc.toggle("amount")} class="text-right">Amount</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each summary.income_by_account as inc}
+            {@const sortedInc = sortInc.key && sortInc.direction ? sortItems(summary.income_by_account, incAccessors[sortInc.key], sortInc.direction) : summary.income_by_account}
+            {#each sortedInc as inc}
               <Table.Row>
                 <Table.Cell>{inc.account_name}</Table.Cell>
                 <Table.Cell>

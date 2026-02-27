@@ -14,6 +14,16 @@
   import Trash2 from "lucide-svelte/icons/trash-2";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+
+  type BudgetSortKey = "accountPattern" | "period" | "limit";
+  const sort = createSortState<BudgetSortKey>();
+  const budgetAccessors: Record<BudgetSortKey, (b: Budget) => string | number> = {
+    accountPattern: (b) => b.account_pattern,
+    period: (b) => b.period_type,
+    limit: (b) => parseFloat(b.amount),
+  };
 
   const settings = new SettingsStore();
 
@@ -201,14 +211,15 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Account Pattern</Table.Head>
-            <Table.Head>Period</Table.Head>
-            <Table.Head class="text-right">Limit</Table.Head>
+            <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>Account Pattern</SortableHeader>
+            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>Period</SortableHeader>
+            <SortableHeader active={sort.key === "limit"} direction={sort.direction} onclick={() => sort.toggle("limit")} class="text-right">Limit</SortableHeader>
             <Table.Head class="text-right">Actions</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each filteredBudgets as budget (budget.id)}
+          {@const sorted = sort.key && sort.direction ? sortItems(filteredBudgets, budgetAccessors[sort.key], sort.direction) : filteredBudgets}
+          {#each sorted as budget (budget.id)}
             <Table.Row>
               {#if editingId === budget.id}
                 <Table.Cell>

@@ -14,6 +14,8 @@
   import { exportGainLossCsv } from "$lib/utils/csv-export.js";
   import Download from "lucide-svelte/icons/download";
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
@@ -51,6 +53,19 @@
     }
     return lines;
   });
+
+  type GainLossSortKey = "currency" | "protocol" | "acquired" | "disposed" | "quantity" | "costBasis" | "proceeds" | "gainLoss";
+  const sort = createSortState<GainLossSortKey>();
+  const gainLossAccessors: Record<GainLossSortKey, (line: any) => string | number | null> = {
+    currency: (l) => l.currency,
+    protocol: (l) => l.source_handler || "",
+    acquired: (l) => l.acquired_date,
+    disposed: (l) => l.disposed_date,
+    quantity: (l) => parseFloat(l.quantity),
+    costBasis: (l) => parseFloat(l.cost_basis),
+    proceeds: (l) => parseFloat(l.proceeds),
+    gainLoss: (l) => parseFloat(l.gain_loss),
+  };
 
   async function generate() {
     generated = false;
@@ -148,20 +163,21 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Currency</Table.Head>
+              <SortableHeader active={sort.key === "currency"} direction={sort.direction} onclick={() => sort.toggle("currency")}>Currency</SortableHeader>
               {#if hasProtocols}
-                <Table.Head>Protocol</Table.Head>
+                <SortableHeader active={sort.key === "protocol"} direction={sort.direction} onclick={() => sort.toggle("protocol")}>Protocol</SortableHeader>
               {/if}
-              <Table.Head class="hidden lg:table-cell">Acquired</Table.Head>
-              <Table.Head class="hidden lg:table-cell">Disposed</Table.Head>
-              <Table.Head class="text-right hidden md:table-cell">Quantity</Table.Head>
-              <Table.Head class="text-right hidden sm:table-cell">Cost Basis</Table.Head>
-              <Table.Head class="text-right hidden sm:table-cell">Proceeds</Table.Head>
-              <Table.Head class="text-right">Gain/Loss</Table.Head>
+              <SortableHeader active={sort.key === "acquired"} direction={sort.direction} onclick={() => sort.toggle("acquired")} class="hidden lg:table-cell">Acquired</SortableHeader>
+              <SortableHeader active={sort.key === "disposed"} direction={sort.direction} onclick={() => sort.toggle("disposed")} class="hidden lg:table-cell">Disposed</SortableHeader>
+              <SortableHeader active={sort.key === "quantity"} direction={sort.direction} onclick={() => sort.toggle("quantity")} class="text-right hidden md:table-cell">Quantity</SortableHeader>
+              <SortableHeader active={sort.key === "costBasis"} direction={sort.direction} onclick={() => sort.toggle("costBasis")} class="text-right hidden sm:table-cell">Cost Basis</SortableHeader>
+              <SortableHeader active={sort.key === "proceeds"} direction={sort.direction} onclick={() => sort.toggle("proceeds")} class="text-right hidden sm:table-cell">Proceeds</SortableHeader>
+              <SortableHeader active={sort.key === "gainLoss"} direction={sort.direction} onclick={() => sort.toggle("gainLoss")} class="text-right">Gain/Loss</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each filteredLines as line (line.lot_id + line.disposed_date)}
+            {@const sortedLines = sort.key && sort.direction ? sortItems(filteredLines, gainLossAccessors[sort.key], sort.direction) : filteredLines}
+            {#each sortedLines as line (line.lot_id + line.disposed_date)}
               {@const gl = parseFloat(line.gain_loss)}
               <Table.Row>
                 <Table.Cell>

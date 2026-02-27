@@ -16,6 +16,17 @@
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Play from "lucide-svelte/icons/play";
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+
+  type RecurringSortKey = "description" | "frequency" | "nextDate" | "active";
+  const sort = createSortState<RecurringSortKey>();
+  const recurringAccessors: Record<RecurringSortKey, (t: RecurringTemplate) => string | number> = {
+    description: (t) => t.description,
+    frequency: (t) => t.frequency,
+    nextDate: (t) => t.next_date,
+    active: (t) => t.is_active ? 1 : 0,
+  };
 
   let templates = $state<RecurringTemplate[]>([]);
   let accounts = $state<Account[]>([]);
@@ -275,15 +286,16 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Description</Table.Head>
-            <Table.Head>Frequency</Table.Head>
-            <Table.Head>Next Date</Table.Head>
-            <Table.Head>Active</Table.Head>
+            <SortableHeader active={sort.key === "description"} direction={sort.direction} onclick={() => sort.toggle("description")}>Description</SortableHeader>
+            <SortableHeader active={sort.key === "frequency"} direction={sort.direction} onclick={() => sort.toggle("frequency")}>Frequency</SortableHeader>
+            <SortableHeader active={sort.key === "nextDate"} direction={sort.direction} onclick={() => sort.toggle("nextDate")}>Next Date</SortableHeader>
+            <SortableHeader active={sort.key === "active"} direction={sort.direction} onclick={() => sort.toggle("active")}>Active</SortableHeader>
             <Table.Head class="text-right">Actions</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each filteredTemplates as template (template.id)}
+          {@const sorted = sort.key && sort.direction ? sortItems(filteredTemplates, recurringAccessors[sort.key], sort.direction) : filteredTemplates}
+          {#each sorted as template (template.id)}
             <Table.Row class={!template.is_active ? "opacity-60" : ""}>
               <Table.Cell>
                 <div>

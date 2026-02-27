@@ -14,11 +14,21 @@
   import { exportTrialBalanceCsv } from "$lib/utils/csv-export.js";
   import Download from "lucide-svelte/icons/download";
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
   let searchTerm = $state("");
+  type TrialBalanceSortKey = "account" | "type" | "debit" | "credit";
+  const sort = createSortState<TrialBalanceSortKey>();
+  const trialBalanceAccessors: Record<TrialBalanceSortKey, (line: typeof store.trialBalance extends { lines: (infer L)[] } | null ? L : never) => string | number> = {
+    account: (l) => l.account_name,
+    type: (l) => l.account_type,
+    debit: (l) => l.balances.filter((b) => parseFloat(b.amount) > 0).reduce((s, b) => s + parseFloat(b.amount), 0),
+    credit: (l) => l.balances.filter((b) => parseFloat(b.amount) < 0).reduce((s, b) => s + Math.abs(parseFloat(b.amount)), 0),
+  };
 
   async function generate() {
     await store.loadTrialBalance(asOf);
@@ -75,14 +85,15 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Account</Table.Head>
-            <Table.Head>Type</Table.Head>
-            <Table.Head class="text-right">Debit</Table.Head>
-            <Table.Head class="text-right">Credit</Table.Head>
+            <SortableHeader active={sort.key === "account"} direction={sort.direction} onclick={() => sort.toggle("account")}>Account</SortableHeader>
+            <SortableHeader active={sort.key === "type"} direction={sort.direction} onclick={() => sort.toggle("type")}>Type</SortableHeader>
+            <SortableHeader active={sort.key === "debit"} direction={sort.direction} onclick={() => sort.toggle("debit")} class="text-right">Debit</SortableHeader>
+            <SortableHeader active={sort.key === "credit"} direction={sort.direction} onclick={() => sort.toggle("credit")} class="text-right">Credit</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each filteredLines as line (line.account_id)}
+          {@const sortedLines = sort.key && sort.direction ? sortItems(filteredLines, trialBalanceAccessors[sort.key], sort.direction) : filteredLines}
+          {#each sortedLines as line (line.account_id)}
             <Table.Row>
               <Table.Cell>
                 <a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a>

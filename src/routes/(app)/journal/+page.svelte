@@ -16,6 +16,8 @@
   import { toast } from "svelte-sonner";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import Pagination from "$lib/components/Pagination.svelte";
@@ -28,6 +30,9 @@
   let exportFormat = $state<LedgerFormat>("ledger");
   let searchTerm = $state("");
   let showDuplicates = $state(false);
+
+  type JournalSortKey = "date" | "description" | "status" | "amount";
+  const sort = createSortState<JournalSortKey>();
 
   interface DuplicateGroup {
     confidence: "likely" | "possible";
@@ -246,14 +251,21 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Date</Table.Head>
-            <Table.Head>Description</Table.Head>
-            <Table.Head class="hidden md:table-cell">Status</Table.Head>
-            <Table.Head class="text-right">Amount</Table.Head>
+            <SortableHeader active={sort.key === "date"} direction={sort.direction} onclick={() => sort.toggle("date")}>Date</SortableHeader>
+            <SortableHeader active={sort.key === "description"} direction={sort.direction} onclick={() => sort.toggle("description")}>Description</SortableHeader>
+            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")} class="hidden md:table-cell">Status</SortableHeader>
+            <SortableHeader active={sort.key === "amount"} direction={sort.direction} onclick={() => sort.toggle("amount")} class="text-right">Amount</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each filteredEntries as [entry, items] (entry.id)}
+          {@const journalAccessors = {
+            date: ([entry]: [any, any]) => entry.date,
+            description: ([entry]: [any, any]) => entry.description,
+            status: ([entry]: [any, any]) => entry.status,
+            amount: ([, items]: [any, any]) => totalDebits(items),
+          }}
+          {@const sortedEntries = sort.key && sort.direction ? sortItems(filteredEntries, journalAccessors[sort.key as JournalSortKey], sort.direction) : filteredEntries}
+          {#each sortedEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px]">
