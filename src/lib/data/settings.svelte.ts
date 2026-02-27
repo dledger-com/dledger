@@ -1,4 +1,5 @@
 import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
+import { configureAccountPaths, type AccountPathConfig } from "$lib/accounts/paths.js";
 
 export interface AppSettings {
   currency: string;
@@ -22,6 +23,7 @@ export interface AppSettings {
   csvCategorizationRules?: CsvCategorizationRule[];
   mlClassificationEnabled?: boolean;
   mlConfidenceThreshold?: number;
+  accountPaths?: Partial<AccountPathConfig>;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -77,6 +79,13 @@ export class SettingsStore {
   settings = $state<AppSettings>(loadFromStorage());
   loading = $state(false);
 
+  constructor() {
+    // Apply saved account paths on construction
+    if (this.settings.accountPaths) {
+      configureAccountPaths(this.settings.accountPaths);
+    }
+  }
+
   get currency() {
     return this.settings.currency;
   }
@@ -128,6 +137,9 @@ export class SettingsStore {
   update(partial: Partial<AppSettings>) {
     this.settings = { ...this.settings, ...partial };
     saveToStorage(this.settings);
+    if (partial.accountPaths !== undefined) {
+      configureAccountPaths(this.settings.accountPaths ?? {});
+    }
   }
 
   reset() {

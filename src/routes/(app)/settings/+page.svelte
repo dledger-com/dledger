@@ -17,7 +17,146 @@
   import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
   import { exportDatabaseBackup, readFileAsUint8Array, downloadDatabase } from "$lib/utils/database-export.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
+  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+  import {
+    DEFAULT_PATH_CONFIG,
+    PATH_TYPE_CONSTRAINTS,
+    getAccountPathConfig,
+    validatePathConfig,
+    type AccountPathConfig,
+  } from "$lib/accounts/paths.js";
   const settings = new SettingsStore();
+
+  // Account Paths state
+  let pathOverrides = $state<Partial<AccountPathConfig>>(
+    settings.settings.accountPaths ? { ...settings.settings.accountPaths } : {},
+  );
+  let pathRenaming = $state(false);
+  let renameCounts = $state<Map<string, number>>(new Map());
+
+  function getPathValue(key: keyof AccountPathConfig): string {
+    return pathOverrides[key] ?? DEFAULT_PATH_CONFIG[key];
+  }
+
+  function handlePathChange(key: keyof AccountPathConfig, value: string) {
+    if (value === DEFAULT_PATH_CONFIG[key]) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [key]: _, ...rest } = pathOverrides;
+      pathOverrides = rest;
+    } else {
+      pathOverrides = { ...pathOverrides, [key]: value };
+    }
+    const errors = validatePathConfig({ [key]: value });
+    if (errors.length === 0) {
+      settings.update({ accountPaths: Object.keys(pathOverrides).length > 0 ? pathOverrides : undefined });
+    }
+  }
+
+  function resetPathSection(keys: (keyof AccountPathConfig)[]) {
+    const next = { ...pathOverrides };
+    for (const k of keys) delete next[k];
+    pathOverrides = next;
+    settings.update({ accountPaths: Object.keys(pathOverrides).length > 0 ? pathOverrides : undefined });
+  }
+
+  async function countAffectedAccounts() {
+    try {
+      const accounts = await getBackend().listAccounts();
+      const counts = new Map<string, number>();
+      const saved = settings.settings.accountPaths ?? {};
+      for (const [key, defaultVal] of Object.entries(DEFAULT_PATH_CONFIG)) {
+        const currentVal = saved[key as keyof AccountPathConfig];
+        if (currentVal && currentVal !== defaultVal) {
+          // Count accounts under the OLD prefix (the default one) that could be renamed
+          const prefix = defaultVal;
+          const count = accounts.filter(
+            (a) => a.full_name === prefix || a.full_name.startsWith(prefix + ":"),
+          ).length;
+          if (count > 0) counts.set(key, count);
+        }
+      }
+      renameCounts = counts;
+    } catch {
+      renameCounts = new Map();
+    }
+  }
+
+  async function handleRenameAll() {
+    pathRenaming = true;
+    try {
+      const backend = getBackend();
+      const saved = settings.settings.accountPaths ?? {};
+      let totalRenamed = 0;
+      let totalSkipped = 0;
+      for (const [key, defaultVal] of Object.entries(DEFAULT_PATH_CONFIG)) {
+        const newVal = saved[key as keyof AccountPathConfig];
+        if (newVal && newVal !== defaultVal) {
+          const result = await backend.renameAccountPrefix(defaultVal, newVal);
+          totalRenamed += result.renamed;
+          totalSkipped += result.skipped;
+        }
+      }
+      if (totalRenamed > 0) {
+        toast.success(`Renamed ${totalRenamed} account${totalRenamed !== 1 ? "s" : ""}${totalSkipped > 0 ? ` (${totalSkipped} skipped)` : ""}`);
+      } else {
+        toast.info("No accounts needed renaming");
+      }
+      renameCounts = new Map();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      pathRenaming = false;
+    }
+  }
+
+  const PATH_SECTIONS: { title: string; description: string; keys: { key: keyof AccountPathConfig; label: string; example: string }[] }[] = [
+    {
+      title: "Banking",
+      description: "Paths for bank account imports (CSV, OFX, PDF).",
+      keys: [
+        { key: "bankAssets", label: "Bank Assets", example: "MyBank" },
+        { key: "bankFees", label: "Bank Fees", example: "MyBank" },
+        { key: "creditCards", label: "Credit Cards", example: "1234" },
+      ],
+    },
+    {
+      title: "Exchange",
+      description: "Paths for crypto exchange imports and CEX integration.",
+      keys: [
+        { key: "exchangeAssets", label: "Exchange Assets", example: "Kraken" },
+        { key: "exchangeFees", label: "Exchange Fees", example: "Kraken" },
+        { key: "exchangeEquity", label: "Exchange Equity", example: "Kraken" },
+        { key: "exchangeStaking", label: "Exchange Staking", example: "Kraken" },
+        { key: "exchangeIncome", label: "Exchange Income", example: "Nexo" },
+        { key: "exchangeExpenses", label: "Exchange Expenses", example: "CryptoCom" },
+      ],
+    },
+    {
+      title: "Wallet / On-chain",
+      description: "Paths for on-chain wallet and gas fee accounts.",
+      keys: [
+        { key: "walletAssets", label: "Wallet Assets", example: "Ethereum:Main" },
+        { key: "walletEquity", label: "Wallet Equity", example: "Ethereum" },
+        { key: "chainFees", label: "Chain Fees", example: "Ethereum" },
+      ],
+    },
+    {
+      title: "DeFi",
+      description: "Paths for DeFi protocol accounts (Aave, Uniswap, etc.).",
+      keys: [
+        { key: "defiAssets", label: "DeFi Assets", example: "Aave:Supply" },
+        { key: "defiLiabilities", label: "DeFi Liabilities", example: "Aave:Borrow" },
+        { key: "defiIncome", label: "DeFi Income", example: "Aave:Interest" },
+        { key: "defiExpenses", label: "DeFi Expenses", example: "Aave:Interest" },
+      ],
+    },
+  ];
+
+  function pathErrors(key: keyof AccountPathConfig): string | null {
+    const value = getPathValue(key);
+    const errs = validatePathConfig({ [key]: value });
+    return errs.length > 0 ? errs[0].error : null;
+  }
 
   // Backup/restore state
   let exporting = $state(false);
@@ -694,6 +833,77 @@
           </Button>
         </div>
       {/if}
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Account Paths -->
+  <Card.Root>
+    <Card.Header>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Card.Title>Account Paths</Card.Title>
+          <Card.Description>Customize the account paths used by future imports. Existing accounts are not automatically renamed.</Card.Description>
+        </div>
+        <div class="flex items-center gap-2">
+          <Button variant="outline" size="sm" onclick={countAffectedAccounts} disabled={pathRenaming}>
+            Check Existing
+          </Button>
+          {#if renameCounts.size > 0}
+            <Button variant="default" size="sm" onclick={handleRenameAll} disabled={pathRenaming}>
+              {pathRenaming ? "Renaming..." : `Rename ${[...renameCounts.values()].reduce((a, b) => a + b, 0)} accounts`}
+            </Button>
+          {/if}
+        </div>
+      </div>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      {#each PATH_SECTIONS as section}
+        <Collapsible.Root>
+          <div class="flex items-center justify-between">
+            <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium hover:underline">
+              <span class="i-lucide-chevron-right h-4 w-4 transition-transform [[data-state=open]>&]:rotate-90">&#9654;</span>
+              {section.title}
+            </Collapsible.Trigger>
+            <Button
+              variant="ghost"
+              size="sm"
+              onclick={() => resetPathSection(section.keys.map((k) => k.key))}
+            >
+              Reset
+            </Button>
+          </div>
+          <p class="text-xs text-muted-foreground mb-2">{section.description}</p>
+          <Collapsible.Content>
+            <div class="space-y-3 pl-2">
+              {#each section.keys as { key, label, example }}
+                {@const err = pathErrors(key)}
+                {@const value = getPathValue(key)}
+                {@const isDefault = value === DEFAULT_PATH_CONFIG[key]}
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2">
+                    <label for="path-{key}" class="text-xs text-muted-foreground w-36 shrink-0">{label}</label>
+                    <Input
+                      id="path-{key}"
+                      value={value}
+                      oninput={(e) => handlePathChange(key, (e.target as HTMLInputElement).value)}
+                      class="font-mono text-xs {err ? 'border-destructive' : ''} {!isDefault ? 'border-primary' : ''}"
+                    />
+                  </div>
+                  <div class="flex items-center gap-2 pl-38">
+                    <span class="text-xs text-muted-foreground font-mono">{value}:{example}</span>
+                    {#if err}
+                      <span class="text-xs text-destructive">{err}</span>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
+        {#if section !== PATH_SECTIONS[PATH_SECTIONS.length - 1]}
+          <Separator />
+        {/if}
+      {/each}
     </Card.Content>
   </Card.Root>
 

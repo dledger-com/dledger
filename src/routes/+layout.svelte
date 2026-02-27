@@ -23,10 +23,10 @@
       try {
         const backend = await initBackend();
         await loadHiddenCurrencies(backend);
-        ready = true;
 
-        // Daily auto-sync via task queue (dedup key prevents double-sync from Sources page)
+        // Configure account paths from saved settings before rendering children
         const settings = new SettingsStore();
+        ready = true;
         const today = new Date().toISOString().slice(0, 10);
         if (settings.lastRateSync !== today) {
           taskQueue.enqueue({
