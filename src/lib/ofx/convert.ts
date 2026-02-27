@@ -113,5 +113,5 @@ export function suggestMainAccount(statement: OfxStatement): string {
     return `Liabilities:CreditCards:${last4}`;
   }
   const type = statement.account.acctType ?? "Checking";
-  return `Assets:Banks:${type}:${last4}`;
+  return `Assets:Bank:${type}:${last4}`;
 }

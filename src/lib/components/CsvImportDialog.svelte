@@ -90,7 +90,7 @@
   let amountColumn = $state("");
   let debitAmountColumn = $state("");
   let creditAmountColumn = $state("");
-  let mainAccount = $state("Assets:Banks:Import");
+  let mainAccount = $state("Assets:Bank:Import");
   let counterAccount = $state("Expenses:Uncategorized");
   let europeanNumbers = $state(false);
   let skipLines = $state(0);
@@ -597,7 +597,7 @@
                 size="sm"
                 variant={!usePreset ? "default" : "outline"}
                 class="text-xs h-7"
-                onclick={() => { usePreset = false; mainAccount = "Assets:Banks:Import"; }}
+                onclick={() => { usePreset = false; mainAccount = "Assets:Bank:Import"; }}
               >
                 Manual Mapping
               </Button>
@@ -642,7 +642,7 @@
         {#if usePreset}
           <div class="space-y-1">
             <label for="d-presetMainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Banks:Import" />
+            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
           </div>
         {/if}
 
@@ -798,7 +798,7 @@
                 </div>
                 <div class="space-y-1">
                   <label for="d-mainAcct" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Banks:Import" />
+                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
                 </div>
                 <div class="space-y-1">
                   <label for="d-counterAcct" class="text-sm font-medium">Counter Account</label>
@@ -835,7 +835,7 @@
                 </div>
                 <div class="space-y-1">
                   <label for="d-mainAcct2" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Banks:Import" />
+                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Bank:Import" />
                 </div>
                 <div class="space-y-1">
                   <label for="d-counterAcct2" class="text-sm font-medium">Counter Account</label>

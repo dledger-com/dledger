@@ -39,7 +39,7 @@ describe("n26Preset", () => {
 
       expect(records![0].date).toBe("2026-01-31");
       expect(records![0].description).toBe("SARL EXEMPLE");
-      expect(records![0].lines[0].account).toBe("Assets:Banks:N26:EUR");
+      expect(records![0].lines[0].account).toBe("Assets:Bank:N26:EUR");
       expect(records![0].lines[0].currency).toBe("EUR");
       expect(records![0].lines[0].amount).toBe("-17.5");
       expect(records![0].lines[1].account).toBe("Expenses:Uncategorized");
@@ -108,7 +108,7 @@ describe("n26Preset", () => {
       ];
 
       const records = n26Preset.transform(usdHeaders, rows);
-      expect(records![0].lines[0].account).toBe("Assets:Banks:N26:USD");
+      expect(records![0].lines[0].account).toBe("Assets:Bank:N26:USD");
       expect(records![0].lines[0].currency).toBe("USD");
     });
 

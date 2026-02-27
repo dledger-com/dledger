@@ -63,7 +63,7 @@
   // -- Parsed OFX data --
   let parseResult = $state<OfxParseResult | null>(null);
   let selectedStatement = $state<OfxStatement | null>(null);
-  let mainAccount = $state("Assets:Banks:Import");
+  let mainAccount = $state("Assets:Bank:Import");
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
@@ -328,7 +328,7 @@
     fileName = "";
     parseResult = null;
     selectedStatement = null;
-    mainAccount = "Assets:Banks:Import";
+    mainAccount = "Assets:Bank:Import";
     fileHeader = null;
     previewRecords = [];
     previewWarnings = [];
@@ -462,7 +462,7 @@
           <!-- Main Account -->
           <div class="space-y-1">
             <label for="ofx-mainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="ofx-mainAcct" bind:value={mainAccount} placeholder="Assets:Banks:Checking" />
+            <Input id="ofx-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:Checking" />
           </div>
 
           <!-- Categorization Rules -->

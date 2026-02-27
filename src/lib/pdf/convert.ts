@@ -86,15 +86,15 @@ export function convertPdfToRecords(
  */
 export function suggestMainAccount(statement: PdfStatement, bankId?: "lbp" | "n26" | "nuri" | "deblock"): string {
   if (bankId === "n26") {
-    return "Assets:Banks:N26";
+    return "Assets:Bank:N26";
   }
   if (bankId === "nuri") {
-    return "Assets:Banks:Nuri";
+    return "Assets:Bank:Nuri";
   }
   if (bankId === "deblock") {
-    return "Assets:Banks:Deblock";
+    return "Assets:Bank:Deblock";
   }
   const acctNum = statement.accountNumber ?? statement.iban;
   const last4 = acctNum?.replace(/\s/g, "").slice(-4) ?? "Unknown";
-  return `Assets:Banks:LaBanquePostale:${last4}`;
+  return `Assets:Bank:LaBanquePostale:${last4}`;
 }

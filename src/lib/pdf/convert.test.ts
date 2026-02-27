@@ -35,7 +35,7 @@ describe("convertPdfToRecords", () => {
   it("converts basic transactions", () => {
     const stmt = makeStatement();
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules: [],
     });
 
@@ -47,7 +47,7 @@ describe("convertPdfToRecords", () => {
     expect(rec1.description).toContain("ACHAT CB TOLLOPERATOR");
     expect(rec1.lines).toHaveLength(2);
     expect(rec1.lines[0]).toEqual({
-      account: "Assets:Banks:LBP",
+      account: "Assets:Bank:LBP",
       currency: "EUR",
       amount: "-2.2",
     });
@@ -66,7 +66,7 @@ describe("convertPdfToRecords", () => {
   it("builds sourceKey from closingDate:txIndex", () => {
     const stmt = makeStatement();
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules: [],
     });
 
@@ -82,7 +82,7 @@ describe("convertPdfToRecords", () => {
 
     const stmt = makeStatement();
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules,
     });
 
@@ -93,7 +93,7 @@ describe("convertPdfToRecords", () => {
   it("assigns expense for negative, income for positive amounts", () => {
     const stmt = makeStatement();
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules: [],
     });
 
@@ -104,14 +104,14 @@ describe("convertPdfToRecords", () => {
   it("builds CsvFileHeader from balance info", () => {
     const stmt = makeStatement();
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules: [],
     });
 
     expect(result.fileHeader.balanceDate).toBe("2022-02-25");
     expect(result.fileHeader.balanceAmount).toBe("631.6");
     expect(result.fileHeader.balanceCurrency).toBe("EUR");
-    expect(result.fileHeader.mainAccount).toBe("Assets:Banks:LBP");
+    expect(result.fileHeader.mainAccount).toBe("Assets:Bank:LBP");
     expect(result.fileHeader.accountMetadata?.accountNumber).toBe("12 345 67X 000");
     expect(result.fileHeader.accountMetadata?.iban).toBe("FR0020041000010000000X000001");
   });
@@ -119,7 +119,7 @@ describe("convertPdfToRecords", () => {
   it("handles empty statement", () => {
     const stmt = makeStatement({ transactions: [] });
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules: [],
     });
 
@@ -133,7 +133,7 @@ describe("convertPdfToRecords", () => {
       closingBalance: null,
     });
     const result = convertPdfToRecords(stmt, {
-      mainAccount: "Assets:Banks:LBP",
+      mainAccount: "Assets:Bank:LBP",
       rules: [],
     });
 
@@ -145,31 +145,31 @@ describe("convertPdfToRecords", () => {
 describe("suggestMainAccount", () => {
   it("suggests account from account number", () => {
     const stmt = makeStatement();
-    expect(suggestMainAccount(stmt)).toBe("Assets:Banks:LaBanquePostale:X000");
+    expect(suggestMainAccount(stmt)).toBe("Assets:Bank:LaBanquePostale:X000");
   });
 
   it("uses IBAN if no account number", () => {
     const stmt = makeStatement({ accountNumber: null });
-    expect(suggestMainAccount(stmt)).toBe("Assets:Banks:LaBanquePostale:0001");
+    expect(suggestMainAccount(stmt)).toBe("Assets:Bank:LaBanquePostale:0001");
   });
 
   it("handles missing account info", () => {
     const stmt = makeStatement({ accountNumber: null, iban: null });
-    expect(suggestMainAccount(stmt)).toBe("Assets:Banks:LaBanquePostale:Unknown");
+    expect(suggestMainAccount(stmt)).toBe("Assets:Bank:LaBanquePostale:Unknown");
   });
 
   it("suggests N26 account when bankId is n26", () => {
     const stmt = makeStatement();
-    expect(suggestMainAccount(stmt, "n26")).toBe("Assets:Banks:N26");
+    expect(suggestMainAccount(stmt, "n26")).toBe("Assets:Bank:N26");
   });
 
   it("preserves LBP behavior when bankId is lbp", () => {
     const stmt = makeStatement();
-    expect(suggestMainAccount(stmt, "lbp")).toBe("Assets:Banks:LaBanquePostale:X000");
+    expect(suggestMainAccount(stmt, "lbp")).toBe("Assets:Bank:LaBanquePostale:X000");
   });
 
   it("suggests Nuri account when bankId is nuri", () => {
     const stmt = makeStatement();
-    expect(suggestMainAccount(stmt, "nuri")).toBe("Assets:Banks:Nuri");
+    expect(suggestMainAccount(stmt, "nuri")).toBe("Assets:Bank:Nuri");
   });
 });

@@ -64,7 +64,7 @@
   // -- Parsed PDF data --
   let statement = $state<PdfStatement | null>(null);
   let detectedBank = $state<"lbp" | "n26" | "nuri" | "deblock" | null>(null);
-  let mainAccount = $state("Assets:Banks:Import");
+  let mainAccount = $state("Assets:Bank:Import");
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
@@ -353,7 +353,7 @@
     parsing = false;
     statement = null;
     detectedBank = null;
-    mainAccount = "Assets:Banks:Import";
+    mainAccount = "Assets:Bank:Import";
     fileHeader = null;
     previewRecords = [];
     previewWarnings = [];
@@ -460,7 +460,7 @@
           <!-- Main Account -->
           <div class="space-y-1">
             <label for="pdf-mainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="pdf-mainAcct" bind:value={mainAccount} placeholder="Assets:Banks:LaBanquePostale:0020" />
+            <Input id="pdf-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:LaBanquePostale:0020" />
           </div>
 
           <!-- Categorization Rules -->

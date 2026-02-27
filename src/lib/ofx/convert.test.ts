@@ -33,7 +33,7 @@ describe("convertOfxToRecords", () => {
   it("converts basic transactions", () => {
     const stmt = makeStatement();
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -45,7 +45,7 @@ describe("convertOfxToRecords", () => {
     expect(rec1.description).toBe("Grocery Store");
     expect(rec1.lines).toHaveLength(2);
     expect(rec1.lines[0]).toEqual({
-      account: "Assets:Banks:Checking",
+      account: "Assets:Bank:Checking",
       currency: "USD",
       amount: "-50",
     });
@@ -65,7 +65,7 @@ describe("convertOfxToRecords", () => {
   it("maps FITID to sourceKey", () => {
     const stmt = makeStatement();
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -84,7 +84,7 @@ describe("convertOfxToRecords", () => {
     });
 
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -103,7 +103,7 @@ describe("convertOfxToRecords", () => {
     });
 
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -119,7 +119,7 @@ describe("convertOfxToRecords", () => {
 
     const stmt = makeStatement();
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules,
     });
 
@@ -133,7 +133,7 @@ describe("convertOfxToRecords", () => {
     });
 
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -146,7 +146,7 @@ describe("convertOfxToRecords", () => {
   it("handles empty statement", () => {
     const stmt = makeStatement({ transactions: [] });
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -165,7 +165,7 @@ describe("convertOfxToRecords", () => {
     });
 
     const result = convertOfxToRecords(stmt, {
-      mainAccount: "Assets:Banks:Checking",
+      mainAccount: "Assets:Bank:Checking",
       rules: [],
     });
 
@@ -178,7 +178,7 @@ describe("convertOfxToRecords", () => {
 describe("suggestMainAccount", () => {
   it("suggests bank account from account info", () => {
     const stmt = makeStatement();
-    expect(suggestMainAccount(stmt)).toBe("Assets:Banks:CHECKING:6789");
+    expect(suggestMainAccount(stmt)).toBe("Assets:Bank:CHECKING:6789");
   });
 
   it("suggests credit card account", () => {
@@ -192,7 +192,7 @@ describe("suggestMainAccount", () => {
     const stmt = makeStatement({
       account: { acctType: "SAVINGS", accountType: "bank" },
     });
-    expect(suggestMainAccount(stmt)).toBe("Assets:Banks:SAVINGS:Unknown");
+    expect(suggestMainAccount(stmt)).toBe("Assets:Bank:SAVINGS:Unknown");
   });
 });
 
@@ -242,7 +242,7 @@ VERSION:102
     expect(parsed.statements).toHaveLength(1);
 
     const result = convertOfxToRecords(parsed.statements[0], {
-      mainAccount: "Assets:Banks:BNPP",
+      mainAccount: "Assets:Bank:BNPP",
       rules: [{ id: "1", pattern: "salaire", account: "Income:Salary" }],
     });
 
