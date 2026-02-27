@@ -16,6 +16,8 @@
   import { toast } from "svelte-sonner";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
+  import { createDefaultAccounts, type DefaultAccountSet } from "$lib/accounts/defaults.js";
+  import { getBackend } from "$lib/backend.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import ChevronRight from "lucide-svelte/icons/chevron-right";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
@@ -311,6 +313,23 @@
     }
   }
 
+  // Default accounts state
+  let defaultSet = $state<DefaultAccountSet>("standard");
+  let creatingDefaults = $state(false);
+
+  async function handleCreateDefaults() {
+    creatingDefaults = true;
+    try {
+      const result = await createDefaultAccounts(getBackend(), defaultSet);
+      toast.success(`Created ${result.created} accounts`);
+      await store.load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      creatingDefaults = false;
+    }
+  }
+
   onMount(() => store.load());
 </script>
 
@@ -382,10 +401,23 @@
     </Card.Root>
   {:else if store.active.length === 0}
     <Card.Root>
-      <Card.Content class="py-8">
+      <Card.Content class="py-8 space-y-4">
         <p class="text-sm text-muted-foreground text-center">
-          No accounts configured yet. Add your first account to build your chart of accounts.
+          No accounts configured yet. Start with a default chart of accounts, or add accounts manually.
         </p>
+        <div class="flex items-center justify-center gap-3">
+          <select
+            bind:value={defaultSet}
+            class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+          >
+            <option value="minimal">Minimal (~25 accounts)</option>
+            <option value="standard">Standard (~45 accounts)</option>
+            <option value="comprehensive">Comprehensive (~65 accounts)</option>
+          </select>
+          <Button onclick={handleCreateDefaults} disabled={creatingDefaults}>
+            {creatingDefaults ? "Creating..." : "Create default accounts"}
+          </Button>
+        </div>
       </Card.Content>
     </Card.Root>
   {:else if filteredAccounts.length === 0}

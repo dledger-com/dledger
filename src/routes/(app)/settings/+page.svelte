@@ -25,6 +25,7 @@
     validatePathConfig,
     type AccountPathConfig,
   } from "$lib/accounts/paths.js";
+  import { createDefaultAccounts, type DefaultAccountSet } from "$lib/accounts/defaults.js";
   const settings = new SettingsStore();
 
   // Account Paths state
@@ -376,6 +377,26 @@
         return { summary: res.success ? `${currencyCode} rate fetched` : "Failed" };
       },
     });
+  }
+
+  // Default accounts state
+  let defaultSet = $state<DefaultAccountSet>("standard");
+  let creatingDefaults = $state(false);
+
+  async function handleCreateDefaults() {
+    creatingDefaults = true;
+    try {
+      const result = await createDefaultAccounts(getBackend(), defaultSet);
+      if (result.created > 0) {
+        toast.success(`Created ${result.created} accounts`);
+      } else {
+        toast.info("All default accounts already exist");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      creatingDefaults = false;
+    }
   }
 
   onMount(() => {
@@ -904,6 +925,31 @@
           <Separator />
         {/if}
       {/each}
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Default Accounts -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Default Accounts</Card.Title>
+      <Card.Description>Create a starter chart of accounts. Existing accounts are preserved.</Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <select
+            bind:value={defaultSet}
+            class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+          >
+            <option value="minimal">Minimal (~25)</option>
+            <option value="standard">Standard (~45)</option>
+            <option value="comprehensive">Comprehensive (~65)</option>
+          </select>
+        </div>
+        <Button variant="outline" size="sm" onclick={handleCreateDefaults} disabled={creatingDefaults}>
+          {creatingDefaults ? "Creating..." : "Create Accounts"}
+        </Button>
+      </div>
     </Card.Content>
   </Card.Root>
 
