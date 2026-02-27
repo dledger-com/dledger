@@ -4,8 +4,8 @@
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import AccountTypeBadge from "$lib/components/AccountTypeBadge.svelte";
   import { ReportStore } from "$lib/data/reports.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
@@ -87,7 +87,7 @@
               <Table.Cell>
                 <a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a>
               </Table.Cell>
-              <Table.Cell><Badge variant="outline">{line.account_type}</Badge></Table.Cell>
+              <Table.Cell><AccountTypeBadge type={line.account_type} /></Table.Cell>
               <Table.Cell class="text-right font-mono">
                 {#each line.balances.filter(b => parseFloat(b.amount) > 0) as b}
                   {formatCurrency(b.amount, b.currency)}

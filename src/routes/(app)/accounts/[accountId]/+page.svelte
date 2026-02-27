@@ -5,6 +5,7 @@
   import * as Table from "$lib/components/ui/table/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import AccountTypeBadge from "$lib/components/AccountTypeBadge.svelte";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
@@ -158,7 +159,7 @@
       <div>
         <h1 class="text-2xl font-bold tracking-tight">{account.full_name}</h1>
         <p class="text-muted-foreground flex items-center gap-2">
-          <Badge variant="outline">{account.account_type}</Badge>
+          <AccountTypeBadge type={account.account_type} />
           {#if account.is_archived}
             <Badge variant="destructive">Archived</Badge>
           {/if}

@@ -8,8 +8,8 @@
   import * as Command from "$lib/components/ui/command/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
+  import AccountTypeBadge from "$lib/components/AccountTypeBadge.svelte";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import type { Account, AccountType } from "$lib/types/index.js";
@@ -386,7 +386,7 @@
                   </div>
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge variant="outline">{account.account_type}</Badge>
+                  <AccountTypeBadge type={account.account_type} />
                 </Table.Cell>
                 <Table.Cell class="hidden md:table-cell">
                   <Switch bind:checked={editPostable} />
@@ -419,7 +419,7 @@
                   <a href="/accounts/{account.id}" class="font-medium hover:underline">{account.full_name}</a>
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge variant="outline">{account.account_type}</Badge>
+                  <AccountTypeBadge type={account.account_type} />
                 </Table.Cell>
                 <Table.Cell class="hidden md:table-cell">{account.is_postable ? "Yes" : "No"}</Table.Cell>
                 <Table.Cell class="text-right hidden sm:table-cell">
