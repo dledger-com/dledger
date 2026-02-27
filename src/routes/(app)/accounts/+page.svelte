@@ -29,6 +29,82 @@
 
   let searchTerm = $state("");
 
+  // Inline edit state
+  let editingId = $state<string | null>(null);
+  let editFullName = $state("");
+  let editPostable = $state(true);
+  let editSaving = $state(false);
+
+  const TYPE_PREFIXES: Record<AccountType, string[]> = {
+    asset: ["Assets:", "Asset:"],
+    liability: ["Liabilities:", "Liability:"],
+    equity: ["Equity:"],
+    revenue: ["Income:", "Revenue:"],
+    expense: ["Expenses:", "Expense:"],
+  };
+
+  function getEditError(account: Account, newFullName: string): string | null {
+    const trimmed = newFullName.trim();
+    if (!trimmed) return "Name is required";
+    if (!trimmed.includes(":")) return "Must contain at least two segments (e.g. Assets:Bank)";
+    const prefixes = TYPE_PREFIXES[account.account_type];
+    if (!prefixes.some((p) => trimmed.startsWith(p))) {
+      return `Must start with ${prefixes[0]}`;
+    }
+    return null;
+  }
+
+  const editError = $derived(
+    editingId
+      ? (() => {
+          const account = store.accounts.find((a) => a.id === editingId);
+          return account ? getEditError(account, editFullName) : null;
+        })()
+      : null,
+  );
+
+  const editHasChanges = $derived(
+    editingId
+      ? (() => {
+          const account = store.accounts.find((a) => a.id === editingId);
+          if (!account) return false;
+          return editFullName.trim() !== account.full_name || editPostable !== account.is_postable;
+        })()
+      : false,
+  );
+
+  function startEdit(account: Account) {
+    editingId = account.id;
+    editFullName = account.full_name;
+    editPostable = account.is_postable;
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    editFullName = "";
+    editPostable = true;
+  }
+
+  async function saveEdit() {
+    if (!editingId || editError || !editHasChanges) return;
+    const account = store.accounts.find((a) => a.id === editingId);
+    if (!account) return;
+
+    editSaving = true;
+    const updates: { full_name?: string; is_postable?: boolean } = {};
+    if (editFullName.trim() !== account.full_name) updates.full_name = editFullName.trim();
+    if (editPostable !== account.is_postable) updates.is_postable = editPostable;
+
+    const ok = await store.update(editingId, updates);
+    editSaving = false;
+    if (ok) {
+      toast.success(`Account "${editFullName.trim()}" updated`);
+      cancelEdit();
+    } else {
+      toast.error(store.error ?? "Failed to update account");
+    }
+  }
+
   const filteredAccounts = $derived(
     store.active.filter((a) => matchesFilter(a, searchTerm.trim(), ["full_name", "account_type"]))
   );
@@ -175,20 +251,60 @@
         </Table.Header>
         <Table.Body>
           {#each filteredAccounts as account (account.id)}
-            <Table.Row>
-              <Table.Cell>
-                <a href="/accounts/{account.id}" class="font-medium hover:underline">{account.full_name}</a>
-              </Table.Cell>
-              <Table.Cell>
-                <Badge variant="outline">{account.account_type}</Badge>
-              </Table.Cell>
-              <Table.Cell class="hidden md:table-cell">{account.is_postable ? "Yes" : "No"}</Table.Cell>
-              <Table.Cell class="text-right hidden sm:table-cell">
-                <Button variant="ghost" size="sm" onclick={() => handleArchive(account.id, account.full_name)}>
-                  Archive
-                </Button>
-              </Table.Cell>
-            </Table.Row>
+            {#if editingId === account.id}
+              <Table.Row>
+                <Table.Cell>
+                  <div class="space-y-1">
+                    <Input
+                      bind:value={editFullName}
+                      class={editError ? "border-destructive" : ""}
+                      onkeydown={(e: KeyboardEvent) => { if (e.key === "Escape") cancelEdit(); if (e.key === "Enter" && !editError && editHasChanges) saveEdit(); }}
+                    />
+                    {#if editError}
+                      <p class="text-xs text-destructive">{editError}</p>
+                    {/if}
+                  </div>
+                </Table.Cell>
+                <Table.Cell>
+                  <Badge variant="outline">{account.account_type}</Badge>
+                </Table.Cell>
+                <Table.Cell class="hidden md:table-cell">
+                  <Switch bind:checked={editPostable} />
+                </Table.Cell>
+                <Table.Cell class="text-right hidden sm:table-cell">
+                  <div class="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="sm" onclick={saveEdit} disabled={!!editError || !editHasChanges || editSaving}>
+                      {editSaving ? "Saving..." : "Save"}
+                    </Button>
+                    <Button variant="ghost" size="sm" onclick={cancelEdit} disabled={editSaving}>
+                      Cancel
+                    </Button>
+                  </div>
+                </Table.Cell>
+              </Table.Row>
+            {:else}
+              <Table.Row>
+                <Table.Cell>
+                  <a href="/accounts/{account.id}" class="font-medium hover:underline">{account.full_name}</a>
+                </Table.Cell>
+                <Table.Cell>
+                  <Badge variant="outline">{account.account_type}</Badge>
+                </Table.Cell>
+                <Table.Cell class="hidden md:table-cell">{account.is_postable ? "Yes" : "No"}</Table.Cell>
+                <Table.Cell class="text-right hidden sm:table-cell">
+                  <div class="flex items-center justify-end gap-1">
+                    {#if account.parent_id !== null}
+                      <Button variant="ghost" size="sm" onclick={() => startEdit(account)}>
+                        Edit
+                      </Button>
+                    {/if}
+                    <Button variant="ghost" size="sm" onclick={() => handleArchive(account.id, account.full_name)}>
+                      Archive
+                    </Button>
+                  </div>
+                </Table.Cell>
+              </Table.Row>
+            {/if}
           {/each}
         </Table.Body>
       </Table.Root>

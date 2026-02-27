@@ -1109,6 +1109,164 @@ export class SqlJsBackend implements Backend {
     this.scheduleSave();
   }
 
+  async updateAccount(id: string, updates: { full_name?: string; is_postable?: boolean }): Promise<void> {
+    const account = this.getAccountById(id);
+    if (!account) throw new Error(`account ${id} not found`);
+
+    // Prevent editing root accounts (the 5 top-level type roots)
+    if (account.parent_id === null) {
+      throw new Error(`cannot edit root account "${account.full_name}"`);
+    }
+
+    if (updates.full_name !== undefined && updates.full_name !== account.full_name) {
+      const newFullName = updates.full_name.trim();
+      if (!newFullName || !newFullName.includes(":")) {
+        throw new Error("full_name must contain at least two segments (e.g. Assets:Bank)");
+      }
+
+      // Validate type constraint: new path must start with same type prefix
+      const oldType = inferAccountTypeFromPath(account.full_name);
+      const newType = inferAccountTypeFromPath(newFullName);
+      if (oldType !== newType) {
+        const oldPrefix = account.full_name.split(":")[0];
+        throw new Error(`cannot change account type: "${newFullName}" does not start with "${oldPrefix}:"`);
+      }
+
+      // Check for duplicate
+      const existing = this.getAccountByFullName(newFullName);
+      if (existing && existing.id !== id) {
+        throw new Error(`account "${newFullName}" already exists`);
+      }
+
+      // Build a cache of all accounts for parent lookups
+      const accountByFullName = new Map<string, Account>();
+      for (const a of await this.listAccounts()) {
+        accountByFullName.set(a.full_name, a);
+      }
+
+      // Ensure parent hierarchy exists for newFullName
+      const parts = newFullName.split(":");
+      let parentId: string | null = null;
+      for (let i = 1; i < parts.length; i++) {
+        const path = parts.slice(0, i).join(":");
+        const existingParent = accountByFullName.get(path);
+        if (existingParent) {
+          parentId = existingParent.id;
+          continue;
+        }
+        // Create intermediate account
+        const intermediateId = uuidv7();
+        const accountType = inferAccountTypeFromPath(path);
+        const intermediate: Account = {
+          id: intermediateId,
+          parent_id: parentId,
+          account_type: accountType,
+          name: parts[i - 1],
+          full_name: path,
+          allowed_currencies: [],
+          is_postable: false,
+          is_archived: false,
+          created_at: new Date().toISOString().slice(0, 10),
+        };
+        this.run(
+          "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [intermediate.id, intermediate.parent_id, intermediate.account_type, intermediate.name, intermediate.full_name, "[]", 0, 0, intermediate.created_at],
+        );
+        this.insertClosureEntries(intermediate.id, intermediate.parent_id);
+        accountByFullName.set(path, intermediate);
+        parentId = intermediateId;
+      }
+
+      const newName = parts[parts.length - 1];
+
+      // Update the account itself
+      this.run(
+        "UPDATE account SET full_name = ?, name = ?, parent_id = ? WHERE id = ?",
+        [newFullName, newName, parentId, id],
+      );
+
+      // Rebuild closure table entries for this account
+      this.run("DELETE FROM account_closure WHERE descendant_id = ? AND ancestor_id != ?", [id, id]);
+      if (parentId) {
+        this.run(
+          "INSERT INTO account_closure (ancestor_id, descendant_id, depth) SELECT ancestor_id, ?, depth + 1 FROM account_closure WHERE descendant_id = ?",
+          [id, parentId],
+        );
+      }
+
+      accountByFullName.delete(account.full_name);
+      accountByFullName.set(newFullName, { ...account, full_name: newFullName, name: newName, parent_id: parentId });
+
+      // Rename all descendant accounts
+      const oldPrefix = account.full_name + ":";
+      const descendants = this.query(
+        "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE full_name LIKE ? ORDER BY length(full_name), full_name",
+        [`${account.full_name}:%`],
+        mapAccount,
+      );
+
+      for (const desc of descendants) {
+        const descNewFullName = newFullName + desc.full_name.substring(account.full_name.length);
+        const descParts = descNewFullName.split(":");
+        const descNewName = descParts[descParts.length - 1];
+
+        // Determine parent: the path one level up
+        const descParentPath = descParts.slice(0, -1).join(":");
+        const descParent = accountByFullName.get(descParentPath);
+        const descParentId = descParent?.id ?? null;
+
+        this.run(
+          "UPDATE account SET full_name = ?, name = ?, parent_id = ? WHERE id = ?",
+          [descNewFullName, descNewName, descParentId, desc.id],
+        );
+
+        // Rebuild closure for descendant
+        this.run("DELETE FROM account_closure WHERE descendant_id = ? AND ancestor_id != ?", [desc.id, desc.id]);
+        if (descParentId) {
+          this.run(
+            "INSERT INTO account_closure (ancestor_id, descendant_id, depth) SELECT ancestor_id, ?, depth + 1 FROM account_closure WHERE descendant_id = ?",
+            [desc.id, descParentId],
+          );
+        }
+
+        accountByFullName.delete(desc.full_name);
+        accountByFullName.set(descNewFullName, { ...desc, full_name: descNewFullName, name: descNewName, parent_id: descParentId });
+      }
+
+      // Clean up orphaned old intermediate accounts iteratively
+      // (non-postable accounts with no children and no line items, deepest first)
+      // Repeat until no more orphans found (deleting a leaf may orphan its parent)
+      const typeRoot = account.full_name.split(":")[0];
+      for (;;) {
+        const orphans = this.query(
+          `SELECT a.id, a.full_name FROM account a
+           WHERE a.full_name LIKE ? AND a.is_postable = 0
+           AND a.parent_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM account c WHERE c.parent_id = a.id)
+           AND NOT EXISTS (SELECT 1 FROM line_item li WHERE li.account_id = a.id)
+           ORDER BY length(a.full_name) DESC`,
+          [`${typeRoot}:%`],
+          (row) => ({ id: row.id as string, full_name: row.full_name as string }),
+        );
+        if (orphans.length === 0) break;
+        for (const orphan of orphans) {
+          this.run("DELETE FROM account_closure WHERE ancestor_id = ? OR descendant_id = ?", [orphan.id, orphan.id]);
+          this.run("DELETE FROM account_metadata WHERE account_id = ?", [orphan.id]);
+          this.run("DELETE FROM account WHERE id = ?", [orphan.id]);
+        }
+      }
+
+      this.audit("rename", "account", id, `${account.full_name} -> ${newFullName}`);
+    }
+
+    if (updates.is_postable !== undefined && updates.is_postable !== account.is_postable) {
+      this.run("UPDATE account SET is_postable = ? WHERE id = ?", [updates.is_postable ? 1 : 0, id]);
+      this.audit("update", "account", id, `is_postable: ${updates.is_postable}`);
+    }
+
+    this.scheduleSave();
+  }
+
   async renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }> {
     if (oldPrefix === newPrefix) return { renamed: 0, skipped: 0 };
 

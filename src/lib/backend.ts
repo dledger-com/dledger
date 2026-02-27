@@ -78,6 +78,7 @@ export interface Backend {
   getAccount(id: string): Promise<Account | null>;
   createAccount(account: Account): Promise<void>;
   archiveAccount(id: string): Promise<void>;
+  updateAccount(id: string, updates: { full_name?: string; is_postable?: boolean }): Promise<void>;
 
   // Journal entries
   postJournalEntry(entry: JournalEntry, items: LineItem[]): Promise<void>;
@@ -245,6 +246,9 @@ class TauriBackend implements Backend {
   }
   async archiveAccount(id: string): Promise<void> {
     return this.invoke("archive_account", { id });
+  }
+  async updateAccount(id: string, updates: { full_name?: string; is_postable?: boolean }): Promise<void> {
+    return this.invoke("update_account", { id, updates });
   }
 
   // Journal entries

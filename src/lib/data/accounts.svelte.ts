@@ -59,6 +59,17 @@ export class AccountStore {
     }
   }
 
+  async update(id: string, updates: { full_name?: string; is_postable?: boolean }): Promise<boolean> {
+    try {
+      await getBackend().updateAccount(id, updates);
+      await this.load();
+      return true;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      return false;
+    }
+  }
+
   async archive(id: string): Promise<boolean> {
     try {
       await getBackend().archiveAccount(id);
