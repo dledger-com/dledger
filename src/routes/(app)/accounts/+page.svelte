@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import * as Popover from "$lib/components/ui/popover/index.js";
+  import * as Command from "$lib/components/ui/command/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -34,6 +36,12 @@
   let editFullName = $state("");
   let editPostable = $state(true);
   let editSaving = $state(false);
+  let suggestionsOpen = $state(false);
+
+  // Merge state
+  let pendingMergeTarget = $state<Account | null>(null);
+  let mergeDialogOpen = $state(false);
+  let merging = $state(false);
 
   const TYPE_PREFIXES: Record<AccountType, string[]> = {
     asset: ["Assets:", "Asset:"],
@@ -73,16 +81,49 @@
       : false,
   );
 
+  // Suggestions: same-type accounts excluding the one being edited
+  const editSuggestions = $derived.by(() => {
+    if (!editingId) return [];
+    const account = store.accounts.find((a) => a.id === editingId);
+    if (!account) return [];
+    const trimmed = editFullName.trim().toLowerCase();
+    if (!trimmed) return [];
+    return store.active
+      .filter((a) => a.id !== editingId && a.account_type === account.account_type && a.full_name.toLowerCase().includes(trimmed))
+      .slice(0, 10);
+  });
+
+  // Detect if editFullName matches an existing same-type account (for merge)
+  const matchedExisting = $derived.by(() => {
+    if (!editingId) return null;
+    const account = store.accounts.find((a) => a.id === editingId);
+    if (!account) return null;
+    const trimmed = editFullName.trim();
+    return store.active.find((a) => a.id !== editingId && a.account_type === account.account_type && a.full_name === trimmed) ?? null;
+  });
+
+  // Whether save action will be a merge
+  const isMerge = $derived(pendingMergeTarget !== null || matchedExisting !== null);
+
   function startEdit(account: Account) {
     editingId = account.id;
     editFullName = account.full_name;
     editPostable = account.is_postable;
+    pendingMergeTarget = null;
   }
 
   function cancelEdit() {
     editingId = null;
     editFullName = "";
     editPostable = true;
+    pendingMergeTarget = null;
+    suggestionsOpen = false;
+  }
+
+  function selectSuggestion(suggestion: Account) {
+    editFullName = suggestion.full_name;
+    pendingMergeTarget = suggestion;
+    suggestionsOpen = false;
   }
 
   async function saveEdit() {
@@ -90,6 +131,14 @@
     const account = store.accounts.find((a) => a.id === editingId);
     if (!account) return;
 
+    // Check if this should be a merge
+    const mergeTarget = pendingMergeTarget ?? matchedExisting;
+    if (mergeTarget) {
+      mergeDialogOpen = true;
+      return;
+    }
+
+    // Normal rename path
     editSaving = true;
     const updates: { full_name?: string; is_postable?: boolean } = {};
     if (editFullName.trim() !== account.full_name) updates.full_name = editFullName.trim();
@@ -102,6 +151,26 @@
       cancelEdit();
     } else {
       toast.error(store.error ?? "Failed to update account");
+    }
+  }
+
+  async function confirmMerge() {
+    if (!editingId) return;
+    const mergeTarget = pendingMergeTarget ?? matchedExisting;
+    if (!mergeTarget) return;
+
+    merging = true;
+    const account = store.accounts.find((a) => a.id === editingId);
+    const result = await store.merge(editingId, mergeTarget.id);
+    merging = false;
+    mergeDialogOpen = false;
+
+    if (result) {
+      const moved = result.lineItems + result.lots + result.assertions + result.reconciliations;
+      toast.success(`Merged "${account?.full_name}" into "${mergeTarget.full_name}" (${moved} items moved)`);
+      cancelEdit();
+    } else {
+      toast.error(store.error ?? "Failed to merge accounts");
     }
   }
 
@@ -255,13 +324,43 @@
               <Table.Row>
                 <Table.Cell>
                   <div class="space-y-1">
-                    <Input
-                      bind:value={editFullName}
-                      class={editError ? "border-destructive" : ""}
-                      onkeydown={(e: KeyboardEvent) => { if (e.key === "Escape") cancelEdit(); if (e.key === "Enter" && !editError && editHasChanges) saveEdit(); }}
-                    />
+                    <Popover.Root bind:open={suggestionsOpen}>
+                      <Popover.Trigger class="w-full text-left">
+                        <Input
+                          bind:value={editFullName}
+                          class={editError ? "border-destructive" : isMerge ? "border-yellow-500" : ""}
+                          onfocus={() => { suggestionsOpen = true; }}
+                          oninput={() => { pendingMergeTarget = null; suggestionsOpen = true; }}
+                          onkeydown={(e: KeyboardEvent) => {
+                            if (e.key === "Escape") { if (suggestionsOpen) { suggestionsOpen = false; e.stopPropagation(); } else cancelEdit(); }
+                            if (e.key === "Enter" && !suggestionsOpen && !editError && editHasChanges) saveEdit();
+                          }}
+                        />
+                      </Popover.Trigger>
+                      {#if editSuggestions.length > 0}
+                        <Popover.Content class="w-[320px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                          <Command.Root shouldFilter={false}>
+                            <Command.List class="max-h-[200px]">
+                              <Command.Group heading="Same-type accounts">
+                                {#each editSuggestions as suggestion}
+                                  <Command.Item
+                                    value={suggestion.full_name}
+                                    onSelect={() => selectSuggestion(suggestion)}
+                                    class="font-mono text-xs"
+                                  >
+                                    {suggestion.full_name}
+                                  </Command.Item>
+                                {/each}
+                              </Command.Group>
+                            </Command.List>
+                          </Command.Root>
+                        </Popover.Content>
+                      {/if}
+                    </Popover.Root>
                     {#if editError}
                       <p class="text-xs text-destructive">{editError}</p>
+                    {:else if isMerge}
+                      <p class="text-xs text-yellow-600 dark:text-yellow-400">Will merge into "{(pendingMergeTarget ?? matchedExisting)?.full_name}"</p>
                     {/if}
                   </div>
                 </Table.Cell>
@@ -273,8 +372,19 @@
                 </Table.Cell>
                 <Table.Cell class="text-right hidden sm:table-cell">
                   <div class="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="sm" onclick={saveEdit} disabled={!!editError || !editHasChanges || editSaving}>
-                      {editSaving ? "Saving..." : "Save"}
+                    <Button
+                      variant={isMerge ? "destructive" : "ghost"}
+                      size="sm"
+                      onclick={saveEdit}
+                      disabled={!!editError || !editHasChanges || editSaving}
+                    >
+                      {#if editSaving}
+                        Saving...
+                      {:else if isMerge}
+                        Merge
+                      {:else}
+                        Save
+                      {/if}
                     </Button>
                     <Button variant="ghost" size="sm" onclick={cancelEdit} disabled={editSaving}>
                       Cancel
@@ -311,3 +421,25 @@
     </Card.Root>
   {/if}
 </div>
+
+<!-- Merge confirmation dialog -->
+<Dialog.Root bind:open={mergeDialogOpen}>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>Merge Account?</Dialog.Title>
+      <Dialog.Description>
+        {#if editingId}
+          {@const source = store.accounts.find((a) => a.id === editingId)}
+          {@const target = pendingMergeTarget ?? matchedExisting}
+          Move all transactions from "{source?.full_name}" into "{target?.full_name}", then delete "{source?.full_name}". This cannot be undone.
+        {/if}
+      </Dialog.Description>
+    </Dialog.Header>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (mergeDialogOpen = false)} disabled={merging}>Cancel</Button>
+      <Button variant="destructive" onclick={confirmMerge} disabled={merging}>
+        {merging ? "Merging..." : "Merge"}
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

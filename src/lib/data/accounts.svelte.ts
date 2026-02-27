@@ -92,6 +92,17 @@ export class AccountStore {
     }
   }
 
+  async merge(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number } | null> {
+    try {
+      const result = await getBackend().mergeAccounts(sourceId, targetId);
+      await this.load();
+      return result;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      return null;
+    }
+  }
+
   async getBalance(accountId: string, asOf?: string): Promise<CurrencyBalance[]> {
     return getBackend().getAccountBalance(accountId, asOf);
   }

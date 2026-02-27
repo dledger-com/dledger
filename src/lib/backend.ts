@@ -190,8 +190,9 @@ export interface Backend {
   commitTransaction?(): void;
   rollbackTransaction?(): void;
 
-  // Account rename
+  // Account rename / merge
   renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }>;
+  mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }>;
 
   // Data management
   clearExchangeRates(): Promise<void>;
@@ -483,9 +484,12 @@ class TauriBackend implements Backend {
     return this.invoke("count_duplicate_sources");
   }
 
-  // Account rename
+  // Account rename / merge
   async renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }> {
     return this.invoke("rename_account_prefix", { oldPrefix, newPrefix });
+  }
+  async mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }> {
+    return this.invoke("merge_accounts", { sourceId, targetId });
   }
 
   // Data management

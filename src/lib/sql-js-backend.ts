@@ -1267,6 +1267,157 @@ export class SqlJsBackend implements Backend {
     this.scheduleSave();
   }
 
+  async mergeAccounts(
+    sourceId: string,
+    targetId: string,
+  ): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }> {
+    if (sourceId === targetId) throw new Error("cannot merge an account into itself");
+
+    const source = this.getAccountById(sourceId);
+    if (!source) throw new Error(`source account ${sourceId} not found`);
+    const target = this.getAccountById(targetId);
+    if (!target) throw new Error(`target account ${targetId} not found`);
+    if (source.account_type !== target.account_type) {
+      throw new Error(`cannot merge accounts of different types (${source.account_type} vs ${target.account_type})`);
+    }
+    if (source.parent_id === null) {
+      throw new Error(`cannot merge root account "${source.full_name}"`);
+    }
+
+    const totals = { lineItems: 0, lots: 0, assertions: 0, reconciliations: 0, templates: 0, metadata: 0 };
+
+    // Helper: move all data from one account to another and delete the source
+    const mergeData = (srcId: string, tgtId: string): void => {
+      // 1. line_items
+      this.run("UPDATE line_item SET account_id = ? WHERE account_id = ?", [tgtId, srcId]);
+      const liCount = this.query("SELECT changes() AS c", [], (r) => r.c as number)[0] ?? 0;
+      totals.lineItems += liCount;
+
+      // 2. lots
+      this.run("UPDATE lot SET account_id = ? WHERE account_id = ?", [tgtId, srcId]);
+      const lotCount = this.query("SELECT changes() AS c", [], (r) => r.c as number)[0] ?? 0;
+      totals.lots += lotCount;
+
+      // 3. balance_assertions
+      this.run("UPDATE balance_assertion SET account_id = ? WHERE account_id = ?", [tgtId, srcId]);
+      const baCount = this.query("SELECT changes() AS c", [], (r) => r.c as number)[0] ?? 0;
+      totals.assertions += baCount;
+
+      // 4. account_metadata (INSERT OR IGNORE so target wins on key conflict)
+      this.run(
+        "INSERT OR IGNORE INTO account_metadata (account_id, key, value) SELECT ?, key, value FROM account_metadata WHERE account_id = ?",
+        [tgtId, srcId],
+      );
+      const mdCount = this.query("SELECT changes() AS c", [], (r) => r.c as number)[0] ?? 0;
+      totals.metadata += mdCount;
+      this.run("DELETE FROM account_metadata WHERE account_id = ?", [srcId]);
+
+      // 5. reconciliations
+      this.run("UPDATE reconciliation SET account_id = ? WHERE account_id = ?", [tgtId, srcId]);
+      const recCount = this.query("SELECT changes() AS c", [], (r) => r.c as number)[0] ?? 0;
+      totals.reconciliations += recCount;
+
+      // 6. recurring_templates — update account_id refs inside line_items_json
+      const templates = this.query(
+        "SELECT id, line_items_json FROM recurring_template",
+        [],
+        (row) => ({ id: row.id as string, json: row.line_items_json as string }),
+      );
+      for (const tmpl of templates) {
+        const items = JSON.parse(tmpl.json || "[]") as Array<{ account_id: string }>;
+        let changed = false;
+        for (const item of items) {
+          if (item.account_id === srcId) {
+            item.account_id = tgtId;
+            changed = true;
+          }
+        }
+        if (changed) {
+          this.run("UPDATE recurring_template SET line_items_json = ? WHERE id = ?", [JSON.stringify(items), tmpl.id]);
+          totals.templates++;
+        }
+      }
+
+      // 7. Delete source from closure table and account table
+      this.run("DELETE FROM account_closure WHERE ancestor_id = ? OR descendant_id = ?", [srcId, srcId]);
+      this.run("DELETE FROM account WHERE id = ?", [srcId]);
+    };
+
+    // Handle descendants of source in two passes
+    const descendants = this.query(
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE full_name LIKE ? ORDER BY length(full_name), full_name",
+      [`${source.full_name}:%`],
+      mapAccount,
+    );
+
+    // Pass 1 (shallowest first): rename non-conflicting, collect conflicting pairs
+    const toMerge: Array<{ srcId: string; tgtId: string }> = [];
+    for (const desc of descendants) {
+      const newFullName = target.full_name + desc.full_name.substring(source.full_name.length);
+      const existing = this.getAccountByFullName(newFullName);
+
+      if (existing) {
+        // Conflict — will merge in pass 2. Re-parent children to existing target account.
+        this.run("UPDATE account SET parent_id = ? WHERE parent_id = ?", [existing.id, desc.id]);
+        toMerge.push({ srcId: desc.id, tgtId: existing.id });
+      } else {
+        // No conflict: rename descendant to live under target
+        const parts = newFullName.split(":");
+        const newName = parts[parts.length - 1];
+        const parentPath = parts.slice(0, -1).join(":");
+        const parentAccount = this.getAccountByFullName(parentPath);
+        const newParentId = parentAccount?.id ?? null;
+
+        this.run(
+          "UPDATE account SET full_name = ?, name = ?, parent_id = ? WHERE id = ?",
+          [newFullName, newName, newParentId, desc.id],
+        );
+
+        // Rebuild closure table entries
+        this.run("DELETE FROM account_closure WHERE descendant_id = ? AND ancestor_id != ?", [desc.id, desc.id]);
+        if (newParentId) {
+          this.run(
+            "INSERT INTO account_closure (ancestor_id, descendant_id, depth) SELECT ancestor_id, ?, depth + 1 FROM account_closure WHERE descendant_id = ?",
+            [desc.id, newParentId],
+          );
+        }
+      }
+    }
+
+    // Pass 2 (deepest first): merge conflicting pairs now that children have been re-parented
+    for (const pair of toMerge.reverse()) {
+      mergeData(pair.srcId, pair.tgtId);
+    }
+
+    // Now source should have no children — merge source into target
+    mergeData(sourceId, targetId);
+
+    // Clean up orphaned intermediate parent accounts (same pattern as updateAccount)
+    const typeRoot = source.full_name.split(":")[0];
+    for (;;) {
+      const orphans = this.query(
+        `SELECT a.id, a.full_name FROM account a
+         WHERE a.full_name LIKE ? AND a.is_postable = 0
+         AND a.parent_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM account c WHERE c.parent_id = a.id)
+         AND NOT EXISTS (SELECT 1 FROM line_item li WHERE li.account_id = a.id)
+         ORDER BY length(a.full_name) DESC`,
+        [`${typeRoot}:%`],
+        (row) => ({ id: row.id as string, full_name: row.full_name as string }),
+      );
+      if (orphans.length === 0) break;
+      for (const orphan of orphans) {
+        this.run("DELETE FROM account_closure WHERE ancestor_id = ? OR descendant_id = ?", [orphan.id, orphan.id]);
+        this.run("DELETE FROM account_metadata WHERE account_id = ?", [orphan.id]);
+        this.run("DELETE FROM account WHERE id = ?", [orphan.id]);
+      }
+    }
+
+    this.audit("merge", "account", sourceId, `${source.full_name} -> ${target.full_name}`);
+    this.scheduleSave();
+    return totals;
+  }
+
   async renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }> {
     if (oldPrefix === newPrefix) return { renamed: 0, skipped: 0 };
 
