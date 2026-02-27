@@ -16,8 +16,10 @@
   import { toast } from "svelte-sonner";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import ChevronRight from "lucide-svelte/icons/chevron-right";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
 
   const store = new AccountStore();
   let dialogOpen = $state(false);
@@ -520,16 +522,22 @@
                 </Table.Cell>
                 <Table.Cell class="hidden md:table-cell">{account.is_postable ? "Yes" : "No"}</Table.Cell>
                 <Table.Cell class="text-right hidden sm:table-cell">
-                  <div class="flex items-center justify-end gap-1">
-                    {#if account.parent_id !== null}
-                      <Button variant="ghost" size="sm" onclick={() => startEdit(account)}>
-                        Edit
-                      </Button>
-                    {/if}
-                    <Button variant="ghost" size="sm" onclick={() => handleArchive(account.id, account.full_name)}>
-                      Archive
-                    </Button>
-                  </div>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      {#snippet child({ props })}
+                        <Button variant="ghost" size="icon-sm" {...props}>
+                          <EllipsisVertical class="h-4 w-4" />
+                          <span class="sr-only">Actions</span>
+                        </Button>
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                      {#if account.parent_id !== null}
+                        <DropdownMenu.Item onclick={() => startEdit(account)}>Edit</DropdownMenu.Item>
+                      {/if}
+                      <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>Archive</DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 </Table.Cell>
               </Table.Row>
             {/if}
