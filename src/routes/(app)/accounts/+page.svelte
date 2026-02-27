@@ -280,6 +280,15 @@
     formIsPostable = true;
   }
 
+  function startSubAccount(parent: Account) {
+    formName = "";
+    formFullName = parent.full_name + ":";
+    formType = parent.account_type;
+    formParentId = parent.id;
+    formIsPostable = true;
+    dialogOpen = true;
+  }
+
   async function handleCreate() {
     const today = new Date().toISOString().slice(0, 10);
     const account: Account = {
@@ -564,6 +573,7 @@
                       {/snippet}
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content>
+                      <DropdownMenu.Item onclick={() => startSubAccount(account)}>Add Sub-Account</DropdownMenu.Item>
                       {#if account.parent_id !== null}
                         <DropdownMenu.Item onclick={() => startEdit(account)}>Edit</DropdownMenu.Item>
                       {/if}
