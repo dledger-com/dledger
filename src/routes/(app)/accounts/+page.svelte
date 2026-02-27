@@ -36,6 +36,22 @@
   // Tree view collapse state
   let collapsedIds = $state(new Set<string>());
 
+  // Ancestor row highlighting on hover
+  let hoveredId = $state<string | null>(null);
+
+  const hoveredAncestorIds = $derived.by(() => {
+    if (!hoveredId) return new Set<string>();
+    const ids = new Set<string>();
+    const hovered = store.byId.get(hoveredId);
+    let pid = hovered?.parent_id ?? null;
+    while (pid) {
+      ids.add(pid);
+      const parent = store.byId.get(pid);
+      pid = parent?.parent_id ?? null;
+    }
+    return ids;
+  });
+
   function toggleCollapse(id: string) {
     const next = new Set(collapsedIds);
     if (next.has(id)) next.delete(id);
@@ -395,7 +411,11 @@
         <Table.Body>
           {#each filteredAccounts as account (account.id)}
             {#if editingId === account.id}
-              <Table.Row>
+              <Table.Row
+                class={hoveredAncestorIds.has(account.id) ? "bg-muted/30" : ""}
+                onmouseenter={() => (hoveredId = account.id)}
+                onmouseleave={() => { if (hoveredId === account.id) hoveredId = null; }}
+              >
                 <Table.Cell>
                   <div style:padding-left="{getDepth(account) * 1.25}rem">
                   <div class="space-y-1">
@@ -469,7 +489,11 @@
                 </Table.Cell>
               </Table.Row>
             {:else}
-              <Table.Row>
+              <Table.Row
+                class={hoveredAncestorIds.has(account.id) ? "bg-muted/30" : ""}
+                onmouseenter={() => (hoveredId = account.id)}
+                onmouseleave={() => { if (hoveredId === account.id) hoveredId = null; }}
+              >
                 <Table.Cell>
                   <div class="flex items-center" style:padding-left="{getDepth(account) * 1.25}rem">
                     {#if parentIds.has(account.id)}
