@@ -16,6 +16,8 @@
   import { toast } from "svelte-sonner";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
+  import ChevronRight from "lucide-svelte/icons/chevron-right";
+  import ChevronDown from "lucide-svelte/icons/chevron-down";
 
   const store = new AccountStore();
   let dialogOpen = $state(false);
@@ -30,6 +32,25 @@
   const accountTypes: AccountType[] = ["asset", "liability", "equity", "revenue", "expense"];
 
   let searchTerm = $state("");
+
+  // Tree view collapse state
+  let collapsedIds = $state(new Set<string>());
+
+  function toggleCollapse(id: string) {
+    const next = new Set(collapsedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    collapsedIds = next;
+  }
+
+  // Set of account IDs that have at least one child
+  const parentIds = $derived(
+    new Set(store.active.filter(a => a.parent_id !== null).map(a => a.parent_id!))
+  );
+
+  function getDepth(account: Account): number {
+    return account.full_name.split(":").length - 1;
+  }
 
   // Inline edit state
   let editingId = $state<string | null>(null);
@@ -195,9 +216,41 @@
     }
   }
 
-  const filteredAccounts = $derived(
-    store.active.filter((a) => matchesFilter(a, searchTerm.trim(), ["full_name", "account_type"]))
-  );
+  const filteredAccounts = $derived.by(() => {
+    const accounts = store.active;
+    const term = searchTerm.trim();
+
+    // When searching, find matching accounts + all their ancestors
+    let includedIds: Set<string> | null = null;
+    if (term) {
+      const matching = accounts.filter(a => matchesFilter(a, term, ["full_name", "account_type"]));
+      includedIds = new Set<string>();
+      for (const account of matching) {
+        includedIds.add(account.id);
+        let pid = account.parent_id;
+        while (pid) {
+          if (includedIds.has(pid)) break;
+          includedIds.add(pid);
+          const parent = store.byId.get(pid);
+          pid = parent?.parent_id ?? null;
+        }
+      }
+    }
+
+    // Walk sorted list, applying both inclusion filter and collapse logic
+    const result: Account[] = [];
+    let skipPrefix: string | null = null;
+    for (const account of accounts) {
+      if (includedIds && !includedIds.has(account.id)) continue;
+      if (skipPrefix && account.full_name.startsWith(skipPrefix)) continue;
+      skipPrefix = null;
+      result.push(account);
+      if (collapsedIds.has(account.id)) {
+        skipPrefix = account.full_name + ":";
+      }
+    }
+    return result;
+  });
 
   function resetForm() {
     formName = "";
@@ -333,7 +386,7 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Full Name</Table.Head>
+            <Table.Head>Account</Table.Head>
             <Table.Head>Type</Table.Head>
             <Table.Head class="hidden md:table-cell">Postable</Table.Head>
             <Table.Head class="text-right hidden sm:table-cell">Actions</Table.Head>
@@ -344,6 +397,7 @@
             {#if editingId === account.id}
               <Table.Row>
                 <Table.Cell>
+                  <div style:padding-left="{getDepth(account) * 1.25}rem">
                   <div class="space-y-1">
                     <Popover.Root bind:open={suggestionsOpen}>
                       <Popover.Trigger class="w-full text-left">
@@ -384,6 +438,7 @@
                       <p class="text-xs text-yellow-600 dark:text-yellow-400">Will merge into "{(pendingMergeTarget ?? matchedExisting)?.full_name}"</p>
                     {/if}
                   </div>
+                  </div>
                 </Table.Cell>
                 <Table.Cell>
                   <AccountTypeBadge type={account.account_type} />
@@ -416,7 +471,25 @@
             {:else}
               <Table.Row>
                 <Table.Cell>
-                  <a href="/accounts/{account.id}" class="font-medium hover:underline">{account.full_name}</a>
+                  <div class="flex items-center" style:padding-left="{getDepth(account) * 1.25}rem">
+                    {#if parentIds.has(account.id)}
+                      <button class="p-0.5 -ml-1 mr-1 rounded hover:bg-muted" onclick={() => toggleCollapse(account.id)}>
+                        {#if collapsedIds.has(account.id)}
+                          <ChevronRight class="h-3.5 w-3.5 text-muted-foreground" />
+                        {:else}
+                          <ChevronDown class="h-3.5 w-3.5 text-muted-foreground" />
+                        {/if}
+                      </button>
+                    {:else}
+                      <span class="w-5"></span>
+                    {/if}
+
+                    {#if account.is_postable}
+                      <a href="/accounts/{account.id}" class="font-medium hover:underline" title={account.full_name}>{account.name}</a>
+                    {:else}
+                      <span class="text-sm text-muted-foreground font-medium" title={account.full_name}>{account.name}</span>
+                    {/if}
+                  </div>
                 </Table.Cell>
                 <Table.Cell>
                   <AccountTypeBadge type={account.account_type} />
