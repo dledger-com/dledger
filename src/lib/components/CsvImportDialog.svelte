@@ -46,6 +46,7 @@
   import Check from "lucide-svelte/icons/check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import BrainCircuit from "lucide-svelte/icons/brain-circuit";
+  import Loader from "lucide-svelte/icons/loader";
 
   let {
     open = $bindable(false),
@@ -167,6 +168,7 @@
             classifier,
             mlThreshold,
             settings.settings.debugMode,
+            backend,
           );
 
           mlSuggestions = suggestions;
@@ -1022,11 +1024,15 @@
                 <Button
                   size="sm"
                   variant="outline"
-                  class="h-7 text-xs"
+                  class="h-7 text-xs {mlClassifying ? 'animate-pulse border-primary/60 disabled:opacity-80' : ''}"
                   onclick={runMlClassification}
                   disabled={mlClassifying || taskQueue.isActive("ml-classify")}
                 >
-                  <BrainCircuit class="h-3 w-3 mr-1" />
+                  {#if mlClassifying}
+                    <Loader class="h-3 w-3 mr-1 animate-spin" />
+                  {:else}
+                    <BrainCircuit class="h-3 w-3 mr-1" />
+                  {/if}
                   {mlClassifying ? "Classifying..." : "Classify with AI"}
                 </Button>
               {/if}

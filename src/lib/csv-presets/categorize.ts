@@ -1,4 +1,5 @@
 import type { TransactionClassifier, ClassificationResult } from "$lib/ml/classifier.js";
+import type { Backend } from "$lib/backend.js";
 import type { CsvRecord } from "./types.js";
 
 export interface CsvCategorizationRule {
@@ -23,6 +24,58 @@ export function matchRule(
 
 const UNCATEGORIZED_SUFFIX = ":Uncategorized";
 
+export interface HistoricalExample {
+  account: string;        // full account path
+  descriptions: string[]; // unique past descriptions assigned to this account
+}
+
+/**
+ * Build historical examples from past confirmed journal entries.
+ * Groups unique transaction descriptions by the accounts they were posted to.
+ */
+export async function buildHistoricalExamples(
+  backend: Backend,
+  maxEntries = 500,
+  maxPerAccount = 10,
+): Promise<HistoricalExample[]> {
+  const accounts = await backend.listAccounts();
+  const accountMap = new Map<string, string>(); // id → full_name
+  for (const a of accounts) {
+    accountMap.set(a.id, a.full_name);
+  }
+
+  const entries = await backend.queryJournalEntries({
+    status: "confirmed",
+    limit: maxEntries,
+  });
+
+  const descsByAccount = new Map<string, Set<string>>(); // full_name → descriptions
+
+  for (const [entry, items] of entries) {
+    if (!entry.description) continue;
+    for (const item of items) {
+      const fullName = accountMap.get(item.account_id);
+      if (!fullName) continue;
+      let descs = descsByAccount.get(fullName);
+      if (!descs) {
+        descs = new Set<string>();
+        descsByAccount.set(fullName, descs);
+      }
+      if (descs.size < maxPerAccount) {
+        descs.add(entry.description);
+      }
+    }
+  }
+
+  const result: HistoricalExample[] = [];
+  for (const [account, descs] of descsByAccount) {
+    if (descs.size > 0) {
+      result.push({ account, descriptions: [...descs] });
+    }
+  }
+  return result;
+}
+
 /**
  * Classify uncategorized import records using ML.
  *
@@ -37,6 +90,7 @@ export async function classifyTransactions(
   classifier: TransactionClassifier,
   threshold = 0.5,
   debug = false,
+  backend?: Backend,
 ): Promise<Map<number, ClassificationResult>> {
   const uncategorizedIndices: number[] = [];
   const uncategorizedDescriptions: string[] = [];
@@ -86,10 +140,30 @@ export async function classifyTransactions(
     return new Map();
   }
 
+  // Build historical examples if backend is available
+  let historicalExamples: HistoricalExample[] | undefined;
+  if (backend) {
+    try {
+      const allExamples = await buildHistoricalExamples(backend);
+      // Filter to only candidate accounts
+      const candidateSet = new Set(candidateAccounts);
+      historicalExamples = allExamples.filter((ex) => candidateSet.has(ex.account));
+      if (debug) {
+        const totalDescs = historicalExamples.reduce((s, e) => s + e.descriptions.length, 0);
+        console.log(`Historical examples: ${historicalExamples.length} accounts, ${totalDescs} descriptions`);
+      }
+    } catch (err) {
+      if (debug) console.warn("Failed to build historical examples:", err);
+      // Graceful degradation — proceed without historical examples
+    }
+  }
+
   const results = await classifier.classifyBatch(
     uncategorizedDescriptions,
     candidateAccounts,
     threshold,
+    undefined,
+    historicalExamples,
   );
 
   const map = new Map<number, ClassificationResult>();

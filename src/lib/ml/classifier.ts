@@ -11,7 +11,7 @@ export interface ClassificationResult {
   description: string;
   account: string;
   confidence: number;
-  method: "embedding" | "zero-shot";
+  method: "embedding" | "zero-shot" | "historical";
 }
 
 interface PendingCallback {
@@ -101,6 +101,7 @@ export class TransactionClassifier {
     accounts: string[],
     threshold = 0.5,
     onProgress?: (p: TaskProgress) => void,
+    historicalExamples?: { account: string; descriptions: string[] }[],
   ): Promise<ClassificationResult[]> {
     if (!this.ready || !this.worker) {
       throw new Error("Classifier not initialized — call init() first");
@@ -133,7 +134,8 @@ export class TransactionClassifier {
         accounts,
         threshold,
         zeroShotTopN: 5,
-      })) as Array<{ account: string; confidence: number; method: "embedding" | "zero-shot" }>;
+        historicalExamples,
+      })) as Array<{ account: string; confidence: number; method: "embedding" | "zero-shot" | "historical" }>;
 
       return results.map((r, i) => ({
         description: descriptions[i],

@@ -35,6 +35,7 @@ interface ClassifyBatchMessage {
     accounts: string[];
     threshold: number;
     zeroShotTopN: number;
+    historicalExamples?: { account: string; descriptions: string[] }[];
   };
 }
 
@@ -49,7 +50,7 @@ type WorkerMessage = InitMessage | ClassifyBatchMessage | DisposeMessage;
 interface ClassifyResult {
   account: string;
   confidence: number;
-  method: "embedding" | "zero-shot";
+  method: "embedding" | "zero-shot" | "historical";
 }
 
 function postProgress(id: string, current: number, total: number, message?: string) {
@@ -121,7 +122,7 @@ async function embedTexts(texts: string[]): Promise<Float32Array[]> {
 }
 
 async function handleClassifyBatch(msg: ClassifyBatchMessage) {
-  const { descriptions, accounts, threshold, zeroShotTopN } = msg.payload;
+  const { descriptions, accounts, threshold, zeroShotTopN, historicalExamples } = msg.payload;
 
   if (!embedder) {
     postError(msg.id, "Embedding model not loaded — call init first");
@@ -140,6 +141,33 @@ async function handleClassifyBatch(msg: ClassifyBatchMessage) {
     });
     const accountEmbeddings = await embedTexts(accountLabels);
 
+    // Build combined reference set: account labels + historical descriptions
+    const combinedEmbeddings: Float32Array[] = [...accountEmbeddings];
+    const combinedAccounts: string[] = [...accounts];
+    const labelBoundary = accountEmbeddings.length; // indices < boundary are label-based
+
+    if (historicalExamples && historicalExamples.length > 0) {
+      postProgress(msg.id, 0, total, "Embedding historical examples...");
+
+      // Collect all historical descriptions with their account mappings
+      const histTexts: string[] = [];
+      const histAccounts: string[] = [];
+      for (const ex of historicalExamples) {
+        for (const desc of ex.descriptions) {
+          histTexts.push(desc);
+          histAccounts.push(ex.account);
+        }
+      }
+
+      if (histTexts.length > 0) {
+        const histEmbeddings = await embedTexts(histTexts);
+        for (let i = 0; i < histEmbeddings.length; i++) {
+          combinedEmbeddings.push(histEmbeddings[i]);
+          combinedAccounts.push(histAccounts[i]);
+        }
+      }
+    }
+
     const results: ClassifyResult[] = [];
 
     // Classify each description
@@ -149,20 +177,42 @@ async function handleClassifyBatch(msg: ClassifyBatchMessage) {
       const desc = descriptions[i];
       const [descEmbedding] = await embedTexts([desc]);
 
-      // Find nearest account by cosine similarity
-      const nearest = findNearest(descEmbedding, accountEmbeddings, zeroShotTopN);
-      const bestMatch = nearest[0];
+      // Find nearest by cosine similarity across combined set
+      // Request extra candidates since same account may appear multiple times
+      const topK = Math.min(zeroShotTopN * 3, combinedEmbeddings.length);
+      const nearest = findNearest(descEmbedding, combinedEmbeddings, topK);
 
-      if (bestMatch && bestMatch.score >= threshold) {
+      // Deduplicate by account, keeping best score per account
+      const bestByAccount = new Map<string, { score: number; index: number }>();
+      for (const match of nearest) {
+        const acct = combinedAccounts[match.index];
+        const existing = bestByAccount.get(acct);
+        if (!existing || match.score > existing.score) {
+          bestByAccount.set(acct, { score: match.score, index: match.index });
+        }
+      }
+
+      // Sort by score descending
+      const deduped = [...bestByAccount.entries()]
+        .map(([acct, { score, index }]) => ({ account: acct, score, index }))
+        .sort((a, b) => b.score - a.score);
+
+      const best = deduped[0];
+
+      if (best && best.score >= threshold) {
         results.push({
-          account: accounts[bestMatch.index],
-          confidence: bestMatch.score,
-          method: "embedding",
+          account: best.account,
+          confidence: best.score,
+          method: best.index >= labelBoundary ? "historical" : "embedding",
         });
-      } else if (zeroShot && nearest.length > 0) {
-        // Try zero-shot with top-N candidate accounts
-        const candidateAccounts = nearest.map((n) => accounts[n.index]);
-        const candidateLabels = nearest.map((n) => accountLabels[n.index]);
+      } else if (zeroShot && deduped.length > 0) {
+        // Try zero-shot with top-N unique candidate accounts
+        const topCandidates = deduped.slice(0, zeroShotTopN);
+        const candidateAccts = topCandidates.map((c) => c.account);
+        const candidateLabels = candidateAccts.map((a) => {
+          const parts = a.split(":");
+          return parts[parts.length - 1];
+        });
 
         try {
           const zsResult = await zeroShot(desc, candidateLabels, {
@@ -175,24 +225,24 @@ async function handleClassifyBatch(msg: ClassifyBatchMessage) {
             const bestLabel = zsData.labels[0];
             const labelIdx = candidateLabels.indexOf(bestLabel);
             results.push({
-              account: labelIdx >= 0 ? candidateAccounts[labelIdx] : candidateAccounts[0],
+              account: labelIdx >= 0 ? candidateAccts[labelIdx] : candidateAccts[0],
               confidence: zsData.scores[0],
               method: "zero-shot",
             });
           } else {
             // Below threshold even with zero-shot
             results.push({
-              account: accounts[bestMatch.index],
-              confidence: bestMatch.score,
-              method: "embedding",
+              account: best.account,
+              confidence: best.score,
+              method: best.index >= labelBoundary ? "historical" : "embedding",
             });
           }
         } catch {
           // Zero-shot failed — fall back to embedding result
           results.push({
-            account: accounts[bestMatch.index],
-            confidence: bestMatch.score,
-            method: "embedding",
+            account: best.account,
+            confidence: best.score,
+            method: best.index >= labelBoundary ? "historical" : "embedding",
           });
         }
       } else {
