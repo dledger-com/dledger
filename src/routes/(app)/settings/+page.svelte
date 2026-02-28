@@ -1038,17 +1038,17 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- dprice Local Price Database -->
+  <!-- dprice Price Database -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>dprice Local Price Database</Card.Title>
-      <Card.Description>Use a local SQLite price database for exchange rates. Syncs from ECB, CryptoCompare, DefiLlama, and Binance.</Card.Description>
+      <Card.Title>dprice Price Database</Card.Title>
+      <Card.Description>Use a dedicated price database for exchange rates. Syncs from ECB, CryptoCompare, DefiLlama, and Binance.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm font-medium">Enable dprice rate source</p>
-          <p class="text-sm text-muted-foreground">Use a local SQLite database for exchange rate lookups.</p>
+          <p class="text-sm text-muted-foreground">Use dprice as an exchange rate source.</p>
         </div>
         <Switch
           checked={isDpriceActive(settings.settings.dpriceMode)}
