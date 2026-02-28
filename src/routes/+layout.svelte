@@ -8,6 +8,7 @@
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
   import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
+  import { createDpriceClient } from "$lib/dprice-client.js";
   import { onMount } from "svelte";
 
   let { children } = $props();
@@ -51,6 +52,19 @@
                 showAutoHideToast(syncResult.autoHidden);
               }
               return { summary: `${syncResult.rates_fetched} rates synced` };
+            },
+          });
+        }
+
+        // dprice: startup sync (latest only — fast)
+        if (settings.settings.dpriceEnabled) {
+          taskQueue.enqueue({
+            key: "dprice-startup-sync",
+            label: "dprice latest prices",
+            async run() {
+              const client = createDpriceClient({ dpriceUrl: settings.settings.dpriceUrl });
+              await client.syncLatest();
+              return { summary: "dprice prices updated" };
             },
           });
         }

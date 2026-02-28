@@ -120,6 +120,118 @@ pub async fn dprice_get_price_range(
 }
 
 #[tauri::command]
+pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String, String> {
+    // Guard: prevent concurrent syncs
+    if state
+        .syncing
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("sync already in progress".to_string());
+    }
+
+    let db_path = state.db_path.clone();
+    let config = state.config.clone();
+
+    let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let mut db = PriceDb::open(&db_path).map_err(|e| e.to_string())?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("runtime error: {e}"))?;
+        rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None))
+            .map_err(|e| e.to_string())?;
+        Ok("latest sync completed".to_string())
+    })
+    .await;
+
+    state.syncing.store(false, Ordering::SeqCst);
+    result.map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_latest_date(
+    state: State<'_, DpriceState>,
+) -> Result<Option<String>, String> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
+        let date = db.get_global_latest_date().map_err(|e| e.to_string())?;
+        Ok(date.map(|d| d.format("%Y-%m-%d").to_string()))
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_ensure_prices(
+    state: State<'_, DpriceState>,
+    requests: Vec<(String, String)>,
+) -> Result<Vec<String>, String> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
+        let mut missing = Vec::new();
+        for (symbol, date) in requests {
+            let price = db.get_price(&symbol, &date).map_err(|e| e.to_string())?;
+            if price.is_none() {
+                missing.push(symbol);
+            }
+        }
+        missing.sort();
+        missing.dedup();
+        Ok(missing)
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_export_db(
+    state: State<'_, DpriceState>,
+) -> Result<Vec<u8>, String> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || {
+        std::fs::read(&db_path).map_err(|e| format!("failed to read dprice.db: {e}"))
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_import_db(
+    state: State<'_, DpriceState>,
+    data: Vec<u8>,
+) -> Result<String, String> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || {
+        // Validate: write to a temp file first, try to open as dprice DB
+        let tmp_path = db_path.with_extension("db.tmp");
+        std::fs::write(&tmp_path, &data)
+            .map_err(|e| format!("failed to write temp file: {e}"))?;
+        match PriceDb::open_readonly(&tmp_path) {
+            Ok(db) => {
+                // Verify it has the expected schema by querying
+                let _ = db.count_assets().map_err(|e| {
+                    let _ = std::fs::remove_file(&tmp_path);
+                    format!("invalid dprice database: {e}")
+                })?;
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(format!("invalid dprice database: {e}"));
+            }
+        }
+        // Replace the actual DB
+        std::fs::rename(&tmp_path, &db_path)
+            .map_err(|e| format!("failed to replace dprice.db: {e}"))?;
+        Ok("dprice database imported".to_string())
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
 pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String> {
     // Guard: prevent concurrent syncs
     if state
@@ -204,5 +316,64 @@ mod tests {
         let db = PriceDb::open_readonly(&db_path).unwrap();
         let prices = db.get_price_range("BTC", "2024-01-01", "2024-12-31").unwrap();
         assert!(prices.is_empty());
+    }
+
+    #[test]
+    fn test_dprice_latest_date_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let _db = PriceDb::open(&db_path).unwrap();
+
+        let db = PriceDb::open_readonly(&db_path).unwrap();
+        let date = db.get_global_latest_date().unwrap();
+        assert!(date.is_none());
+    }
+
+    #[test]
+    fn test_dprice_ensure_prices() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let _db = PriceDb::open(&db_path).unwrap();
+
+        let db = PriceDb::open_readonly(&db_path).unwrap();
+        // No data → all requests should be missing
+        let price = db.get_price("BTC", "2024-01-01").unwrap();
+        assert!(price.is_none());
+    }
+
+    #[test]
+    fn test_dprice_export_import() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        // Create DB with schema
+        let _db = PriceDb::open(&db_path).unwrap();
+        drop(_db);
+
+        // Export: read the file bytes
+        let data = std::fs::read(&db_path).unwrap();
+        assert!(!data.is_empty());
+
+        // Import: write to a new path and validate via open_readonly
+        let import_path = dir.path().join("imported.db");
+        std::fs::write(&import_path, &data).unwrap();
+        let db = PriceDb::open_readonly(&import_path).unwrap();
+        assert_eq!(db.count_assets().unwrap(), 0);
+        assert_eq!(db.count_prices().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_dprice_import_invalid_rejects() {
+        let dir = tempfile::tempdir().unwrap();
+        let bad_path = dir.path().join("bad.db");
+        std::fs::write(&bad_path, b"not a database").unwrap();
+
+        // open_readonly may succeed, but queries on an invalid file should fail
+        match PriceDb::open_readonly(&bad_path) {
+            Err(_) => {} // open itself failed — good
+            Ok(db) => {
+                // If open succeeded, querying should fail
+                assert!(db.count_assets().is_err());
+            }
+        }
     }
 }

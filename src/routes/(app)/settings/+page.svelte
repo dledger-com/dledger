@@ -19,6 +19,7 @@
   import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
   import { exportDatabaseBackup, readFileAsUint8Array, downloadDatabase } from "$lib/utils/database-export.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
+  import { createDpriceClient, type DpriceHealthResponse } from "$lib/dprice-client.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import {
     DEFAULT_PATH_CONFIG,
@@ -424,10 +425,110 @@
     }
   }
 
+  // dprice state
+  let dpriceHealth = $state<DpriceHealthResponse | null>(null);
+  let dpriceLatest = $state<string | null>(null);
+  let dpriceLoading = $state(false);
+  let dpriceExporting = $state(false);
+  let dpriceImporting = $state(false);
+
+  function dpriceClient() {
+    return createDpriceClient({ dpriceUrl: settings.settings.dpriceUrl });
+  }
+
+  async function loadDpriceStatus() {
+    if (!settings.settings.dpriceEnabled) return;
+    dpriceLoading = true;
+    try {
+      const client = dpriceClient();
+      const [health, latest] = await Promise.all([
+        client.health(),
+        client.latestDate(),
+      ]);
+      dpriceHealth = health;
+      dpriceLatest = latest;
+    } catch {
+      dpriceHealth = null;
+      dpriceLatest = null;
+    } finally {
+      dpriceLoading = false;
+    }
+  }
+
+  function dpriceStaleDays(): number | null {
+    if (!dpriceLatest) return null;
+    const latest = new Date(dpriceLatest);
+    const now = new Date();
+    return Math.floor((now.getTime() - latest.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  function handleDpriceSyncLatest() {
+    taskQueue.enqueue({
+      key: "dprice-sync-latest",
+      label: "dprice latest prices",
+      async run() {
+        await dpriceClient().syncLatest();
+        await loadDpriceStatus();
+        toast.success("dprice latest prices synced");
+        return { summary: "dprice latest synced" };
+      },
+    });
+  }
+
+  function handleDpriceSyncFull() {
+    taskQueue.enqueue({
+      key: "dprice-sync-full",
+      label: "dprice full sync",
+      async run() {
+        await dpriceClient().sync();
+        await loadDpriceStatus();
+        toast.success("dprice full sync completed");
+        return { summary: "dprice full sync done" };
+      },
+    });
+  }
+
+  async function handleDpriceExport() {
+    dpriceExporting = true;
+    try {
+      const data = await dpriceClient().exportDb();
+      downloadDatabase(data, `dprice-backup-${new Date().toISOString().slice(0, 10)}.db`);
+      toast.success("dprice database exported");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      dpriceExporting = false;
+    }
+  }
+
+  function handleDpriceImport() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".db,.sqlite,.sqlite3";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!window.confirm(`Import "${file.name}" as dprice database? This will replace the current price database.`)) return;
+      dpriceImporting = true;
+      try {
+        const data = await readFileAsUint8Array(file);
+        await dpriceClient().importDb(data);
+        toast.success("dprice database imported");
+        await loadDpriceStatus();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      } finally {
+        dpriceImporting = false;
+      }
+    };
+    input.click();
+  }
+
   onMount(() => {
     loadCurrencies();
     loadExchangeRates();
     loadRateSources();
+    loadDpriceStatus();
   });
 </script>
 
@@ -880,6 +981,103 @@
             }}
           >
             Clear cached models
+          </Button>
+        </div>
+      {/if}
+    </Card.Content>
+  </Card.Root>
+
+  <!-- dprice Local Price Database -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>dprice Local Price Database</Card.Title>
+      <Card.Description>Use a local SQLite price database for exchange rates. Syncs from ECB, CryptoCompare, DefiLlama, and Binance.</Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Enable dprice</p>
+          <p class="text-sm text-muted-foreground">Use the local price DB as an exchange rate source.</p>
+        </div>
+        <Switch
+          checked={settings.settings.dpriceEnabled ?? false}
+          onCheckedChange={(v) => {
+            settings.update({ dpriceEnabled: v });
+            if (v) loadDpriceStatus();
+          }}
+        />
+      </div>
+      {#if settings.settings.dpriceEnabled}
+        <Separator />
+        <div class="space-y-2">
+          <label for="dprice-url" class="text-sm font-medium">Server URL (browser mode only)</label>
+          <Input
+            id="dprice-url"
+            value={settings.settings.dpriceUrl ?? "http://localhost:3080"}
+            oninput={(e) => settings.update({ dpriceUrl: (e.target as HTMLInputElement).value || undefined })}
+            placeholder="http://localhost:3080"
+            class="w-80"
+          />
+        </div>
+        <Separator />
+        <div class="space-y-2">
+          {#if dpriceLoading}
+            <p class="text-sm text-muted-foreground">Loading status...</p>
+          {:else if dpriceHealth}
+            <p class="text-sm">
+              <span class="font-medium">Status:</span>
+              {dpriceHealth.assets.toLocaleString()} assets, {dpriceHealth.prices.toLocaleString()} prices
+            </p>
+            {#if dpriceLatest}
+              {@const days = dpriceStaleDays()}
+              {#if days !== null && days > 2}
+                <p class="text-sm text-amber-600 dark:text-amber-400">
+                  Data is stale (last update: {dpriceLatest}, {days} days ago)
+                </p>
+              {:else}
+                <p class="text-sm text-muted-foreground">
+                  Last updated: {dpriceLatest}{days !== null ? ` (${days === 0 ? "today" : days === 1 ? "1 day ago" : `${days} days ago`})` : ""}
+                </p>
+              {/if}
+            {:else}
+              <p class="text-sm text-muted-foreground">No price data yet. Run a sync to populate.</p>
+            {/if}
+          {:else}
+            <p class="text-sm text-muted-foreground">Could not load dprice status. Is the database accessible?</p>
+          {/if}
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
+            onclick={handleDpriceSyncLatest}
+          >
+            {taskQueue.isActive("dprice-sync-latest") ? "Syncing..." : "Sync Latest"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
+            onclick={handleDpriceSyncFull}
+          >
+            {taskQueue.isActive("dprice-sync-full") ? "Syncing..." : "Full Sync"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={dpriceExporting}
+            onclick={handleDpriceExport}
+          >
+            {dpriceExporting ? "Exporting..." : "Export DB"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={dpriceImporting}
+            onclick={handleDpriceImport}
+          >
+            {dpriceImporting ? "Importing..." : "Import DB"}
           </Button>
         </div>
       {/if}

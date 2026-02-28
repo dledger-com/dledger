@@ -20,6 +20,11 @@ export interface DpriceClient {
   getRates(currencies: string[], date?: string): Promise<DpriceRateEntry[]>;
   getPriceRange(symbol: string, fromDate: string, toDate: string): Promise<DpricePriceEntry[]>;
   sync(): Promise<string>;
+  syncLatest(): Promise<string>;
+  latestDate(): Promise<string | null>;
+  ensurePrices(requests: Array<{ symbol: string; date: string }>): Promise<string[]>;
+  exportDb(): Promise<Uint8Array>;
+  importDb(data: Uint8Array): Promise<string>;
 }
 
 class TauriDpriceClient implements DpriceClient {
@@ -46,6 +51,28 @@ class TauriDpriceClient implements DpriceClient {
 
   async sync(): Promise<string> {
     return this.invoke("dprice_sync");
+  }
+
+  async syncLatest(): Promise<string> {
+    return this.invoke("dprice_sync_latest");
+  }
+
+  async latestDate(): Promise<string | null> {
+    return this.invoke("dprice_latest_date");
+  }
+
+  async ensurePrices(requests: Array<{ symbol: string; date: string }>): Promise<string[]> {
+    const tuples = requests.map((r) => [r.symbol, r.date]);
+    return this.invoke("dprice_ensure_prices", { requests: tuples });
+  }
+
+  async exportDb(): Promise<Uint8Array> {
+    const data = await this.invoke<number[]>("dprice_export_db");
+    return new Uint8Array(data);
+  }
+
+  async importDb(data: Uint8Array): Promise<string> {
+    return this.invoke("dprice_import_db", { data: Array.from(data) });
   }
 }
 
@@ -111,6 +138,50 @@ class HttpDpriceClient implements DpriceClient {
     }
     const json = await resp.json();
     return json.status ?? "sync triggered";
+  }
+
+  async syncLatest(): Promise<string> {
+    // HTTP server sync endpoint handles latest internally
+    return this.sync();
+  }
+
+  async latestDate(): Promise<string | null> {
+    // Use GraphQL to query the global latest date
+    const query = `{ health { latestDate } }`;
+    try {
+      const resp = await fetch(`${this.baseUrl}/graphql`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      if (!resp.ok) return null;
+      const json = await resp.json();
+      return json.data?.health?.latestDate ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async ensurePrices(requests: Array<{ symbol: string; date: string }>): Promise<string[]> {
+    const missing: string[] = [];
+    for (const { symbol, date } of requests) {
+      const params = new URLSearchParams({ symbol, date });
+      try {
+        const resp = await fetch(`${this.baseUrl}/api/v1/price?${params}`);
+        if (!resp.ok) missing.push(symbol);
+      } catch {
+        missing.push(symbol);
+      }
+    }
+    return [...new Set(missing)];
+  }
+
+  async exportDb(): Promise<Uint8Array> {
+    throw new Error("dprice DB export is not supported in browser mode");
+  }
+
+  async importDb(_data: Uint8Array): Promise<string> {
+    throw new Error("dprice DB import is not supported in browser mode");
   }
 }
 

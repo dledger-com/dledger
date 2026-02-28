@@ -132,6 +132,11 @@ pub fn run() {
             dprice_commands::dprice_get_rates,
             dprice_commands::dprice_get_price_range,
             dprice_commands::dprice_sync,
+            dprice_commands::dprice_sync_latest,
+            dprice_commands::dprice_latest_date,
+            dprice_commands::dprice_ensure_prices,
+            dprice_commands::dprice_export_db,
+            dprice_commands::dprice_import_db,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -10,6 +10,11 @@ describe("dprice-client", () => {
     expect(client.getRates).toBeInstanceOf(Function);
     expect(client.getPriceRange).toBeInstanceOf(Function);
     expect(client.sync).toBeInstanceOf(Function);
+    expect(client.syncLatest).toBeInstanceOf(Function);
+    expect(client.latestDate).toBeInstanceOf(Function);
+    expect(client.ensurePrices).toBeInstanceOf(Function);
+    expect(client.exportDb).toBeInstanceOf(Function);
+    expect(client.importDb).toBeInstanceOf(Function);
   });
 
   it("creates an HTTP client with custom URL", () => {
@@ -25,6 +30,11 @@ describe("dprice-client", () => {
       getRates: async () => [],
       getPriceRange: async () => [],
       sync: async () => "ok",
+      syncLatest: async () => "ok",
+      latestDate: async () => null,
+      ensurePrices: async () => [],
+      exportDb: async () => new Uint8Array(),
+      importDb: async () => "ok",
     };
     expect(_typeCheck).toBeDefined();
   });
