@@ -33,7 +33,7 @@
           coingeckoApiKey: settings.coingeckoApiKey,
           finnhubApiKey: settings.finnhubApiKey,
           cryptoCompareApiKey: settings.cryptoCompareApiKey,
-          dpriceEnabled: settings.settings.dpriceEnabled,
+          dpriceMode: settings.settings.dpriceMode,
           dpriceUrl: settings.settings.dpriceUrl,
         },
       );

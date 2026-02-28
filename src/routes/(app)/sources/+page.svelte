@@ -440,7 +440,7 @@
                         coingeckoApiKey: settings.coingeckoApiKey,
                         finnhubApiKey: settings.finnhubApiKey,
                         cryptoCompareApiKey: settings.cryptoCompareApiKey,
-                        dpriceEnabled: settings.settings.dpriceEnabled,
+                        dpriceMode: settings.settings.dpriceMode,
                         dpriceUrl: settings.settings.dpriceUrl,
                         onProgress: (fetched, total) => {
                             ctx.reportProgress({ current: fetched, total });
@@ -494,7 +494,7 @@
                     settings.finnhubApiKey,
                     getHiddenCurrencySet(),
                     settings.cryptoCompareApiKey,
-                    settings.settings.dpriceEnabled,
+                    settings.settings.dpriceMode,
                     settings.settings.dpriceUrl,
                 );
 

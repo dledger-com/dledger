@@ -17,9 +17,28 @@ describe("dprice-client", () => {
     expect(client.importDb).toBeInstanceOf(Function);
   });
 
-  it("creates an HTTP client with custom URL", () => {
-    const client = createDpriceClient({ dpriceUrl: "http://example.com:9090" });
+  it("creates an HTTP client with custom URL via http mode", () => {
+    const client = createDpriceClient({ dpriceMode: "http", dpriceUrl: "http://example.com:9090" });
     expect(client).toBeDefined();
+  });
+
+  it("creates an HTTP client for integrated mode in non-Tauri env", () => {
+    // In test env (no Tauri), integrated/local falls back to HTTP
+    const client = createDpriceClient({ dpriceMode: "integrated" });
+    expect(client).toBeDefined();
+  });
+
+  it("creates an HTTP client for local mode in non-Tauri env", () => {
+    const client = createDpriceClient({ dpriceMode: "local" });
+    expect(client).toBeDefined();
+  });
+
+  it("creates an HTTP client when mode is off or undefined", () => {
+    const clientOff = createDpriceClient({ dpriceMode: "off" });
+    expect(clientOff).toBeDefined();
+
+    const clientUndef = createDpriceClient();
+    expect(clientUndef).toBeDefined();
   });
 
   it("DpriceClient interface has all required methods", () => {

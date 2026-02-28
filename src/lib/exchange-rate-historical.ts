@@ -3,6 +3,7 @@ import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource } from "./backend.js";
 import type { SourceName } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
+import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -53,7 +54,7 @@ export interface HistoricalFetchConfig {
   coingeckoApiKey: string;
   finnhubApiKey: string;
   cryptoCompareApiKey?: string;
-  dpriceEnabled?: boolean;
+  dpriceMode?: DpriceMode;
   dpriceUrl?: string;
   onProgress?: (fetched: number, total: number) => void;
 }
@@ -227,7 +228,7 @@ export async function fetchHistoricalRates(
   }
 
   // ---- dprice: local price DB historical ----
-  if (dpriceReqs.length > 0 && config.dpriceEnabled) {
+  if (dpriceReqs.length > 0 && isDpriceActive(config.dpriceMode)) {
     await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick);
   }
 
@@ -832,7 +833,7 @@ async function fetchDpriceHistorical(
   successCurrencies: Set<string>,
   onDateDone: () => void,
 ): Promise<void> {
-  const client = createDpriceClient({ dpriceUrl: config.dpriceUrl });
+  const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
   for (const req of requests) {

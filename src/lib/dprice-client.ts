@@ -190,9 +190,19 @@ const DEFAULT_DPRICE_URL = "http://localhost:3080";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
 
-export function createDpriceClient(settings?: { dpriceUrl?: string }): DpriceClient {
+import type { DpriceMode } from "./data/settings.svelte.js";
+
+export function createDpriceClient(settings?: {
+  dpriceMode?: DpriceMode;
+  dpriceUrl?: string;
+}): DpriceClient {
+  const mode = settings?.dpriceMode;
+  if (mode === "http") {
+    return new HttpDpriceClient(settings?.dpriceUrl ?? DEFAULT_DPRICE_URL);
+  }
   if (isTauri) {
     return new TauriDpriceClient();
   }
+  // Browser fallback: always HTTP
   return new HttpDpriceClient(settings?.dpriceUrl ?? DEFAULT_DPRICE_URL);
 }

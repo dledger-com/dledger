@@ -3,7 +3,7 @@
   import { ModeWatcher } from "mode-watcher";
   import { Toaster } from "$lib/components/ui/sonner/index.js";
   import { initBackend, getBackend, disposeBackend } from "$lib/backend.js";
-  import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { SettingsStore, isDpriceActive } from "$lib/data/settings.svelte.js";
   import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
   import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
@@ -41,7 +41,7 @@
                 settings.finnhubApiKey,
                 getHiddenCurrencySet(),
                 settings.cryptoCompareApiKey,
-                settings.settings.dpriceEnabled,
+                settings.settings.dpriceMode,
                 settings.settings.dpriceUrl,
               );
               settings.update({ lastRateSync: today });
@@ -57,12 +57,28 @@
         }
 
         // dprice: startup sync (latest only — fast)
-        if (settings.settings.dpriceEnabled) {
+        const dpriceMode = settings.settings.dpriceMode;
+        if (isDpriceActive(dpriceMode)) {
+          // For integrated/local modes, tell Rust which DB to use
+          if (dpriceMode !== "http") {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              if ((window as any).__TAURI_INTERNALS__) {
+                const { invoke } = await import("@tauri-apps/api/core");
+                await invoke("dprice_set_mode", { mode: dpriceMode });
+              }
+            } catch {
+              // Not in Tauri — ignore
+            }
+          }
           taskQueue.enqueue({
             key: "dprice-startup-sync",
             label: "dprice latest prices",
             async run() {
-              const client = createDpriceClient({ dpriceUrl: settings.settings.dpriceUrl });
+              const client = createDpriceClient({
+                dpriceMode,
+                dpriceUrl: settings.settings.dpriceUrl,
+              });
               await client.syncLatest();
               return { summary: "dprice prices updated" };
             },

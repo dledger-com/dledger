@@ -4,14 +4,14 @@ mod dprice_commands;
 mod etherscan;
 
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use tauri::Manager;
 
 use commands::AppState;
 use db::{apply_migrations, SqliteStorage};
 use dledger_core::LedgerEngine;
-use dprice_commands::DpriceState;
+use dprice_commands::{DpriceMode, DpriceState};
 use etherscan::EtherscanState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -42,15 +42,18 @@ pub fn run() {
                 EtherscanState::new(db_path_str).map_err(|e| e.to_string())?;
             app.manage(etherscan_state);
 
-            // Initialize dprice: co-located DB in app data dir
-            let dprice_db_path = data_dir.join("dprice.db");
+            // Initialize dprice: co-located DB in app data dir + local XDG path
+            let dprice_integrated_path = data_dir.join("dprice.db");
             // Open once to create DB and run migrations, then close
-            let _dprice_db = dprice::db::PriceDb::open(&dprice_db_path)
+            let _dprice_db = dprice::db::PriceDb::open(&dprice_integrated_path)
                 .map_err(|e| e.to_string())?;
             let dprice_config = dprice::config::DpriceConfig::load()
                 .unwrap_or_default();
+            let dprice_local_path = dprice_config.resolved_db_path();
             app.manage(DpriceState {
-                db_path: dprice_db_path,
+                integrated_db_path: dprice_integrated_path,
+                local_db_path: dprice_local_path,
+                mode: RwLock::new(DpriceMode::Integrated),
                 config: dprice_config,
                 syncing: AtomicBool::new(false),
             });
@@ -137,6 +140,8 @@ pub fn run() {
             dprice_commands::dprice_ensure_prices,
             dprice_commands::dprice_export_db,
             dprice_commands::dprice_import_db,
+            dprice_commands::dprice_set_mode,
+            dprice_commands::dprice_local_db_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

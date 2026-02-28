@@ -2,6 +2,7 @@ import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource } from "./backend.js";
 import { createDpriceClient } from "./dprice-client.js";
+import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -111,7 +112,7 @@ export async function syncExchangeRates(
   finnhubApiKey: string,
   hiddenCurrencies: Set<string>,
   cryptoCompareApiKey?: string,
-  dpriceEnabled?: boolean,
+  dpriceMode?: DpriceMode,
   dpriceUrl?: string,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
@@ -143,9 +144,9 @@ export async function syncExchangeRates(
 
   // When dprice is enabled, probe which assets are available in the local price DB
   let dpriceAssets: Set<string> | undefined;
-  if (dpriceEnabled) {
+  if (isDpriceActive(dpriceMode)) {
     try {
-      const client = createDpriceClient({ dpriceUrl });
+      const client = createDpriceClient({ dpriceMode, dpriceUrl });
       const health = await client.health();
       if (health.assets > 0) {
         // Build asset set by checking rates for each currency code
@@ -573,9 +574,9 @@ export async function syncExchangeRates(
   }
 
   // ---- dprice rates (local price DB) ----
-  if (dpriceCodes.length > 0 && dpriceEnabled) {
+  if (dpriceCodes.length > 0 && isDpriceActive(dpriceMode)) {
     try {
-      const client = createDpriceClient({ dpriceUrl });
+      const client = createDpriceClient({ dpriceMode, dpriceUrl });
       for (const code of dpriceCodes) {
         try {
           const rate = await client.getRate(code, baseCurrency);
@@ -643,6 +644,7 @@ export async function fetchSingleRate(
   coingeckoApiKey: string,
   finnhubApiKey: string,
   cryptoCompareApiKey?: string,
+  dpriceMode?: DpriceMode,
   dpriceUrl?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const today = todayISO();
@@ -798,7 +800,7 @@ export async function fetchSingleRate(
 
     case "dprice": {
       try {
-        const client = createDpriceClient({ dpriceUrl });
+        const client = createDpriceClient({ dpriceMode, dpriceUrl });
         const rate = await client.getRate(code, baseCurrency);
         if (rate == null) return { success: false, error: `dprice: no rate for ${code}/${baseCurrency}` };
         await backend.recordExchangeRate({

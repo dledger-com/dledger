@@ -1,17 +1,36 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::RwLock;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use dprice::config::DpriceConfig;
 use dprice::cross_rate;
 use dprice::db::PriceDb;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DpriceMode {
+    Integrated,
+    Local,
+}
+
 pub struct DpriceState {
-    pub db_path: PathBuf,
+    pub integrated_db_path: PathBuf,
+    pub local_db_path: PathBuf,
+    pub mode: RwLock<DpriceMode>,
     pub config: DpriceConfig,
     pub syncing: AtomicBool,
+}
+
+impl DpriceState {
+    pub fn active_db_path(&self) -> PathBuf {
+        match *self.mode.read().unwrap() {
+            DpriceMode::Integrated => self.integrated_db_path.clone(),
+            DpriceMode::Local => self.local_db_path.clone(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -37,7 +56,7 @@ pub struct DpricePriceEntry {
 pub async fn dprice_health(
     state: State<'_, DpriceState>,
 ) -> Result<DpriceHealthResponse, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let assets = db.count_assets().map_err(|e| e.to_string())?;
@@ -55,7 +74,7 @@ pub async fn dprice_get_rate(
     to: String,
     date: Option<String>,
 ) -> Result<Option<String>, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     let date = date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
@@ -73,7 +92,7 @@ pub async fn dprice_get_rates(
     currencies: Vec<String>,
     date: Option<String>,
 ) -> Result<Vec<DpriceRateEntry>, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     let date = date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
@@ -101,7 +120,7 @@ pub async fn dprice_get_price_range(
     from_date: String,
     to_date: String,
 ) -> Result<Vec<DpricePriceEntry>, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let prices = db
@@ -130,7 +149,7 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
         return Err("sync already in progress".to_string());
     }
 
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     let config = state.config.clone();
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
@@ -153,7 +172,7 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
 pub async fn dprice_latest_date(
     state: State<'_, DpriceState>,
 ) -> Result<Option<String>, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let date = db.get_global_latest_date().map_err(|e| e.to_string())?;
@@ -168,7 +187,7 @@ pub async fn dprice_ensure_prices(
     state: State<'_, DpriceState>,
     requests: Vec<(String, String)>,
 ) -> Result<Vec<String>, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let mut missing = Vec::new();
@@ -190,7 +209,7 @@ pub async fn dprice_ensure_prices(
 pub async fn dprice_export_db(
     state: State<'_, DpriceState>,
 ) -> Result<Vec<u8>, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     tokio::task::spawn_blocking(move || {
         std::fs::read(&db_path).map_err(|e| format!("failed to read dprice.db: {e}"))
     })
@@ -203,7 +222,7 @@ pub async fn dprice_import_db(
     state: State<'_, DpriceState>,
     data: Vec<u8>,
 ) -> Result<String, String> {
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     tokio::task::spawn_blocking(move || {
         // Validate: write to a temp file first, try to open as dprice DB
         let tmp_path = db_path.with_extension("db.tmp");
@@ -242,7 +261,7 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
         return Err("sync already in progress".to_string());
     }
 
-    let db_path = state.db_path.clone();
+    let db_path = state.active_db_path();
     let config = state.config.clone();
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
@@ -263,6 +282,36 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
     state.syncing.store(false, Ordering::SeqCst);
 
     result.map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_set_mode(
+    state: State<'_, DpriceState>,
+    mode: DpriceMode,
+) -> Result<(), String> {
+    if mode == DpriceMode::Local {
+        let local_path = &state.local_db_path;
+        if let Some(parent) = local_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("cannot create dprice data dir: {e}"))?;
+        }
+        // Open to create DB and run migrations if it doesn't exist
+        let _db = PriceDb::open(local_path)
+            .map_err(|e| format!("cannot open local dprice.db: {e}"))?;
+    }
+    *state.mode.write().unwrap() = mode;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn dprice_local_db_path(
+    state: State<'_, DpriceState>,
+) -> Result<String, String> {
+    state
+        .local_db_path
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "invalid path encoding".to_string())
 }
 
 #[cfg(test)]
@@ -375,5 +424,52 @@ mod tests {
                 assert!(db.count_assets().is_err());
             }
         }
+    }
+
+    #[test]
+    fn test_active_db_path_integrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let integrated = dir.path().join("integrated.db");
+        let local = dir.path().join("local.db");
+        let state = DpriceState {
+            integrated_db_path: integrated.clone(),
+            local_db_path: local.clone(),
+            mode: RwLock::new(DpriceMode::Integrated),
+            config: DpriceConfig::default(),
+            syncing: AtomicBool::new(false),
+        };
+        assert_eq!(state.active_db_path(), integrated);
+    }
+
+    #[test]
+    fn test_active_db_path_local() {
+        let dir = tempfile::tempdir().unwrap();
+        let integrated = dir.path().join("integrated.db");
+        let local = dir.path().join("local.db");
+        let state = DpriceState {
+            integrated_db_path: integrated.clone(),
+            local_db_path: local.clone(),
+            mode: RwLock::new(DpriceMode::Local),
+            config: DpriceConfig::default(),
+            syncing: AtomicBool::new(false),
+        };
+        assert_eq!(state.active_db_path(), local);
+    }
+
+    #[test]
+    fn test_active_db_path_mode_switch() {
+        let dir = tempfile::tempdir().unwrap();
+        let integrated = dir.path().join("integrated.db");
+        let local = dir.path().join("local.db");
+        let state = DpriceState {
+            integrated_db_path: integrated.clone(),
+            local_db_path: local.clone(),
+            mode: RwLock::new(DpriceMode::Integrated),
+            config: DpriceConfig::default(),
+            syncing: AtomicBool::new(false),
+        };
+        assert_eq!(state.active_db_path(), integrated);
+        *state.mode.write().unwrap() = DpriceMode::Local;
+        assert_eq!(state.active_db_path(), local);
     }
 }

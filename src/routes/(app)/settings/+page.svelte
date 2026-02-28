@@ -20,6 +20,7 @@
   import { exportDatabaseBackup, readFileAsUint8Array, downloadDatabase } from "$lib/utils/database-export.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { createDpriceClient, type DpriceHealthResponse } from "$lib/dprice-client.js";
+  import { isDpriceActive, type DpriceMode } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import {
     DEFAULT_PATH_CONFIG,
@@ -391,6 +392,7 @@
           settings.coingeckoApiKey,
           settings.finnhubApiKey,
           settings.cryptoCompareApiKey,
+          settings.settings.dpriceMode,
           settings.settings.dpriceUrl,
         );
         await loadRateSources();
@@ -431,13 +433,17 @@
   let dpriceLoading = $state(false);
   let dpriceExporting = $state(false);
   let dpriceImporting = $state(false);
+  let dpriceLocalPath = $state<string | null>(null);
 
   function dpriceClient() {
-    return createDpriceClient({ dpriceUrl: settings.settings.dpriceUrl });
+    return createDpriceClient({
+      dpriceMode: settings.settings.dpriceMode,
+      dpriceUrl: settings.settings.dpriceUrl,
+    });
   }
 
   async function loadDpriceStatus() {
-    if (!settings.settings.dpriceEnabled) return;
+    if (!isDpriceActive(settings.settings.dpriceMode)) return;
     dpriceLoading = true;
     try {
       const client = dpriceClient();
@@ -524,11 +530,45 @@
     input.click();
   }
 
+  async function loadDpriceLocalPath() {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((window as any).__TAURI_INTERNALS__) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        dpriceLocalPath = await invoke<string>("dprice_local_db_path");
+      }
+    } catch {
+      dpriceLocalPath = null;
+    }
+  }
+
+  async function handleDpriceModeChange(newMode: DpriceMode) {
+    settings.update({ dpriceMode: newMode });
+    if (isDpriceActive(newMode) && newMode !== "http") {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((window as any).__TAURI_INTERNALS__) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("dprice_set_mode", { mode: newMode });
+        }
+      } catch (e) {
+        toast.error(`Failed to switch dprice mode: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    if (isDpriceActive(newMode)) {
+      await loadDpriceStatus();
+    } else {
+      dpriceHealth = null;
+      dpriceLatest = null;
+    }
+  }
+
   onMount(() => {
     loadCurrencies();
     loadExchangeRates();
     loadRateSources();
     loadDpriceStatus();
+    loadDpriceLocalPath();
   });
 </script>
 
@@ -994,31 +1034,50 @@
       <Card.Description>Use a local SQLite price database for exchange rates. Syncs from ECB, CryptoCompare, DefiLlama, and Binance.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium">Enable dprice</p>
-          <p class="text-sm text-muted-foreground">Use the local price DB as an exchange rate source.</p>
-        </div>
-        <Switch
-          checked={settings.settings.dpriceEnabled ?? false}
-          onCheckedChange={(v) => {
-            settings.update({ dpriceEnabled: v });
-            if (v) loadDpriceStatus();
-          }}
-        />
+      <div class="space-y-2">
+        <label for="dprice-mode" class="text-sm font-medium">Mode</label>
+        <select
+          id="dprice-mode"
+          class="flex h-9 w-60 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={settings.settings.dpriceMode ?? "off"}
+          onchange={(e) => handleDpriceModeChange((e.target as HTMLSelectElement).value as DpriceMode)}
+        >
+          <option value="off">Off</option>
+          <option value="integrated">Integrated (app-managed DB)</option>
+          <option value="local">Local (shared CLI DB)</option>
+          <option value="http">HTTP API (external server)</option>
+        </select>
+        <p class="text-xs text-muted-foreground">
+          {#if (settings.settings.dpriceMode ?? "off") === "off"}
+            dprice is disabled as a rate source.
+          {:else if settings.settings.dpriceMode === "integrated"}
+            Uses a co-located database managed by the app.
+          {:else if settings.settings.dpriceMode === "local"}
+            Shares the database with the <code>dprice</code> CLI tool.
+          {:else if settings.settings.dpriceMode === "http"}
+            Connects to an external <code>dprice serve</code> instance.
+          {/if}
+        </p>
       </div>
-      {#if settings.settings.dpriceEnabled}
-        <Separator />
-        <div class="space-y-2">
-          <label for="dprice-url" class="text-sm font-medium">Server URL (browser mode only)</label>
-          <Input
-            id="dprice-url"
-            value={settings.settings.dpriceUrl ?? "http://localhost:3080"}
-            oninput={(e) => settings.update({ dpriceUrl: (e.target as HTMLInputElement).value || undefined })}
-            placeholder="http://localhost:3080"
-            class="w-80"
-          />
-        </div>
+      {#if isDpriceActive(settings.settings.dpriceMode)}
+        {#if settings.settings.dpriceMode === "http"}
+          <Separator />
+          <div class="space-y-2">
+            <label for="dprice-url" class="text-sm font-medium">Server URL</label>
+            <Input
+              id="dprice-url"
+              value={settings.settings.dpriceUrl ?? "http://localhost:3080"}
+              oninput={(e) => settings.update({ dpriceUrl: (e.target as HTMLInputElement).value || undefined })}
+              placeholder="http://localhost:3080"
+              class="w-80"
+            />
+          </div>
+        {/if}
+        {#if settings.settings.dpriceMode === "local" && dpriceLocalPath}
+          <div class="rounded-md border bg-muted/50 p-3">
+            <p class="text-xs text-muted-foreground">Database path: <code>{dpriceLocalPath}</code></p>
+          </div>
+        {/if}
         <Separator />
         <div class="space-y-2">
           {#if dpriceLoading}
@@ -1063,23 +1122,30 @@
           >
             {taskQueue.isActive("dprice-sync-full") ? "Syncing..." : "Full Sync"}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={dpriceExporting}
-            onclick={handleDpriceExport}
-          >
-            {dpriceExporting ? "Exporting..." : "Export DB"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={dpriceImporting}
-            onclick={handleDpriceImport}
-          >
-            {dpriceImporting ? "Importing..." : "Import DB"}
-          </Button>
+          {#if settings.settings.dpriceMode !== "http"}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={dpriceExporting}
+              onclick={handleDpriceExport}
+            >
+              {dpriceExporting ? "Exporting..." : "Export DB"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={dpriceImporting}
+              onclick={handleDpriceImport}
+            >
+              {dpriceImporting ? "Importing..." : "Import DB"}
+            </Button>
+          {/if}
         </div>
+        {#if settings.settings.dpriceMode === "local"}
+          <p class="text-xs text-amber-600 dark:text-amber-400">
+            Note: Import will replace the database shared with the CLI tool.
+          </p>
+        {/if}
       {/if}
     </Card.Content>
   </Card.Root>

@@ -1,6 +1,12 @@
 import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { configureAccountPaths, type AccountPathConfig } from "$lib/accounts/paths.js";
 
+export type DpriceMode = "off" | "integrated" | "http" | "local";
+
+export function isDpriceActive(mode?: DpriceMode): boolean {
+  return !!mode && mode !== "off";
+}
+
 export interface AppSettings {
   currency: string;
   dateFormat: string;
@@ -24,7 +30,7 @@ export interface AppSettings {
   mlClassificationEnabled?: boolean;
   mlConfidenceThreshold?: number;
   accountPaths?: Partial<AccountPathConfig>;
-  dpriceEnabled?: boolean;
+  dpriceMode?: DpriceMode;
   dpriceUrl?: string;
 }
 
@@ -61,6 +67,11 @@ function loadFromStorage(): AppSettings {
         parsed.showHidden = parsed.showSpam;
       }
       delete parsed.showSpam;
+      // Migrate old dpriceEnabled → dpriceMode
+      if ("dpriceEnabled" in parsed && !("dpriceMode" in parsed)) {
+        parsed.dpriceMode = parsed.dpriceEnabled ? "integrated" : "off";
+        delete parsed.dpriceEnabled;
+      }
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch {
