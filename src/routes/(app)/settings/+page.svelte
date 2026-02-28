@@ -428,6 +428,8 @@
   }
 
   // dprice state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
   let dpriceHealth = $state<DpriceHealthResponse | null>(null);
   let dpriceLatest = $state<string | null>(null);
   let dpriceLoading = $state(false);
@@ -539,6 +541,15 @@
       }
     } catch {
       dpriceLocalPath = null;
+    }
+  }
+
+  function handleDpriceToggle(enabled: boolean) {
+    if (enabled) {
+      const defaultMode: DpriceMode = isTauri ? "integrated" : "http";
+      handleDpriceModeChange(defaultMode);
+    } else {
+      handleDpriceModeChange("off");
     }
   }
 
@@ -1034,32 +1045,43 @@
       <Card.Description>Use a local SQLite price database for exchange rates. Syncs from ECB, CryptoCompare, DefiLlama, and Binance.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
-      <div class="space-y-2">
-        <label for="dprice-mode" class="text-sm font-medium">Mode</label>
-        <select
-          id="dprice-mode"
-          class="flex h-9 w-60 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          value={settings.settings.dpriceMode ?? "off"}
-          onchange={(e) => handleDpriceModeChange((e.target as HTMLSelectElement).value as DpriceMode)}
-        >
-          <option value="off">Off</option>
-          <option value="integrated">Integrated (app-managed DB)</option>
-          <option value="local">Local (shared CLI DB)</option>
-          <option value="http">HTTP API (external server)</option>
-        </select>
-        <p class="text-xs text-muted-foreground">
-          {#if (settings.settings.dpriceMode ?? "off") === "off"}
-            dprice is disabled as a rate source.
-          {:else if settings.settings.dpriceMode === "integrated"}
-            Uses a co-located database managed by the app.
-          {:else if settings.settings.dpriceMode === "local"}
-            Shares the database with the <code>dprice</code> CLI tool.
-          {:else if settings.settings.dpriceMode === "http"}
-            Connects to an external <code>dprice serve</code> instance.
-          {/if}
-        </p>
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">Enable dprice rate source</p>
+          <p class="text-sm text-muted-foreground">Use a local SQLite database for exchange rate lookups.</p>
+        </div>
+        <Switch
+          checked={isDpriceActive(settings.settings.dpriceMode)}
+          onCheckedChange={handleDpriceToggle}
+        />
       </div>
       {#if isDpriceActive(settings.settings.dpriceMode)}
+        {#if isTauri}
+          <div class="space-y-2">
+            <label for="dprice-mode" class="text-sm font-medium">Mode</label>
+            <select
+              id="dprice-mode"
+              class="flex h-9 w-60 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={settings.settings.dpriceMode}
+              onchange={(e) => handleDpriceModeChange((e.target as HTMLSelectElement).value as DpriceMode)}
+            >
+              <option value="integrated">Integrated (app-managed DB)</option>
+              <option value="local">Local (shared CLI DB)</option>
+              <option value="http">HTTP API (external server)</option>
+            </select>
+            <p class="text-xs text-muted-foreground">
+              {#if settings.settings.dpriceMode === "integrated"}
+                Uses a co-located database managed by the app.
+              {:else if settings.settings.dpriceMode === "local"}
+                Shares the database with the <code>dprice</code> CLI tool.
+              {:else if settings.settings.dpriceMode === "http"}
+                Connects to an external <code>dprice serve</code> instance.
+              {/if}
+            </p>
+          </div>
+        {:else}
+          <p class="text-xs text-muted-foreground">Using HTTP API mode. Configure the server URL below.</p>
+        {/if}
         {#if settings.settings.dpriceMode === "http"}
           <Separator />
           <div class="space-y-2">
