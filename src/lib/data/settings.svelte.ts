@@ -24,6 +24,8 @@ export interface AppSettings {
   mlClassificationEnabled?: boolean;
   mlConfidenceThreshold?: number;
   accountPaths?: Partial<AccountPathConfig>;
+  dpriceEnabled?: boolean;
+  dpriceUrl?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

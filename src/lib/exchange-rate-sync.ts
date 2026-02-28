@@ -1,6 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource } from "./backend.js";
+import { createDpriceClient } from "./dprice-client.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -68,10 +69,17 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export type SourceName = "frankfurter" | "coingecko" | "finnhub" | "defillama" | "cryptocompare" | "binance";
+export type SourceName = "frankfurter" | "coingecko" | "finnhub" | "defillama" | "cryptocompare" | "binance" | "dprice";
 
 /** Auto-detect the best source for a currency using static heuristics */
-function autoDetectSource(code: string, baseCurrency: string, hasTokenAddress: boolean): SourceName | "none" {
+function autoDetectSource(
+  code: string,
+  baseCurrency: string,
+  hasTokenAddress: boolean,
+  dpriceAssets?: Set<string>,
+): SourceName | "none" {
+  // When dprice is enabled and the asset is available locally, prefer it
+  if (dpriceAssets && dpriceAssets.has(code)) return "dprice";
   if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
     return "frankfurter";
   }
@@ -103,6 +111,8 @@ export async function syncExchangeRates(
   finnhubApiKey: string,
   hiddenCurrencies: Set<string>,
   cryptoCompareApiKey?: string,
+  dpriceEnabled?: boolean,
+  dpriceUrl?: string,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -131,6 +141,23 @@ export async function syncExchangeRates(
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrSet = new Set(tokenAddresses.map((t) => t.currency));
 
+  // When dprice is enabled, probe which assets are available in the local price DB
+  let dpriceAssets: Set<string> | undefined;
+  if (dpriceEnabled) {
+    try {
+      const client = createDpriceClient({ dpriceUrl });
+      const health = await client.health();
+      if (health.assets > 0) {
+        // Build asset set by checking rates for each currency code
+        // Use getRates with all codes to batch-check availability
+        const entries = await client.getRates(codes);
+        dpriceAssets = new Set(entries.map((e) => e.from));
+      }
+    } catch {
+      // dprice not available — fall through to other sources
+    }
+  }
+
   // Build per-source fetch lists
   const frankfurterCodes: string[] = [];
   const coingeckoCodes: string[] = [];
@@ -138,6 +165,7 @@ export async function syncExchangeRates(
   const defillamaCodes: string[] = [];
   const cryptocompareCodes: string[] = [];
   const binanceCodes: string[] = [];
+  const dpriceCodes: string[] = [];
   const autoDetectCodes: string[] = []; // codes needing auto-detection
 
   for (const code of codes) {
@@ -151,9 +179,10 @@ export async function syncExchangeRates(
       else if (stored.rate_source === "defillama") defillamaCodes.push(code);
       else if (stored.rate_source === "cryptocompare") cryptocompareCodes.push(code);
       else if (stored.rate_source === "binance") binanceCodes.push(code);
+      else if (stored.rate_source === "dprice") dpriceCodes.push(code);
     } else {
       // No stored source → auto-detect
-      const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code));
+      const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code), dpriceAssets);
       if (detected === "none") continue; // No known pricing path — skip
       if (detected === "frankfurter") frankfurterCodes.push(code);
       else if (detected === "coingecko") coingeckoCodes.push(code);
@@ -161,6 +190,7 @@ export async function syncExchangeRates(
       else if (detected === "defillama") defillamaCodes.push(code);
       else if (detected === "cryptocompare") cryptocompareCodes.push(code);
       else if (detected === "binance") binanceCodes.push(code);
+      else if (detected === "dprice") dpriceCodes.push(code);
       autoDetectCodes.push(code);
     }
   }
@@ -542,9 +572,52 @@ export async function syncExchangeRates(
     }
   }
 
+  // ---- dprice rates (local price DB) ----
+  if (dpriceCodes.length > 0 && dpriceEnabled) {
+    try {
+      const client = createDpriceClient({ dpriceUrl });
+      for (const code of dpriceCodes) {
+        try {
+          const rate = await client.getRate(code, baseCurrency);
+          if (rate == null) {
+            result.errors.push(`dprice: no rate for ${code}/${baseCurrency}`);
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
+            continue;
+          }
+
+          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+          allSucceeded.add(code);
+
+          const existing = await backend.getExchangeRate(code, baseCurrency, today);
+          if (existing !== null) {
+            result.rates_skipped++;
+            continue;
+          }
+
+          await backend.recordExchangeRate({
+            id: uuidv7(),
+            date: today,
+            from_currency: code,
+            to_currency: baseCurrency,
+            rate,
+            source: "dprice",
+          });
+          result.rates_fetched++;
+        } catch (err) {
+          result.errors.push(`dprice ${code}: ${err instanceof Error ? err.message : String(err)}`);
+          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          allFailed.add(code);
+        }
+      }
+    } catch (err) {
+      result.errors.push(`dprice: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   // Post-process: Write auto-detection results to DB
   for (const code of autoDetectSuccess) {
-    const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code));
+    const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code), dpriceAssets);
     await backend.setCurrencyRateSource(code, detected, "auto");
     result.newlyDetected.push(code);
   }
@@ -570,6 +643,7 @@ export async function fetchSingleRate(
   coingeckoApiKey: string,
   finnhubApiKey: string,
   cryptoCompareApiKey?: string,
+  dpriceUrl?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const today = todayISO();
 
@@ -719,6 +793,25 @@ export async function fetchSingleRate(
         return { success: true };
       } catch (err) {
         return { success: false, error: `Binance: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "dprice": {
+      try {
+        const client = createDpriceClient({ dpriceUrl });
+        const rate = await client.getRate(code, baseCurrency);
+        if (rate == null) return { success: false, error: `dprice: no rate for ${code}/${baseCurrency}` };
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate,
+          source: "dprice",
+        });
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: `dprice: ${err instanceof Error ? err.message : String(err)}` };
       }
     }
   }

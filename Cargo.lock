@@ -1315,6 +1315,7 @@ version = "0.1.16"
 dependencies = [
  "chrono",
  "dledger-core",
+ "dprice",
  "rusqlite",
  "rust_decimal",
  "rust_decimal_macros",
@@ -1324,6 +1325,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tempfile",
+ "tokio",
  "tracing",
  "ureq",
  "uuid",

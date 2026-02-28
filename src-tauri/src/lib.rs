@@ -1,7 +1,9 @@
 mod commands;
 pub mod db;
+mod dprice_commands;
 mod etherscan;
 
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use tauri::Manager;
@@ -9,6 +11,7 @@ use tauri::Manager;
 use commands::AppState;
 use db::{apply_migrations, SqliteStorage};
 use dledger_core::LedgerEngine;
+use dprice_commands::DpriceState;
 use etherscan::EtherscanState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +41,19 @@ pub fn run() {
             let etherscan_state =
                 EtherscanState::new(db_path_str).map_err(|e| e.to_string())?;
             app.manage(etherscan_state);
+
+            // Initialize dprice: co-located DB in app data dir
+            let dprice_db_path = data_dir.join("dprice.db");
+            // Open once to create DB and run migrations, then close
+            let _dprice_db = dprice::db::PriceDb::open(&dprice_db_path)
+                .map_err(|e| e.to_string())?;
+            let dprice_config = dprice::config::DpriceConfig::load()
+                .unwrap_or_default();
+            app.manage(DpriceState {
+                db_path: dprice_db_path,
+                config: dprice_config,
+                syncing: AtomicBool::new(false),
+            });
 
             Ok(())
         })
@@ -111,6 +127,11 @@ pub fn run() {
             commands::set_currency_token_address,
             commands::get_currency_token_addresses,
             commands::get_currency_token_address,
+            dprice_commands::dprice_health,
+            dprice_commands::dprice_get_rate,
+            dprice_commands::dprice_get_rates,
+            dprice_commands::dprice_get_price_range,
+            dprice_commands::dprice_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

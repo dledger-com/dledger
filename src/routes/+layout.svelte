@@ -40,6 +40,8 @@
                 settings.finnhubApiKey,
                 getHiddenCurrencySet(),
                 settings.cryptoCompareApiKey,
+                settings.settings.dpriceEnabled,
+                settings.settings.dpriceUrl,
               );
               settings.update({ lastRateSync: today });
               for (const code of syncResult.autoHidden) {

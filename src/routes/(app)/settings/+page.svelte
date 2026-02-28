@@ -390,6 +390,7 @@
           settings.coingeckoApiKey,
           settings.finnhubApiKey,
           settings.cryptoCompareApiKey,
+          settings.settings.dpriceUrl,
         );
         await loadRateSources();
         if (res.success) {
@@ -599,6 +600,7 @@
                         <option value="cryptocompare">cryptocompare</option>
                         <option value="binance">binance</option>
                         <option value="finnhub">finnhub</option>
+                        <option value="dprice">dprice</option>
                         <option value="none">none</option>
                       </select>
                       {#if rs?.set_by}

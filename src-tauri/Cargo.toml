@@ -13,6 +13,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 dledger-core = { workspace = true }
+dprice = { workspace = true }
+tokio = { version = "1", features = ["rt"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { workspace = true }

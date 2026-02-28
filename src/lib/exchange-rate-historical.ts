@@ -2,6 +2,7 @@ import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource } from "./backend.js";
 import type { SourceName } from "./exchange-rate-sync.js";
+import { createDpriceClient } from "./dprice-client.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -52,6 +53,8 @@ export interface HistoricalFetchConfig {
   coingeckoApiKey: string;
   finnhubApiKey: string;
   cryptoCompareApiKey?: string;
+  dpriceEnabled?: boolean;
+  dpriceUrl?: string;
   onProgress?: (fetched: number, total: number) => void;
 }
 
@@ -69,6 +72,7 @@ function classifySource(
   baseCurrency: string,
   rateSourceMap: Map<string, CurrencyRateSource>,
   tokenAddressCurrencies?: Set<string>,
+  dpriceAssets?: Set<string>,
 ): SourceName | null {
   // 1. DB-stored source always wins
   const stored = rateSourceMap.get(currency);
@@ -76,7 +80,9 @@ function classifySource(
   if (stored?.rate_source) {
     return stored.rate_source as SourceName;
   }
-  // 2. Static heuristic fallback
+  // 2. When dprice is enabled and asset is available, prefer it
+  if (dpriceAssets?.has(currency)) return "dprice";
+  // 3. Static heuristic fallback
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (tokenAddressCurrencies?.has(currency)) return "defillama";
   if (COINGECKO_IDS[currency]) return "defillama";
@@ -89,6 +95,7 @@ export async function findMissingRates(
   backend: Backend,
   baseCurrency: string,
   currencyDates: { currency: string; date: string }[],
+  dpriceAssets?: Set<string>,
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -121,7 +128,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies);
+      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -134,7 +141,7 @@ export async function findMissingRates(
       const rate = await backend.getExchangeRate(currency, baseCurrency, date);
       if (rate !== null) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies);
+      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -173,6 +180,7 @@ export async function fetchHistoricalRates(
   const defillamaReqs = requests.filter((r) => r.source === "defillama");
   const cryptocompareReqs = requests.filter((r) => r.source === "cryptocompare");
   const binanceReqs = requests.filter((r) => r.source === "binance");
+  const dpriceReqs = requests.filter((r) => r.source === "dprice");
 
   const tick = () => { progress++; config.onProgress?.(progress, totalDates); };
 
@@ -216,6 +224,11 @@ export async function fetchHistoricalRates(
   // ---- Binance: klines per symbol ----
   if (binanceReqs.length > 0) {
     await fetchBinanceHistorical(backend, binanceReqs, config, result, successCurrencies, tick);
+  }
+
+  // ---- dprice: local price DB historical ----
+  if (dpriceReqs.length > 0 && config.dpriceEnabled) {
+    await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick);
   }
 
   // Fallback chain: if DefiLlama failed for some currencies, try CoinGecko → CryptoCompare
@@ -796,6 +809,95 @@ async function fetchBinanceHistorical(
     }
   } finally {
     binanceFetch.dispose();
+  }
+
+  if (rateBatch.length > 0) {
+    if (backend.recordExchangeRateBatch) {
+      await backend.recordExchangeRateBatch(rateBatch);
+    } else {
+      for (const rate of rateBatch) {
+        await backend.recordExchangeRate(rate);
+      }
+    }
+  }
+}
+
+// ---- dprice historical (local price DB) ----
+
+async function fetchDpriceHistorical(
+  backend: Backend,
+  requests: HistoricalRateRequest[],
+  config: HistoricalFetchConfig,
+  result: HistoricalFetchResult,
+  successCurrencies: Set<string>,
+  onDateDone: () => void,
+): Promise<void> {
+  const client = createDpriceClient({ dpriceUrl: config.dpriceUrl });
+  const rateBatch: import("./types/index.js").ExchangeRate[] = [];
+
+  for (const req of requests) {
+    const sortedDates = [...req.dates].sort();
+    if (sortedDates.length === 0) continue;
+
+    const fromDate = sortedDates[0];
+    const toDate = sortedDates[sortedDates.length - 1];
+
+    try {
+      // Fetch USD prices in bulk from dprice
+      const prices = await client.getPriceRange(req.currency, fromDate, toDate);
+      const dateMap = new Map(prices.map((p) => [p.date, p.price_usd]));
+
+      // If baseCurrency is not USD, also fetch baseCurrency USD price for cross-rate
+      let basePriceMap: Map<string, string> | null = null;
+      if (config.baseCurrency !== "USD") {
+        const basePrices = await client.getPriceRange(config.baseCurrency, fromDate, toDate);
+        basePriceMap = new Map(basePrices.map((p) => [p.date, p.price_usd]));
+      }
+
+      await ensureCurrency(backend, req.currency);
+      await ensureCurrency(backend, config.baseCurrency);
+
+      for (const date of sortedDates) {
+        const usdPrice = dateMap.get(date);
+        if (usdPrice == null) {
+          result.skipped++;
+          onDateDone();
+          continue;
+        }
+
+        let finalRate: string;
+        let toCurrency: string;
+        if (basePriceMap) {
+          // Cross-rate: asset_USD / base_USD
+          const baseUsd = basePriceMap.get(date);
+          if (baseUsd == null || parseFloat(baseUsd) === 0) {
+            result.skipped++;
+            onDateDone();
+            continue;
+          }
+          finalRate = (parseFloat(usdPrice) / parseFloat(baseUsd)).toString();
+          toCurrency = config.baseCurrency;
+        } else {
+          finalRate = usdPrice;
+          toCurrency = "USD";
+        }
+
+        successCurrencies.add(req.currency);
+        rateBatch.push({
+          id: uuidv7(),
+          date,
+          from_currency: req.currency,
+          to_currency: toCurrency,
+          rate: finalRate,
+          source: "dprice",
+        });
+        result.fetched++;
+        onDateDone();
+      }
+    } catch (err) {
+      result.errors.push(`dprice ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
+      for (const _d of req.dates) onDateDone();
+    }
   }
 
   if (rateBatch.length > 0) {
