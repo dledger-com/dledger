@@ -35,6 +35,8 @@
     import {
         findMissingRates,
         fetchHistoricalRates,
+        enqueueRateBackfill,
+        autoBackfillRates,
     } from "$lib/exchange-rate-historical.js";
     import type { ChainInfo, EtherscanAccount } from "$lib/types/index.js";
     import { SUPPORTED_CHAINS } from "$lib/types/index.js";
@@ -350,6 +352,22 @@
                 if (result.entries_imported > 0 && ethAccounts.length > 0) {
                     handleConsolidateCex();
                 }
+                // Auto-backfill missing exchange rates
+                if (result.entries_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        {
+                            baseCurrency: settings.currency,
+                            coingeckoApiKey: settings.coingeckoApiKey,
+                            finnhubApiKey: settings.finnhubApiKey,
+                            cryptoCompareApiKey: settings.cryptoCompareApiKey,
+                            dpriceMode: settings.settings.dpriceMode,
+                            dpriceUrl: settings.settings.dpriceUrl,
+                        },
+                        getHiddenCurrencySet(),
+                    );
+                }
                 return {
                     summary: `${result.entries_imported} imported, ${result.entries_skipped} skipped, ${result.entries_consolidated} consolidated`,
                 };
@@ -509,6 +527,65 @@
         });
     }
 
+    function handleAutoBackfill() {
+        taskQueue.enqueue({
+            key: "rate-backfill:auto",
+            label: "Auto-backfill all missing rates",
+            async run(ctx) {
+                const result = await autoBackfillRates(
+                    getBackend(),
+                    {
+                        baseCurrency: settings.currency,
+                        coingeckoApiKey: settings.coingeckoApiKey,
+                        finnhubApiKey: settings.finnhubApiKey,
+                        cryptoCompareApiKey: settings.cryptoCompareApiKey,
+                        dpriceMode: settings.settings.dpriceMode,
+                        dpriceUrl: settings.settings.dpriceUrl,
+                        onProgress: (fetched, total) => {
+                            ctx.reportProgress({ current: fetched, total });
+                        },
+                    },
+                    getHiddenCurrencySet(),
+                );
+
+                // Auto-hide currencies that failed all sources
+                if (result.failedCurrencies.length > 0) {
+                    const backend = getBackend();
+                    for (const code of result.failedCurrencies) {
+                        await backend.setCurrencyRateSource(
+                            code,
+                            "none",
+                            "auto",
+                        );
+                        await markCurrencyHidden(backend, code);
+                    }
+                    showAutoHideToast(result.failedCurrencies);
+                    loadAvailableCurrencies();
+                }
+
+                if (result.fetched === 0 && result.errors.length === 0) {
+                    toast.success("All rates already available");
+                    return { summary: "All rates already available" };
+                }
+
+                if (result.errors.length > 0) {
+                    toast.warning(
+                        `Fetched ${result.fetched} rate(s) with ${result.errors.length} warning(s)`,
+                    );
+                } else {
+                    toast.success(
+                        `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
+                    );
+                }
+
+                return {
+                    summary: `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
+                    data: result,
+                };
+            },
+        });
+    }
+
     function handleSyncRates() {
         taskQueue.enqueue({
             key: "rate-sync",
@@ -649,6 +726,22 @@
                 // Auto-trigger consolidation if entries were imported and CEX accounts exist
                 if (r.transactions_imported > 0 && cexAccounts.length > 0) {
                     handleConsolidateCex();
+                }
+                // Auto-backfill missing exchange rates
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        {
+                            baseCurrency: settings.currency,
+                            coingeckoApiKey: settings.coingeckoApiKey,
+                            finnhubApiKey: settings.finnhubApiKey,
+                            cryptoCompareApiKey: settings.cryptoCompareApiKey,
+                            dpriceMode: settings.settings.dpriceMode,
+                            dpriceUrl: settings.settings.dpriceUrl,
+                        },
+                        getHiddenCurrencySet(),
+                    );
                 }
                 return {
                     summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
@@ -2090,15 +2183,22 @@
                 </div>
             </div>
         </Card.Content>
-        <Card.Footer class="flex justify-end">
+        <Card.Footer class="flex justify-end gap-2">
             <Button
+                onclick={handleAutoBackfill}
+                disabled={backfilling}
+            >
+                {backfilling ? "Fetching..." : "Backfill All Missing Rates"}
+            </Button>
+            <Button
+                variant="outline"
                 onclick={handleBackfill}
                 disabled={backfilling ||
                     backfillCurrencies.length === 0 ||
                     !backfillFromDate ||
                     !backfillToDate}
             >
-                {backfilling ? "Fetching..." : "Fetch Historical Rates"}
+                Fetch Selected Range
             </Button>
         </Card.Footer>
     </Card.Root>

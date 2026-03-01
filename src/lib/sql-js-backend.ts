@@ -2583,6 +2583,138 @@ export class SqlJsBackend implements Backend {
     return result;
   }
 
+  async getExchangeRatesBatchExact(
+    pairs: { currency: string; date: string }[],
+    baseCurrency: string,
+  ): Promise<Map<string, boolean>> {
+    if (pairs.length === 0) return new Map();
+
+    // Collect unique currencies
+    const currencies = [...new Set(pairs.map((p) => p.currency))];
+    if (currencies.length === 0) return new Map();
+
+    const ph = currencies.map(() => "?").join(", ");
+
+    // Direct: from_currency IN currencies, to_currency = baseCurrency
+    const directRows = this.query(
+      `SELECT from_currency, date FROM exchange_rate WHERE from_currency IN (${ph}) AND to_currency = ?`,
+      [...currencies, baseCurrency],
+      (row) => ({ currency: row.from_currency as string, date: row.date as string }),
+    );
+
+    // Inverse: from_currency = baseCurrency, to_currency IN currencies
+    const inverseRows = this.query(
+      `SELECT to_currency AS currency, date FROM exchange_rate WHERE from_currency = ? AND to_currency IN (${ph})`,
+      [baseCurrency, ...currencies],
+      (row) => ({ currency: row.currency as string, date: row.date as string }),
+    );
+
+    // Build exact set of "currency:date" entries
+    const exactSet = new Set<string>();
+    for (const row of [...directRows, ...inverseRows]) {
+      exactSet.add(`${row.currency}:${row.date}`);
+    }
+
+    // For each pair, check exact match only
+    const result = new Map<string, boolean>();
+    for (const { currency, date } of pairs) {
+      const key = `${currency}:${date}`;
+      result.set(key, exactSet.has(key));
+    }
+
+    return result;
+  }
+
+  async getCurrencyDateRequirements(baseCurrency: string): Promise<import("./backend.js").CurrencyDateRequirement[]> {
+    const rows = this.query(
+      `SELECT li.currency, a.account_type,
+              MIN(je.date) AS first_date, MAX(je.date) AS last_date,
+              SUM(CAST(li.amount AS REAL)) AS balance,
+              GROUP_CONCAT(DISTINCT je.date) AS all_dates
+       FROM line_item li
+       JOIN journal_entry je ON je.id = li.journal_entry_id
+       JOIN account a ON a.id = li.account_id
+       WHERE je.status != 'voided' AND li.currency != ?
+       GROUP BY li.currency, a.account_type`,
+      [baseCurrency],
+      (row) => ({
+        currency: row.currency as string,
+        accountType: row.account_type as string,
+        firstDate: row.first_date as string,
+        lastDate: row.last_date as string,
+        balance: row.balance as number,
+        allDates: row.all_dates as string,
+      }),
+    );
+
+    // Merge rows per currency: asset/liability → range, others → dates
+    // If a currency appears in both asset and expense, range dominates
+    const currencyMap = new Map<string, {
+      hasRange: boolean;
+      firstDate: string;
+      lastDate: string;
+      balanceSum: number;
+      allDates: Set<string>;
+    }>();
+
+    for (const row of rows) {
+      const isRange = row.accountType === "asset" || row.accountType === "liability";
+      let entry = currencyMap.get(row.currency);
+      if (!entry) {
+        entry = {
+          hasRange: false,
+          firstDate: row.firstDate,
+          lastDate: row.lastDate,
+          balanceSum: 0,
+          allDates: new Set(),
+        };
+        currencyMap.set(row.currency, entry);
+      }
+
+      if (isRange) {
+        entry.hasRange = true;
+        entry.balanceSum += row.balance;
+      }
+
+      // Extend date range
+      if (row.firstDate < entry.firstDate) entry.firstDate = row.firstDate;
+      if (row.lastDate > entry.lastDate) entry.lastDate = row.lastDate;
+
+      // Collect all dates
+      if (row.allDates) {
+        for (const d of row.allDates.split(",")) {
+          entry.allDates.add(d);
+        }
+      }
+    }
+
+    const results: import("./backend.js").CurrencyDateRequirement[] = [];
+    for (const [currency, entry] of currencyMap) {
+      if (entry.hasRange) {
+        results.push({
+          currency,
+          mode: "range",
+          firstDate: entry.firstDate,
+          lastDate: entry.lastDate,
+          hasBalance: Math.abs(entry.balanceSum) > 1e-12,
+          dates: [],
+        });
+      } else {
+        const sortedDates = [...entry.allDates].sort();
+        results.push({
+          currency,
+          mode: "dates",
+          firstDate: sortedDates[0],
+          lastDate: sortedDates[sortedDates.length - 1],
+          hasBalance: false,
+          dates: sortedDates,
+        });
+      }
+    }
+
+    return results;
+  }
+
   async listExchangeRates(
     from?: string,
     to?: string,

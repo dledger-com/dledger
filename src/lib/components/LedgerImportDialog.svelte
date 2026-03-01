@@ -5,18 +5,15 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
-  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
   import { readFileAsText } from "$lib/utils/read-file-text.js";
   import { detectFormat, detectFormatFromFilename, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
   import { resolveIncludes, filterLedgerFiles } from "$lib/ledger-include.js";
   import { unzipSync, strFromU8 } from "fflate";
   import {
-    findMissingRates,
-    fetchHistoricalRates,
-    type HistoricalRateRequest,
+    enqueueRateBackfill,
   } from "$lib/exchange-rate-historical.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import type { LedgerImportResult } from "$lib/types/index.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import Upload from "lucide-svelte/icons/upload";
@@ -42,9 +39,7 @@
   let fileCount = $state(0);
   let submitting = $state(false);
   let result = $state<LedgerImportResult | null>(null);
-  let missingRateRequests = $state<HistoricalRateRequest[]>([]);
   let formatOverride = $state<LedgerFormat | null>(null);
-  const fetchingMissingRates = $derived(taskQueue.isActive("rate-backfill:missing"));
 
   let detectedFormat = $derived<LedgerFormat | null>(
     fileName ? detectFormatFromFilename(fileName) ?? (fileContent.trim() ? detectFormat(fileContent) : null)
@@ -118,26 +113,32 @@
 
     submitting = true;
     result = null;
-    missingRateRequests = [];
 
     try {
-      result = await getBackend().importLedgerFile(fileContent, effectiveFormat ?? undefined);
+      const backend = getBackend();
+      result = await backend.importLedgerFile(fileContent, effectiveFormat ?? undefined);
       const parts = [`${result.transactions_imported} transaction(s) imported`];
       if (result.duplicates_skipped > 0) {
         parts.push(`${result.duplicates_skipped} duplicate(s) skipped`);
       }
       toast.success(parts.join(", "));
 
+      // Auto-backfill missing exchange rates for imported currencies
       if (result.transaction_currency_dates && result.transaction_currency_dates.length > 0) {
-        const currencyDates = result.transaction_currency_dates.map(([currency, date]) => ({ currency, date }));
-        const missing = await findMissingRates(
-          getBackend(),
-          settings.currency,
-          currencyDates,
+        enqueueRateBackfill(
+          taskQueue,
+          backend,
+          {
+            baseCurrency: settings.currency,
+            coingeckoApiKey: settings.coingeckoApiKey,
+            finnhubApiKey: settings.finnhubApiKey,
+            cryptoCompareApiKey: settings.cryptoCompareApiKey,
+            dpriceMode: settings.settings.dpriceMode,
+            dpriceUrl: settings.settings.dpriceUrl,
+          },
+          getHiddenCurrencySet(),
+          result.transaction_currency_dates,
         );
-        if (missing.length > 0) {
-          missingRateRequests = missing;
-        }
       }
     } catch (err) {
       toast.error(String(err));
@@ -146,55 +147,11 @@
     }
   }
 
-  function handleFetchMissingRates() {
-    const requests = [...missingRateRequests];
-    taskQueue.enqueue({
-      key: "rate-backfill:missing",
-      label: `Fetch ${requests.reduce((sum, r) => sum + r.dates.length, 0)} missing rate(s)`,
-      async run(ctx) {
-        const result = await fetchHistoricalRates(
-          getBackend(),
-          requests,
-          {
-            baseCurrency: settings.currency,
-            coingeckoApiKey: settings.coingeckoApiKey,
-            finnhubApiKey: settings.finnhubApiKey,
-            cryptoCompareApiKey: settings.cryptoCompareApiKey,
-            dpriceMode: settings.settings.dpriceMode,
-            dpriceUrl: settings.settings.dpriceUrl,
-            onProgress: (fetched, total) => {
-              ctx.reportProgress({ current: fetched, total });
-            },
-          },
-        );
-        missingRateRequests = [];
-
-        if (result.failedCurrencies.length > 0) {
-          const backend = getBackend();
-          for (const code of result.failedCurrencies) {
-            await backend.setCurrencyRateSource(code, "none", "auto");
-            await markCurrencyHidden(backend, code);
-          }
-          showAutoHideToast(result.failedCurrencies);
-        }
-
-        if (result.errors.length > 0) {
-          toast.warning(`Fetched ${result.fetched} rate(s) with ${result.errors.length} warning(s)`);
-        } else {
-          toast.success(`Fetched ${result.fetched} historical rate(s)`);
-        }
-
-        return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
-      },
-    });
-  }
-
   function resetDialog() {
     fileContent = "";
     fileName = null;
     fileCount = 0;
     result = null;
-    missingRateRequests = [];
     formatOverride = null;
   }
 
@@ -336,28 +293,6 @@
                   <li class="py-0.5">{warning}</li>
                 {/each}
               </ul>
-            </div>
-          {/if}
-
-          <!-- Missing rates banner (inline) -->
-          {#if missingRateRequests.length > 0}
-            {@const totalMissing = missingRateRequests.reduce((sum, r) => sum + r.dates.length, 0)}
-            <div class="rounded-md border border-amber-200 dark:border-amber-800 p-3 space-y-2">
-              <p class="text-sm font-medium">Missing Historical Rates</p>
-              <p class="text-xs text-muted-foreground">
-                {totalMissing} historical rate(s) missing for {missingRateRequests.length} currency(ies).
-              </p>
-              <div class="flex flex-wrap gap-2">
-                {#each missingRateRequests as req}
-                  <Badge variant="secondary">{req.currency} ({req.dates.length} date{req.dates.length === 1 ? "" : "s"})</Badge>
-                {/each}
-              </div>
-              <div class="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onclick={() => { missingRateRequests = []; }}>Skip</Button>
-                <Button size="sm" onclick={handleFetchMissingRates} disabled={fetchingMissingRates}>
-                  {fetchingMissingRates ? "Fetching..." : "Fetch Now"}
-                </Button>
-              </div>
             </div>
           {/if}
 

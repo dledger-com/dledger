@@ -34,6 +34,8 @@
     type DedupIndex,
   } from "$lib/csv-presets/index.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
+  import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
+  import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
   import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
@@ -426,6 +428,24 @@
       importResult = result;
       const skipMsg = result.duplicates_skipped > 0 ? `, ${result.duplicates_skipped} duplicates skipped` : "";
       toast.success(`Imported ${importResult.entries_created} entries${skipMsg}`);
+
+      // Auto-backfill missing exchange rates for imported currencies
+      if (result.transaction_currency_dates.length > 0) {
+        enqueueRateBackfill(
+          taskQueue,
+          backend,
+          {
+            baseCurrency: settings.currency,
+            coingeckoApiKey: settings.coingeckoApiKey,
+            finnhubApiKey: settings.finnhubApiKey,
+            cryptoCompareApiKey: settings.cryptoCompareApiKey,
+            dpriceMode: settings.settings.dpriceMode,
+            dpriceUrl: settings.settings.dpriceUrl,
+          },
+          getHiddenCurrencySet(),
+          result.transaction_currency_dates,
+        );
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {

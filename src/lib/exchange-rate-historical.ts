@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
-import type { Backend, CurrencyRateSource } from "./backend.js";
+import type { Backend, CurrencyRateSource, CurrencyDateRequirement } from "./backend.js";
 import type { SourceName } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
@@ -97,6 +97,7 @@ export async function findMissingRates(
   baseCurrency: string,
   currencyDates: { currency: string; date: string }[],
   dpriceAssets?: Set<string>,
+  options?: { exactDateMatch?: boolean },
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -123,7 +124,24 @@ export async function findMissingRates(
   // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
 
-  if (backend.getExchangeRatesBatch && unique.length > 0) {
+  const useExact = options?.exactDateMatch;
+
+  if (useExact && backend.getExchangeRatesBatchExact && unique.length > 0) {
+    // Exact date matching — a rate from January does NOT satisfy a June lookup
+    const existenceMap = await backend.getExchangeRatesBatchExact(unique, baseCurrency);
+    for (const { currency, date } of unique) {
+      const key = `${currency}:${date}`;
+      if (existenceMap.get(key)) continue;
+
+      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      if (!source) continue;
+      const groupKey = `${currency}:${source}`;
+      if (!missing.has(groupKey)) {
+        missing.set(groupKey, { currency, dates: [], source });
+      }
+      missing.get(groupKey)!.dates.push(date);
+    }
+  } else if (backend.getExchangeRatesBatch && unique.length > 0) {
     const existenceMap = await backend.getExchangeRatesBatch(unique, baseCurrency);
     for (const { currency, date } of unique) {
       const key = `${currency}:${date}`;
@@ -938,6 +956,133 @@ export async function ensurePeriodicRates(
   if (missing.length === 0) return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [] };
 
   return fetchHistoricalRates(backend, missing, config);
+}
+
+// ---- Auto-backfill ----
+
+export interface AutoBackfillResult extends HistoricalFetchResult {
+  currenciesAnalyzed: number;
+  totalDatesRequested: number;
+}
+
+/**
+ * Automatically determine which exchange rates are missing across the entire ledger
+ * and fetch them. Uses exact-date matching to find true gaps.
+ */
+export async function autoBackfillRates(
+  backend: Backend,
+  config: HistoricalFetchConfig,
+  hiddenCurrencies: Set<string>,
+  dpriceAssets?: Set<string>,
+): Promise<AutoBackfillResult> {
+  if (!backend.getCurrencyDateRequirements) {
+    return { fetched: 0, skipped: 0, errors: ["Backend does not support getCurrencyDateRequirements"], failedCurrencies: [], currenciesAnalyzed: 0, totalDatesRequested: 0 };
+  }
+
+  const requirements = await backend.getCurrencyDateRequirements(config.baseCurrency);
+
+  // Filter out hidden currencies
+  const filtered = requirements.filter((r) => !hiddenCurrencies.has(r.currency));
+
+  // Build currency-date pairs
+  const today = new Date().toISOString().slice(0, 10);
+  const currencyDates: { currency: string; date: string }[] = [];
+
+  for (const req of filtered) {
+    if (req.mode === "range") {
+      // Generate daily dates from firstDate to max(lastDate, today if hasBalance)
+      const endDate = req.hasBalance && today > req.lastDate ? today : req.lastDate;
+      let current = new Date(req.firstDate);
+      const end = new Date(endDate);
+      while (current <= end) {
+        currencyDates.push({ currency: req.currency, date: current.toISOString().slice(0, 10) });
+        current.setDate(current.getDate() + 1);
+      }
+    } else {
+      // Use exact transaction dates
+      for (const date of req.dates) {
+        currencyDates.push({ currency: req.currency, date });
+      }
+    }
+  }
+
+  const totalDatesRequested = currencyDates.length;
+
+  if (currencyDates.length === 0) {
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
+  }
+
+  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true });
+  if (missing.length === 0) {
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested };
+  }
+
+  const result = await fetchHistoricalRates(backend, missing, config);
+  return {
+    ...result,
+    currenciesAnalyzed: filtered.length,
+    totalDatesRequested,
+  };
+}
+
+/**
+ * Enqueue a rate backfill task into the task queue.
+ *
+ * Two modes:
+ * - With `currencyDates`: targeted backfill for specific currency/date pairs (CSV/OFX/PDF/Ledger imports)
+ * - Without `currencyDates`: full ledger analysis via autoBackfillRates (Etherscan/CEX sync, Sources button)
+ */
+export function enqueueRateBackfill(
+  taskQueue: { enqueue(def: import("./task-queue.svelte.js").TaskDefinition): void; isActive(key: string): boolean },
+  backend: Backend,
+  config: HistoricalFetchConfig,
+  hiddenCurrencies: Set<string>,
+  currencyDates?: [string, string][],
+  dpriceAssets?: Set<string>,
+): void {
+  // Skip if a backfill is already running
+  if (taskQueue.isActive("rate-backfill")) return;
+
+  if (currencyDates && currencyDates.length > 0) {
+    // Targeted backfill for specific import
+    const pairs = currencyDates.map(([currency, date]) => ({ currency, date }));
+    taskQueue.enqueue({
+      key: "rate-backfill:post-import",
+      label: `Backfill rates for ${new Set(currencyDates.map(([c]) => c)).size} imported currency(ies)`,
+      async run(ctx) {
+        const missing = await findMissingRates(backend, config.baseCurrency, pairs, dpriceAssets);
+        if (missing.length === 0) {
+          return { summary: "All rates already available" };
+        }
+        const totalDates = missing.reduce((sum, r) => sum + r.dates.length, 0);
+        const result = await fetchHistoricalRates(backend, missing, {
+          ...config,
+          onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total: total || totalDates }),
+        });
+        return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
+      },
+    });
+  } else {
+    // Full auto-backfill
+    taskQueue.enqueue({
+      key: "rate-backfill:auto",
+      label: "Auto-backfill all missing rates",
+      async run(ctx) {
+        const result = await autoBackfillRates(backend, {
+          ...config,
+          onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total }),
+        }, hiddenCurrencies, dpriceAssets);
+
+        if (result.fetched === 0 && result.errors.length === 0) {
+          return { summary: "All rates already available" };
+        }
+        return {
+          summary: `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
+          data: result,
+        };
+      },
+    });
+  }
 }
 
 // ---- Helpers ----

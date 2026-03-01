@@ -68,6 +68,15 @@ export interface CurrencyRateSource {
   updated_at: string;
 }
 
+export interface CurrencyDateRequirement {
+  currency: string;
+  mode: "range" | "dates";
+  firstDate: string;   // YYYY-MM-DD
+  lastDate: string;
+  hasBalance: boolean;  // net balance != 0 → extend to today
+  dates: string[];      // populated when mode="dates"
+}
+
 export interface Backend {
   // Currencies
   listCurrencies(): Promise<Currency[]>;
@@ -110,7 +119,11 @@ export interface Backend {
   recordExchangeRateBatch?(rates: ExchangeRate[]): Promise<void>;
   getExchangeRate(from: string, to: string, date: string): Promise<string | null>;
   getExchangeRatesBatch?(pairs: { currency: string; date: string }[], baseCurrency: string): Promise<Map<string, boolean>>;
+  getExchangeRatesBatchExact?(pairs: { currency: string; date: string }[], baseCurrency: string): Promise<Map<string, boolean>>;
   listExchangeRates(from?: string, to?: string): Promise<ExchangeRate[]>;
+
+  // Auto-backfill: determine which currencies need rates and for which dates
+  getCurrencyDateRequirements?(baseCurrency: string): Promise<CurrencyDateRequirement[]>;
 
   // Ledger file import/export
   importLedgerFile(content: string, format?: LedgerFormat): Promise<LedgerImportResult>;
