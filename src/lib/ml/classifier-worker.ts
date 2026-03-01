@@ -39,12 +39,23 @@ interface ClassifyBatchMessage {
   };
 }
 
+interface SuggestTagsMessage {
+  type: "suggest-tags";
+  id: string;
+  payload: {
+    descriptions: string[];
+    historicalTags: { description: string; tags: string[] }[];
+    topK: number;
+    minCount: number;
+  };
+}
+
 interface DisposeMessage {
   type: "dispose";
   id: string;
 }
 
-type WorkerMessage = InitMessage | ClassifyBatchMessage | DisposeMessage;
+type WorkerMessage = InitMessage | ClassifyBatchMessage | SuggestTagsMessage | DisposeMessage;
 
 /** Result for a single classified description */
 interface ClassifyResult {
@@ -262,6 +273,68 @@ async function handleClassifyBatch(msg: ClassifyBatchMessage) {
   }
 }
 
+async function handleSuggestTags(msg: SuggestTagsMessage) {
+  const { descriptions, historicalTags, topK, minCount } = msg.payload;
+
+  if (!embedder) {
+    postError(msg.id, "Embedding model not loaded — call init first");
+    return;
+  }
+
+  try {
+    if (historicalTags.length === 0) {
+      // No historical data — return empty arrays
+      postResult(msg.id, descriptions.map(() => []));
+      return;
+    }
+
+    postProgress(msg.id, 0, descriptions.length, "Embedding historical descriptions...");
+
+    // Embed all historical descriptions
+    const histTexts = historicalTags.map((h) => h.description);
+    const histEmbeddings = await embedTexts(histTexts);
+
+    const results: string[][] = [];
+
+    for (let i = 0; i < descriptions.length; i++) {
+      postProgress(msg.id, i, descriptions.length, `Suggesting tags ${i + 1}/${descriptions.length}...`);
+
+      const [descEmbedding] = await embedTexts([descriptions[i]]);
+      const k = Math.min(topK, histEmbeddings.length);
+      const nearest = findNearest(descEmbedding, histEmbeddings, k);
+
+      // Collect tag frequencies weighted by similarity
+      const tagScores = new Map<string, number>();
+      for (const match of nearest) {
+        const tags = historicalTags[match.index].tags;
+        for (const tag of tags) {
+          tagScores.set(tag, (tagScores.get(tag) ?? 0) + match.score);
+        }
+      }
+
+      // Filter by minCount (number of times the tag appeared, not score)
+      const tagCounts = new Map<string, number>();
+      for (const match of nearest) {
+        for (const tag of historicalTags[match.index].tags) {
+          tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+        }
+      }
+
+      const suggested = [...tagScores.entries()]
+        .filter(([tag]) => (tagCounts.get(tag) ?? 0) >= minCount)
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag]) => tag);
+
+      results.push(suggested);
+    }
+
+    postProgress(msg.id, descriptions.length, descriptions.length, "Tag suggestions complete");
+    postResult(msg.id, results);
+  } catch (err) {
+    postError(msg.id, err instanceof Error ? err.message : String(err));
+  }
+}
+
 function handleDispose(msg: DisposeMessage) {
   embedder = null;
   zeroShot = null;
@@ -276,6 +349,9 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
       break;
     case "classify-batch":
       await handleClassifyBatch(msg);
+      break;
+    case "suggest-tags":
+      await handleSuggestTags(msg);
       break;
     case "dispose":
       handleDispose(msg);

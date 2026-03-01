@@ -15,6 +15,7 @@
     importRecords,
     buildDedupIndex,
     isDuplicate,
+    applyRuleTags,
     type CsvRecord,
     type CsvFileHeader,
     type DedupIndex,
@@ -36,6 +37,8 @@
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
   import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
   import AccountCombobox from "./AccountCombobox.svelte";
+  import TagInput from "./TagInput.svelte";
+  import { serializeTags, parseTags, TAGS_META_KEY, tagColor } from "$lib/utils/tags.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
   import Trash2 from "lucide-svelte/icons/trash-2";
@@ -74,7 +77,11 @@
   let rules = $state<CsvCategorizationRule[]>([]);
   let newPattern = $state("");
   let newAccount = $state("");
+  let newRuleTags = $state<string[]>([]);
   let showRules = $state(false);
+
+  // -- Batch tags for import --
+  let importTags = $state<string[]>([]);
 
   // -- Step 2 state --
   let previewRecords = $state<CsvRecord[]>([]);
@@ -166,6 +173,11 @@
         if (rec.lines[j].account.endsWith(":Uncategorized")) {
           rec.lines[j] = { ...rec.lines[j], account: suggestion.account };
         }
+      }
+      if (suggestion.tags && suggestion.tags.length > 0) {
+        const existing = parseTags(rec.metadata?.[TAGS_META_KEY]);
+        const merged = [...new Set([...existing, ...suggestion.tags])];
+        rec.metadata = { ...rec.metadata, [TAGS_META_KEY]: serializeTags(merged) };
       }
       updated[idx] = rec;
     }
@@ -277,6 +289,16 @@
     importing = true;
     importResult = null;
     try {
+      // Merge batch tags + rule tags into records before import
+      if (importTags.length > 0) {
+        for (const rec of previewRecords) {
+          const existing = parseTags(rec.metadata?.[TAGS_META_KEY]);
+          const merged = [...new Set([...existing, ...importTags])];
+          rec.metadata = { ...rec.metadata, [TAGS_META_KEY]: serializeTags(merged) };
+        }
+      }
+      applyRuleTags(previewRecords, rules);
+
       const backend = getBackend();
       const result = await importRecords(backend, previewRecords, presetId);
 
@@ -359,9 +381,12 @@
 
   function addRule() {
     if (!newPattern.trim() || !newAccount.trim()) return;
-    rules = [...rules, { id: uuidv7(), pattern: newPattern.trim(), account: newAccount.trim() }];
+    const rule: CsvCategorizationRule = { id: uuidv7(), pattern: newPattern.trim(), account: newAccount.trim() };
+    if (newRuleTags.length > 0) rule.tags = [...newRuleTags];
+    rules = [...rules, rule];
     newPattern = "";
     newAccount = "";
+    newRuleTags = [];
     saveRules();
   }
 
@@ -386,6 +411,7 @@
     mlAccepted = new Set();
     mlClassifying = false;
     accountPaths = [];
+    importTags = [];
   }
 
   // Reset on close
@@ -534,6 +560,11 @@
                       <Badge variant="outline" class="font-mono">{rule.pattern}</Badge>
                       <span class="text-muted-foreground">&rarr;</span>
                       <span class="font-mono text-xs">{rule.account}</span>
+                      {#if rule.tags && rule.tags.length > 0}
+                        {#each rule.tags as tag}
+                          <Badge variant="outline" class={tagColor(tag) + " border-transparent text-[10px] px-1 py-0"}>{tag}</Badge>
+                        {/each}
+                      {/if}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -552,6 +583,10 @@
                 <Button size="sm" class="h-8" onclick={addRule} disabled={!newPattern.trim() || !newAccount.trim()}>
                   <Plus class="h-3 w-3 mr-1" /> Add
                 </Button>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground shrink-0">Rule tags:</span>
+                <TagInput tags={newRuleTags} onchange={(t) => { newRuleTags = t; }} class="flex-1" />
               </div>
             {/if}
           </div>
@@ -657,6 +692,12 @@
             </div>
           </div>
 
+          <!-- Batch tags for all imported entries -->
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-muted-foreground shrink-0">Tags for all:</span>
+            <TagInput tags={importTags} onchange={(t) => { importTags = t; }} class="flex-1" />
+          </div>
+
           {#if previewWarnings.length > 0}
             <details>
               <summary class="text-xs text-muted-foreground cursor-pointer">Show warnings</summary>
@@ -686,13 +727,21 @@
                   {@const dup = duplicateFlags[recIdx] ?? false}
                   {@const mlSuggestion = mlSuggestions.get(recIdx)}
                   {@const mlIsAccepted = mlAccepted.has(recIdx)}
+                  {@const recTags = parseTags(rec.metadata?.[TAGS_META_KEY])}
                   <Table.Row class={dup ? "opacity-40" : ""}>
                     <Table.Cell class="font-mono text-xs">{rec.date}</Table.Cell>
-                    <Table.Cell class="text-xs max-w-[200px] truncate">
-                      {rec.description}
+                    <Table.Cell class="text-xs max-w-[200px]">
+                      <span class="truncate">{rec.description}</span>
                       {#if rec.metadata?.["bank-category"]}<span class="text-muted-foreground ml-1">• {rec.metadata["bank-category"]}</span>{/if}
                       {#if rec.metadata?.["transaction-type"]}<Badge variant="secondary" class="ml-1 text-[10px] px-1 py-0 h-4">{rec.metadata["transaction-type"]}</Badge>{/if}
                       {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
+                      {#if recTags.length > 0}
+                        <div class="flex flex-wrap gap-0.5 mt-0.5">
+                          {#each recTags as tag}
+                            <Badge variant="outline" class={tagColor(tag) + " border-transparent text-[10px] px-1 py-0"}>{tag}</Badge>
+                          {/each}
+                        </div>
+                      {/if}
                     </Table.Cell>
                     <Table.Cell class="text-xs">
                       {#each rec.lines.slice(0, 4) as line, lineIdx}
@@ -720,6 +769,13 @@
                           <span class="font-mono truncate max-w-[140px]">{mlSuggestion.account}</span>
                           <Badge variant="outline" class="text-[10px] px-1 py-0 h-4">{Math.round(mlSuggestion.confidence * 100)}%</Badge>
                         </button>
+                        {#if mlIsAccepted && mlSuggestion.tags && mlSuggestion.tags.length > 0}
+                          <div class="flex flex-wrap gap-0.5 mt-0.5 ml-4">
+                            {#each mlSuggestion.tags as tag}
+                              <Badge variant="outline" class={tagColor(tag) + " border-transparent text-[10px] px-1 py-0 opacity-70"}>{tag}</Badge>
+                            {/each}
+                          </div>
+                        {/if}
                       {/if}
                     </Table.Cell>
                     <Table.Cell class="text-center">

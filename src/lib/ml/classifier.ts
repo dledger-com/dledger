@@ -12,6 +12,7 @@ export interface ClassificationResult {
   account: string;
   confidence: number;
   method: "embedding" | "zero-shot" | "historical";
+  tags?: string[];
 }
 
 interface PendingCallback {
@@ -146,6 +147,31 @@ export class TransactionClassifier {
     } finally {
       this.worker.onmessage = originalHandler;
     }
+  }
+
+  /**
+   * Suggest tags for a batch of descriptions based on historical tag data.
+   * Uses embedding similarity to find nearest historical descriptions and
+   * returns their tags, weighted by frequency.
+   */
+  async suggestTagsBatch(
+    descriptions: string[],
+    historicalTags: { description: string; tags: string[] }[],
+    topK = 5,
+    minCount = 1,
+  ): Promise<string[][]> {
+    if (!this.ready || !this.worker) {
+      throw new Error("Classifier not initialized — call init() first");
+    }
+
+    const results = (await this.sendMessage("suggest-tags", {
+      descriptions,
+      historicalTags,
+      topK,
+      minCount,
+    })) as string[][];
+
+    return results;
   }
 
   /** Release model resources and terminate the worker. */

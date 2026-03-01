@@ -5,7 +5,12 @@
   import X from "lucide-svelte/icons/x";
   import Plus from "lucide-svelte/icons/plus";
 
-  let { tags, onchange, class: className }: { tags: string[]; onchange: (tags: string[]) => void; class?: string } = $props();
+  let { tags, onchange, suggestions, class: className }: { tags: string[]; onchange: (tags: string[]) => void; suggestions?: string[]; class?: string } = $props();
+
+  const listId = `tag-sug-${Math.random().toString(36).slice(2, 8)}`;
+  const filteredSuggestions = $derived(
+    suggestions?.filter((s) => !tags.includes(s)) ?? [],
+  );
 
   let editing = $state(false);
   let inputValue = $state("");
@@ -63,11 +68,19 @@
     <input
       bind:this={inputEl}
       bind:value={inputValue}
+      list={listId}
       class="h-5 w-20 rounded border border-dashed border-muted-foreground/40 bg-transparent px-1.5 text-xs outline-none focus:border-primary"
       placeholder="tag"
       onkeydown={handleKeydown}
       onblur={handleBlur}
     />
+    {#if filteredSuggestions.length > 0}
+      <datalist id={listId}>
+        {#each filteredSuggestions as s}
+          <option value={s}></option>
+        {/each}
+      </datalist>
+    {/if}
   {:else}
     <button
       type="button"

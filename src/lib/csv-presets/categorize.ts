@@ -1,11 +1,13 @@
 import type { TransactionClassifier, ClassificationResult } from "$lib/ml/classifier.js";
 import type { Backend } from "$lib/backend.js";
 import type { CsvRecord } from "./types.js";
+import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
 
 export interface CsvCategorizationRule {
   id: string;
   pattern: string;   // substring match (case-insensitive)
   account: string;   // target account path
+  tags?: string[];   // optional tags to apply when rule matches
 }
 
 export function matchRule(
@@ -20,6 +22,48 @@ export function matchRule(
     }
   }
   return null;
+}
+
+/**
+ * Apply rule tags to records. For each record that matches a rule with tags,
+ * merge rule tags into the record's metadata.
+ */
+export function applyRuleTags(records: CsvRecord[], rules: CsvCategorizationRule[]): void {
+  for (const rec of records) {
+    const rule = matchRule(rec.description, rules);
+    if (rule?.tags && rule.tags.length > 0) {
+      const existing = parseTags(rec.metadata?.[TAGS_META_KEY]);
+      const merged = [...new Set([...existing, ...rule.tags])];
+      rec.metadata = { ...rec.metadata, [TAGS_META_KEY]: serializeTags(merged) };
+    }
+  }
+}
+
+/**
+ * Build historical tag examples from past confirmed journal entries.
+ * Returns entries that have tags, with their description and tags array.
+ */
+export async function buildHistoricalTagExamples(
+  backend: Backend,
+  maxEntries = 500,
+): Promise<{ description: string; tags: string[] }[]> {
+  const entries = await backend.queryJournalEntries({
+    status: "confirmed",
+    limit: maxEntries,
+  });
+
+  const results: { description: string; tags: string[] }[] = [];
+  for (const [entry] of entries) {
+    if (!entry.description) continue;
+    const meta = await backend.getMetadata(entry.id);
+    const tagValue = meta[TAGS_META_KEY];
+    if (!tagValue) continue;
+    const tags = parseTags(tagValue);
+    if (tags.length > 0) {
+      results.push({ description: entry.description, tags });
+    }
+  }
+  return results;
 }
 
 const UNCATEGORIZED_SUFFIX = ":Uncategorized";
@@ -166,6 +210,25 @@ export async function classifyTransactions(
     historicalExamples,
   );
 
+  // Suggest tags if historical tag data is available
+  let tagSuggestions: string[][] | undefined;
+  if (backend) {
+    try {
+      const histTags = await buildHistoricalTagExamples(backend);
+      if (histTags.length > 0) {
+        tagSuggestions = await classifier.suggestTagsBatch(
+          uncategorizedDescriptions,
+          histTags,
+        );
+        if (debug) {
+          console.log(`Tag suggestions: ${histTags.length} historical examples, ${tagSuggestions.filter(t => t.length > 0).length} descriptions got suggestions`);
+        }
+      }
+    } catch (err) {
+      if (debug) console.warn("Failed to suggest tags:", err);
+    }
+  }
+
   const map = new Map<number, ClassificationResult>();
   let aboveThreshold = 0;
 
@@ -175,14 +238,18 @@ export async function classifyTransactions(
     const result = results[i];
     const pass = result.account && result.confidence >= threshold;
     if (pass) {
-      map.set(uncategorizedIndices[i], result);
+      const withTags = tagSuggestions?.[i]?.length
+        ? { ...result, tags: tagSuggestions[i] }
+        : result;
+      map.set(uncategorizedIndices[i], withTags);
       aboveThreshold++;
     }
     if (debug) {
       const mark = pass ? "✓" : "✗ below threshold";
+      const tagStr = tagSuggestions?.[i]?.length ? ` tags=[${tagSuggestions[i].join(",")}]` : "";
       console.log(
         `  "${uncategorizedDescriptions[i]}" → ${result.account || "(none)"} ` +
-        `(${result.confidence.toFixed(2)}, ${result.method}) ${mark}`,
+        `(${result.confidence.toFixed(2)}, ${result.method})${tagStr} ${mark}`,
       );
     }
   }

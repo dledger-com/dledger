@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { v7 as uuidv7 } from "uuid";
-import { matchRule, buildHistoricalExamples, type CsvCategorizationRule } from "./categorize.js";
+import { matchRule, buildHistoricalExamples, buildHistoricalTagExamples, applyRuleTags, type CsvCategorizationRule } from "./categorize.js";
 import { createTestBackend } from "../../test/helpers.js";
 import type { Account, JournalEntry, LineItem } from "$lib/types/index.js";
+import type { CsvRecord } from "./types.js";
+import { TAGS_META_KEY, parseTags, serializeTags } from "$lib/utils/tags.js";
 
 const rules: CsvCategorizationRule[] = [
   { id: "1", pattern: "coffee", account: "Expenses:Coffee" },
@@ -214,5 +216,244 @@ describe("buildHistoricalExamples", () => {
     if (groceryEx) {
       expect(groceryEx.descriptions).not.toContain("Voided purchase");
     }
+  });
+});
+
+describe("applyRuleTags", () => {
+  function makeRecord(description: string, metadata?: Record<string, string>): CsvRecord {
+    return {
+      date: "2024-01-01",
+      description,
+      lines: [
+        { account: "Expenses:Uncategorized", currency: "USD", amount: "100" },
+        { account: "Assets:Bank", currency: "USD", amount: "-100" },
+      ],
+      metadata,
+    };
+  }
+
+  it("applies tags from matching rule", () => {
+    const records = [makeRecord("morning coffee")];
+    const rules: CsvCategorizationRule[] = [
+      { id: "1", pattern: "coffee", account: "Expenses:Coffee", tags: ["food", "daily"] },
+    ];
+    applyRuleTags(records, rules);
+    expect(parseTags(records[0].metadata?.[TAGS_META_KEY])).toEqual(["food", "daily"]);
+  });
+
+  it("merges with existing tags", () => {
+    const records = [makeRecord("morning coffee", { [TAGS_META_KEY]: "imported" })];
+    const rules: CsvCategorizationRule[] = [
+      { id: "1", pattern: "coffee", account: "Expenses:Coffee", tags: ["food"] },
+    ];
+    applyRuleTags(records, rules);
+    const tags = parseTags(records[0].metadata?.[TAGS_META_KEY]);
+    expect(tags).toContain("imported");
+    expect(tags).toContain("food");
+  });
+
+  it("does not apply tags when rule has no tags", () => {
+    const records = [makeRecord("morning coffee")];
+    const rules: CsvCategorizationRule[] = [
+      { id: "1", pattern: "coffee", account: "Expenses:Coffee" },
+    ];
+    applyRuleTags(records, rules);
+    expect(records[0].metadata?.[TAGS_META_KEY]).toBeUndefined();
+  });
+
+  it("does nothing when no rule matches", () => {
+    const records = [makeRecord("electric bill")];
+    const rules: CsvCategorizationRule[] = [
+      { id: "1", pattern: "coffee", account: "Expenses:Coffee", tags: ["food"] },
+    ];
+    applyRuleTags(records, rules);
+    expect(records[0].metadata?.[TAGS_META_KEY]).toBeUndefined();
+  });
+
+  it("deduplicates when merging", () => {
+    const records = [makeRecord("morning coffee", { [TAGS_META_KEY]: "food" })];
+    const rules: CsvCategorizationRule[] = [
+      { id: "1", pattern: "coffee", account: "Expenses:Coffee", tags: ["food", "daily"] },
+    ];
+    applyRuleTags(records, rules);
+    const tags = parseTags(records[0].metadata?.[TAGS_META_KEY]);
+    expect(tags.filter((t) => t === "food")).toHaveLength(1);
+    expect(tags).toContain("daily");
+  });
+});
+
+describe("buildHistoricalTagExamples", () => {
+  async function setupAndPost(backend: Awaited<ReturnType<typeof createTestBackend>>) {
+    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    await backend.createCurrency(USD);
+
+    const assetsId = uuidv7();
+    await backend.createAccount({
+      id: assetsId, parent_id: null, account_type: "asset",
+      name: "Assets", full_name: "Assets",
+      allowed_currencies: [], is_postable: false, is_archived: false, created_at: "2024-01-01",
+    });
+    const bank: Account = {
+      id: uuidv7(), parent_id: assetsId, account_type: "asset",
+      name: "Bank", full_name: "Assets:Bank",
+      allowed_currencies: [], is_postable: true, is_archived: false, created_at: "2024-01-01",
+    };
+    await backend.createAccount(bank);
+
+    const expensesId = uuidv7();
+    await backend.createAccount({
+      id: expensesId, parent_id: null, account_type: "expense",
+      name: "Expenses", full_name: "Expenses",
+      allowed_currencies: [], is_postable: false, is_archived: false, created_at: "2024-01-01",
+    });
+    const groceries: Account = {
+      id: uuidv7(), parent_id: expensesId, account_type: "expense",
+      name: "Groceries", full_name: "Expenses:Groceries",
+      allowed_currencies: [], is_postable: true, is_archived: false, created_at: "2024-01-01",
+    };
+    await backend.createAccount(groceries);
+
+    // Post entry with tags
+    const entryId = uuidv7();
+    const entry: JournalEntry = {
+      id: entryId, date: "2024-06-15", description: "LIDL groceries",
+      status: "confirmed", source: "manual", voided_by: null, created_at: "2024-06-15",
+    };
+    const items: LineItem[] = [
+      { id: uuidv7(), journal_entry_id: entryId, account_id: groceries.id, currency: "USD", amount: "50", lot_id: null },
+      { id: uuidv7(), journal_entry_id: entryId, account_id: bank.id, currency: "USD", amount: "-50", lot_id: null },
+    ];
+    await backend.postJournalEntry(entry, items);
+    await backend.setMetadata(entryId, { [TAGS_META_KEY]: "groceries,food" });
+
+    // Post entry without tags
+    const entryId2 = uuidv7();
+    const entry2: JournalEntry = {
+      id: entryId2, date: "2024-06-16", description: "Rent payment",
+      status: "confirmed", source: "manual", voided_by: null, created_at: "2024-06-16",
+    };
+    const items2: LineItem[] = [
+      { id: uuidv7(), journal_entry_id: entryId2, account_id: groceries.id, currency: "USD", amount: "1000", lot_id: null },
+      { id: uuidv7(), journal_entry_id: entryId2, account_id: bank.id, currency: "USD", amount: "-1000", lot_id: null },
+    ];
+    await backend.postJournalEntry(entry2, items2);
+
+    return { bank, groceries };
+  }
+
+  it("returns empty for no tagged entries", async () => {
+    const backend = await createTestBackend();
+    const result = await buildHistoricalTagExamples(backend);
+    expect(result).toEqual([]);
+  });
+
+  it("returns entries with tags", async () => {
+    const backend = await createTestBackend();
+    await setupAndPost(backend);
+
+    const result = await buildHistoricalTagExamples(backend);
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe("LIDL groceries");
+    expect(result[0].tags).toEqual(["groceries", "food"]);
+  });
+
+  it("skips entries without tags", async () => {
+    const backend = await createTestBackend();
+    await setupAndPost(backend);
+
+    const result = await buildHistoricalTagExamples(backend);
+    const descriptions = result.map((r) => r.description);
+    expect(descriptions).not.toContain("Rent payment");
+  });
+});
+
+describe("getAllTagValues", () => {
+  it("returns empty for no metadata", async () => {
+    const backend = await createTestBackend();
+    const result = await backend.getAllTagValues();
+    expect(result).toEqual([]);
+  });
+
+  it("returns deduplicated sorted tags", async () => {
+    const backend = await createTestBackend();
+    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    await backend.createCurrency(USD);
+    const acctId = uuidv7();
+    const acctId2 = uuidv7();
+    await backend.createAccount({
+      id: acctId, parent_id: null, account_type: "asset",
+      name: "Bank", full_name: "Assets:Bank",
+      allowed_currencies: [], is_postable: true, is_archived: false, created_at: "2024-01-01",
+    });
+    await backend.createAccount({
+      id: acctId2, parent_id: null, account_type: "expense",
+      name: "Food", full_name: "Expenses:Food",
+      allowed_currencies: [], is_postable: true, is_archived: false, created_at: "2024-01-01",
+    });
+
+    // Post two entries with overlapping tags (each entry must balance)
+    const e1 = uuidv7();
+    await backend.postJournalEntry(
+      { id: e1, date: "2024-01-01", description: "A", status: "confirmed", source: "manual", voided_by: null, created_at: "2024-01-01" },
+      [
+        { id: uuidv7(), journal_entry_id: e1, account_id: acctId, currency: "USD", amount: "-100", lot_id: null },
+        { id: uuidv7(), journal_entry_id: e1, account_id: acctId2, currency: "USD", amount: "100", lot_id: null },
+      ],
+    );
+    await backend.setMetadata(e1, { [TAGS_META_KEY]: "food,groceries" });
+
+    const e2 = uuidv7();
+    await backend.postJournalEntry(
+      { id: e2, date: "2024-01-02", description: "B", status: "confirmed", source: "manual", voided_by: null, created_at: "2024-01-02" },
+      [
+        { id: uuidv7(), journal_entry_id: e2, account_id: acctId, currency: "USD", amount: "-50", lot_id: null },
+        { id: uuidv7(), journal_entry_id: e2, account_id: acctId2, currency: "USD", amount: "50", lot_id: null },
+      ],
+    );
+    await backend.setMetadata(e2, { [TAGS_META_KEY]: "food,rent" });
+
+    const tags = await backend.getAllTagValues();
+    expect(tags).toEqual(["food", "groceries", "rent"]); // sorted, deduplicated
+  });
+});
+
+describe("getAllMetadataKeys", () => {
+  it("returns empty for no metadata", async () => {
+    const backend = await createTestBackend();
+    const result = await backend.getAllMetadataKeys();
+    expect(result).toEqual([]);
+  });
+
+  it("returns distinct keys excluding tags", async () => {
+    const backend = await createTestBackend();
+    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    await backend.createCurrency(USD);
+    const acctId = uuidv7();
+    const acctId2 = uuidv7();
+    await backend.createAccount({
+      id: acctId, parent_id: null, account_type: "asset",
+      name: "Bank", full_name: "Assets:Bank",
+      allowed_currencies: [], is_postable: true, is_archived: false, created_at: "2024-01-01",
+    });
+    await backend.createAccount({
+      id: acctId2, parent_id: null, account_type: "expense",
+      name: "Food", full_name: "Expenses:Food",
+      allowed_currencies: [], is_postable: true, is_archived: false, created_at: "2024-01-01",
+    });
+
+    const e1 = uuidv7();
+    await backend.postJournalEntry(
+      { id: e1, date: "2024-01-01", description: "A", status: "confirmed", source: "manual", voided_by: null, created_at: "2024-01-01" },
+      [
+        { id: uuidv7(), journal_entry_id: e1, account_id: acctId, currency: "USD", amount: "-100", lot_id: null },
+        { id: uuidv7(), journal_entry_id: e1, account_id: acctId2, currency: "USD", amount: "100", lot_id: null },
+      ],
+    );
+    await backend.setMetadata(e1, { [TAGS_META_KEY]: "food", "bank-category": "groceries", "source": "n26" });
+
+    const keys = await backend.getAllMetadataKeys();
+    expect(keys).toContain("bank-category");
+    expect(keys).toContain("source");
+    expect(keys).not.toContain("tags");
   });
 });

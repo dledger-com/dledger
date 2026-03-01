@@ -27,6 +27,7 @@ import type {
   BalanceAssertionResult,
 } from "./types/index.js";
 import type { Backend, CurrencyRateSource, Reconciliation, RecurringTemplate, UnreconciledLineItem } from "./backend.js";
+import { parseTags } from "./utils/tags.js";
 
 // ---- IndexedDB persistence ----
 
@@ -2783,6 +2784,29 @@ export class SqlJsBackend implements Backend {
       result[key] = value;
     }
     return result;
+  }
+
+  async getAllTagValues(): Promise<string[]> {
+    const rows = this.query(
+      "SELECT DISTINCT value FROM journal_entry_metadata WHERE key = 'tags'",
+      [],
+      (row) => row.value as string,
+    );
+    const tagSet = new Set<string>();
+    for (const raw of rows) {
+      for (const t of parseTags(raw)) {
+        tagSet.add(t);
+      }
+    }
+    return [...tagSet].sort();
+  }
+
+  async getAllMetadataKeys(): Promise<string[]> {
+    return this.query(
+      "SELECT DISTINCT key FROM journal_entry_metadata WHERE key != 'tags' ORDER BY key",
+      [],
+      (row) => row.key as string,
+    );
   }
 
   // ---- Backend: Account Metadata ----

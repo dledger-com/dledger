@@ -145,6 +145,8 @@ export interface Backend {
   setMetadata(entryId: string, entries: Record<string, string>): Promise<void>;
   getMetadata(entryId: string): Promise<Record<string, string>>;
   queryEntriesByMetadata(key: string, value: string): Promise<string[]>;
+  getAllTagValues(): Promise<string[]>;
+  getAllMetadataKeys(): Promise<string[]>;
 
   // Account metadata
   setAccountMetadata(accountId: string, entries: Record<string, string>): Promise<void>;
@@ -382,6 +384,12 @@ class TauriBackend implements Backend {
 
   async queryEntriesByMetadata(key: string, value: string): Promise<string[]> {
     return this.invoke("query_entries_by_metadata", { key, value });
+  }
+  async getAllTagValues(): Promise<string[]> {
+    return [];
+  }
+  async getAllMetadataKeys(): Promise<string[]> {
+    return [];
   }
 
   // Account metadata

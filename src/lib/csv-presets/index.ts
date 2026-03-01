@@ -25,7 +25,7 @@ export { CsvPresetRegistry } from "./registry.js";
 export { parseDate, detectDateFormat, DATE_FORMATS, type DateFormatId } from "./parse-date.js";
 export { parseAmount, detectNumberFormat } from "./parse-amount.js";
 export { detectColumns, type ColumnDetection } from "./detect.js";
-export { matchRule, type CsvCategorizationRule } from "./categorize.js";
+export { matchRule, applyRuleTags, type CsvCategorizationRule } from "./categorize.js";
 export { transformGeneric, importRecords, type TransformOptions, type TransformResult } from "./transform.js";
 export { buildDedupIndex, isDuplicate, computeRecordFingerprint, type DedupIndex } from "./dedup.js";
 export type { CsvPreset, CsvRecord, CsvFileHeader, PresetDetectionResult } from "./types.js";

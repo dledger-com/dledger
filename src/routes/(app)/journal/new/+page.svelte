@@ -14,6 +14,9 @@
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Plus from "lucide-svelte/icons/plus";
   import AccountCombobox from "$lib/components/AccountCombobox.svelte";
+  import TagInput from "$lib/components/TagInput.svelte";
+  import MetadataEditor from "$lib/components/MetadataEditor.svelte";
+  import { serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -21,6 +24,10 @@
   let date = $state(new Date().toISOString().slice(0, 10));
   let description = $state("");
   let currency = $state("EUR");
+  let tags = $state<string[]>([]);
+  let entryMetadata = $state<Record<string, string>>({});
+  let tagSuggestions = $state<string[]>([]);
+  let metaKeySuggestions = $state<string[]>([]);
 
   interface FormLine {
     key: string;
@@ -134,17 +141,33 @@
     if (needsReload) await accountStore.load();
 
     const ok = await journalStore.post(entry, items);
-    submitting = false;
 
     if (ok) {
+      // Save tags + metadata
+      const metaToSave = { ...entryMetadata };
+      if (tags.length > 0) metaToSave[TAGS_META_KEY] = serializeTags(tags);
+      if (Object.keys(metaToSave).length > 0) {
+        await getBackend().setMetadata(entryId, metaToSave);
+      }
+      submitting = false;
       toast.success("Journal entry posted");
       goto("/journal");
     } else {
+      submitting = false;
       toast.error(journalStore.error ?? "Failed to post entry");
     }
   }
 
-  onMount(() => accountStore.load());
+  onMount(async () => {
+    await accountStore.load();
+    try {
+      const backend = getBackend();
+      tagSuggestions = await backend.getAllTagValues();
+      metaKeySuggestions = await backend.getAllMetadataKeys();
+    } catch {
+      // Non-critical
+    }
+  });
 </script>
 
 <div class="space-y-6">
@@ -181,6 +204,21 @@
             {/if}
           </select>
         </div>
+
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Tags</label>
+          <TagInput tags={tags} onchange={(t) => { tags = t; }} suggestions={tagSuggestions} />
+        </div>
+
+        <details class="space-y-2">
+          <summary class="text-sm font-medium cursor-pointer text-muted-foreground">Metadata</summary>
+          <MetadataEditor
+            metadata={entryMetadata}
+            onchange={(m) => { entryMetadata = m; }}
+            keySuggestions={metaKeySuggestions}
+            class="mt-2"
+          />
+        </details>
       </Card.Content>
     </Card.Root>
 
