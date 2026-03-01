@@ -279,6 +279,50 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([makePage([NEW_HEADER])]);
     expect(result.currency).toBe("EUR");
   });
+
+  it("excludes page footer and header lines from transaction descriptions", () => {
+    // Page 1: transaction, then footer lines at low Y
+    const page1 = makePage([
+      makeLine(750, ["01.01.2026 jusqu'au 31.01.2026", 44]),
+      NEW_HEADER,
+      makeLine(670, ["SUPERMARKET", 44], ["15.01.2026", 391], ["-42,00€", 499]),
+      makeLine(655, ["Mastercard", 44]),
+      // Footer lines (y ≤ 69) — name, address, IBAN
+      makeLine(69, ["Jean Dupont", 44], ["Émis le 02.02.2026", 350]),
+      makeLine(53, ["123 Rue Exemple, 75001 Paris", 44], ["02.02.2026", 400]),
+      makeLine(37, ["IBAN FR7630001007941234567890185", 44], ["Relevé N° 01/2026", 350]),
+    ], 1);
+
+    // Page 2: header line at high Y, then more transactions
+    const page2 = makePage([
+      makeLine(790, ["Relevé de compte N° 01/2026", 44]),
+      NEW_HEADER,
+      makeLine(670, ["ONLINE SHOP", 44], ["20.01.2026", 391], ["-15,99€", 499]),
+      // Footer on page 2
+      makeLine(69, ["Jean Dupont", 44], ["Émis le 02.02.2026", 350]),
+      makeLine(53, ["123 Rue Exemple, 75001 Paris", 44], ["02.02.2026", 400]),
+    ], 2);
+
+    const result = parseN26Statement([page1, page2]);
+
+    expect(result.transactions).toHaveLength(2);
+    // First tx should only have "SUPERMARKET Mastercard", no footer content
+    expect(result.transactions[0].description).toBe("SUPERMARKET Mastercard");
+    expect(result.transactions[0].amount).toBe(-42);
+    // Second tx should only have "ONLINE SHOP", no footer or header content
+    expect(result.transactions[1].description).toBe("ONLINE SHOP");
+    expect(result.transactions[1].amount).toBe(-15.99);
+
+    // Verify no transaction description contains footer/header patterns
+    for (const tx of result.transactions) {
+      expect(tx.description).not.toMatch(/Jean Dupont/);
+      expect(tx.description).not.toMatch(/Émis le/);
+      expect(tx.description).not.toMatch(/IBAN FR/);
+      expect(tx.description).not.toMatch(/Rue Exemple/);
+      expect(tx.description).not.toMatch(/Relevé de compte/);
+      expect(tx.description).not.toMatch(/Relevé N°/);
+    }
+  });
 });
 
 // ─── Old format parser ──────────────────────────────────────────────────────
@@ -394,5 +438,40 @@ describe("parseN26Statement — old format", () => {
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].description).toBe("PARIS SHOP Mastercard Ref: ABC123");
     expect(result.transactions[0].amount).toBe(-50);
+  });
+
+  it("excludes page footer and header lines from transaction descriptions", () => {
+    const page1 = makePage([
+      makeLine(693, ["1. mars 2020 jusqu'au 31. mars 2020", 30]),
+      makeLine(600, ["jeudi, 19. mars 2020", 30]),
+      makeLine(580, ["ATM WITHDRAWAL", 30]),
+      makeLine(565, ["Mastercard", 30], ["-100,00€", 520]),
+      // Footer lines
+      makeLine(69, ["Jean Dupont", 30], ["Émis le 01.04.2020", 350]),
+      makeLine(53, ["123 Rue Exemple, 75001 Paris", 30]),
+      makeLine(37, ["IBAN FR7630001007941234567890185", 30]),
+    ], 1);
+
+    const page2 = makePage([
+      // Header on page 2
+      makeLine(790, ["Relevé de compte N° 03/2020", 30]),
+      makeLine(600, ["vendredi, 20. mars 2020", 30]),
+      makeLine(580, ["ONLINE STORE", 30]),
+      makeLine(565, ["Mastercard", 30], ["-25,00€", 520]),
+      makeLine(69, ["Jean Dupont", 30]),
+    ], 2);
+
+    const result = parseN26Statement([page1, page2]);
+
+    expect(result.transactions).toHaveLength(2);
+    expect(result.transactions[0].description).toBe("ATM WITHDRAWAL Mastercard");
+    expect(result.transactions[1].description).toBe("ONLINE STORE Mastercard");
+
+    for (const tx of result.transactions) {
+      expect(tx.description).not.toMatch(/Jean Dupont/);
+      expect(tx.description).not.toMatch(/Émis le/);
+      expect(tx.description).not.toMatch(/IBAN FR/);
+      expect(tx.description).not.toMatch(/Relevé de compte/);
+    }
   });
 });

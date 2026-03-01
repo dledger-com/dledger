@@ -128,11 +128,20 @@ describe("N26 integration tests — new format", () => {
     expect(result.iban).toBeTruthy();
   });
 
-  it.skipIf(!sample2026_01)("2026-01: parses transactions", async () => {
+  it.skipIf(!sample2026_01)("2026-01: parses transactions without footer pollution", async () => {
     const result = await parseFromFile(sample2026_01!);
 
     expect(result.transactions.length).toBeGreaterThan(0);
     expect(result.openingDate).toContain("2026-01");
+
+    // Verify no transaction description contains page footer/header patterns
+    for (const tx of result.transactions) {
+      expect(tx.description).not.toMatch(/Relevé de compte/i);
+      expect(tx.description).not.toMatch(/Émis le/i);
+      expect(tx.description).not.toMatch(/\bIBAN\s+FR\d/);
+      // Footer contains address lines — check for common French postal patterns
+      expect(tx.description).not.toMatch(/\b\d{5}\s+\w+.*France\b/i);
+    }
   });
 });
 

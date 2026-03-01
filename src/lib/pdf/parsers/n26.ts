@@ -33,6 +33,12 @@ const BOOKING_DATE_X_MIN = 340;
 /** Minimum X for description text (left margin area) */
 const DESC_X_MAX = 340;
 
+/** Y threshold: items below this are in the page footer zone (name, address, IBAN) */
+const PAGE_FOOTER_Y = 80;
+
+/** Y threshold: items above this are in the page header zone ("Relevé de compte N°...") */
+const PAGE_HEADER_Y = 730;
+
 /**
  * Detect whether the N26 PDF uses the new format (2021+) or old format (2017-2020).
  * Returns "new" if column headers are found, "old" if French long-date headers are found.
@@ -145,6 +151,9 @@ function parseNewFormat(pages: PdfPage[], iban: string | null, warnings: string[
       }
 
       if (!inTransactionArea) continue;
+
+      // Skip page footer (name, address, IBAN) and header ("Relevé de compte") zones
+      if (line.y < PAGE_FOOTER_Y || line.y > PAGE_HEADER_Y) continue;
 
       // Look for a booking date (DD.MM.YYYY) in the date column area
       let bookingDate: string | null = null;
@@ -283,6 +292,9 @@ function parseOldFormat(pages: PdfPage[], iban: string | null, warnings: string[
       }
 
       if (!currentDate) continue;
+
+      // Skip page footer (name, address, IBAN) and header ("Relevé de compte") zones
+      if (line.y < PAGE_FOOTER_Y || line.y > PAGE_HEADER_Y) continue;
 
       // Check if line has an amount on the right side
       const amount = findAmountOnLineRight(line);
