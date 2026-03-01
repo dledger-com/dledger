@@ -142,6 +142,8 @@ pub fn run() {
             dprice_commands::dprice_import_db,
             dprice_commands::dprice_set_mode,
             dprice_commands::dprice_local_db_path,
+            dprice_commands::dprice_vacuum,
+            dprice_commands::dprice_export_parquet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

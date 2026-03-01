@@ -304,6 +304,33 @@ pub async fn dprice_set_mode(
 }
 
 #[tauri::command]
+pub async fn dprice_export_parquet(state: State<'_, DpriceState>) -> Result<Vec<u8>, String> {
+    let db_path = state.active_db_path();
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
+        let tmp_path = std::env::temp_dir().join("dprice-export.parquet");
+        dprice::export::export_prices_parquet(&db, &tmp_path).map_err(|e| e.to_string())?;
+        let data = std::fs::read(&tmp_path).map_err(|e| format!("read error: {e}"))?;
+        let _ = std::fs::remove_file(&tmp_path);
+        Ok(data)
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_vacuum(state: State<'_, DpriceState>) -> Result<String, String> {
+    let db_path = state.active_db_path();
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open(&db_path).map_err(|e| e.to_string())?;
+        db.vacuum().map_err(|e| e.to_string())?;
+        Ok("vacuumed".to_string())
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
 pub async fn dprice_local_db_path(
     state: State<'_, DpriceState>,
 ) -> Result<String, String> {
