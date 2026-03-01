@@ -710,7 +710,7 @@
           {/if}
 
           <!-- Entry preview table -->
-          <div class="overflow-x-auto max-h-[40vh]">
+          <div class="overflow-x-auto">
             <Table.Root>
               <Table.Header>
                 <Table.Row>
