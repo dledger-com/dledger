@@ -364,10 +364,12 @@
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px]">
-                <a href="/journal/{entry.id}" class="font-medium hover:underline truncate block" title={entry.description}>{entry.description}</a>
-                {#if entryTags.get(entry.id)?.length}
-                  <TagDisplay tags={entryTags.get(entry.id)!} class="mt-0.5" />
-                {/if}
+                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                  <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+                  {#if entryTags.get(entry.id)?.length}
+                    <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
+                  {/if}
+                </div>
               </Table.Cell>
               <Table.Cell class="hidden md:table-cell">
                 <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
