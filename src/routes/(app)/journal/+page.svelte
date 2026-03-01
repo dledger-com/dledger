@@ -292,12 +292,13 @@
         </div>
       </Card.Content>
     </Card.Root>
-  {:else if filteredEntries.length === 0}
+  {:else if store.error}
     <Card.Root>
       <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">
-          No journal entries yet. Create your first entry to start recording transactions.
-        </p>
+        <p class="text-sm text-destructive text-center">{store.error}</p>
+        <div class="flex justify-center mt-2">
+          <Button variant="outline" size="sm" onclick={() => store.load()}>Retry</Button>
+        </div>
       </Card.Content>
     </Card.Root>
   {:else if filteredEntries.length === 0 && searchTerm}
@@ -309,6 +310,14 @@
         <div class="flex justify-center mt-2">
           <Button variant="outline" size="sm" onclick={() => (searchTerm = "")}>Clear search</Button>
         </div>
+      </Card.Content>
+    </Card.Root>
+  {:else if filteredEntries.length === 0}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          No journal entries yet. Create your first entry to start recording transactions.
+        </p>
       </Card.Content>
     </Card.Root>
   {:else}
