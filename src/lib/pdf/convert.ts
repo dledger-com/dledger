@@ -54,6 +54,7 @@ export function convertPdfToRecords(
         { account: counterAccount, currency, amount: counterAmountStr },
       ],
       sourceKey: `${statement.closingDate ?? "unknown"}:${tx.index}`,
+      ...(tx.category ? { category: tx.category } : {}),
     });
   }
 

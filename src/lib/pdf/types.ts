@@ -22,6 +22,7 @@ export interface PdfTransaction {
   description: string;
   amount: number;
   index: number;
+  category?: string;
 }
 
 export interface PdfStatement {

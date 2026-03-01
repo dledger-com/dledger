@@ -280,6 +280,64 @@ describe("parseN26Statement — new format", () => {
     expect(result.currency).toBe("EUR");
   });
 
+  it("strips N26 category from description (bullet •)", () => {
+    const page = makePage([
+      makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
+      NEW_HEADER,
+      makeLine(670, ["PHARMACIE EXAMPLE Mastercard", 44], ["15.09.2021", 391], ["-25,50€", 499]),
+      makeLine(655, ["• Santé et pharmacie", 44]),
+    ]);
+
+    const result = parseN26Statement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("PHARMACIE EXAMPLE Mastercard");
+    expect(result.transactions[0].category).toBe("Santé et pharmacie");
+  });
+
+  it("strips N26 category from description (middle dot ·)", () => {
+    const page = makePage([
+      makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
+      NEW_HEADER,
+      makeLine(670, ["CAFE PARIS Mastercard · Sorties", 44], ["15.09.2021", 391], ["-12,00€", 499]),
+    ]);
+
+    const result = parseN26Statement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("CAFE PARIS Mastercard");
+    expect(result.transactions[0].category).toBe("Sorties");
+  });
+
+  it("leaves category undefined when no bullet in description", () => {
+    const page = makePage([
+      makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
+      NEW_HEADER,
+      makeLine(670, ["SALARY INC", 44], ["01.09.2021", 391], ["+2.000,00€", 491]),
+      makeLine(655, ["Revenus", 44]),
+    ]);
+
+    const result = parseN26Statement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("SALARY INC Revenus");
+    expect(result.transactions[0].category).toBeUndefined();
+  });
+
+  it("splits only on first bullet when multiple bullets present", () => {
+    const page = makePage([
+      makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
+      NEW_HEADER,
+      makeLine(670, ["SHOP A Mastercard • Cat A • Sub B", 44], ["15.09.2021", 391], ["-10,00€", 499]),
+    ]);
+
+    const result = parseN26Statement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("SHOP A Mastercard");
+    expect(result.transactions[0].category).toBe("Cat A • Sub B");
+  });
+
   it("excludes page footer and header lines from transaction descriptions", () => {
     // Page 1: transaction, then footer lines at low Y
     const page1 = makePage([
@@ -438,6 +496,36 @@ describe("parseN26Statement — old format", () => {
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].description).toBe("PARIS SHOP Mastercard Ref: ABC123");
     expect(result.transactions[0].amount).toBe(-50);
+  });
+
+  it("strips N26 category from description in old format (bullet •)", () => {
+    const page = makePage([
+      makeLine(693, ["1. septembre 2017 jusqu'au 30. septembre 2017", 30]),
+      makeLine(600, ["vendredi, 8. septembre 2017", 30]),
+      makeLine(580, ["PayPal Europe", 30]),
+      makeLine(565, ["Revenus • Loisirs", 30], ["+0,02€", 520]),
+    ]);
+
+    const result = parseN26Statement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("PayPal Europe Revenus");
+    expect(result.transactions[0].category).toBe("Loisirs");
+  });
+
+  it("leaves category undefined in old format when no bullet", () => {
+    const page = makePage([
+      makeLine(693, ["1. septembre 2017 jusqu'au 30. septembre 2017", 30]),
+      makeLine(600, ["vendredi, 8. septembre 2017", 30]),
+      makeLine(580, ["PayPal Europe", 30]),
+      makeLine(565, ["Revenus", 30], ["+0,02€", 520]),
+    ]);
+
+    const result = parseN26Statement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("PayPal Europe Revenus");
+    expect(result.transactions[0].category).toBeUndefined();
   });
 
   it("excludes page footer and header lines from transaction descriptions", () => {

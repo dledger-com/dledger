@@ -93,6 +93,7 @@ interface RawN26Tx {
   date: string; // YYYY-MM-DD
   descParts: string[];
   amount: number | null;
+  category?: string;
 }
 
 function parseNewFormat(pages: PdfPage[], iban: string | null, warnings: string[]): PdfStatement {
@@ -208,12 +209,10 @@ function parseNewFormat(pages: PdfPage[], iban: string | null, warnings: string[
 
   finalizeTx();
 
-  const transactions: PdfTransaction[] = rawTxs.map((raw, idx) => ({
-    date: raw.date,
-    description: raw.descParts.join(" "),
-    amount: raw.amount!,
-    index: idx,
-  }));
+  const transactions: PdfTransaction[] = rawTxs.map((raw, idx) => {
+    const { description, category } = splitCategory(raw.descParts.join(" "));
+    return { date: raw.date, description, amount: raw.amount!, index: idx, ...(category ? { category } : {}) };
+  });
 
   if (transactions.length === 0) {
     warnings.push("No transactions found in PDF");
@@ -353,12 +352,10 @@ function parseOldFormat(pages: PdfPage[], iban: string | null, warnings: string[
 
   finalizeTx();
 
-  const transactions: PdfTransaction[] = rawTxs.map((raw, idx) => ({
-    date: raw.date,
-    description: raw.descParts.join(" "),
-    amount: raw.amount!,
-    index: idx,
-  }));
+  const transactions: PdfTransaction[] = rawTxs.map((raw, idx) => {
+    const { description, category } = splitCategory(raw.descParts.join(" "));
+    return { date: raw.date, description, amount: raw.amount!, index: idx, ...(category ? { category } : {}) };
+  });
 
   if (transactions.length === 0) {
     warnings.push("No transactions found in PDF");
@@ -374,6 +371,18 @@ function parseOldFormat(pages: PdfPage[], iban: string | null, warnings: string[
     closingDate,
     transactions,
     warnings,
+  };
+}
+
+/** Split a description at ` • ` or ` · ` (first occurrence) to extract N26 category */
+function splitCategory(desc: string): { description: string; category?: string } {
+  const idx = desc.search(/\s+[•·]\s+/);
+  if (idx === -1) return { description: desc };
+  const match = desc.slice(idx).match(/^(\s+[•·]\s+)/);
+  if (!match) return { description: desc };
+  return {
+    description: desc.slice(0, idx).trim(),
+    category: desc.slice(idx + match[1].length).trim() || undefined,
   };
 }
 
