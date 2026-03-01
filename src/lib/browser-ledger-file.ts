@@ -773,12 +773,12 @@ export async function importLedger(
       // price = how much of target you get per unit of source
       // e.g., -402 EUR @ XAU with 0.353 XAU counterparty → 0.353/402 = 0.000878 XAU/EUR
       p.costPrice.price = totalTarget.div(totalSource).toString();
-      // Compute exact cost total using multiply-first to avoid precision loss
-      // from dividing then multiplying back: amount * target / source is exact
-      // when amount is a factor of source (common case: single posting)
+      // Divide-first to keep intermediate ≤ 1, preserving precision for
+      // large amounts (e.g. 300152.68522384 RHOC @ REV would overflow
+      // Decimal.js-light's 20-digit precision if multiplied first)
       p.costPrice.inferredCostTotal = new Decimal(p.amount!)
-        .times(totalTarget)
         .div(totalSource)
+        .times(totalTarget)
         .toString();
     }
 

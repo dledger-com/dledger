@@ -457,6 +457,22 @@ commodity EUR
       expect(items.length).toBe(8);
     });
 
+    it("handles @ COMMODITY with large amounts without precision loss", async () => {
+      // 300152.68522384 squared exceeds Decimal.js-light's 20-digit precision
+      // if multiply-first order is used; divide-first keeps intermediate ≤ 1
+      const content = `
+2020-01-01 open Assets:Crypto:HW
+2020-01-01 open Assets:Crypto:SW
+
+2020-02-25 * "REV issuance (RChain mainnet launch)"
+  Assets:Crypto:HW  -300152.68522384 RHOC @ REV
+  Assets:Crypto:SW  300152.68522384 REV
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.errors ?? []).toHaveLength(0);
+    });
+
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
       // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
       // beancount allows this rounding; we round cost total to price's decimal places
