@@ -690,7 +690,8 @@
                     <Table.Cell class="font-mono text-xs">{rec.date}</Table.Cell>
                     <Table.Cell class="text-xs max-w-[200px] truncate">
                       {rec.description}
-                      {#if rec.category}<span class="text-muted-foreground ml-1">• {rec.category}</span>{/if}
+                      {#if rec.metadata?.["bank-category"]}<span class="text-muted-foreground ml-1">• {rec.metadata["bank-category"]}</span>{/if}
+                      {#if rec.metadata?.["transaction-type"]}<Badge variant="secondary" class="ml-1 text-[10px] px-1 py-0 h-4">{rec.metadata["transaction-type"]}</Badge>{/if}
                       {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
                     </Table.Cell>
                     <Table.Cell class="text-xs">

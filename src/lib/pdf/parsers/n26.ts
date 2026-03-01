@@ -93,7 +93,6 @@ interface RawN26Tx {
   date: string; // YYYY-MM-DD
   descParts: string[];
   amount: number | null;
-  category?: string;
 }
 
 function parseNewFormat(pages: PdfPage[], iban: string | null, warnings: string[]): PdfStatement {
@@ -210,8 +209,11 @@ function parseNewFormat(pages: PdfPage[], iban: string | null, warnings: string[
   finalizeTx();
 
   const transactions: PdfTransaction[] = rawTxs.map((raw, idx) => {
-    const { description, category } = splitCategory(raw.descParts.join(" "));
-    return { date: raw.date, description, amount: raw.amount!, index: idx, ...(category ? { category } : {}) };
+    const { description, metadata } = extractN26Metadata(raw.descParts.join(" "));
+    return {
+      date: raw.date, description, amount: raw.amount!, index: idx,
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    };
   });
 
   if (transactions.length === 0) {
@@ -353,8 +355,11 @@ function parseOldFormat(pages: PdfPage[], iban: string | null, warnings: string[
   finalizeTx();
 
   const transactions: PdfTransaction[] = rawTxs.map((raw, idx) => {
-    const { description, category } = splitCategory(raw.descParts.join(" "));
-    return { date: raw.date, description, amount: raw.amount!, index: idx, ...(category ? { category } : {}) };
+    const { description, metadata } = extractN26Metadata(raw.descParts.join(" "));
+    return {
+      date: raw.date, description, amount: raw.amount!, index: idx,
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    };
   });
 
   if (transactions.length === 0) {
@@ -374,16 +379,78 @@ function parseOldFormat(pages: PdfPage[], iban: string | null, warnings: string[
   };
 }
 
-/** Split a description at ` • ` or ` · ` (first occurrence) to extract N26 category */
-function splitCategory(desc: string): { description: string; category?: string } {
-  const idx = desc.search(/\s+[•·]\s+/);
-  if (idx === -1) return { description: desc };
-  const match = desc.slice(idx).match(/^(\s+[•·]\s+)/);
-  if (!match) return { description: desc };
-  return {
-    description: desc.slice(0, idx).trim(),
-    category: desc.slice(idx + match[1].length).trim() || undefined,
-  };
+/** IBAN+BIC pattern: "IBAN: XX... • BIC: YY..." or "IBAN: XX... BIC: YY..." */
+const IBAN_BIC_RE = /IBAN[:\s]+([A-Z]{2}\d{2}[\dA-Z\s]+?)\s*[•·]?\s*BIC[:\s]+(\S+)/;
+/** Standalone IBAN pattern (no BIC) */
+const IBAN_ONLY_RE = /IBAN[:\s]+([A-Z]{2}\d{2}[\dA-Z\s]+?)(?:\s*$|\s+(?!BIC))/;
+
+/** Transaction type keywords, ordered by specificity (longer/more specific first) */
+const TX_TYPE_KEYWORDS: { pattern: RegExp; type: string; extra?: Record<string, string> }[] = [
+  { pattern: /Commission sur les virements instantan[ée]s/, type: "instant-transfer-fee" },
+  { pattern: /ATM Withdrawal Fee/, type: "atm-fee" },
+  { pattern: /Virements sortants/, type: "transfer-out" },
+  { pattern: /Virements entrants/, type: "transfer-in" },
+  { pattern: /Pr[ée]l[èe]vement(?:\s+SEPA)?/, type: "direct-debit" },
+  { pattern: /Remboursement/, type: "refund" },
+  { pattern: /Mastercard/, type: "card-payment", extra: { "card-type": "mastercard" } },
+  { pattern: /Revenus/, type: "income" },
+];
+
+/**
+ * Extract structured metadata from an N26 transaction description.
+ * Returns a cleaned description and a metadata record with fields like
+ * bank-category, transaction-type, card-type, iban, bic, reference.
+ */
+export function extractN26Metadata(rawDesc: string): { description: string; metadata: Record<string, string> } {
+  const metadata: Record<string, string> = {};
+  let text = rawDesc;
+
+  // Step 1 — Extract IBAN + BIC (must be first to avoid bullet confusion)
+  const ibanBicMatch = text.match(IBAN_BIC_RE);
+  if (ibanBicMatch) {
+    metadata.iban = ibanBicMatch[1].replace(/\s+/g, "");
+    metadata.bic = ibanBicMatch[2].trim();
+    text = text.replace(ibanBicMatch[0], " ");
+  } else {
+    const ibanMatch = text.match(IBAN_ONLY_RE);
+    if (ibanMatch) {
+      metadata.iban = ibanMatch[1].replace(/\s+/g, "");
+      text = text.replace(ibanMatch[0], " ");
+    }
+  }
+
+  // Step 2 — Split at first remaining bullet (• or ·)
+  const bulletIdx = text.search(/\s+[•·]\s+/);
+  if (bulletIdx !== -1) {
+    const bulletMatch = text.slice(bulletIdx).match(/^(\s+[•·]\s+)/);
+    if (bulletMatch) {
+      const category = text.slice(bulletIdx + bulletMatch[1].length).trim();
+      if (category) metadata["bank-category"] = category;
+      text = text.slice(0, bulletIdx);
+    }
+  }
+
+  // Step 3 — Match transaction type keyword
+  for (const kw of TX_TYPE_KEYWORDS) {
+    const kwMatch = text.match(kw.pattern);
+    if (kwMatch) {
+      metadata["transaction-type"] = kw.type;
+      if (kw.extra) Object.assign(metadata, kw.extra);
+
+      const before = text.slice(0, kwMatch.index!).trim();
+      const after = text.slice(kwMatch.index! + kwMatch[0].length).trim();
+
+      if (after) metadata.reference = after;
+      // If stripping keyword leaves description empty, keep original text
+      text = before || rawDesc;
+      break;
+    }
+  }
+
+  // Step 4 — Trim and normalize whitespace
+  const description = text.replace(/\s+/g, " ").trim();
+
+  return { description, metadata };
 }
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────

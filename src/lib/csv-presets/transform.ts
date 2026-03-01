@@ -249,6 +249,7 @@ export async function importRecords(
       description: group[0].description,
       lines: group.flatMap((r) => r.lines),
       sourceKey: group[0].sourceKey,
+      ...(group[0].metadata ? { metadata: group[0].metadata } : {}),
     };
     if (isDuplicate(merged, presetId, dedupIndex)) {
       result.duplicates_skipped++;
@@ -331,5 +332,11 @@ async function postRecord(
   };
 
   await backend.postJournalEntry(entry, lineItems);
+
+  // Store structured metadata if present
+  if (rec.metadata && Object.keys(rec.metadata).length > 0) {
+    await backend.setMetadata(entryId, rec.metadata);
+  }
+
   return true;
 }

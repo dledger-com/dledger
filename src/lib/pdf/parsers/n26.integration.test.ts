@@ -128,7 +128,7 @@ describe("N26 integration tests — new format", () => {
     expect(result.iban).toBeTruthy();
   });
 
-  it.skipIf(!sample2026_01)("2026-01: parses transactions without footer pollution", async () => {
+  it.skipIf(!sample2026_01)("2026-01: parses transactions with metadata, without footer pollution", async () => {
     const result = await parseFromFile(sample2026_01!);
 
     expect(result.transactions.length).toBeGreaterThan(0);
@@ -139,20 +139,30 @@ describe("N26 integration tests — new format", () => {
       expect(tx.description).not.toMatch(/Relevé de compte/i);
       expect(tx.description).not.toMatch(/Émis le/i);
       expect(tx.description).not.toMatch(/\bIBAN\s+FR\d/);
-      // Footer contains address lines — check for common French postal patterns
       expect(tx.description).not.toMatch(/\b\d{5}\s+\w+.*France\b/i);
-      // Description should not contain bullet-separated category
       expect(tx.description).not.toMatch(/\s+[•·]\s+/);
+      // Descriptions should not contain transaction-type keywords
+      expect(tx.description).not.toMatch(/\bMastercard\b/);
+      expect(tx.description).not.toMatch(/\bRevenus\b/);
+      expect(tx.description).not.toMatch(/\bVirements sortants\b/);
+      expect(tx.description).not.toMatch(/\bVirements entrants\b/);
+      expect(tx.description).not.toMatch(/\bPrélèvement\b/);
+      // Descriptions should not contain raw IBAN/BIC
+      expect(tx.description).not.toMatch(/\bIBAN[:\s]+[A-Z]{2}\d/);
+      expect(tx.description).not.toMatch(/\bBIC[:\s]+\S/);
     }
 
-    // Check that at least some transactions have categories extracted
-    const withCategory = result.transactions.filter((tx) => tx.category);
-    // N26 2026 statements typically have categories; if present, verify they're clean
+    // Check that at least some transactions have metadata extracted
+    const withCategory = result.transactions.filter((tx) => tx.metadata?.["bank-category"]);
     for (const tx of withCategory) {
-      expect(tx.category!.length).toBeGreaterThan(0);
-      expect(tx.category).not.toMatch(/^\s/);
-      expect(tx.category).not.toMatch(/\s$/);
+      expect(tx.metadata!["bank-category"].length).toBeGreaterThan(0);
+      expect(tx.metadata!["bank-category"]).not.toMatch(/^\s/);
+      expect(tx.metadata!["bank-category"]).not.toMatch(/\s$/);
     }
+
+    // Check that transaction-type metadata is present on most transactions
+    const withType = result.transactions.filter((tx) => tx.metadata?.["transaction-type"]);
+    expect(withType.length).toBeGreaterThan(0);
   });
 });
 

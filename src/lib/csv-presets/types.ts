@@ -6,7 +6,7 @@ export interface CsvRecord {
   lines: { account: string; currency: string; amount: string }[];
   groupKey?: string;
   sourceKey?: string;
-  category?: string;
+  metadata?: Record<string, string>;
 }
 
 export interface CsvFileHeader {

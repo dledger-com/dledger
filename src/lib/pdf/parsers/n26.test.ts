@@ -4,6 +4,7 @@ import {
   parseN26Amount,
   parseFrenchLongDate,
   detectN26Format,
+  extractN26Metadata,
 } from "./n26.js";
 import type { PdfPage, PdfTextItem, PdfTextLine } from "../types.js";
 
@@ -150,7 +151,8 @@ describe("parseN26Statement — new format", () => {
 
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].date).toBe("2021-09-15");
-    expect(result.transactions[0].description).toBe("CAFE PARIS Mastercard");
+    expect(result.transactions[0].description).toBe("CAFE PARIS");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
     expect(result.transactions[0].amount).toBe(-25.5);
     expect(result.transactions[0].index).toBe(0);
   });
@@ -169,7 +171,7 @@ describe("parseN26Statement — new format", () => {
     expect(result.transactions[0].amount).toBe(1400);
   });
 
-  it("merges multi-line descriptions", () => {
+  it("merges multi-line descriptions and extracts metadata", () => {
     const page = makePage([
       makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
       NEW_HEADER,
@@ -182,9 +184,11 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe(
-      "JOHN DOE Revenus IBAN: DE00100000000000000004 BIC: NTSBDEB1XXX PAYMENT REF 09/21",
-    );
+    expect(result.transactions[0].description).toBe("JOHN DOE");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("income");
+    expect(result.transactions[0].metadata?.iban).toBe("DE00100000000000000004");
+    expect(result.transactions[0].metadata?.bic).toBe("NTSBDEB1XXX");
+    expect(result.transactions[0].metadata?.reference).toBe("PAYMENT REF 09/21");
   });
 
   it("skips 'Date de valeur' continuation lines", () => {
@@ -201,7 +205,7 @@ describe("parseN26Statement — new format", () => {
     expect(result.transactions[0].description).toBe("JOHN DOE");
   });
 
-  it("parses multiple transactions", () => {
+  it("parses multiple transactions with metadata", () => {
     const page = makePage([
       makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
       NEW_HEADER,
@@ -217,8 +221,11 @@ describe("parseN26Statement — new format", () => {
 
     expect(result.transactions).toHaveLength(3);
     expect(result.transactions[0].amount).toBe(2000);
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("income");
     expect(result.transactions[1].amount).toBe(-85.3);
+    expect(result.transactions[1].metadata?.["transaction-type"]).toBe("card-payment");
     expect(result.transactions[2].amount).toBe(-750);
+    expect(result.transactions[2].metadata?.["transaction-type"]).toBe("transfer-out");
   });
 
   it("extracts opening and closing balance from summary page", () => {
@@ -280,7 +287,7 @@ describe("parseN26Statement — new format", () => {
     expect(result.currency).toBe("EUR");
   });
 
-  it("strips N26 category from description (bullet •)", () => {
+  it("extracts bank-category and transaction-type from description (bullet •)", () => {
     const page = makePage([
       makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
       NEW_HEADER,
@@ -291,11 +298,13 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("PHARMACIE EXAMPLE Mastercard");
-    expect(result.transactions[0].category).toBe("Santé et pharmacie");
+    expect(result.transactions[0].description).toBe("PHARMACIE EXAMPLE");
+    expect(result.transactions[0].metadata?.["bank-category"]).toBe("Santé et pharmacie");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
+    expect(result.transactions[0].metadata?.["card-type"]).toBe("mastercard");
   });
 
-  it("strips N26 category from description (middle dot ·)", () => {
+  it("extracts bank-category from description (middle dot ·)", () => {
     const page = makePage([
       makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
       NEW_HEADER,
@@ -305,11 +314,12 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("CAFE PARIS Mastercard");
-    expect(result.transactions[0].category).toBe("Sorties");
+    expect(result.transactions[0].description).toBe("CAFE PARIS");
+    expect(result.transactions[0].metadata?.["bank-category"]).toBe("Sorties");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
   });
 
-  it("leaves category undefined when no bullet in description", () => {
+  it("extracts transaction-type when no bullet in description", () => {
     const page = makePage([
       makeLine(750, ["01.09.2021 jusqu'au 30.09.2021", 44]),
       NEW_HEADER,
@@ -320,8 +330,9 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("SALARY INC Revenus");
-    expect(result.transactions[0].category).toBeUndefined();
+    expect(result.transactions[0].description).toBe("SALARY INC");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("income");
+    expect(result.transactions[0].metadata?.["bank-category"]).toBeUndefined();
   });
 
   it("splits only on first bullet when multiple bullets present", () => {
@@ -334,8 +345,9 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("SHOP A Mastercard");
-    expect(result.transactions[0].category).toBe("Cat A • Sub B");
+    expect(result.transactions[0].description).toBe("SHOP A");
+    expect(result.transactions[0].metadata?.["bank-category"]).toBe("Cat A • Sub B");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
   });
 
   it("excludes page footer and header lines from transaction descriptions", () => {
@@ -364,8 +376,9 @@ describe("parseN26Statement — new format", () => {
     const result = parseN26Statement([page1, page2]);
 
     expect(result.transactions).toHaveLength(2);
-    // First tx should only have "SUPERMARKET Mastercard", no footer content
-    expect(result.transactions[0].description).toBe("SUPERMARKET Mastercard");
+    // First tx should only have "SUPERMARKET", no footer content
+    expect(result.transactions[0].description).toBe("SUPERMARKET");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
     expect(result.transactions[0].amount).toBe(-42);
     // Second tx should only have "ONLINE SHOP", no footer or header content
     expect(result.transactions[1].description).toBe("ONLINE SHOP");
@@ -403,7 +416,8 @@ describe("parseN26Statement — old format", () => {
 
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].date).toBe("2017-09-08");
-    expect(result.transactions[0].description).toContain("PayPal Europe");
+    expect(result.transactions[0].description).toBe("PayPal Europe");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("income");
     expect(result.transactions[0].amount).toBe(0.02);
     expect(result.openingBalance).toBe(18.39);
     expect(result.closingBalance).toBe(18.41);
@@ -494,11 +508,13 @@ describe("parseN26Statement — old format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("PARIS SHOP Mastercard Ref: ABC123");
+    expect(result.transactions[0].description).toBe("PARIS SHOP");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
+    expect(result.transactions[0].metadata?.reference).toBe("Ref: ABC123");
     expect(result.transactions[0].amount).toBe(-50);
   });
 
-  it("strips N26 category from description in old format (bullet •)", () => {
+  it("extracts bank-category and transaction-type in old format (bullet •)", () => {
     const page = makePage([
       makeLine(693, ["1. septembre 2017 jusqu'au 30. septembre 2017", 30]),
       makeLine(600, ["vendredi, 8. septembre 2017", 30]),
@@ -509,11 +525,12 @@ describe("parseN26Statement — old format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("PayPal Europe Revenus");
-    expect(result.transactions[0].category).toBe("Loisirs");
+    expect(result.transactions[0].description).toBe("PayPal Europe");
+    expect(result.transactions[0].metadata?.["bank-category"]).toBe("Loisirs");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("income");
   });
 
-  it("leaves category undefined in old format when no bullet", () => {
+  it("extracts transaction-type in old format when no bullet", () => {
     const page = makePage([
       makeLine(693, ["1. septembre 2017 jusqu'au 30. septembre 2017", 30]),
       makeLine(600, ["vendredi, 8. septembre 2017", 30]),
@@ -524,8 +541,9 @@ describe("parseN26Statement — old format", () => {
     const result = parseN26Statement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe("PayPal Europe Revenus");
-    expect(result.transactions[0].category).toBeUndefined();
+    expect(result.transactions[0].description).toBe("PayPal Europe");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("income");
+    expect(result.transactions[0].metadata?.["bank-category"]).toBeUndefined();
   });
 
   it("excludes page footer and header lines from transaction descriptions", () => {
@@ -552,8 +570,10 @@ describe("parseN26Statement — old format", () => {
     const result = parseN26Statement([page1, page2]);
 
     expect(result.transactions).toHaveLength(2);
-    expect(result.transactions[0].description).toBe("ATM WITHDRAWAL Mastercard");
-    expect(result.transactions[1].description).toBe("ONLINE STORE Mastercard");
+    expect(result.transactions[0].description).toBe("ATM WITHDRAWAL");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-payment");
+    expect(result.transactions[1].description).toBe("ONLINE STORE");
+    expect(result.transactions[1].metadata?.["transaction-type"]).toBe("card-payment");
 
     for (const tx of result.transactions) {
       expect(tx.description).not.toMatch(/Jean Dupont/);
@@ -561,5 +581,127 @@ describe("parseN26Statement — old format", () => {
       expect(tx.description).not.toMatch(/IBAN FR/);
       expect(tx.description).not.toMatch(/Relevé de compte/);
     }
+  });
+});
+
+// ─── extractN26Metadata unit tests ──────────────────────────────────────────
+
+describe("extractN26Metadata", () => {
+  it("extracts card payment with category", () => {
+    const { description, metadata } = extractN26Metadata("CAFE PARIS Mastercard • Bars et restaurants");
+    expect(description).toBe("CAFE PARIS");
+    expect(metadata["bank-category"]).toBe("Bars et restaurants");
+    expect(metadata["transaction-type"]).toBe("card-payment");
+    expect(metadata["card-type"]).toBe("mastercard");
+  });
+
+  it("extracts income with IBAN, BIC, and reference", () => {
+    const { description, metadata } = extractN26Metadata(
+      "Marie Dupont Revenus IBAN: DE00200000000000000001 • BIC: EXMPDEHHXXX Kraken Tx//ABCDE123 WXYZ 4567",
+    );
+    expect(description).toBe("Marie Dupont");
+    expect(metadata["transaction-type"]).toBe("income");
+    expect(metadata.iban).toBe("DE00200000000000000001");
+    expect(metadata.bic).toBe("EXMPDEHHXXX");
+    expect(metadata.reference).toBe("Kraken Tx//ABCDE123 WXYZ 4567");
+    expect(metadata["bank-category"]).toBeUndefined();
+  });
+
+  it("extracts transfer-out with IBAN only (no BIC)", () => {
+    const { description, metadata } = extractN26Metadata(
+      "HI . G8701 Virements sortants IBAN: FR7630001007941234567890185",
+    );
+    expect(description).toBe("HI . G8701");
+    expect(metadata["transaction-type"]).toBe("transfer-out");
+    expect(metadata.iban).toBe("FR7630001007941234567890185");
+    expect(metadata.bic).toBeUndefined();
+  });
+
+  it("preserves description when keyword IS the description", () => {
+    const { description, metadata } = extractN26Metadata("ATM Withdrawal Fee");
+    expect(description).toBe("ATM Withdrawal Fee");
+    expect(metadata["transaction-type"]).toBe("atm-fee");
+  });
+
+  it("extracts instant-transfer-fee", () => {
+    const { description, metadata } = extractN26Metadata(
+      "Commission sur les virements instantanés",
+    );
+    expect(description).toBe("Commission sur les virements instantanés");
+    expect(metadata["transaction-type"]).toBe("instant-transfer-fee");
+  });
+
+  it("extracts transfer-in", () => {
+    const { description, metadata } = extractN26Metadata("John Doe Virements entrants");
+    expect(description).toBe("John Doe");
+    expect(metadata["transaction-type"]).toBe("transfer-in");
+  });
+
+  it("extracts direct-debit (Prélèvement)", () => {
+    const { description, metadata } = extractN26Metadata("EDF Prélèvement SEPA");
+    expect(description).toBe("EDF");
+    expect(metadata["transaction-type"]).toBe("direct-debit");
+  });
+
+  it("extracts direct-debit (Prelevement without accents)", () => {
+    const { description, metadata } = extractN26Metadata("EDF Prelevement");
+    expect(description).toBe("EDF");
+    expect(metadata["transaction-type"]).toBe("direct-debit");
+  });
+
+  it("extracts refund (Remboursement)", () => {
+    const { description, metadata } = extractN26Metadata("AMAZON Remboursement");
+    expect(description).toBe("AMAZON");
+    expect(metadata["transaction-type"]).toBe("refund");
+  });
+
+  it("returns empty metadata when no keywords match", () => {
+    const { description, metadata } = extractN26Metadata("RANDOM DESCRIPTION TEXT");
+    expect(description).toBe("RANDOM DESCRIPTION TEXT");
+    expect(Object.keys(metadata)).toHaveLength(0);
+  });
+
+  it("first keyword match wins (Mastercard before Revenus)", () => {
+    // "Mastercard" appears before "Revenus" in keyword table
+    const { description, metadata } = extractN26Metadata("SHOP Mastercard Revenus");
+    expect(description).toBe("SHOP");
+    expect(metadata["transaction-type"]).toBe("card-payment");
+    expect(metadata["card-type"]).toBe("mastercard");
+    expect(metadata.reference).toBe("Revenus");
+  });
+
+  it("extracts IBAN with spaces", () => {
+    const { description, metadata } = extractN26Metadata(
+      "Someone Revenus IBAN: DE00 2000 0000 0000 0000 01 BIC: EXMPDEHHXXX",
+    );
+    expect(metadata.iban).toBe("DE00200000000000000001");
+    expect(metadata.bic).toBe("EXMPDEHHXXX");
+    expect(description).toBe("Someone");
+  });
+
+  it("does not treat IBAN•BIC bullet as category separator", () => {
+    const { description, metadata } = extractN26Metadata(
+      "Person Revenus IBAN: DE00200000000000000001 • BIC: EXMPDEHHXXX",
+    );
+    expect(metadata.iban).toBe("DE00200000000000000001");
+    expect(metadata.bic).toBe("EXMPDEHHXXX");
+    expect(metadata["bank-category"]).toBeUndefined();
+    expect(description).toBe("Person");
+  });
+
+  it("extracts reference text after keyword", () => {
+    const { description, metadata } = extractN26Metadata(
+      "COMPANY Virements sortants REF123 XYZ",
+    );
+    expect(description).toBe("COMPANY");
+    expect(metadata["transaction-type"]).toBe("transfer-out");
+    expect(metadata.reference).toBe("REF123 XYZ");
+  });
+
+  it("handles category with middle dot ·", () => {
+    const { description, metadata } = extractN26Metadata("SHOP Mastercard · Shopping");
+    expect(description).toBe("SHOP");
+    expect(metadata["bank-category"]).toBe("Shopping");
+    expect(metadata["transaction-type"]).toBe("card-payment");
   });
 });
