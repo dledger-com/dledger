@@ -541,6 +541,27 @@ commodity EUR
       expect(result.transactions_imported).toBe(1);
     });
 
+    it("handles @ COMMODITY with commodity-less counterparty posting", async () => {
+      // The second posting has no commodity — it should be inferred as BTC
+      // (the @ COMMODITY target), not SXP (the defaultCommodity).
+      const content = `
+2020-01-01 open Assets:Crypto:Swipe
+
+2020-10-05 * "Swipe" "Exchange"
+  Assets:Crypto:Swipe  -0.00053042 SXP @ BTC
+  Assets:Crypto:Swipe  0.00000006
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.warnings).toHaveLength(0);
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      // The commodity-less posting should have become BTC (not SXP)
+      const btcItems = items.filter((it) => it.currency === "BTC");
+      expect(btcItems.length).toBeGreaterThan(0);
+    });
+
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
       // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
       // beancount allows this rounding; we round cost total to price's decimal places

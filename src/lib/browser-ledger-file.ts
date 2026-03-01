@@ -365,6 +365,8 @@ export async function importLedger(
     accountName: string;
     amount?: string;
     commodity?: string;
+    /** True when commodity was inferred from defaultCommodity (no explicit commodity in source). */
+    commodityInferred?: boolean;
     costPrice?: { price?: string; commodity: string; inferredCostTotal?: string };
     lotCost?: { price: string; commodity: string } | { auto: true };
     balanceAssertion?: {
@@ -508,9 +510,11 @@ export async function importLedger(
       throw new Error(`line ${lineNum}: bad amount '${tokens[0]}'`);
     }
 
+    let commodityInferred = false;
     if (tokens.length < 2) {
       if (defaultCommodity) {
         commodity = defaultCommodity;
+        commodityInferred = true;
       } else {
         throw new Error(
           `line ${lineNum}: posting has amount but no commodity`,
@@ -551,7 +555,7 @@ export async function importLedger(
       costPrice = { commodity: tokens[3] };
     }
 
-    return { accountName: account, amount, commodity, costPrice, lotCost, balanceAssertion };
+    return { accountName: account, amount, commodity, commodityInferred, costPrice, lotCost, balanceAssertion };
   }
 
   // ---- Transaction parser ----
@@ -748,6 +752,29 @@ export async function importLedger(
         `line ${startIdx + 1}: skipped transaction with only zero-amount postings`,
       );
       return consumed;
+    }
+
+    // Fix up inferred-commodity postings that should be in the @ COMMODITY target.
+    // e.g. "0.00000006" with no commodity gets defaultCommodity=SXP, but should
+    // be BTC when another posting has "@ BTC" and no BTC counterparty exists.
+    const atTargets = new Set(
+      postings
+        .filter((p) => p.costPrice && !p.costPrice.price)
+        .map((p) => p.costPrice!.commodity),
+    );
+    for (const target of atTargets) {
+      const hasCounterparty = postings.some(
+        (q) => q.commodity === target && !q.costPrice,
+      );
+      if (!hasCounterparty) {
+        // Reassign inferred-commodity postings to the target commodity
+        for (const q of postings) {
+          if (q.commodityInferred && !q.costPrice) {
+            q.commodity = target;
+            q.commodityInferred = false;
+          }
+        }
+      }
     }
 
     // Infer missing prices for `@ COMMODITY` (no price) annotations
