@@ -755,14 +755,16 @@ export async function importLedger(
     for (const p of postings) {
       if (!p.costPrice || p.costPrice.price || !p.amount) continue;
       const target = p.costPrice.commodity;
-      // Sum abs amounts of all postings annotated with @ <target> (missing price)
+      // Net amount of all postings annotated with @ <target> (missing price)
       const totalSource = postings
         .filter((q) => q.costPrice?.commodity === target && !q.costPrice?.price)
-        .reduce((acc, q) => acc.plus(new Decimal(q.amount!).abs()), new Decimal(0));
-      // Sum abs amounts of counterparty postings in the target commodity (no @ annotation)
+        .reduce((acc, q) => acc.plus(new Decimal(q.amount!)), new Decimal(0))
+        .abs();
+      // Net amount of counterparty postings in the target commodity (no @ annotation)
       const totalTarget = postings
         .filter((q) => q.commodity === target && !q.costPrice)
-        .reduce((acc, q) => acc.plus(new Decimal(q.amount!).abs()), new Decimal(0));
+        .reduce((acc, q) => acc.plus(new Decimal(q.amount!)), new Decimal(0))
+        .abs();
       if (totalTarget.isZero() || totalSource.isZero()) {
         result.warnings.push(
           `line ${startIdx + 1}: cannot infer price for @ ${target} — no counterparty`,

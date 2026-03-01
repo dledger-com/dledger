@@ -473,6 +473,29 @@ commodity EUR
       expect(result.errors ?? []).toHaveLength(0);
     });
 
+    it("handles @ COMMODITY with separate fee legs", async () => {
+      // Fee postings (-2.06472806 CRO + +2.06472806 CRO) cancel out and should
+      // not inflate totalTarget when inferring the missing price.
+      const content = `
+2020-01-01 open Assets:Crypto:CDC:Exchange
+2020-01-01 open Expenses:Crypto:Fees:Trading
+
+2020-07-16 * "Crypto.com" "Exchange ALGO to CRO"
+  Assets:Crypto:CDC:Exchange  -677.76 ALGO @ CRO
+  Assets:Crypto:CDC:Exchange  1290.455 CRO
+  Assets:Crypto:CDC:Exchange  -2.06472806 CRO
+  Expenses:Crypto:Fees:Trading  2.06472806 CRO
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.warnings).toHaveLength(0);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      // 4 postings + 2 trading entries (ALGO) = 6 line items
+      expect(items.length).toBe(6);
+    });
+
     it("handles @ price with dust amounts that would round to zero", async () => {
       // -0.00000003 VET @ 0.0754 CRO → cost total 0.000000002262
       // toDecimalPlaces(4) would round this to 0, causing "amount cannot be zero"
