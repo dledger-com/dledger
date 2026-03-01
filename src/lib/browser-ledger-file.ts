@@ -811,6 +811,34 @@ export async function importLedger(
         .toString();
     }
 
+    // Auto-balance single-currency imbalances when no elided posting exists
+    // and no postings have cost/price annotations (which create trading entries
+    // that would handle the balance). Handles real-world beancount files where
+    // e.g. a transfer fee is explicit but the source posting doesn't include it.
+    const hasCostAnnotations = postings.some((p) => p.costPrice || p.lotCost);
+    if (elidedCount === 0 && !hasCostAnnotations) {
+      const balSums = new Map<string, Decimal>();
+      for (const p of postings) {
+        if (!p.amount || !p.commodity) continue;
+        const cur = balSums.get(p.commodity) ?? new Decimal(0);
+        balSums.set(p.commodity, cur.plus(new Decimal(p.amount)));
+      }
+      for (const [currency, sum] of balSums) {
+        if (!sum.isZero()) {
+          const target = postings.find(
+            (q) => q.commodity === currency && !q.costPrice,
+          );
+          if (target) {
+            postings.push({
+              accountName: target.accountName,
+              amount: sum.neg().toString(),
+              commodity: currency,
+            });
+          }
+        }
+      }
+    }
+
     // Build journal entry and line items
     const entryId = uuidv7();
     const items: LineItem[] = [];

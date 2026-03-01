@@ -4,6 +4,7 @@ import { detectFormat, detectFormatFromFilename } from "./ledger-format.js";
 import { createTestBackend } from "../test/helpers.js";
 import type { SqlJsBackend } from "./sql-js-backend.js";
 import { computeEntryAmountFingerprint } from "./csv-presets/dedup.js";
+import Decimal from "decimal.js-light";
 
 describe("detectFormat", () => {
   it("detects beancount by txn keyword", () => {
@@ -560,6 +561,36 @@ commodity EUR
       // The commodity-less posting should have become BTC (not SXP)
       const btcItems = items.filter((it) => it.currency === "BTC");
       expect(btcItems.length).toBeGreaterThan(0);
+    });
+
+    it("auto-balances explicit postings with single-currency imbalance", async () => {
+      // Transfer with explicit fee but source doesn't include fee in its amount.
+      // -8501 + 8501 + 0.024404 = 0.024404 XTZ imbalance — auto-add balancing leg.
+      const content = `
+2020-01-01 open Assets:Crypto:HW:Pro
+2020-01-01 open Assets:Crypto:CDC:Exchange
+2020-01-01 open Expenses:Crypto:Fees:Tx
+
+2020-11-20 * "Transfer" #pro
+  id: "onxDSHk4XHUwmF3wxAmN6seSVqExaSZBv864VCq77Y94FPGswwu"
+  Assets:Crypto:HW:Pro  -8501.0 XTZ
+  Assets:Crypto:CDC:Exchange  8501.0 XTZ
+  Expenses:Crypto:Fees:Tx  0.024404 XTZ
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.warnings).toHaveLength(0);
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      // 3 original postings + 1 auto-balance = 4 line items
+      expect(items.length).toBe(4);
+      // All items sum to zero
+      const total = items.reduce(
+        (acc, it) => acc.plus(it.amount),
+        new Decimal(0),
+      );
+      expect(total.isZero()).toBe(true);
     });
 
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
