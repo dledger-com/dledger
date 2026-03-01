@@ -620,6 +620,27 @@ commodity EUR
       expect(total.isZero()).toBe(true);
     });
 
+    it("handles zero-balance elided posting", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Assets:Cash
+2024-01-01 open Assets:Other
+
+2024-01-20 * "Cash withdrawal"
+  Assets:Bank  -400 EUR
+  Assets:Cash  400 EUR
+  Assets:Other
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.warnings).toHaveLength(0);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      // Only the two postings with amounts should remain
+      expect(items).toHaveLength(2);
+    });
+
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
       // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
       // beancount allows this rounding; we round cost total to price's decimal places

@@ -720,9 +720,11 @@ export async function importLedger(
       }
 
       if (unbalanced.length === 0) {
-        throw new Error(
-          `line ${startIdx + 1}: cannot auto-balance: all currencies already balance`,
+        // All currencies balance — elided posting resolves to zero; remove it
+        const elidedIdx = postings.findIndex(
+          (p) => p.amount === undefined,
         );
+        postings.splice(elidedIdx, 1);
       } else if (unbalanced.length === 1) {
         const [commodity, sum] = unbalanced[0];
         const elided = postings.find(
