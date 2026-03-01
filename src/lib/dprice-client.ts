@@ -113,7 +113,7 @@ class HttpDpriceClient implements DpriceClient {
   async getPriceRange(symbol: string, fromDate: string, toDate: string): Promise<DpricePriceEntry[]> {
     // HTTP mode uses GraphQL for price range (REST has no range endpoint)
     const query = `{ priceHistory(symbol: "${symbol}", from: "${fromDate}", to: "${toDate}") { date priceUsd } }`;
-    const resp = await fetch(`${this.baseUrl}/graphql`, {
+    const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query }),
@@ -149,7 +149,7 @@ class HttpDpriceClient implements DpriceClient {
     // Use GraphQL to query the global latest date
     const query = `{ health { latestDate } }`;
     try {
-      const resp = await fetch(`${this.baseUrl}/graphql`, {
+      const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
