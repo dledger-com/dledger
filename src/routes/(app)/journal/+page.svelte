@@ -9,11 +9,13 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { convertBalances } from "$lib/utils/currency-convert.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
-  import type { CurrencyBalance } from "$lib/types/index.js";
+  import type { CurrencyBalance, JournalEntry, LineItem } from "$lib/types/index.js";
   import { filterHiddenEntries } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
+  import Loader from "lucide-svelte/icons/loader";
+
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
@@ -28,6 +30,7 @@
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(store.entries, hidden));
   let exporting = $state(false);
+  let detectingDuplicates = $state(false);
   let exportFormat = $state<LedgerFormat>("ledger");
   let searchTerm = $state("");
   let showDuplicates = $state(false);
@@ -37,49 +40,39 @@
 
   interface DuplicateGroup {
     confidence: "likely" | "possible";
-    entries: typeof filteredEntries;
+    entries: [JournalEntry, LineItem[]][];
   }
 
-  const duplicateGroups = $derived.by((): DuplicateGroup[] => {
-    const groups: DuplicateGroup[] = [];
-    const entries = filteredEntries;
-    const checked = new Set<string>();
+  let duplicateGroups = $state<DuplicateGroup[]>([]);
 
-    for (let i = 0; i < entries.length; i++) {
-      if (checked.has(entries[i][0].id)) continue;
-      const [entryA, itemsA] = entries[i];
-      const amountsA = itemsA.map((it) => `${it.amount}:${it.currency}`).sort().join(",");
-      const group: typeof filteredEntries = [];
-
-      for (let j = i + 1; j < entries.length; j++) {
-        if (checked.has(entries[j][0].id)) continue;
-        const [entryB, itemsB] = entries[j];
-        if (entryA.date !== entryB.date) continue;
-
-        const amountsB = itemsB.map((it) => `${it.amount}:${it.currency}`).sort().join(",");
-        if (amountsA !== amountsB) continue;
-
-        // Same date + same amounts
-        const isLikely = entryA.description === entryB.description;
-        if (group.length === 0) {
-          group.push(entries[i]);
-        }
-        group.push(entries[j]);
-        checked.add(entries[j][0].id);
+  function findDuplicateGroups(
+    entries: [JournalEntry, LineItem[]][],
+  ): DuplicateGroup[] {
+    // O(n): bucket by "date|amounts-fingerprint"
+    const buckets = new Map<string, [JournalEntry, LineItem[]][]>();
+    for (const [entry, items] of entries) {
+      const fingerprint = items.map((it) => `${it.amount}:${it.currency}`).sort().join(",");
+      const key = `${entry.date}|${fingerprint}`;
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = [];
+        buckets.set(key, bucket);
       }
-
-      if (group.length > 0) {
-        checked.add(entryA.id);
-        const isLikely = group.every(([e]) => e.description === group[0][0].description);
-        groups.push({
-          confidence: isLikely ? "likely" : "possible",
-          entries: group,
-        });
-      }
+      bucket.push([entry, items]);
     }
 
+    // Collect buckets with 2+ entries
+    const groups: DuplicateGroup[] = [];
+    for (const bucket of buckets.values()) {
+      if (bucket.length < 2) continue;
+      const isLikely = bucket.every(([e]) => e.description === bucket[0][0].description);
+      groups.push({
+        confidence: isLikely ? "likely" : "possible",
+        entries: bucket,
+      });
+    }
     return groups;
-  });
+  }
 
   // Debounced backend search
   let debounceTimer: ReturnType<typeof setTimeout>;
@@ -206,8 +199,21 @@
     </div>
     <ListFilter bind:value={searchTerm} placeholder="Filter entries..." class="order-last sm:order-none" />
     <div class="flex flex-wrap gap-2 shrink-0">
-      <Button variant="outline" size="sm" class="hidden sm:inline-flex" onclick={async () => { await store.loadAll(); showDuplicates = true; }}>
-        Detect Duplicates
+      <Button variant="outline" size="sm" class="hidden sm:inline-flex" disabled={detectingDuplicates} onclick={async () => {
+        detectingDuplicates = true;
+        try {
+          const allEntries = await getBackend().queryJournalEntries({});
+          const filtered = filterHiddenEntries(allEntries, getHiddenCurrencySet());
+          duplicateGroups = findDuplicateGroups(filtered);
+          showDuplicates = true;
+        } finally {
+          detectingDuplicates = false;
+        }
+      }}>
+        {#if detectingDuplicates}
+          <Loader class="h-3.5 w-3.5 mr-1 animate-spin" />
+        {/if}
+        {detectingDuplicates ? "Detecting..." : "Detect Duplicates"}
       </Button>
       <select
         class="h-8 rounded-md border border-input bg-background px-2 text-xs"
@@ -303,7 +309,7 @@
 
 <!-- Duplicate Detection Dialog -->
 <Dialog.Root bind:open={showDuplicates}>
-  <Dialog.Content class="max-w-2xl max-h-[80vh] overflow-y-auto">
+  <Dialog.Content class="w-fit max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>Duplicate Detection</Dialog.Title>
       <Dialog.Description>
