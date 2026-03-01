@@ -1127,24 +1127,24 @@
             <p class="text-sm text-muted-foreground">Could not load dprice status. Is the database accessible?</p>
           {/if}
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
-            onclick={handleDpriceSyncLatest}
-          >
-            {taskQueue.isActive("dprice-sync-latest") ? "Syncing..." : "Sync Latest"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
-            onclick={handleDpriceSyncFull}
-          >
-            {taskQueue.isActive("dprice-sync-full") ? "Syncing..." : "Full Sync"}
-          </Button>
-          {#if settings.settings.dpriceMode !== "http"}
+        {#if settings.settings.dpriceMode === "integrated"}
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
+              onclick={handleDpriceSyncLatest}
+            >
+              {taskQueue.isActive("dprice-sync-latest") ? "Syncing..." : "Sync Latest"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
+              onclick={handleDpriceSyncFull}
+            >
+              {taskQueue.isActive("dprice-sync-full") ? "Syncing..." : "Full Sync"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1161,12 +1161,7 @@
             >
               {dpriceImporting ? "Importing..." : "Import DB"}
             </Button>
-          {/if}
-        </div>
-        {#if settings.settings.dpriceMode === "local"}
-          <p class="text-xs text-amber-600 dark:text-amber-400">
-            Note: Import will replace the database shared with the CLI tool.
-          </p>
+          </div>
         {/if}
       {/if}
     </Card.Content>
