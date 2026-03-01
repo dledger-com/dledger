@@ -23,6 +23,8 @@
   import type { Account } from "$lib/types/index.js";
 
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import TagDisplay from "$lib/components/TagDisplay.svelte";
+  import { parseTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
@@ -124,6 +126,31 @@
     if (byCode.length === 0) return formatCurrency(0, settings.currency);
     return byCode.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
+
+  let entryTags = $state<Map<string, string[]>>(new Map());
+  let tagGen = 0;
+
+  $effect(() => {
+    const entries = filteredEntries;
+    if (entries.length === 0) {
+      entryTags = new Map();
+      return;
+    }
+    const gen = ++tagGen;
+    const backend = getBackend();
+    (async () => {
+      const map = new Map<string, string[]>();
+      const metas = await Promise.all(
+        entries.map(([e]) => backend.getMetadata(e.id).catch(() => ({}) as Record<string, string>)),
+      );
+      if (gen !== tagGen) return;
+      for (let i = 0; i < entries.length; i++) {
+        const tags = parseTags(metas[i][TAGS_META_KEY]);
+        if (tags.length > 0) map.set(entries[i][0].id, tags);
+      }
+      entryTags = map;
+    })();
+  });
 
   let convertedTotals = $state(new Map<string, string>());
   let conversionGen = 0;
@@ -338,6 +365,9 @@
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px]">
                 <a href="/journal/{entry.id}" class="font-medium hover:underline truncate block" title={entry.description}>{entry.description}</a>
+                {#if entryTags.get(entry.id)?.length}
+                  <TagDisplay tags={entryTags.get(entry.id)!} class="mt-0.5" />
+                {/if}
               </Table.Cell>
               <Table.Cell class="hidden md:table-cell">
                 <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>

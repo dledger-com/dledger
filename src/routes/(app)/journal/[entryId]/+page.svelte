@@ -16,6 +16,8 @@
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { templateFromEntry } from "$lib/utils/recurring.js";
+  import TagInput from "$lib/components/TagInput.svelte";
+  import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
 
   const journalStore = new JournalStore();
@@ -28,6 +30,15 @@
   let metadata = $state<Record<string, string>>({});
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const isHidden = $derived(entryInvolvesHidden(items, hidden));
+  const tags = $derived(parseTags(metadata[TAGS_META_KEY]));
+
+  async function handleTagsChange(newTags: string[]) {
+    const id = entryId;
+    if (!id) return;
+    const serialized = serializeTags(newTags);
+    await getBackend().setMetadata(id, { [TAGS_META_KEY]: serialized });
+    metadata = { ...metadata, [TAGS_META_KEY]: serialized };
+  }
   let loading = $state(true);
 
   function formatMetaKey(key: string): string {
@@ -154,14 +165,24 @@
       </Card.Content>
     </Card.Root>
 
-    {#if Object.keys(metadata).length > 0}
+    <Card.Root>
+      <Card.Header class="pb-3">
+        <Card.Title class="text-sm">Tags</Card.Title>
+      </Card.Header>
+      <Card.Content class="pt-0">
+        <TagInput {tags} onchange={handleTagsChange} />
+      </Card.Content>
+    </Card.Root>
+
+    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY)}
+    {#if displayMeta.length > 0}
       <Card.Root>
         <Card.Header>
           <Card.Title>Metadata</Card.Title>
         </Card.Header>
         <Card.Content>
           <dl class="grid grid-cols-2 gap-4 text-sm">
-            {#each Object.entries(metadata) as [key, value]}
+            {#each displayMeta as [key, value]}
               <div>
                 <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
                 <dd>
