@@ -516,6 +516,31 @@ commodity EUR
       expect(result.errors ?? []).toHaveLength(0);
     });
 
+    it("handles @ price multiplication precision dust across many postings", async () => {
+      // 396.33442949 × 33.20403794061153 requires ~27 significant digits,
+      // but Decimal.js-light defaults to 20. Three such truncated products
+      // accumulate a dust error of ~-2.4e-13. The dust compensation pass
+      // should absorb this so the entry balances.
+      const content = `
+2020-01-01 open Assets:Crypto:CDC:App
+2020-01-01 open Assets:Crypto:CDC:Earn
+2020-01-01 open Assets:Crypto:CDC:Stake
+2020-01-01 open Assets:Crypto:CDC:Exchange
+
+2020-08-11 * "Crypto.com" "MCO / CRO Swap"
+  Assets:Crypto:CDC:App  -396.33442949 MCO @ 33.20403794061153 CRO
+  Assets:Crypto:CDC:Earn  -500.0 MCO @ 33.20403794061153 CRO
+  Assets:Crypto:CDC:Stake  -5000.0 MCO @ 33.20403794061153 CRO
+  Assets:Crypto:CDC:App  11110.31008943 CRO
+  Assets:Crypto:CDC:Stake  138219.5 CRO
+  Assets:Crypto:CDC:Earn  13821.95 CRO
+  Assets:Crypto:CDC:Exchange  32630.35201789 CRO
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.warnings).toHaveLength(0);
+      expect(result.transactions_imported).toBe(1);
+    });
+
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
       // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
       // beancount allows this rounding; we round cost total to price's decimal places

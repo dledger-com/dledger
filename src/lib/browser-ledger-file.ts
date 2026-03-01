@@ -901,6 +901,26 @@ export async function importLedger(
       }
     }
 
+    // Compensate for floating-point dust from @ price multiplications.
+    // Decimal.js-light's 20-digit precision can lose precision when
+    // multiplying high-precision amounts × prices (e.g. 11+16 digits
+    // needs 27). Adjust the last line item per currency to absorb dust.
+    const dustSums = new Map<string, Decimal>();
+    for (const item of items) {
+      const cur = dustSums.get(item.currency) ?? new Decimal(0);
+      dustSums.set(item.currency, cur.plus(new Decimal(item.amount)));
+    }
+    for (const [currency, sum] of dustSums) {
+      if (!sum.isZero() && sum.abs().lt(new Decimal("1e-10"))) {
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (items[i].currency === currency) {
+            items[i].amount = new Decimal(items[i].amount).minus(sum).toString();
+            break;
+          }
+        }
+      }
+    }
+
     const entry: JournalEntry = {
       id: entryId,
       date,
