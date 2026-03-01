@@ -26,6 +26,8 @@
     import X from "lucide-svelte/icons/x";
     import Pencil from "lucide-svelte/icons/pencil";
     import { readFileAsText } from "$lib/utils/read-file-text.js";
+    import { unzipSync, strFromU8 } from "fflate";
+    import { filterLedgerFiles, resolveIncludes } from "$lib/ledger-include.js";
     import {
         syncExchangeRates,
         fetchSingleRate,
@@ -147,7 +149,33 @@
         ledgerDragCounter = 0;
         const file = e.dataTransfer?.files[0];
         if (!file) return;
-        ledgerInitialContent = await readFileAsText(file);
+
+        if (file.name.toLowerCase().endsWith(".zip")) {
+            try {
+                const buf = new Uint8Array(await file.arrayBuffer());
+                const entries = unzipSync(buf);
+                const fileMap = new Map<string, string>();
+                for (const [name, data] of Object.entries(entries)) {
+                    fileMap.set(name, strFromU8(data));
+                }
+                const ledgerFiles = filterLedgerFiles(fileMap);
+                if (ledgerFiles.length === 0) {
+                    toast.error("No ledger files found in archive");
+                    return;
+                }
+                const parts: string[] = [];
+                for (const [name, content] of ledgerFiles) {
+                    parts.push(resolveIncludes(content, fileMap));
+                }
+                ledgerInitialContent = parts.join("\n\n");
+            } catch (err) {
+                toast.error(`Failed to read zip: ${err}`);
+                return;
+            }
+        } else {
+            ledgerInitialContent = await readFileAsText(file);
+        }
+
         ledgerInitialFileName = file.name;
         ledgerDialogOpen = true;
     }
