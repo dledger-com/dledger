@@ -1630,8 +1630,6 @@ dependencies = [
  "parquet",
  "reqwest 0.12.28",
  "rusqlite",
- "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
  "tempfile",
