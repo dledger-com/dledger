@@ -154,12 +154,22 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let mut db = PriceDb::open(&db_path).map_err(|e| e.to_string())?;
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| format!("runtime error: {e}"))?;
-        rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None))
-            .map_err(|e| e.to_string())?;
+        let _ = db.mark_sync_started();
+        let start = std::time::Instant::now();
+        let sync_result = {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| format!("runtime error: {e}"))?;
+            rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None))
+        };
+        let elapsed = start.elapsed();
+        let _ = db.mark_sync_completed(
+            sync_result.is_ok(),
+            sync_result.as_ref().err().map(|e| e.to_string()).as_deref(),
+            elapsed.as_secs_f64(),
+        );
+        sync_result.map_err(|e| e.to_string())?;
         Ok("latest sync completed".to_string())
     })
     .await;
@@ -266,14 +276,22 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let mut db = PriceDb::open(&db_path).map_err(|e| e.to_string())?;
-        // run_sync is async (uses reqwest) — create a nested current-thread runtime
-        // same pattern as dprice daemon.rs:run_one_sync
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| format!("runtime error: {e}"))?;
-        rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None))
-            .map_err(|e| e.to_string())?;
+        let _ = db.mark_sync_started();
+        let start = std::time::Instant::now();
+        let sync_result = {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| format!("runtime error: {e}"))?;
+            rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None))
+        };
+        let elapsed = start.elapsed();
+        let _ = db.mark_sync_completed(
+            sync_result.is_ok(),
+            sync_result.as_ref().err().map(|e| e.to_string()).as_deref(),
+            elapsed.as_secs_f64(),
+        );
+        sync_result.map_err(|e| e.to_string())?;
         Ok("sync completed".to_string())
     })
     .await;
