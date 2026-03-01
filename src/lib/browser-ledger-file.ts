@@ -365,7 +365,7 @@ export async function importLedger(
     accountName: string;
     amount?: string;
     commodity?: string;
-    costPrice?: { price: string; commodity: string };
+    costPrice?: { price?: string; commodity: string; inferredCostTotal?: string };
     lotCost?: { price: string; commodity: string } | { auto: true };
     balanceAssertion?: {
       amount: string;
@@ -454,7 +454,7 @@ export async function importLedger(
 
     let amount: string;
     let commodity: string;
-    let costPrice: { price: string; commodity: string } | undefined;
+    let costPrice: ParsedPosting["costPrice"];
 
     // hledger: prefix currency — detect $100.00, EUR 100.00, etc.
     if (fmt === "hledger" && tokens.length >= 1) {
@@ -489,6 +489,9 @@ export async function importLedger(
               throw new Error(`line ${lineNum}: bad cost price '${tokens[3]}'`);
             }
             costPrice = { price: tokens[3], commodity: tokens[4] };
+          } else if (tokens.length === 4 && tokens[2] === "@") {
+            // @ COMMODITY without price — price will be inferred from counterparty postings
+            costPrice = { commodity: tokens[3] };
           }
           return { accountName: account, amount, commodity, costPrice, lotCost, balanceAssertion };
         } catch {
@@ -543,6 +546,9 @@ export async function importLedger(
         );
       }
       costPrice = { price: stripThousands(tokens[3]), commodity: tokens[4] };
+    } else if (tokens.length === 4 && tokens[2] === "@") {
+      // @ COMMODITY without price — price will be inferred from counterparty postings
+      costPrice = { commodity: tokens[3] };
     }
 
     return { accountName: account, amount, commodity, costPrice, lotCost, balanceAssertion };
@@ -684,7 +690,7 @@ export async function importLedger(
       const sums = new Map<string, Decimal>();
       for (const p of postings) {
         if (p.amount === undefined) continue;
-        if (p.costPrice) {
+        if (p.costPrice?.price) {
           const costTotal = new Decimal(p.amount)
             .times(new Decimal(p.costPrice.price))
             .toDecimalPlaces(decimalPlaces(p.costPrice.price));
@@ -742,6 +748,38 @@ export async function importLedger(
         `line ${startIdx + 1}: skipped transaction with only zero-amount postings`,
       );
       return consumed;
+    }
+
+    // Infer missing prices for `@ COMMODITY` (no price) annotations
+    // by matching against counterparty postings for the target commodity.
+    for (const p of postings) {
+      if (!p.costPrice || p.costPrice.price || !p.amount) continue;
+      const target = p.costPrice.commodity;
+      // Sum abs amounts of all postings annotated with @ <target> (missing price)
+      const totalSource = postings
+        .filter((q) => q.costPrice?.commodity === target && !q.costPrice?.price)
+        .reduce((acc, q) => acc.plus(new Decimal(q.amount!).abs()), new Decimal(0));
+      // Sum abs amounts of counterparty postings in the target commodity (no @ annotation)
+      const totalTarget = postings
+        .filter((q) => q.commodity === target && !q.costPrice)
+        .reduce((acc, q) => acc.plus(new Decimal(q.amount!).abs()), new Decimal(0));
+      if (totalTarget.isZero() || totalSource.isZero()) {
+        result.warnings.push(
+          `line ${startIdx + 1}: cannot infer price for @ ${target} — no counterparty`,
+        );
+        p.costPrice = undefined;
+        continue;
+      }
+      // price = how much of target you get per unit of source
+      // e.g., -402 EUR @ XAU with 0.353 XAU counterparty → 0.353/402 = 0.000878 XAU/EUR
+      p.costPrice.price = totalTarget.div(totalSource).toString();
+      // Compute exact cost total using multiply-first to avoid precision loss
+      // from dividing then multiplying back: amount * target / source is exact
+      // when amount is a factor of source (common case: single posting)
+      p.costPrice.inferredCostTotal = new Decimal(p.amount!)
+        .times(totalTarget)
+        .div(totalSource)
+        .toString();
     }
 
     // Build journal entry and line items
@@ -807,7 +845,7 @@ export async function importLedger(
           rate: p.lotCost.price,
           source: "transaction",
         });
-      } else if (p.costPrice) {
+      } else if (p.costPrice?.price) {
         await ensureCurrency(p.costPrice.commodity);
         const tradingAccountName = tradingAccount(commodity);
         const tradingId = await ensureAccount(
@@ -827,9 +865,11 @@ export async function importLedger(
         });
 
         // Add cost total in cost commodity
-        const costTotal = new Decimal(amount)
-          .times(new Decimal(p.costPrice.price))
-          .toDecimalPlaces(decimalPlaces(p.costPrice.price));
+        const costTotal = p.costPrice.inferredCostTotal
+          ? new Decimal(p.costPrice.inferredCostTotal)
+          : new Decimal(amount)
+              .times(new Decimal(p.costPrice.price))
+              .toDecimalPlaces(decimalPlaces(p.costPrice.price));
         items.push({
           id: uuidv7(),
           journal_entry_id: entryId,

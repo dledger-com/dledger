@@ -414,6 +414,49 @@ commodity EUR
       expect(trading).toBeDefined();
     });
 
+    it("handles @ COMMODITY without price via inferred trading entries", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Assets:Gold
+
+2024-01-01 * "Buy gold"
+  Assets:Bank  -500 EUR @ XAU
+  Assets:Gold  0.5 XAU
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      // 2 postings + 2 trading entries = 4 line items
+      expect(items.length).toBe(4);
+
+      const accounts = await backend.listAccounts();
+      const trading = accounts.find((a) => a.full_name === "Equity:Trading:EUR");
+      expect(trading).toBeDefined();
+    });
+
+    it("handles @ COMMODITY without price for multiple commodities", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Assets:Gold
+2024-01-01 open Assets:Silver
+
+2024-01-01 * "Buy metals"
+  Assets:Bank  -402 EUR @ XAU
+  Assets:Bank  -494 EUR @ XAG
+  Assets:Gold  0.353 XAU
+  Assets:Silver  20 XAG
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      // 4 postings + 4 trading entries = 8 line items
+      expect(items.length).toBe(8);
+    });
+
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
       // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
       // beancount allows this rounding; we round cost total to price's decimal places
