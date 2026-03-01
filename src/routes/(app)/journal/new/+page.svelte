@@ -7,10 +7,13 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
-  import type { JournalEntry, LineItem } from "$lib/types/index.js";
+  import type { Account, JournalEntry, LineItem } from "$lib/types/index.js";
+  import { getBackend } from "$lib/backend.js";
+  import { inferAccountType } from "$lib/browser-etherscan.js";
   import { toast } from "svelte-sonner";
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Plus from "lucide-svelte/icons/plus";
+  import AccountCombobox from "$lib/components/AccountCombobox.svelte";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -21,18 +24,53 @@
 
   interface FormLine {
     key: string;
-    accountId: string;
+    accountPath: string;
     debit: string;
     credit: string;
   }
 
   let lines = $state<FormLine[]>([
-    { key: uuidv7(), accountId: "", debit: "", credit: "" },
-    { key: uuidv7(), accountId: "", debit: "", credit: "" },
+    { key: uuidv7(), accountPath: "", debit: "", credit: "" },
+    { key: uuidv7(), accountPath: "", debit: "", credit: "" },
   ]);
 
+  const accountNames = $derived(accountStore.postable.map((a) => a.full_name));
+
   function addLine() {
-    lines = [...lines, { key: uuidv7(), accountId: "", debit: "", credit: "" }];
+    lines = [...lines, { key: uuidv7(), accountPath: "", debit: "", credit: "" }];
+  }
+
+  async function ensureAccountHierarchy(fullName: string): Promise<string> {
+    // Check existing accounts first
+    const existing = accountStore.active.find((a) => a.full_name === fullName);
+    if (existing) return existing.id;
+
+    const backend = getBackend();
+    const parts = fullName.split(":");
+    let parentId: string | null = null;
+
+    for (let i = 1; i <= parts.length; i++) {
+      const path = parts.slice(0, i).join(":");
+      const cached = accountStore.accounts.find((a) => a.full_name === path);
+      if (cached) {
+        parentId = cached.id;
+        continue;
+      }
+      const account: Account = {
+        id: uuidv7(),
+        parent_id: parentId,
+        account_type: inferAccountType(path),
+        name: parts[i - 1],
+        full_name: path,
+        allowed_currencies: [],
+        is_postable: i === parts.length,
+        is_archived: false,
+        created_at: new Date().toISOString().slice(0, 10),
+      };
+      await backend.createAccount(account);
+      parentId = account.id;
+    }
+    return parentId!;
   }
 
   function removeLine(key: string) {
@@ -69,22 +107,31 @@
       created_at: today,
     };
 
-    const items: LineItem[] = lines
-      .filter((l) => l.accountId && (l.debit || l.credit))
-      .map((l) => {
-        const debitAmount = parseFloat(l.debit) || 0;
-        const creditAmount = parseFloat(l.credit) || 0;
-        // Positive = debit, negative = credit
-        const amount = debitAmount > 0 ? debitAmount : -creditAmount;
-        return {
-          id: uuidv7(),
-          journal_entry_id: entryId,
-          account_id: l.accountId,
-          currency,
-          amount: amount.toString(),
-          lot_id: null,
-        };
+    const validLines = lines.filter((l) => l.accountPath && (l.debit || l.credit));
+
+    // Resolve account paths to IDs (creating new accounts as needed)
+    let needsReload = false;
+    const items: LineItem[] = [];
+    for (const l of validLines) {
+      const existingBefore = accountStore.active.find((a) => a.full_name === l.accountPath);
+      const accountId = await ensureAccountHierarchy(l.accountPath);
+      if (!existingBefore) needsReload = true;
+
+      const debitAmount = parseFloat(l.debit) || 0;
+      const creditAmount = parseFloat(l.credit) || 0;
+      // Positive = debit, negative = credit
+      const amount = debitAmount > 0 ? debitAmount : -creditAmount;
+      items.push({
+        id: uuidv7(),
+        journal_entry_id: entryId,
+        account_id: accountId,
+        currency,
+        amount: amount.toString(),
+        lot_id: null,
       });
+    }
+
+    if (needsReload) await accountStore.load();
 
     const ok = await journalStore.post(entry, items);
     submitting = false;
@@ -153,16 +200,13 @@
 
           {#each lines as line (line.key)}
             <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 items-center">
-              <select
-                bind:value={line.accountId}
-                class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                required
-              >
-                <option value="">Select account...</option>
-                {#each accountStore.postable as acc}
-                  <option value={acc.id}>{acc.full_name}</option>
-                {/each}
-              </select>
+              <AccountCombobox
+                value={line.accountPath}
+                accounts={accountNames}
+                variant="input"
+                placeholder="Select account..."
+                onchange={(v) => { line.accountPath = v; }}
+              />
               <Input
                 type="number"
                 step="0.01"

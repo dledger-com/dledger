@@ -7,11 +7,15 @@
     value,
     accounts,
     onchange,
+    variant = "link",
+    placeholder = "",
     class: className,
   }: {
     value: string;
     accounts: string[];
     onchange: (value: string) => void;
+    variant?: "link" | "input";
+    placeholder?: string;
     class?: string;
   } = $props();
 
@@ -52,11 +56,14 @@
 <Popover.Root bind:open onOpenChange={(v) => { if (!v) search = ""; }}>
   <Popover.Trigger
     class={cn(
-      "font-mono text-muted-foreground truncate max-w-[160px] text-left text-xs hover:underline hover:text-foreground cursor-pointer bg-transparent border-none p-0 inline-block",
+      variant === "input"
+        ? "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm font-mono text-left truncate cursor-pointer hover:border-foreground/30"
+        : "font-mono text-muted-foreground truncate max-w-[160px] text-left text-xs hover:underline hover:text-foreground cursor-pointer bg-transparent border-none p-0 inline-block",
+      !value && variant === "input" && "text-muted-foreground",
       className,
     )}
   >
-    {value}
+    {value || placeholder}
   </Popover.Trigger>
   <Popover.Content class="w-[280px] p-0" align="start">
     <Command.Root shouldFilter={true}>
