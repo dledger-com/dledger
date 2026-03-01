@@ -542,6 +542,33 @@ commodity EUR
       expect(result.transactions_imported).toBe(1);
     });
 
+    it("handles @ price rounding imbalance from independently-rounded source data", async () => {
+      // The price 0.10928961695871456 doesn't produce a cost total that
+      // perfectly offsets the other RAY postings — the mismatch is ~0.0001 RAY.
+      // This is inherent rounding in source data, not Decimal.js precision loss.
+      const content = `
+2021-01-01 open Income:Crypto:Farming
+2021-01-01 open Assets:Crypto:SW:Farm
+2021-01-01 open Assets:Crypto:SW:Stake
+2021-01-01 open Assets:Crypto:SW
+2021-01-01 open Expenses:Crypto:Fees:Tx
+
+2021-05-17 * "Raydium" "Unstake and unfarm RAY-USDC"
+  Income:Crypto:Farming  -512.730022 RAY
+  Assets:Crypto:SW:Farm  -1711.0 RAY
+  Assets:Crypto:SW:Stake  -352.667128 RAY
+  Assets:Crypto:SW:Farm  -14269.977495 USDC
+  Assets:Crypto:SW:Farm  -517.838305 USDC @ 0.10928961695871456 RAY
+  Assets:Crypto:SW  2632.9916 RAY
+  Assets:Crypto:SW  14269.977495 USDC
+  Assets:Crypto:SW  -0.00209928 SOL
+  Expenses:Crypto:Fees:Tx  0.00209928 SOL
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.errors ?? []).toHaveLength(0);
+      expect(result.transactions_imported).toBe(1);
+    });
+
     it("handles @ COMMODITY with commodity-less counterparty posting", async () => {
       // The second posting has no commodity — it should be inferred as BTC
       // (the @ COMMODITY target), not SXP (the defaultCommodity).

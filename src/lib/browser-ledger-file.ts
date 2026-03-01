@@ -966,7 +966,15 @@ export async function importLedger(
       dustSums.set(item.currency, cur.plus(new Decimal(item.amount)));
     }
     for (const [currency, sum] of dustSums) {
-      if (!sum.isZero() && sum.abs().lt(new Decimal("1e-10"))) {
+      // For cost-annotated transactions (@ price, {cost}), allow a larger
+      // tolerance to absorb rounding from independently-rounded source data.
+      // 0.005 is half a cent in fiat — negligible, but catches real-world
+      // crypto transaction rounding. For simple transactions, only absorb
+      // floating-point dust (< 1e-10).
+      const tolerance = hasCostAnnotations
+        ? new Decimal("0.005")
+        : new Decimal("1e-10");
+      if (!sum.isZero() && sum.abs().lt(tolerance)) {
         for (let i = items.length - 1; i >= 0; i--) {
           if (items[i].currency === currency) {
             items[i].amount = new Decimal(items[i].amount).minus(sum).toString();
