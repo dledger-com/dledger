@@ -131,18 +131,11 @@ class HttpDpriceClient implements DpriceClient {
   }
 
   async sync(): Promise<string> {
-    const resp = await fetch(`${this.baseUrl}/api/v1/sync`, { method: "POST" });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => resp.statusText);
-      throw new Error(`dprice sync HTTP ${resp.status}: ${text}`);
-    }
-    const json = await resp.json();
-    return json.status ?? "sync triggered";
+    throw new Error("sync not available via HTTP API — use `dprice update` CLI instead");
   }
 
   async syncLatest(): Promise<string> {
-    // HTTP server sync endpoint handles latest internally
-    return this.sync();
+    throw new Error("sync not available via HTTP API — use `dprice update` CLI instead");
   }
 
   async latestDate(): Promise<string | null> {
