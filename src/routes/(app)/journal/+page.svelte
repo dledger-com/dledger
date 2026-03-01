@@ -226,7 +226,7 @@
           for (const [entry] of allEntries) {
             if (entry.voided_by) continue;
             const meta = await backend.getMetadata(entry.id);
-            if (meta["cross_match_linked"] || meta["cex_linked"]) linked.add(entry.id);
+            if (meta["cross_match_linked"] || meta["cex_linked"] || meta["cross_match_skipped"]) linked.add(entry.id);
           }
           const nonVoided = allEntries.filter(([e]) => !e.voided_by);
           const candidates = extractAllCandidates(nonVoided, idToName, linked);
