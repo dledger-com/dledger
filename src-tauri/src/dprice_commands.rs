@@ -164,13 +164,34 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
             rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None))
         };
         let elapsed = start.elapsed();
-        let _ = db.mark_sync_completed(
-            sync_result.is_ok(),
-            sync_result.as_ref().err().map(|e| e.to_string()).as_deref(),
-            elapsed.as_secs_f64(),
-        );
-        sync_result.map_err(|e| e.to_string())?;
-        Ok("latest sync completed".to_string())
+        match sync_result {
+            Ok(results) => {
+                let succeeded = dprice::sync::all_succeeded(&results);
+                let error_msg = if succeeded {
+                    None
+                } else {
+                    Some(dprice::sync::summarize_failures(&results))
+                };
+                let _ = db.mark_sync_completed(
+                    succeeded,
+                    error_msg.as_deref(),
+                    elapsed.as_secs_f64(),
+                );
+                if succeeded {
+                    Ok("latest sync completed".to_string())
+                } else {
+                    Ok(format!(
+                        "latest sync completed with errors: {}",
+                        error_msg.unwrap_or_default()
+                    ))
+                }
+            }
+            Err(e) => {
+                let _ =
+                    db.mark_sync_completed(false, Some(&e.to_string()), elapsed.as_secs_f64());
+                Err(e.to_string())
+            }
+        }
     })
     .await;
 
@@ -286,13 +307,34 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
             rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None))
         };
         let elapsed = start.elapsed();
-        let _ = db.mark_sync_completed(
-            sync_result.is_ok(),
-            sync_result.as_ref().err().map(|e| e.to_string()).as_deref(),
-            elapsed.as_secs_f64(),
-        );
-        sync_result.map_err(|e| e.to_string())?;
-        Ok("sync completed".to_string())
+        match sync_result {
+            Ok(results) => {
+                let succeeded = dprice::sync::all_succeeded(&results);
+                let error_msg = if succeeded {
+                    None
+                } else {
+                    Some(dprice::sync::summarize_failures(&results))
+                };
+                let _ = db.mark_sync_completed(
+                    succeeded,
+                    error_msg.as_deref(),
+                    elapsed.as_secs_f64(),
+                );
+                if succeeded {
+                    Ok("sync completed".to_string())
+                } else {
+                    Ok(format!(
+                        "sync completed with errors: {}",
+                        error_msg.unwrap_or_default()
+                    ))
+                }
+            }
+            Err(e) => {
+                let _ =
+                    db.mark_sync_completed(false, Some(&e.to_string()), elapsed.as_secs_f64());
+                Err(e.to_string())
+            }
+        }
     })
     .await;
 
