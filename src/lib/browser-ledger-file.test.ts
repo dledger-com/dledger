@@ -829,6 +829,25 @@ plugin "beancount.plugins.auto_accounts"
       expect(result.transactions_imported).toBe(1);
       expect(result.warnings.filter((w: string) => w.includes("balance assertion failed"))).toHaveLength(0);
     });
+
+    it("handles detached negative sign in posting amount", async () => {
+      const content = `
+2024-01-01 open Assets:Bank
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Test" "Detached sign"
+  Assets:Bank  - 100.00 USD
+  Expenses:Food  100.00 USD
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.warnings.filter((w: string) => w.includes("bad amount"))).toHaveLength(0);
+
+      const entries = await backend.queryJournalEntries({});
+      const items = entries[0][1];
+      expect(items).toHaveLength(2);
+      expect(items.some((l: { amount: string }) => l.amount === "-100.00")).toBe(true);
+    });
   });
 
   describe("importLedger (hledger format)", () => {

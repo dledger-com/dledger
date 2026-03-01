@@ -443,6 +443,13 @@ export async function importLedger(
     }
 
     const tokens = rest.split(/\s+/);
+
+    // Recombine detached sign: "- 123.45 USD" → ["-", "123.45", "USD"] → ["-123.45", "USD"]
+    if (tokens.length >= 2 && (tokens[0] === "-" || tokens[0] === "+")) {
+      tokens[0] = tokens[0] + tokens[1];
+      tokens.splice(1, 1);
+    }
+
     if (tokens.length === 0) {
       return { accountName: account, balanceAssertion, lotCost };
     }
