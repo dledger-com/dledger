@@ -691,9 +691,9 @@ export async function importLedger(
       for (const p of postings) {
         if (p.amount === undefined) continue;
         if (p.costPrice?.price) {
-          const costTotal = new Decimal(p.amount)
-            .times(new Decimal(p.costPrice.price))
-            .toDecimalPlaces(decimalPlaces(p.costPrice.price));
+          const costTotal = new Decimal(p.amount).times(
+            new Decimal(p.costPrice.price),
+          );
           const cur =
             sums.get(p.costPrice.commodity) ?? new Decimal(0);
           sums.set(p.costPrice.commodity, cur.plus(costTotal));
@@ -865,11 +865,13 @@ export async function importLedger(
         });
 
         // Add cost total in cost commodity
+        // No toDecimalPlaces here — unlike {cost} (which rounds to match an
+        // explicit cash leg), @ price computes the trading entry itself, and
+        // rounding tiny dust amounts (e.g. 0.00000003 VET @ 0.0754 CRO) to
+        // the price's decimal places can produce zero.
         const costTotal = p.costPrice.inferredCostTotal
           ? new Decimal(p.costPrice.inferredCostTotal)
-          : new Decimal(amount)
-              .times(new Decimal(p.costPrice.price))
-              .toDecimalPlaces(decimalPlaces(p.costPrice.price));
+          : new Decimal(amount).times(new Decimal(p.costPrice.price));
         items.push({
           id: uuidv7(),
           journal_entry_id: entryId,

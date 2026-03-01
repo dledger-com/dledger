@@ -473,6 +473,26 @@ commodity EUR
       expect(result.errors ?? []).toHaveLength(0);
     });
 
+    it("handles @ price with dust amounts that would round to zero", async () => {
+      // -0.00000003 VET @ 0.0754 CRO → cost total 0.000000002262
+      // toDecimalPlaces(4) would round this to 0, causing "amount cannot be zero"
+      const content = `
+2020-01-01 open Assets:Crypto:CDC:App
+2020-01-01 open Expenses:Crypto:Fees:Trading
+
+2020-07-02 * "Crypto.com" "Convert Dust to CRO"
+  Assets:Crypto:CDC:App  -0.00329 ADA @ 0.757 CRO
+  Assets:Crypto:CDC:App  -0.00294881 ENJ @ 1.385 CRO
+  Assets:Crypto:CDC:App  -0.69326722 ICX @ 2.43 CRO
+  Assets:Crypto:CDC:App  -0.00000003 VET @ 0.0754 CRO
+  Assets:Crypto:CDC:App  1.6799847 CRO
+  Expenses:Crypto:Fees:Trading
+`;
+      const result = await importLedger(backend, content, "beancount");
+      expect(result.transactions_imported).toBe(1);
+      expect(result.errors ?? []).toHaveLength(0);
+    });
+
     it("rounds {cost} total to price precision to handle beancount rounding tolerance", async () => {
       // 3.711 * 129.35 = 480.01785, but cash leg is -480.02 USD
       // beancount allows this rounding; we round cost total to price's decimal places
