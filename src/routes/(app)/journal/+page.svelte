@@ -16,6 +16,12 @@
   import { toast } from "svelte-sonner";
   import Loader from "lucide-svelte/icons/loader";
 
+  import MatchDialog from "$lib/components/MatchDialog.svelte";
+  import { extractAllCandidates } from "$lib/matching/extract.js";
+  import { findMatches } from "$lib/matching/score.js";
+  import type { MatchCandidate } from "$lib/matching/types.js";
+  import type { Account } from "$lib/types/index.js";
+
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
@@ -44,6 +50,10 @@
   }
 
   let duplicateGroups = $state<DuplicateGroup[]>([]);
+  let findingMatches = $state(false);
+  let showMatches = $state(false);
+  let matchCandidates = $state<MatchCandidate[]>([]);
+  let matchAccountMap = $state<Map<string, Account>>(new Map());
 
   function findDuplicateGroups(
     entries: [JournalEntry, LineItem[]][],
@@ -199,6 +209,46 @@
     </div>
     <ListFilter bind:value={searchTerm} placeholder="Filter entries..." class="order-last sm:order-none" />
     <div class="flex flex-wrap gap-2 shrink-0">
+      <Button variant="outline" size="sm" class="hidden sm:inline-flex" disabled={findingMatches} onclick={async () => {
+        findingMatches = true;
+        try {
+          const backend = getBackend();
+          const allEntries = await backend.queryJournalEntries({});
+          const accounts = await backend.listAccounts();
+          const idToName = new Map<string, string>();
+          const accMap = new Map<string, Account>();
+          for (const acc of accounts) {
+            idToName.set(acc.id, acc.full_name);
+            accMap.set(acc.full_name, acc);
+          }
+          // Collect already-linked entry IDs
+          const linked = new Set<string>();
+          for (const [entry] of allEntries) {
+            if (entry.voided_by) continue;
+            const meta = await backend.getMetadata(entry.id);
+            if (meta["cross_match_linked"] || meta["cex_linked"]) linked.add(entry.id);
+          }
+          const nonVoided = allEntries.filter(([e]) => !e.voided_by);
+          const candidates = extractAllCandidates(nonVoided, idToName, linked);
+          // Load metadata for scoring
+          const metaMap = new Map<string, Record<string, string>>();
+          for (const c of candidates) {
+            metaMap.set(c.entry.id, await backend.getMetadata(c.entry.id));
+          }
+          matchCandidates = findMatches(candidates, metaMap);
+          matchAccountMap = accMap;
+          showMatches = true;
+        } catch (e) {
+          toast.error(String(e));
+        } finally {
+          findingMatches = false;
+        }
+      }}>
+        {#if findingMatches}
+          <Loader class="h-3.5 w-3.5 mr-1 animate-spin" />
+        {/if}
+        {findingMatches ? "Finding..." : "Find Matches"}
+      </Button>
       <Button variant="outline" size="sm" class="hidden sm:inline-flex" disabled={detectingDuplicates} onclick={async () => {
         detectingDuplicates = true;
         try {
@@ -306,6 +356,14 @@
     </div>
   {/if}
 </div>
+
+<!-- Cross-Source Match Dialog -->
+<MatchDialog
+  bind:open={showMatches}
+  matches={matchCandidates}
+  accountMap={matchAccountMap}
+  onMerged={() => store.load()}
+/>
 
 <!-- Duplicate Detection Dialog -->
 <Dialog.Root bind:open={showDuplicates}>
