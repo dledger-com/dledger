@@ -34,23 +34,19 @@
 
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
 
-  // Initialize from cache
-  const cachedRecent = getCachedRecentEntries();
-  const cachedSummaries = getCachedSummaries();
-  const cachedCharts = getCachedCharts();
-
-  let recentLoaded = $state(cachedRecent.loaded);
-  let assetsSummary = $state<ConvertedSummary | null>(cachedSummaries.assets);
-  let liabilitiesSummary = $state<ConvertedSummary | null>(cachedSummaries.liabilities);
-  let revenueSummary = $state<ConvertedSummary | null>(cachedSummaries.revenue);
-  let netIncomeSummary = $state<ConvertedSummary | null>(cachedSummaries.netIncome);
+  // Start empty — cache is restored in onMount (like Journal)
+  let recentLoaded = $state(false);
+  let assetsSummary = $state<ConvertedSummary | null>(null);
+  let liabilitiesSummary = $state<ConvertedSummary | null>(null);
+  let revenueSummary = $state<ConvertedSummary | null>(null);
+  let netIncomeSummary = $state<ConvertedSummary | null>(null);
   let showAssets = $state(false);
   let showLiabilities = $state(false);
   let showRevenue = $state(false);
   let showNetIncome = $state(false);
 
   // Recent journal entries (queried directly, not via JournalStore)
-  let recentEntries = $state<[JournalEntry, LineItem[]][]>(cachedRecent.entries);
+  let recentEntries = $state<[JournalEntry, LineItem[]][]>([]);
 
   function debitsByCurrency(items: { amount: string; currency: string }[]): { currency: string; amount: string }[] {
     const map = new Map<string, number>();
@@ -68,10 +64,9 @@
   }
 
   // Charts
-  let netWorthData = $state<NetWorthPoint[]>(cachedCharts.netWorth);
-  let expenseData = $state<ExpenseCategory[]>(cachedCharts.expenses);
-  let chartsLoading = $state(!cachedCharts.loaded);
-  let chartsReady = $state(false);
+  let netWorthData = $state<NetWorthPoint[]>([]);
+  let expenseData = $state<ExpenseCategory[]>([]);
+  let chartsLoading = $state(true);
 
   // Persistent exchange rate cache — rates are immutable by (from, to, date)
   let rateCache: ExchangeRateCache | undefined;
@@ -139,7 +134,23 @@
   }
 
   onMount(() => {
-    requestAnimationFrame(() => { chartsReady = true; });
+    // Restore from cache (async callbacks defer past first paint)
+    const cachedRecent = getCachedRecentEntries();
+    if (cachedRecent.loaded) {
+      recentEntries = cachedRecent.entries;
+      recentLoaded = true;
+    }
+    const cachedSummaries = getCachedSummaries();
+    if (cachedSummaries.assets) assetsSummary = cachedSummaries.assets;
+    if (cachedSummaries.liabilities) liabilitiesSummary = cachedSummaries.liabilities;
+    if (cachedSummaries.revenue) revenueSummary = cachedSummaries.revenue;
+    if (cachedSummaries.netIncome) netIncomeSummary = cachedSummaries.netIncome;
+    const cachedCharts = getCachedCharts();
+    if (cachedCharts.loaded) {
+      netWorthData = cachedCharts.netWorth;
+      expenseData = cachedCharts.expenses;
+      chartsLoading = false;
+    }
 
     const date = today();
     const base = settings.currency;
@@ -373,7 +384,7 @@
         <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if !chartsReady || chartsLoading}
+        {#if chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
           <p class="text-sm text-muted-foreground py-12 text-center">
@@ -402,7 +413,7 @@
         <Card.Description>Breakdown by category.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if !chartsReady || chartsLoading}
+        {#if chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if expenseData.length === 0}
           <p class="text-sm text-muted-foreground py-12 text-center">No expenses in period.</p>
