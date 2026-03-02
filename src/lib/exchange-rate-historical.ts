@@ -75,14 +75,19 @@ function classifySource(
   tokenAddressCurrencies?: Set<string>,
   dpriceAssets?: Set<string>,
 ): SourceName | null {
-  // 1. DB-stored source always wins
+  // 1. When dprice is active and asset is available, prefer it (unless user override)
+  if (dpriceAssets?.has(currency)) {
+    const stored = rateSourceMap.get(currency);
+    if (!stored || stored.set_by !== "user" || stored.rate_source === "dprice") {
+      return "dprice";
+    }
+  }
+  // 2. DB-stored source
   const stored = rateSourceMap.get(currency);
   if (stored?.rate_source === "none") return null;
   if (stored?.rate_source) {
     return stored.rate_source as SourceName;
   }
-  // 2. When dprice is enabled and asset is available, prefer it
-  if (dpriceAssets?.has(currency)) return "dprice";
   // 3. Static heuristic fallback
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (tokenAddressCurrencies?.has(currency)) return "defillama";
@@ -203,6 +208,11 @@ export async function fetchHistoricalRates(
 
   const tick = () => { progress++; config.onProgress?.(progress, totalDates); };
 
+  // ---- dprice: local price DB historical (FIRST — avoids redundant external API calls) ----
+  if (dpriceReqs.length > 0 && isDpriceActive(config.dpriceMode)) {
+    await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick);
+  }
+
   // ---- Frankfurter: full timeseries, multi-symbol ----
   if (frankfurterReqs.length > 0) {
     await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, successCurrencies, tick);
@@ -243,11 +253,6 @@ export async function fetchHistoricalRates(
   // ---- Binance: klines per symbol ----
   if (binanceReqs.length > 0) {
     await fetchBinanceHistorical(backend, binanceReqs, config, result, successCurrencies, tick);
-  }
-
-  // ---- dprice: local price DB historical ----
-  if (dpriceReqs.length > 0 && isDpriceActive(config.dpriceMode)) {
-    await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick);
   }
 
   // Fallback chain: if DefiLlama failed for some currencies, try CoinGecko → CryptoCompare

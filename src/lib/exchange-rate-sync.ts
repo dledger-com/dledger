@@ -142,17 +142,48 @@ export async function syncExchangeRates(
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrSet = new Set(tokenAddresses.map((t) => t.currency));
 
-  // When dprice is enabled, probe which assets are available in the local price DB
+  // When dprice is enabled, try it FIRST for all currencies.
+  // This dprice-first pass fetches actual rates and records them, avoiding redundant external API calls.
   let dpriceAssets: Set<string> | undefined;
+  const dpriceServed = new Set<string>(); // codes successfully served by dprice this run
   if (isDpriceActive(dpriceMode)) {
     try {
       const client = createDpriceClient({ dpriceMode, dpriceUrl });
-      const health = await client.health();
-      if (health.assets > 0) {
-        // Build asset set by checking rates for each currency code
-        // Use getRates with all codes to batch-check availability
-        const entries = await client.getRates(codes);
-        dpriceAssets = new Set(entries.map((e) => e.from));
+      // Request cross-rates for all codes (including baseCurrency for completeness)
+      const entries = await client.getRates([...codes, baseCurrency]);
+      dpriceAssets = new Set(entries.map((e) => e.from));
+
+      // Filter entries that give us a direct rate to baseCurrency
+      const baseRates = entries.filter((e) => e.to === baseCurrency);
+      for (const entry of baseRates) {
+        const code = entry.from;
+        if (code === baseCurrency) continue;
+        if (!codes.includes(code)) continue;
+
+        // Respect user-priority source overrides: if user explicitly chose a different source, skip
+        const stored = sourceMap.get(code);
+        if (stored?.set_by === "user" && stored.rate_source !== null && stored.rate_source !== "dprice") {
+          continue;
+        }
+
+        // Check if rate already exists today
+        const existing = await backend.getExchangeRate(code, baseCurrency, today);
+        if (existing !== null) {
+          result.rates_skipped++;
+          dpriceServed.add(code);
+          continue;
+        }
+
+        await backend.recordExchangeRate({
+          id: uuidv7(),
+          date: today,
+          from_currency: code,
+          to_currency: baseCurrency,
+          rate: entry.rate,
+          source: "dprice",
+        });
+        result.rates_fetched++;
+        dpriceServed.add(code);
       }
     } catch {
       // dprice not available — fall through to other sources
@@ -170,6 +201,9 @@ export async function syncExchangeRates(
   const autoDetectCodes: string[] = []; // codes needing auto-detection
 
   for (const code of codes) {
+    // Skip codes already served by the dprice-first pass
+    if (dpriceServed.has(code)) continue;
+
     const stored = sourceMap.get(code);
     if (stored && stored.rate_source !== null) {
       // Has configured source
@@ -573,51 +607,27 @@ export async function syncExchangeRates(
     }
   }
 
-  // ---- dprice rates (local price DB) ----
-  if (dpriceCodes.length > 0 && isDpriceActive(dpriceMode)) {
-    try {
-      const client = createDpriceClient({ dpriceMode, dpriceUrl });
-      for (const code of dpriceCodes) {
-        try {
-          const rate = await client.getRate(code, baseCurrency);
-          if (rate == null) {
-            result.errors.push(`dprice: no rate for ${code}/${baseCurrency}`);
-            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-            allFailed.add(code);
-            continue;
-          }
-
-          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
-          allSucceeded.add(code);
-
-          const existing = await backend.getExchangeRate(code, baseCurrency, today);
-          if (existing !== null) {
-            result.rates_skipped++;
-            continue;
-          }
-
-          await backend.recordExchangeRate({
-            id: uuidv7(),
-            date: today,
-            from_currency: code,
-            to_currency: baseCurrency,
-            rate,
-            source: "dprice",
-          });
-          result.rates_fetched++;
-        } catch (err) {
-          result.errors.push(`dprice ${code}: ${err instanceof Error ? err.message : String(err)}`);
-          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-          allFailed.add(code);
-        }
-      }
-    } catch (err) {
-      result.errors.push(`dprice: ${err instanceof Error ? err.message : String(err)}`);
-    }
+  // ---- dprice fallback: mark any unserved dpriceCodes as failed ----
+  // These are codes routed to dprice (user-configured or auto-detected) that the dprice-first pass
+  // couldn't serve — e.g. dprice was unavailable or didn't have a baseCurrency cross-rate.
+  for (const code of dpriceCodes) {
+    if (dpriceServed.has(code)) continue;
+    if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+    allFailed.add(code);
   }
 
   // Post-process: Write auto-detection results to DB
+  // Include dprice-served codes that had no prior stored source
+  for (const code of dpriceServed) {
+    const stored = sourceMap.get(code);
+    if (!stored || stored.rate_source === null) {
+      await backend.setCurrencyRateSource(code, "dprice", "auto");
+      result.newlyDetected.push(code);
+    }
+    allSucceeded.add(code);
+  }
   for (const code of autoDetectSuccess) {
+    if (dpriceServed.has(code)) continue; // already handled above
     const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code), dpriceAssets);
     await backend.setCurrencyRateSource(code, detected, "auto");
     result.newlyDetected.push(code);
