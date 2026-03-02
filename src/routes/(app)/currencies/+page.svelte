@@ -5,7 +5,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
+
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
   import ListFilter from "$lib/components/ListFilter.svelte";
@@ -30,6 +30,7 @@
   let currName = $state("");
   let currDecimals = $state("2");
   let currIsBase = $state(false);
+  const hiddenCurrencies = $derived(currencies.filter((c) => c.is_hidden));
 
   // Sort state
   type CurrencySortKey = "code" | "name" | "decimals" | "base" | "rateSource";
@@ -130,67 +131,63 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Currencies</h1>
-    <p class="text-muted-foreground">Manage currencies and rate sources.</p>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="shrink-0">
+      <h1 class="text-2xl font-bold tracking-tight">Currencies</h1>
+      <p class="text-muted-foreground hidden sm:block">Manage currencies and rate sources.</p>
+    </div>
+    <ListFilter bind:value={currencySearchTerm} placeholder="Filter currencies..." class="order-last sm:order-none" />
+    <div class="flex flex-wrap items-center gap-3 shrink-0">
+      <label class="flex items-center gap-2 text-sm">
+        <Switch
+          checked={settings.showHidden}
+          onCheckedChange={(v) => settings.update({ showHidden: v })}
+        />
+        Show hidden
+      </label>
+      <Button
+        variant="outline"
+        size="sm"
+        onclick={async () => {
+          await getBackend().clearAutoRateSources();
+          await loadRateSources();
+          toast.success("Auto-detected rate sources cleared. They will be re-detected on next sync.");
+        }}
+      >
+        Re-detect Sources
+      </Button>
+    </div>
   </div>
 
-  <Card.Root>
-    <Card.Header>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Card.Title>Currencies</Card.Title>
-          <Card.Description>Add currencies and manage rate sources.</Card.Description>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <ListFilter bind:value={currencySearchTerm} placeholder="Filter currencies..." />
-          <label class="flex items-center gap-2 text-sm">
-            <Switch
-              checked={settings.showHidden}
-              onCheckedChange={(v) => settings.update({ showHidden: v })}
-            />
-            Show hidden
-          </label>
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={async () => {
-              await getBackend().clearAutoRateSources();
-              await loadRateSources();
-              toast.success("Auto-detected rate sources cleared. They will be re-detected on next sync.");
-            }}
-          >
-            Re-detect Sources
-          </Button>
-        </div>
-      </div>
-    </Card.Header>
-    <Card.Content class="space-y-4">
-      <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
-        <div class="space-y-1">
-          <label for="curr-code" class="text-xs text-muted-foreground">Code</label>
-          <Input id="curr-code" bind:value={currCode} placeholder="EUR" class="w-24" />
-        </div>
-        <div class="space-y-1">
-          <label for="curr-name" class="text-xs text-muted-foreground">Name</label>
-          <Input id="curr-name" bind:value={currName} placeholder="Euro" class="w-40" />
-        </div>
-        <div class="space-y-1">
-          <label for="curr-decimals" class="text-xs text-muted-foreground">Decimals</label>
-          <Input id="curr-decimals" type="number" bind:value={currDecimals} class="w-20" />
-        </div>
-        <div class="space-y-1 flex items-center gap-2 pb-1">
-          <Switch id="curr-base" bind:checked={currIsBase} />
-          <label for="curr-base" class="text-xs text-muted-foreground">Base</label>
-        </div>
-        <Button type="submit" size="sm">Add</Button>
-      </form>
+  <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
+    <div class="space-y-1">
+      <label for="curr-code" class="text-xs text-muted-foreground">Code</label>
+      <Input id="curr-code" bind:value={currCode} placeholder="EUR" class="w-24" />
+    </div>
+    <div class="space-y-1">
+      <label for="curr-name" class="text-xs text-muted-foreground">Name</label>
+      <Input id="curr-name" bind:value={currName} placeholder="Euro" class="w-40" />
+    </div>
+    <div class="space-y-1">
+      <label for="curr-decimals" class="text-xs text-muted-foreground">Decimals</label>
+      <Input id="curr-decimals" type="number" bind:value={currDecimals} class="w-20" />
+    </div>
+    <div class="space-y-1 flex items-center gap-2 pb-1">
+      <Switch id="curr-base" bind:checked={currIsBase} />
+      <label for="curr-base" class="text-xs text-muted-foreground">Base</label>
+    </div>
+    <Button type="submit" size="sm">Add</Button>
+  </form>
 
-      <Separator />
-
-      {#if currencies.length === 0}
-        <p class="text-sm text-muted-foreground text-center py-4">No currencies defined.</p>
-      {:else}
+  {#if currencies.length === 0}
+    <Card.Root class="border-x-0 rounded-none shadow-none">
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">No currencies defined.</p>
+      </Card.Content>
+    </Card.Root>
+  {:else}
+    <Card.Root class="border-x-0 rounded-none shadow-none py-0">
+      <Card.Content class="p-0">
         <Table.Root>
           <Table.Header>
             <Table.Row>
@@ -264,21 +261,23 @@
             {/each}
           </Table.Body>
         </Table.Root>
-      {/if}
+      </Card.Content>
+    </Card.Root>
+  {/if}
 
-      {@const hiddenCurrencies = currencies.filter((c) => c.is_hidden)}
-      {#if hiddenCurrencies.length > 0 && !settings.showHidden}
-        <Separator />
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <h3 class="text-sm font-medium">Hidden Currencies ({hiddenCurrencies.length})</h3>
-            <Button variant="outline" size="sm" onclick={async () => {
-              for (const c of hiddenCurrencies) {
-                await unmarkCurrencyHidden(getBackend(), c.code);
-              }
-              await loadCurrencies();
-            }}>Unhide All</Button>
-          </div>
+  {#if hiddenCurrencies.length > 0 && !settings.showHidden}
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-medium">Hidden Currencies ({hiddenCurrencies.length})</h3>
+        <Button variant="outline" size="sm" onclick={async () => {
+          for (const c of hiddenCurrencies) {
+            await unmarkCurrencyHidden(getBackend(), c.code);
+          }
+          await loadCurrencies();
+        }}>Unhide All</Button>
+      </div>
+      <Card.Root class="border-x-0 rounded-none shadow-none py-0">
+        <Card.Content class="p-0">
           <Table.Root>
             <Table.Header>
               <Table.Row>
@@ -301,8 +300,8 @@
               {/each}
             </Table.Body>
           </Table.Root>
-        </div>
-      {/if}
-    </Card.Content>
-  </Card.Root>
+        </Card.Content>
+      </Card.Root>
+    </div>
+  {/if}
 </div>
