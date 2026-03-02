@@ -45,18 +45,27 @@
   let searchTerm = $state("");
   let showDuplicates = $state(false);
 
-  // Extract #tag and ^link tokens and remaining text from search term
+  // Parse comma-separated OR groups, each with space-separated AND tokens (#tag, ^link, text)
+  interface SearchGroup { tags: string[]; links: string[]; text: string; }
+
   const searchFilters = $derived.by(() => {
-    const tokens = searchTerm.trim().split(/\s+/);
-    const tags: string[] = [];
-    const links: string[] = [];
-    const rest: string[] = [];
-    for (const t of tokens) {
-      if (t.startsWith("#") && t.length > 1) tags.push(t.slice(1).toLowerCase());
-      else if (t.startsWith("^") && t.length > 1) links.push(t.slice(1).toLowerCase());
-      else rest.push(t);
-    }
-    return { tags, links, text: rest.join(" ") };
+    const rawGroups = searchTerm.split(",").map(g => g.trim()).filter(Boolean);
+    if (rawGroups.length === 0) return { groups: [] as SearchGroup[], backendText: "" };
+    const groups: SearchGroup[] = rawGroups.map(group => {
+      const tokens = group.split(/\s+/);
+      const tags: string[] = [];
+      const links: string[] = [];
+      const rest: string[] = [];
+      for (const t of tokens) {
+        if (t.startsWith("#") && t.length > 1) tags.push(t.slice(1).toLowerCase());
+        else if (t.startsWith("^") && t.length > 1) links.push(t.slice(1).toLowerCase());
+        else rest.push(t);
+      }
+      return { tags, links, text: rest.join(" ") };
+    });
+    // Single group: backend can handle text search. Multiple groups: fetch all, filter client-side.
+    const backendText = groups.length === 1 ? groups[0].text : "";
+    return { groups, backendText };
   });
 
   type JournalSortKey = "date" | "description" | "status" | "amount";
@@ -105,13 +114,13 @@
   // Debounced backend search
   let debounceTimer: ReturnType<typeof setTimeout>;
   $effect(() => {
-    const { text } = searchFilters;
+    const { backendText } = searchFilters;
     const orderBy = sort.key !== "amount" ? sort.key : null;
     const orderDir = sort.direction;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       const filter: TransactionFilter = {};
-      if (text) filter.description_search = text;
+      if (backendText) filter.description_search = backendText;
       if (orderBy && orderDir) {
         filter.order_by = orderBy;
         filter.order_direction = orderDir;
@@ -192,20 +201,26 @@
     })();
   });
 
-  // Post-filter by #tag and ^link tokens
+  // Post-filter: OR across comma-separated groups, AND within each group
   const displayEntries = $derived.by(() => {
-    const { tags, links } = searchFilters;
-    if (tags.length === 0 && links.length === 0) return filteredEntries;
+    const { groups } = searchFilters;
+    if (groups.length === 0) return filteredEntries;
+    const single = groups.length === 1;
+    if (single && groups[0].tags.length === 0 && groups[0].links.length === 0) return filteredEntries;
     return filteredEntries.filter(([entry]) => {
-      if (tags.length > 0) {
-        const eTags = entryTags.get(entry.id);
-        if (!eTags || !tags.every((t) => eTags.some((et) => et.toLowerCase() === t))) return false;
-      }
-      if (links.length > 0) {
-        const eLinks = entryLinks.get(entry.id);
-        if (!eLinks || !links.every((l) => eLinks.some((el) => el.toLowerCase() === l))) return false;
-      }
-      return true;
+      return groups.some(({ tags, links, text }) => {
+        // Text match client-side only for multi-group (single-group text handled by backend)
+        if (!single && text && !entry.description.toLowerCase().includes(text.toLowerCase())) return false;
+        if (tags.length > 0) {
+          const eTags = entryTags.get(entry.id);
+          if (!eTags || !tags.every(t => eTags.some(et => et.toLowerCase() === t))) return false;
+        }
+        if (links.length > 0) {
+          const eLinks = entryLinks.get(entry.id);
+          if (!eLinks || !links.every(l => eLinks.some(el => el.toLowerCase() === l))) return false;
+        }
+        return true;
+      });
     });
   });
 
