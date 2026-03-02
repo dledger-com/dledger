@@ -1120,7 +1120,7 @@
                 <Table.Row>
                   <Table.Head class="w-24">Date</Table.Head>
                   <Table.Head>Description</Table.Head>
-                  <Table.Head>Line Items</Table.Head>
+                  <Table.Head class="min-w-[260px]">Line Items</Table.Head>
                   <Table.Head class="w-16 text-center">Balance</Table.Head>
                 </Table.Row>
               </Table.Header>
@@ -1134,8 +1134,8 @@
                     {@const mlSuggestion = mlSuggestions.get(recIdx)}
                     {@const mlIsAccepted = mlAccepted.has(recIdx)}
                     {@const recTags = parseTags(rec.metadata?.[TAGS_META_KEY])}
-                    <Table.Cell class="text-xs max-w-[200px]">
-                      <span class="truncate">{rec.description}</span>
+                    <Table.Cell class="text-xs max-w-[250px] whitespace-normal">
+                      <span>{rec.description}</span>
                       {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
                       {#if recTags.length > 0}
                         <div class="flex flex-wrap gap-0.5 mt-0.5">
@@ -1145,7 +1145,7 @@
                         </div>
                       {/if}
                     </Table.Cell>
-                    <Table.Cell class="text-xs">
+                    <Table.Cell class="text-xs whitespace-normal">
                       {#each rec.lines.slice(0, 4) as line, lineIdx}
                         <div class="flex gap-1 items-center">
                           <AccountCombobox
