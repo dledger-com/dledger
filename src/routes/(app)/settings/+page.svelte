@@ -5,6 +5,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend } from "$lib/backend.js";
   import { reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
@@ -652,132 +653,242 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- dprice Price Database -->
+  <!-- External Services -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>dprice Price Database</Card.Title>
-      <Card.Description>Use a dedicated price database for exchange rates. Syncs from ECB, CryptoCompare, DefiLlama, and Binance.</Card.Description>
+      <Card.Title>External Services</Card.Title>
+      <Card.Description>API keys and configuration for external data providers.</Card.Description>
     </Card.Header>
-    <Card.Content class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium">Enable dprice rate source</p>
-          <p class="text-sm text-muted-foreground">Use dprice as an exchange rate source.</p>
-        </div>
-        <Switch
-          checked={isDpriceActive(settings.settings.dpriceMode)}
-          onCheckedChange={handleDpriceToggle}
-        />
-      </div>
-      {#if isDpriceActive(settings.settings.dpriceMode)}
-        {#if isTauri}
+    <Card.Content>
+      <Tabs.Root value="general">
+        <Tabs.List>
+          <Tabs.Trigger value="general">General</Tabs.Trigger>
+          <Tabs.Trigger value="fiat">Fiat</Tabs.Trigger>
+          <Tabs.Trigger value="stock">Stock Market</Tabs.Trigger>
+          <Tabs.Trigger value="crypto">Crypto</Tabs.Trigger>
+        </Tabs.List>
+
+        <Tabs.Content value="general" class="space-y-4">
           <div class="space-y-2">
-            <label for="dprice-mode" class="text-sm font-medium">Mode</label>
-            <select
-              id="dprice-mode"
-              class="flex h-9 w-60 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={settings.settings.dpriceMode}
-              onchange={(e) => handleDpriceModeChange((e.target as HTMLSelectElement).value as DpriceMode)}
-            >
-              <option value="integrated">Integrated (app-managed DB)</option>
-              <option value="local">Local (shared CLI DB)</option>
-              <option value="http">HTTP API (external server)</option>
-            </select>
-            <p class="text-xs text-muted-foreground">
-              {#if settings.settings.dpriceMode === "integrated"}
-                Uses a co-located database managed by the app.
-              {:else if settings.settings.dpriceMode === "local"}
-                Shares the database with the <code>dprice</code> CLI tool.
-              {:else if settings.settings.dpriceMode === "http"}
-                Connects to an external <code>dprice serve</code> instance.
-              {/if}
-            </p>
-          </div>
-        {:else}
-          <p class="text-xs text-muted-foreground">Using HTTP API mode. Configure the server URL below.</p>
-        {/if}
-        {#if settings.settings.dpriceMode === "http"}
-          <Separator />
-          <div class="space-y-2">
-            <label for="dprice-url" class="text-sm font-medium">Server URL</label>
-            <Input
-              id="dprice-url"
-              value={settings.settings.dpriceUrl ?? "http://localhost:3080"}
-              oninput={(e) => settings.update({ dpriceUrl: (e.target as HTMLInputElement).value || undefined })}
-              placeholder="http://localhost:3080"
-              class="w-80"
-            />
-          </div>
-        {/if}
-        {#if settings.settings.dpriceMode === "local" && dpriceLocalPath}
-          <div class="rounded-md border bg-muted/50 p-3">
-            <p class="text-xs text-muted-foreground">Database path: <code>{dpriceLocalPath}</code></p>
-          </div>
-        {/if}
-        <Separator />
-        <div class="space-y-2">
-          {#if dpriceLoading}
-            <p class="text-sm text-muted-foreground">Loading status...</p>
-          {:else if dpriceHealth}
-            <p class="text-sm">
-              <span class="font-medium">Status:</span>
-              {dpriceHealth.assets.toLocaleString()} assets, {dpriceHealth.prices.toLocaleString()} prices
-            </p>
-            {#if dpriceLatest}
-              {@const days = dpriceStaleDays()}
-              {#if days !== null && days > 2}
-                <p class="text-sm text-amber-600 dark:text-amber-400">
-                  Data is stale (last update: {dpriceLatest}, {days} days ago)
-                </p>
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium">dprice Price Database</p>
+                <p class="text-sm text-muted-foreground">Dedicated price DB — syncs from ECB, CryptoCompare, DefiLlama, and Binance.</p>
+              </div>
+              <Switch
+                checked={isDpriceActive(settings.settings.dpriceMode)}
+                onCheckedChange={handleDpriceToggle}
+              />
+            </div>
+            {#if isDpriceActive(settings.settings.dpriceMode)}
+              {#if isTauri}
+                <div class="space-y-2">
+                  <label for="dprice-mode" class="text-sm font-medium">Mode</label>
+                  <select
+                    id="dprice-mode"
+                    class="flex h-9 w-60 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={settings.settings.dpriceMode}
+                    onchange={(e) => handleDpriceModeChange((e.target as HTMLSelectElement).value as DpriceMode)}
+                  >
+                    <option value="integrated">Integrated (app-managed DB)</option>
+                    <option value="local">Local (shared CLI DB)</option>
+                    <option value="http">HTTP API (external server)</option>
+                  </select>
+                  <p class="text-xs text-muted-foreground">
+                    {#if settings.settings.dpriceMode === "integrated"}
+                      Uses a co-located database managed by the app.
+                    {:else if settings.settings.dpriceMode === "local"}
+                      Shares the database with the <code>dprice</code> CLI tool.
+                    {:else if settings.settings.dpriceMode === "http"}
+                      Connects to an external <code>dprice serve</code> instance.
+                    {/if}
+                  </p>
+                </div>
               {:else}
-                <p class="text-sm text-muted-foreground">
-                  Last updated: {dpriceLatest}{days !== null ? ` (${days === 0 ? "today" : days === 1 ? "1 day ago" : `${days} days ago`})` : ""}
-                </p>
+                <p class="text-xs text-muted-foreground">Using HTTP API mode. Configure the server URL below.</p>
               {/if}
-            {:else}
-              <p class="text-sm text-muted-foreground">No price data yet. Run a sync to populate.</p>
+              {#if settings.settings.dpriceMode === "http"}
+                <div class="space-y-2">
+                  <label for="dprice-url" class="text-sm font-medium">Server URL</label>
+                  <Input
+                    id="dprice-url"
+                    value={settings.settings.dpriceUrl ?? "http://localhost:3080"}
+                    oninput={(e) => settings.update({ dpriceUrl: (e.target as HTMLInputElement).value || undefined })}
+                    placeholder="http://localhost:3080"
+                    class="w-80"
+                  />
+                </div>
+              {/if}
+              {#if settings.settings.dpriceMode === "local" && dpriceLocalPath}
+                <div class="rounded-md border bg-muted/50 p-3">
+                  <p class="text-xs text-muted-foreground">Database path: <code>{dpriceLocalPath}</code></p>
+                </div>
+              {/if}
+              <div class="space-y-2">
+                {#if dpriceLoading}
+                  <p class="text-sm text-muted-foreground">Loading status...</p>
+                {:else if dpriceHealth}
+                  <p class="text-sm">
+                    <span class="font-medium">Status:</span>
+                    {dpriceHealth.assets.toLocaleString()} assets, {dpriceHealth.prices.toLocaleString()} prices
+                  </p>
+                  {#if dpriceLatest}
+                    {@const days = dpriceStaleDays()}
+                    {#if days !== null && days > 2}
+                      <p class="text-sm text-amber-600 dark:text-amber-400">
+                        Data is stale (last update: {dpriceLatest}, {days} days ago)
+                      </p>
+                    {:else}
+                      <p class="text-sm text-muted-foreground">
+                        Last updated: {dpriceLatest}{days !== null ? ` (${days === 0 ? "today" : days === 1 ? "1 day ago" : `${days} days ago`})` : ""}
+                      </p>
+                    {/if}
+                  {:else}
+                    <p class="text-sm text-muted-foreground">No price data yet. Run a sync to populate.</p>
+                  {/if}
+                {:else}
+                  <p class="text-sm text-muted-foreground">Could not load dprice status. Is the database accessible?</p>
+                {/if}
+              </div>
+              {#if settings.settings.dpriceMode === "integrated"}
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
+                    onclick={handleDpriceSyncLatest}
+                  >
+                    {taskQueue.isActive("dprice-sync-latest") ? "Syncing..." : "Sync Latest"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
+                    onclick={handleDpriceSyncFull}
+                  >
+                    {taskQueue.isActive("dprice-sync-full") ? "Syncing..." : "Full Sync"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={dpriceExporting}
+                    onclick={handleDpriceExport}
+                  >
+                    {dpriceExporting ? "Exporting..." : "Export DB"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={dpriceImporting}
+                    onclick={handleDpriceImport}
+                  >
+                    {dpriceImporting ? "Importing..." : "Import DB"}
+                  </Button>
+                </div>
+              {/if}
             {/if}
-          {:else}
-            <p class="text-sm text-muted-foreground">Could not load dprice status. Is the database accessible?</p>
-          {/if}
-        </div>
-        {#if settings.settings.dpriceMode === "integrated"}
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
-              onclick={handleDpriceSyncLatest}
-            >
-              {taskQueue.isActive("dprice-sync-latest") ? "Syncing..." : "Sync Latest"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={taskQueue.isActive("dprice-sync-latest") || taskQueue.isActive("dprice-sync-full")}
-              onclick={handleDpriceSyncFull}
-            >
-              {taskQueue.isActive("dprice-sync-full") ? "Syncing..." : "Full Sync"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={dpriceExporting}
-              onclick={handleDpriceExport}
-            >
-              {dpriceExporting ? "Exporting..." : "Export DB"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={dpriceImporting}
-              onclick={handleDpriceImport}
-            >
-              {dpriceImporting ? "Importing..." : "Import DB"}
-            </Button>
           </div>
-        {/if}
-      {/if}
+        </Tabs.Content>
+
+        <Tabs.Content value="fiat" class="space-y-4">
+          <p class="text-sm text-muted-foreground">Frankfurter — fiat exchange rates (no key required)</p>
+        </Tabs.Content>
+
+        <Tabs.Content value="stock" class="space-y-4">
+          <div class="space-y-2">
+            <label for="finnhub-api-key" class="text-sm font-medium">Finnhub API Key</label>
+            <Input
+              id="finnhub-api-key"
+              type="password"
+              placeholder="Finnhub API key (optional)"
+              value={settings.finnhubApiKey}
+              oninput={(e) => settings.update({ finnhubApiKey: (e.target as HTMLInputElement).value })}
+            />
+            <p class="text-xs text-muted-foreground">
+              Get a free key at <a href="https://finnhub.io" target="_blank" class="underline hover:text-foreground">finnhub.io</a>.
+              Required for stock prices (AAPL, GOOG, etc.).
+            </p>
+          </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="crypto" class="space-y-4">
+          <p class="text-sm text-muted-foreground">DefiLlama — default crypto rate source (no key required)</p>
+
+          <div class="space-y-2">
+            <label for="coingecko-api-key" class="text-sm font-medium">CoinGecko API Key</label>
+            <Input
+              id="coingecko-api-key"
+              type="password"
+              placeholder="CoinGecko demo API key (optional)"
+              value={settings.coingeckoApiKey}
+              oninput={(e) => settings.update({ coingeckoApiKey: (e.target as HTMLInputElement).value })}
+            />
+            <p class="text-xs text-muted-foreground">
+              Get a free demo key at <a href="https://www.coingecko.com/en/api" target="_blank" class="underline hover:text-foreground">coingecko.com</a>.
+              Required for crypto rates. Fiat rates work without a key.
+            </p>
+          </div>
+          <div class="space-y-2">
+            <label for="cryptocompare-api-key" class="text-sm font-medium">CryptoCompare API Key</label>
+            <Input
+              id="cryptocompare-api-key"
+              type="password"
+              placeholder="CryptoCompare API key (optional)"
+              value={settings.cryptoCompareApiKey}
+              oninput={(e) => settings.update({ cryptoCompareApiKey: (e.target as HTMLInputElement).value })}
+            />
+            <p class="text-xs text-muted-foreground">
+              Get a free key at <a href="https://www.cryptocompare.com/cryptopian/api-keys" target="_blank" class="underline hover:text-foreground">cryptocompare.com</a>.
+              Optional fallback for crypto historical rates.
+            </p>
+          </div>
+
+          <p class="text-sm text-muted-foreground">Binance — crypto rates via public API (no key required)</p>
+
+          <div class="space-y-2">
+            <label for="etherscan-api-key" class="text-sm font-medium">Etherscan API Key</label>
+            <Input
+              id="etherscan-api-key"
+              type="password"
+              placeholder="Etherscan API key"
+              value={settings.etherscanApiKey}
+              oninput={(e) => settings.update({ etherscanApiKey: (e.target as HTMLInputElement).value })}
+            />
+            <p class="text-xs text-muted-foreground">
+              Get a free API key at <a href="https://etherscan.io/apis" target="_blank" class="underline hover:text-foreground">etherscan.io</a>.
+              One key works for most EVM chains.
+            </p>
+          </div>
+          <div class="space-y-2">
+            <label for="routescan-api-key" class="text-sm font-medium">Routescan API Key (optional)</label>
+            <Input
+              id="routescan-api-key"
+              type="password"
+              placeholder="Routescan API key"
+              value={settings.settings.routescanApiKey}
+              oninput={(e) => settings.update({ routescanApiKey: (e.target as HTMLInputElement).value })}
+            />
+            <p class="text-xs text-muted-foreground">
+              Used for BSC, Base, Optimism, and Avalanche (free at <a href="https://routescan.io" target="_blank" class="underline hover:text-foreground">routescan.io</a>).
+              Leave blank for keyless access (slower rate limit).
+            </p>
+          </div>
+          <div class="space-y-2">
+            <label for="thegraph-api-key" class="text-sm font-medium">The Graph API Key</label>
+            <Input
+              id="thegraph-api-key"
+              type="password"
+              placeholder="The Graph API key (optional)"
+              value={settings.theGraphApiKey}
+              oninput={(e) => settings.update({ theGraphApiKey: (e.target as HTMLInputElement).value })}
+            />
+            <p class="text-xs text-muted-foreground">
+              Get a free key at <a href="https://thegraph.com/studio/apikeys/" target="_blank" class="underline hover:text-foreground">thegraph.com/studio</a>.
+              Required for Uniswap pool enrichment.
+            </p>
+          </div>
+        </Tabs.Content>
+      </Tabs.Root>
     </Card.Content>
   </Card.Root>
 
