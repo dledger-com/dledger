@@ -31,17 +31,16 @@
         const backend = await initBackend();
         await loadHiddenCurrencies(backend);
 
+        // Pre-warm account cache BEFORE rendering children (guarantees cache hit)
+        const [accounts, currencies] = await Promise.all([
+          backend.listAccounts(),
+          backend.listCurrencies(),
+        ]);
+        preWarmAccountCache(accounts, currencies);
+
         // Configure account paths from saved settings before rendering children
         const settings = new SettingsStore();
         ready = true;
-
-        // Pre-warm account cache for faster first navigation
-        Promise.all([
-          backend.listAccounts(),
-          backend.listCurrencies(),
-        ]).then(([accounts, currencies]) => {
-          preWarmAccountCache(accounts, currencies);
-        }).catch(() => {});
         const today = new Date().toISOString().slice(0, 10);
         if (settings.lastRateSync !== today) {
           taskQueue.enqueue({

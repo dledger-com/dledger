@@ -1,10 +1,17 @@
 import type { TrialBalance, IncomeStatement, BalanceSheet, GainLossReport } from "$lib/types/index.js";
 import { getBackend } from "$lib/backend.js";
 
+// Module-level cache for balance sheet and income statement
+let _cachedBS = $state<BalanceSheet | null>(null);
+let _cachedIS = $state<IncomeStatement | null>(null);
+let _bsDate: string | null = null;
+let _isFrom: string | null = null;
+let _isTo: string | null = null;
+
 export class ReportStore {
   trialBalance = $state<TrialBalance | null>(null);
-  incomeStatement = $state<IncomeStatement | null>(null);
-  balanceSheet = $state<BalanceSheet | null>(null);
+  incomeStatement = $state<IncomeStatement | null>(_cachedIS);
+  balanceSheet = $state<BalanceSheet | null>(_cachedBS);
   gainLossReport = $state<GainLossReport | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
@@ -22,10 +29,13 @@ export class ReportStore {
   }
 
   async loadIncomeStatement(fromDate: string, toDate: string) {
-    this.loading = true;
+    if (!_cachedIS || _isFrom !== fromDate || _isTo !== toDate) this.loading = true;
     this.error = null;
     try {
       this.incomeStatement = await getBackend().incomeStatement(fromDate, toDate);
+      _cachedIS = this.incomeStatement;
+      _isFrom = fromDate;
+      _isTo = toDate;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -34,10 +44,12 @@ export class ReportStore {
   }
 
   async loadBalanceSheet(asOf: string) {
-    this.loading = true;
+    if (!_cachedBS || _bsDate !== asOf) this.loading = true;
     this.error = null;
     try {
       this.balanceSheet = await getBackend().balanceSheet(asOf);
+      _cachedBS = this.balanceSheet;
+      _bsDate = asOf;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {

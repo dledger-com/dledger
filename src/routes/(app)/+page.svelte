@@ -22,24 +22,35 @@
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import { AreaChart, PieChart } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
+  import {
+    getCachedRecentEntries, setCachedRecentEntries,
+    getCachedSummaries, setCachedSummary,
+    getCachedCharts, setCachedCharts,
+  } from "$lib/data/dashboard-cache.svelte.js";
 
   const accountStore = new AccountStore();
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
 
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
-  let recentLoaded = $state(false);
-  let assetsSummary = $state<ConvertedSummary | null>(null);
-  let liabilitiesSummary = $state<ConvertedSummary | null>(null);
-  let revenueSummary = $state<ConvertedSummary | null>(null);
-  let netIncomeSummary = $state<ConvertedSummary | null>(null);
+
+  // Initialize from cache
+  const cachedRecent = getCachedRecentEntries();
+  const cachedSummaries = getCachedSummaries();
+  const cachedCharts = getCachedCharts();
+
+  let recentLoaded = $state(cachedRecent.loaded);
+  let assetsSummary = $state<ConvertedSummary | null>(cachedSummaries.assets);
+  let liabilitiesSummary = $state<ConvertedSummary | null>(cachedSummaries.liabilities);
+  let revenueSummary = $state<ConvertedSummary | null>(cachedSummaries.revenue);
+  let netIncomeSummary = $state<ConvertedSummary | null>(cachedSummaries.netIncome);
   let showAssets = $state(false);
   let showLiabilities = $state(false);
   let showRevenue = $state(false);
   let showNetIncome = $state(false);
 
   // Recent journal entries (queried directly, not via JournalStore)
-  let recentEntries = $state<[JournalEntry, LineItem[]][]>([]);
+  let recentEntries = $state<[JournalEntry, LineItem[]][]>(cachedRecent.entries);
 
   function debitsByCurrency(items: { amount: string; currency: string }[]): { currency: string; amount: string }[] {
     const map = new Map<string, number>();
@@ -57,9 +68,9 @@
   }
 
   // Charts
-  let netWorthData = $state<NetWorthPoint[]>([]);
-  let expenseData = $state<ExpenseCategory[]>([]);
-  let chartsLoading = $state(true);
+  let netWorthData = $state<NetWorthPoint[]>(cachedCharts.netWorth);
+  let expenseData = $state<ExpenseCategory[]>(cachedCharts.expenses);
+  let chartsLoading = $state(!cachedCharts.loaded);
 
   // Persistent exchange rate cache — rates are immutable by (from, to, date)
   let rateCache: ExchangeRateCache | undefined;
@@ -118,6 +129,7 @@
       ]);
       netWorthData = nw;
       expenseData = exp;
+      setCachedCharts(nw, exp);
     } catch (e) {
       console.error("Charts failed:", e);
     } finally {
@@ -135,8 +147,10 @@
     getBackend()
       .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
       .then((entries) => {
-        recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
+        const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
+        recentEntries = filtered;
         recentLoaded = true;
+        setCachedRecentEntries(filtered);
       })
       .catch((e) => console.error("Recent entries failed:", e));
 
@@ -149,11 +163,11 @@
         convertBalances(
           filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { assetsSummary = s; }).catch(() => {});
+        ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {});
         convertBalances(
           filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { liabilitiesSummary = s; }).catch(() => {});
+        ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {});
       }
     });
 
@@ -163,11 +177,11 @@
         convertBalances(
           filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { revenueSummary = s; }).catch(() => {});
+        ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {});
         convertBalances(
           filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { netIncomeSummary = s; }).catch(() => {});
+        ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {});
       }
     });
 
@@ -192,7 +206,9 @@
   async function refreshRecentEntries() {
     try {
       const entries = await getBackend().queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" });
-      recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
+      const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
+      recentEntries = filtered;
+      setCachedRecentEntries(filtered);
     } catch (e) {
       console.error("Failed to refresh recent entries:", e);
     }
@@ -209,11 +225,11 @@
         convertBalances(
           filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { assetsSummary = s; }).catch(() => {});
+        ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {});
         convertBalances(
           filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { liabilitiesSummary = s; }).catch(() => {});
+        ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {});
       }
     });
 
@@ -222,11 +238,11 @@
         convertBalances(
           filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { revenueSummary = s; }).catch(() => {});
+        ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {});
         convertBalances(
           filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
           base, date, sharedCache,
-        ).then((s) => { netIncomeSummary = s; }).catch(() => {});
+        ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {});
       }
     });
 
