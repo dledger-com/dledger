@@ -52,6 +52,13 @@
     source: (r) => r.source,
   };
 
+  const sortedRates = $derived.by(() => {
+    if (sortRates.key && sortRates.direction) {
+      return sortItems(exchangeRates, rateAccessors[sortRates.key], sortRates.direction);
+    }
+    return exchangeRates;
+  });
+
   // Virtual scrolling for rates
   let scrollEl = $state<HTMLDivElement | null>(null);
 
@@ -70,13 +77,6 @@
   const paddingBottom = $derived(
     virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0,
   );
-
-  const sortedRates = $derived.by(() => {
-    if (sortRates.key && sortRates.direction) {
-      return sortItems(exchangeRates, rateAccessors[sortRates.key], sortRates.direction);
-    }
-    return exchangeRates;
-  });
 
   async function loadCurrencyDetail() {
     const allCurrencies = await getBackend().listCurrencies();
