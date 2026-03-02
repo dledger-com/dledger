@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
-  import { JournalStore } from "$lib/data/journal.svelte.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
+  import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
@@ -21,7 +23,6 @@
   import { scaleTime, scaleLinear } from "d3-scale";
 
   const accountStore = new AccountStore();
-  const journalStore = new JournalStore();
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
 
@@ -35,6 +36,24 @@
   let showLiabilities = $state(false);
   let showRevenue = $state(false);
   let showNetIncome = $state(false);
+
+  // Recent journal entries (queried directly, not via JournalStore)
+  let recentEntries = $state<[JournalEntry, LineItem[]][]>([]);
+
+  function debitsByCurrency(items: { amount: string; currency: string }[]): { currency: string; amount: string }[] {
+    const map = new Map<string, number>();
+    for (const item of items) {
+      const n = parseFloat(item.amount);
+      if (n > 0) map.set(item.currency, (map.get(item.currency) ?? 0) + n);
+    }
+    return [...map].map(([currency, amount]) => ({ currency, amount: String(amount) }));
+  }
+
+  function formatDebitTotal(items: { amount: string; currency: string }[]): string {
+    const byCode = debitsByCurrency(items);
+    if (byCode.length === 0) return formatCurrency(0, settings.currency);
+    return byCode.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
+  }
 
   // Charts
   let netWorthData = $state<NetWorthPoint[]>([]);
@@ -109,7 +128,9 @@
     try {
       await Promise.all([
         accountStore.load(),
-        journalStore.load({ limit: 10 }),
+        getBackend().queryJournalEntries({ limit: 10, order_by: "date", order_direction: "desc" }).then(entries => {
+          recentEntries = filterHiddenEntries(entries, hidden);
+        }),
         reportStore.loadBalanceSheet(today()),
         reportStore.loadIncomeStatement(rangeFromDate(), today()),
       ]);
@@ -333,37 +354,58 @@
   </div>
 
   <!-- Recent Journal Entries -->
-  <Card.Root>
-    <Card.Header>
-      <Card.Title>Recent Journal Entries</Card.Title>
-      <Card.Description>Latest transactions.</Card.Description>
-    </Card.Header>
-    <Card.Content>
-      {#if !ready}
+  <div class="flex items-center justify-between">
+    <h2 class="text-lg font-semibold tracking-tight">Recent Journal Entries</h2>
+    <Button variant="link" size="sm" href="/journal">View all</Button>
+  </div>
+  {#if !ready}
+    <Card.Root class="border-x-0 rounded-none shadow-none">
+      <Card.Content class="py-4">
         <div class="space-y-2">
           {#each [1, 2, 3] as _}
             <Skeleton class="h-10 w-full" />
           {/each}
         </div>
-      {:else if filterHiddenEntries(journalStore.entries, hidden).length === 0}
-        <p class="text-sm text-muted-foreground py-8 text-center">
+      </Card.Content>
+    </Card.Root>
+  {:else if recentEntries.length === 0}
+    <Card.Root class="border-x-0 rounded-none shadow-none">
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
           No journal entries yet. Create your first entry to get started.
         </p>
-      {:else}
-        <div class="space-y-2">
-          {#each filterHiddenEntries(journalStore.entries, hidden) as [entry, items]}
-            <a href="/journal/{entry.id}" class="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors">
-              <div class="flex items-center gap-3">
-                <span class="text-sm text-muted-foreground w-24">{entry.date}</span>
-                <span class="text-sm font-medium">{entry.description}</span>
-              </div>
-              <span class="text-xs px-2 py-0.5 rounded-full {entry.status === 'confirmed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : entry.status === 'voided' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'}">
-                {entry.status}
-              </span>
-            </a>
+      </Card.Content>
+    </Card.Root>
+  {:else}
+    <Card.Root class="border-x-0 rounded-none shadow-none py-0">
+      <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <Table.Head>Date</Table.Head>
+            <Table.Head>Description</Table.Head>
+            <Table.Head class="hidden md:table-cell">Status</Table.Head>
+            <Table.Head class="text-right">Amount</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {#each recentEntries as [entry, items]}
+            <Table.Row>
+              <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
+              <Table.Cell class="max-w-[300px]">
+                <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+              </Table.Cell>
+              <Table.Cell class="hidden md:table-cell">
+                <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
+                  {entry.status}
+                </Badge>
+              </Table.Cell>
+              <Table.Cell class="text-right font-mono">
+                {formatDebitTotal(items)}
+              </Table.Cell>
+            </Table.Row>
           {/each}
-        </div>
-      {/if}
-    </Card.Content>
-  </Card.Root>
+        </Table.Body>
+      </Table.Root>
+    </Card.Root>
+  {/if}
 </div>
