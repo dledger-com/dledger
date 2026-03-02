@@ -162,7 +162,7 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
                 .enable_all()
                 .build()
                 .map_err(|e| format!("runtime error: {e}"))?;
-            rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None, &CancellationToken::new()))
+            rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None, &CancellationToken::new(), false))
         };
         let elapsed = start.elapsed();
         match sync_result {
@@ -305,7 +305,7 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
                 .enable_all()
                 .build()
                 .map_err(|e| format!("runtime error: {e}"))?;
-            rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None, &CancellationToken::new()))
+            rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None, &CancellationToken::new(), false))
         };
         let elapsed = start.elapsed();
         match sync_result {
