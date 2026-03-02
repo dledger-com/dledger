@@ -341,7 +341,7 @@ commodity EUR
       expect(entries[0][0].description).toBe("Fancy Grocery Store");
     });
 
-    it("strips tags and links, stores as metadata", async () => {
+    it("strips tags and links, stores tags as metadata and links in entry_link", async () => {
       const content = `
 2024-01-01 open Assets:Bank
 2024-01-01 open Expenses:Food
@@ -358,7 +358,11 @@ commodity EUR
 
       const meta = await backend.getMetadata(entries[0][0].id);
       expect(meta.tags).toBe("#groceries");
-      expect(meta.links).toBe("^invoice-001");
+      expect(meta.links).toBeUndefined();
+
+      // Links stored in dedicated entry_link table
+      const links = await backend.getEntryLinks(entries[0][0].id);
+      expect(links).toEqual(["invoice-001"]);
     });
 
     it("parses @@ total cost", async () => {
@@ -1091,6 +1095,60 @@ P 2024-01-01 EUR 1.10 USD
 
       expect(exported).toContain('bank-name: "Chase"');
       expect(exported).toContain('invoice-id: "INV-001"');
+    });
+
+    it("exports beancount links in header line", async () => {
+      const input = `
+2024-01-01 open Assets:Bank USD
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Payment" ^invoice-jan ^batch-001
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "beancount");
+
+      expect(exported).toContain('^invoice-jan');
+      expect(exported).toContain('^batch-001');
+      // Links should be on the header line with the description
+      expect(exported).toMatch(/"Payment" \^/);
+    });
+
+    it("exports hledger links as comment", async () => {
+      const input = `
+2024-01-01 open Assets:Bank USD
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Payment" ^invoice-jan
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "hledger");
+
+      expect(exported).toContain('; links: ^invoice-jan');
+    });
+
+    it("round-trips beancount links: import → export → reimport", async () => {
+      const input = `
+2024-01-01 open Assets:Bank USD
+2024-01-01 open Expenses:Food
+
+2024-01-15 * "Payment" ^invoice-jan ^batch-001
+  Expenses:Food  50 USD
+  Assets:Bank  -50 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "beancount");
+
+      const backend2 = await createTestBackend();
+      const result2 = await importLedger(backend2, exported, "beancount");
+      expect(result2.transactions_imported).toBe(1);
+
+      const entries2 = await backend2.queryJournalEntries({});
+      const links2 = await backend2.getEntryLinks(entries2[0][0].id);
+      expect(links2).toEqual(["batch-001", "invoice-jan"]);
     });
 
     it("round-trips beancount import → export → reimport", async () => {

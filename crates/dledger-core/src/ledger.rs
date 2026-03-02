@@ -433,6 +433,29 @@ impl LedgerEngine {
         Ok(self.storage.query_entries_by_metadata(key, value)?)
     }
 
+    // --- Entry links ---
+
+    pub fn set_entry_links(&self, entry_id: &Uuid, links: &[String]) -> LedgerResult<()> {
+        self.storage.set_entry_links(entry_id, links)?;
+        Ok(())
+    }
+
+    pub fn get_entry_links(&self, entry_id: &Uuid) -> LedgerResult<Vec<String>> {
+        Ok(self.storage.get_entry_links(entry_id)?)
+    }
+
+    pub fn get_entries_by_link(&self, link_name: &str) -> LedgerResult<Vec<Uuid>> {
+        Ok(self.storage.get_entries_by_link(link_name)?)
+    }
+
+    pub fn get_all_link_names(&self) -> LedgerResult<Vec<String>> {
+        Ok(self.storage.get_all_link_names()?)
+    }
+
+    pub fn get_all_links_with_counts(&self) -> LedgerResult<Vec<(String, u64)>> {
+        Ok(self.storage.get_all_links_with_counts()?)
+    }
+
     // --- Open lots ---
 
     pub fn list_all_open_lots(&self) -> LedgerResult<Vec<Lot>> {

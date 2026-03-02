@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 15;
+pub const SCHEMA_VERSION: u32 = 16;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -232,6 +232,14 @@ CREATE TABLE IF NOT EXISTS account_metadata (
 );
 CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value);
 
+-- Transaction links (v16)
+CREATE TABLE IF NOT EXISTS entry_link (
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    link_name TEXT NOT NULL,
+    PRIMARY KEY (journal_entry_id, link_name)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -249,6 +257,15 @@ CREATE TABLE IF NOT EXISTS budget (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value);
+"#;
+
+pub const MIGRATION_V16: &str = r#"
+CREATE TABLE IF NOT EXISTS entry_link (
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    link_name TEXT NOT NULL,
+    PRIMARY KEY (journal_entry_id, link_name)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name);
 "#;
 
 pub const MIGRATION_V15: &str = r#"

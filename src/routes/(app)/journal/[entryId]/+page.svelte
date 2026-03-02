@@ -17,6 +17,7 @@
   import { goto } from "$app/navigation";
   import { templateFromEntry } from "$lib/utils/recurring.js";
   import TagInput from "$lib/components/TagInput.svelte";
+  import LinkInput from "$lib/components/LinkInput.svelte";
   import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
 
@@ -31,6 +32,15 @@
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const isHidden = $derived(entryInvolvesHidden(items, hidden));
   const tags = $derived(parseTags(metadata[TAGS_META_KEY]));
+  let entryLinks = $state<string[]>([]);
+  let linkSuggestions = $state<string[]>([]);
+
+  async function handleLinksChange(newLinks: string[]) {
+    const id = entryId;
+    if (!id) return;
+    await getBackend().setEntryLinks(id, newLinks);
+    entryLinks = newLinks;
+  }
 
   async function handleTagsChange(newTags: string[]) {
     const id = entryId;
@@ -56,15 +66,20 @@
     loading = true;
     const id = entryId;
     if (!id) { loading = false; return; }
-    const [entryResult, metaResult] = await Promise.all([
+    const backend = getBackend();
+    const [entryResult, metaResult, linksResult, linkSuggestionsResult] = await Promise.all([
       journalStore.get(id),
-      getBackend().getMetadata(id).catch(() => ({}) as Record<string, string>),
+      backend.getMetadata(id).catch(() => ({}) as Record<string, string>),
+      backend.getEntryLinks(id).catch(() => [] as string[]),
+      backend.getAllLinkNames().catch(() => [] as string[]),
     ]);
     if (entryResult) {
       entry = entryResult.entry;
       items = entryResult.items;
     }
     metadata = metaResult;
+    entryLinks = linksResult;
+    linkSuggestions = linkSuggestionsResult;
     loading = false;
   }
 
@@ -165,13 +180,14 @@
       </Card.Content>
     </Card.Root>
 
-    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY)}
+    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
     <Card.Root>
       <Card.Header class="pb-3">
-        <Card.Title class="text-sm">Tags & Metadata</Card.Title>
+        <Card.Title class="text-sm">Tags, Links & Metadata</Card.Title>
       </Card.Header>
       <Card.Content class="pt-0 space-y-3">
         <TagInput {tags} onchange={handleTagsChange} />
+        <LinkInput links={entryLinks} onchange={handleLinksChange} suggestions={linkSuggestions} />
         {#if displayMeta.length > 0}
           <dl class="grid grid-cols-2 gap-4 text-sm">
             {#each displayMeta as [key, value]}

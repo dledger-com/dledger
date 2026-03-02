@@ -308,6 +308,77 @@ pub fn query_entries_by_metadata(
         .map_err(|e| e.to_string())
 }
 
+// -- Entry link commands --
+
+#[tauri::command]
+pub fn set_entry_links(
+    state: State<'_, AppState>,
+    entry_id: Uuid,
+    links: Vec<String>,
+) -> Result<(), String> {
+    state
+        .engine
+        .set_entry_links(&entry_id, &links)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_entry_links(
+    state: State<'_, AppState>,
+    entry_id: Uuid,
+) -> Result<Vec<String>, String> {
+    state
+        .engine
+        .get_entry_links(&entry_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_entries_by_link(
+    state: State<'_, AppState>,
+    link_name: String,
+) -> Result<Vec<Uuid>, String> {
+    state
+        .engine
+        .get_entries_by_link(&link_name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_all_link_names(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    state
+        .engine
+        .get_all_link_names()
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct LinkWithCount {
+    pub link_name: String,
+    pub entry_count: u64,
+}
+
+#[tauri::command]
+pub fn get_all_links_with_counts(
+    state: State<'_, AppState>,
+) -> Result<Vec<LinkWithCount>, String> {
+    state
+        .engine
+        .get_all_links_with_counts()
+        .map_err(|e| e.to_string())
+        .map(|pairs| {
+            pairs
+                .into_iter()
+                .map(|(link_name, entry_count)| LinkWithCount {
+                    link_name,
+                    entry_count,
+                })
+                .collect()
+        })
+}
+
 // -- Open lots command --
 
 #[derive(serde::Serialize)]

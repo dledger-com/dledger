@@ -15,6 +15,7 @@
   import Plus from "lucide-svelte/icons/plus";
   import AccountCombobox from "$lib/components/AccountCombobox.svelte";
   import TagInput from "$lib/components/TagInput.svelte";
+  import LinkInput from "$lib/components/LinkInput.svelte";
   import MetadataEditor from "$lib/components/MetadataEditor.svelte";
   import { serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
 
@@ -25,8 +26,10 @@
   let description = $state("");
   let currency = $state("EUR");
   let tags = $state<string[]>([]);
+  let entryLinks = $state<string[]>([]);
   let entryMetadata = $state<Record<string, string>>({});
   let tagSuggestions = $state<string[]>([]);
+  let linkSuggestions = $state<string[]>([]);
   let metaKeySuggestions = $state<string[]>([]);
 
   interface FormLine {
@@ -149,6 +152,10 @@
       if (Object.keys(metaToSave).length > 0) {
         await getBackend().setMetadata(entryId, metaToSave);
       }
+      // Save links
+      if (entryLinks.length > 0) {
+        await getBackend().setEntryLinks(entryId, entryLinks);
+      }
       submitting = false;
       toast.success("Journal entry posted");
       goto("/journal");
@@ -162,8 +169,11 @@
     await accountStore.load();
     try {
       const backend = getBackend();
-      tagSuggestions = await backend.getAllTagValues();
-      metaKeySuggestions = await backend.getAllMetadataKeys();
+      [tagSuggestions, linkSuggestions, metaKeySuggestions] = await Promise.all([
+        backend.getAllTagValues(),
+        backend.getAllLinkNames(),
+        backend.getAllMetadataKeys(),
+      ]);
     } catch {
       // Non-critical
     }
@@ -208,6 +218,11 @@
         <div class="space-y-2">
           <label class="text-sm font-medium">Tags</label>
           <TagInput tags={tags} onchange={(t) => { tags = t; }} suggestions={tagSuggestions} />
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Links</label>
+          <LinkInput links={entryLinks} onchange={(l) => { entryLinks = l; }} suggestions={linkSuggestions} />
         </div>
 
         <details class="space-y-2">

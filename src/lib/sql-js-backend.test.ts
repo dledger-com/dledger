@@ -755,4 +755,129 @@ describe("SqlJsBackend", () => {
       expect(all).toHaveLength(0);
     });
   });
+
+  // ---- Entry links ----
+
+  describe("entry links", () => {
+    async function seedEntry(desc = "Test entry"): Promise<string> {
+      // Ensure currency + accounts exist (idempotent: catch dups)
+      await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true }).catch(() => {});
+      const accounts = await backend.listAccounts();
+      let assetId: string, expenseId: string;
+      const existingAsset = accounts.find(a => a.full_name === "Assets");
+      const existingExpense = accounts.find(a => a.full_name === "Expenses");
+      if (existingAsset) {
+        assetId = existingAsset.id;
+      } else {
+        const a = { id: uuidv7(), parent_id: null, account_type: "asset" as const, name: "Assets", full_name: "Assets", allowed_currencies: [] as string[], is_postable: true, is_archived: false, created_at: "2024-01-01" };
+        await backend.createAccount(a);
+        assetId = a.id;
+      }
+      if (existingExpense) {
+        expenseId = existingExpense.id;
+      } else {
+        const e = { id: uuidv7(), parent_id: null, account_type: "expense" as const, name: "Expenses", full_name: "Expenses", allowed_currencies: [] as string[], is_postable: true, is_archived: false, created_at: "2024-01-01" };
+        await backend.createAccount(e);
+        expenseId = e.id;
+      }
+      const entry = makeEntry({ description: desc });
+      const items = [
+        makeLineItem(entry.id, assetId, "USD", "-100"),
+        makeLineItem(entry.id, expenseId, "USD", "100"),
+      ];
+      await backend.postJournalEntry(entry, items);
+      return entry.id;
+    }
+
+    it("returns empty links for entry with no links", async () => {
+      const id = await seedEntry();
+      const links = await backend.getEntryLinks(id);
+      expect(links).toEqual([]);
+    });
+
+    it("sets and gets entry links", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["invoice-jan", "payment-batch"]);
+      const links = await backend.getEntryLinks(id);
+      expect(links).toEqual(["invoice-jan", "payment-batch"]);
+    });
+
+    it("normalizes link names (lowercase, trim)", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["  Invoice-JAN  ", "PAYMENT"]);
+      const links = await backend.getEntryLinks(id);
+      expect(links).toEqual(["invoice-jan", "payment"]);
+    });
+
+    it("replaces links on subsequent set", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["link1", "link2"]);
+      await backend.setEntryLinks(id, ["link3"]);
+      const links = await backend.getEntryLinks(id);
+      expect(links).toEqual(["link3"]);
+    });
+
+    it("clears links when set to empty array", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["link1"]);
+      await backend.setEntryLinks(id, []);
+      const links = await backend.getEntryLinks(id);
+      expect(links).toEqual([]);
+    });
+
+    it("getEntriesByLink returns entry IDs for a link", async () => {
+      const id1 = await seedEntry("Entry 1");
+      const id2 = await seedEntry("Entry 2");
+      await backend.setEntryLinks(id1, ["shared-link"]);
+      await backend.setEntryLinks(id2, ["shared-link", "other"]);
+      const entryIds = await backend.getEntriesByLink("shared-link");
+      expect(entryIds).toHaveLength(2);
+      expect(entryIds).toContain(id1);
+      expect(entryIds).toContain(id2);
+    });
+
+    it("getEntriesByLink excludes voided entries", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["mylink"]);
+      await backend.voidJournalEntry(id);
+      const entryIds = await backend.getEntriesByLink("mylink");
+      expect(entryIds).not.toContain(id);
+    });
+
+    it("getAllLinkNames returns distinct link names", async () => {
+      const id1 = await seedEntry("E1");
+      const id2 = await seedEntry("E2");
+      await backend.setEntryLinks(id1, ["alpha", "beta"]);
+      await backend.setEntryLinks(id2, ["beta", "gamma"]);
+      const names = await backend.getAllLinkNames();
+      expect(names).toEqual(["alpha", "beta", "gamma"]);
+    });
+
+    it("getAllLinksWithCounts returns counts excluding voided", async () => {
+      const id1 = await seedEntry("E1");
+      const id2 = await seedEntry("E2");
+      await backend.setEntryLinks(id1, ["invoice"]);
+      await backend.setEntryLinks(id2, ["invoice"]);
+      await backend.voidJournalEntry(id2);
+      const counts = await backend.getAllLinksWithCounts();
+      const invoiceCount = counts.find(c => c.link_name === "invoice");
+      expect(invoiceCount?.entry_count).toBe(1);
+    });
+
+    it("clearLedgerData clears entry links", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["mylink"]);
+      await backend.clearLedgerData();
+      const names = await backend.getAllLinkNames();
+      expect(names).toHaveLength(0);
+    });
+
+    it("clearAllData clears entry links", async () => {
+      const id = await seedEntry();
+      await backend.setEntryLinks(id, ["mylink"]);
+      await backend.clearAllData();
+      const names = await backend.getAllLinkNames();
+      expect(names).toHaveLength(0);
+    });
+  });
 });

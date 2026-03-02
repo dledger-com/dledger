@@ -148,6 +148,13 @@ export interface Backend {
   getAllTagValues(): Promise<string[]>;
   getAllMetadataKeys(): Promise<string[]>;
 
+  // Entry links
+  setEntryLinks(entryId: string, links: string[]): Promise<void>;
+  getEntryLinks(entryId: string): Promise<string[]>;
+  getEntriesByLink(linkName: string): Promise<string[]>;
+  getAllLinkNames(): Promise<string[]>;
+  getAllLinksWithCounts(): Promise<Array<{ link_name: string; entry_count: number }>>;
+
   // Account metadata
   setAccountMetadata(accountId: string, entries: Record<string, string>): Promise<void>;
   getAccountMetadata(accountId: string): Promise<Record<string, string>>;
@@ -390,6 +397,23 @@ class TauriBackend implements Backend {
   }
   async getAllMetadataKeys(): Promise<string[]> {
     return [];
+  }
+
+  // Entry links
+  async setEntryLinks(entryId: string, links: string[]): Promise<void> {
+    return this.invoke("set_entry_links", { entryId, links });
+  }
+  async getEntryLinks(entryId: string): Promise<string[]> {
+    return this.invoke("get_entry_links", { entryId });
+  }
+  async getEntriesByLink(linkName: string): Promise<string[]> {
+    return this.invoke("get_entries_by_link", { linkName });
+  }
+  async getAllLinkNames(): Promise<string[]> {
+    return this.invoke("get_all_link_names");
+  }
+  async getAllLinksWithCounts(): Promise<Array<{ link_name: string; entry_count: number }>> {
+    return this.invoke("get_all_links_with_counts");
   }
 
   // Account metadata

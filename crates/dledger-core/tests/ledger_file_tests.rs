@@ -1160,6 +1160,13 @@ impl Storage for TestStorage {
         Ok(vec![])
     }
 
+    // -- Entry links (stub) --
+    fn set_entry_links(&self, _entry_id: &Uuid, _links: &[String]) -> StorageResult<()> { Ok(()) }
+    fn get_entry_links(&self, _entry_id: &Uuid) -> StorageResult<Vec<String>> { Ok(vec![]) }
+    fn get_entries_by_link(&self, _link_name: &str) -> StorageResult<Vec<Uuid>> { Ok(vec![]) }
+    fn get_all_link_names(&self) -> StorageResult<Vec<String>> { Ok(vec![]) }
+    fn get_all_links_with_counts(&self) -> StorageResult<Vec<(String, u64)>> { Ok(vec![]) }
+
     fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>> {
         Ok(vec![])
     }

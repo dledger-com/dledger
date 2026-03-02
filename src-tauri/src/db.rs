@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -1097,6 +1097,107 @@ impl Storage for SqliteStorage {
         .collect()
     }
 
+    // -- Entry links --
+
+    fn set_entry_links(&self, entry_id: &Uuid, links: &[String]) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "DELETE FROM entry_link WHERE journal_entry_id = ?1",
+            params![entry_id.to_string()],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut stmt = conn
+            .prepare("INSERT INTO entry_link (journal_entry_id, link_name) VALUES (?1, ?2)")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        for link in links {
+            let normalized = link.trim().to_lowercase();
+            if !normalized.is_empty() {
+                stmt.execute(params![entry_id.to_string(), normalized])
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn get_entry_links(&self, entry_id: &Uuid) -> StorageResult<Vec<String>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT link_name FROM entry_link WHERE journal_entry_id = ?1 ORDER BY link_name",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![entry_id.to_string()], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| StorageError::Internal(e.to_string()))?);
+        }
+        Ok(result)
+    }
+
+    fn get_entries_by_link(&self, link_name: &str) -> StorageResult<Vec<Uuid>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT el.journal_entry_id FROM entry_link el
+                 JOIN journal_entry je ON je.id = el.journal_entry_id
+                 WHERE el.link_name = ?1 AND je.status != 'voided'
+                 ORDER BY je.date DESC",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![link_name], |row| row.get::<_, String>(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut result = Vec::new();
+        for row in rows {
+            let id_str = row.map_err(|e| StorageError::Internal(e.to_string()))?;
+            result.push(parse_uuid(&id_str)?);
+        }
+        Ok(result)
+    }
+
+    fn get_all_link_names(&self) -> StorageResult<Vec<String>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT link_name FROM entry_link ORDER BY link_name")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| StorageError::Internal(e.to_string()))?);
+        }
+        Ok(result)
+    }
+
+    fn get_all_links_with_counts(&self) -> StorageResult<Vec<(String, u64)>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT el.link_name, COUNT(DISTINCT el.journal_entry_id) as cnt
+                 FROM entry_link el
+                 JOIN journal_entry je ON je.id = el.journal_entry_id
+                 WHERE je.status != 'voided'
+                 GROUP BY el.link_name
+                 ORDER BY el.link_name",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| StorageError::Internal(e.to_string()))?);
+        }
+        Ok(result)
+    }
+
     fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
@@ -1324,6 +1425,7 @@ impl Storage for SqliteStorage {
              DELETE FROM lot_disposal;
              DELETE FROM lot;
              DELETE FROM line_item;
+             DELETE FROM entry_link;
              DELETE FROM journal_entry_metadata;
              DELETE FROM balance_assertion;
              DELETE FROM audit_log;
@@ -1347,6 +1449,7 @@ impl Storage for SqliteStorage {
             "DELETE FROM lot_disposal;
              DELETE FROM lot;
              DELETE FROM line_item;
+             DELETE FROM entry_link;
              DELETE FROM journal_entry_metadata;
              DELETE FROM balance_assertion;
              DELETE FROM audit_log;
@@ -2004,6 +2107,36 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
             // Add extended balance assertion columns (idempotent)
             let _ = storage.execute_sql(MIGRATION_V15);
             storage.set_schema_version(15)?;
+        }
+        if current < 16 {
+            storage.execute_sql(MIGRATION_V16)?;
+            // Migrate links from metadata to entry_link table
+            {
+                let conn = storage.conn.borrow();
+                let mut link_stmt = conn.prepare(
+                    "SELECT journal_entry_id, value FROM journal_entry_metadata WHERE key = 'links'"
+                ).map_err(|e| StorageError::Internal(e.to_string()))?;
+                let link_rows: Vec<(String, String)> = link_stmt.query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                }).map_err(|e| StorageError::Internal(e.to_string()))?
+                .filter_map(|r| r.ok())
+                .collect();
+                drop(link_stmt);
+                for (entry_id, value) in &link_rows {
+                    for token in value.split_whitespace() {
+                        let link = token.trim_start_matches('^').to_lowercase();
+                        if !link.is_empty() {
+                            let _ = conn.execute(
+                                "INSERT OR IGNORE INTO entry_link (journal_entry_id, link_name) VALUES (?1, ?2)",
+                                params![entry_id, link],
+                            );
+                        }
+                    }
+                }
+                drop(conn);
+            }
+            storage.execute_sql("DELETE FROM journal_entry_metadata WHERE key = 'links'")?;
+            storage.set_schema_version(16)?;
         }
     }
     Ok(())
@@ -3851,7 +3984,7 @@ mod tests {
 
         apply_migrations(&storage).unwrap();
 
-        assert_eq!(storage.get_schema_version().unwrap(), 15);
+        assert_eq!(storage.get_schema_version().unwrap(), 16);
 
         // Verify budget table exists
         storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();
@@ -3867,5 +4000,9 @@ mod tests {
 
         // Verify currency_token_address table exists
         storage.execute_sql("INSERT INTO currency_token_address (currency, chain, contract_address) VALUES ('USDC', 'ethereum', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48')").unwrap();
+
+        // Verify entry_link table exists (v16)
+        storage.execute_sql("INSERT INTO journal_entry (id, date, description, status, source, created_at) VALUES ('test-je', '2024-01-01', 'test', 'confirmed', 'manual', '2024-01-01')").unwrap();
+        storage.execute_sql("INSERT INTO entry_link (journal_entry_id, link_name) VALUES ('test-je', 'test-link')").unwrap();
     }
 }

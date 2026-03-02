@@ -148,6 +148,14 @@ pub trait Storage: Send + Sync {
     fn get_metadata(&self, journal_entry_id: &Uuid) -> StorageResult<Vec<Metadata>>;
     fn query_entries_by_metadata(&self, key: &str, value: &str) -> StorageResult<Vec<Uuid>>;
 
+    // -- Entry links --
+
+    fn set_entry_links(&self, entry_id: &Uuid, links: &[String]) -> StorageResult<()>;
+    fn get_entry_links(&self, entry_id: &Uuid) -> StorageResult<Vec<String>>;
+    fn get_entries_by_link(&self, link_name: &str) -> StorageResult<Vec<Uuid>>;
+    fn get_all_link_names(&self) -> StorageResult<Vec<String>>;
+    fn get_all_links_with_counts(&self) -> StorageResult<Vec<(String, u64)>>;
+
     // -- Open lots --
 
     fn list_all_open_lots(&self) -> StorageResult<Vec<Lot>>;

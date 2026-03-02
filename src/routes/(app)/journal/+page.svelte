@@ -24,6 +24,7 @@
 
   import ListFilter from "$lib/components/ListFilter.svelte";
   import TagDisplay from "$lib/components/TagDisplay.svelte";
+  import LinkDisplay from "$lib/components/LinkDisplay.svelte";
   import { parseTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import { formatExtension, type LedgerFormat } from "$lib/ledger-format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
@@ -150,6 +151,30 @@
         if (tags.length > 0) map.set(entries[i][0].id, tags);
       }
       entryTags = map;
+    })();
+  });
+
+  let entryLinks = $state<Map<string, string[]>>(new Map());
+  let linkGen = 0;
+
+  $effect(() => {
+    const entries = filteredEntries;
+    if (entries.length === 0) {
+      entryLinks = new Map();
+      return;
+    }
+    const gen = ++linkGen;
+    const backend = getBackend();
+    (async () => {
+      const map = new Map<string, string[]>();
+      const links = await Promise.all(
+        entries.map(([e]) => backend.getEntryLinks(e.id).catch(() => [] as string[])),
+      );
+      if (gen !== linkGen) return;
+      for (let i = 0; i < entries.length; i++) {
+        if (links[i].length > 0) map.set(entries[i][0].id, links[i]);
+      }
+      entryLinks = map;
     })();
   });
 
@@ -377,6 +402,9 @@
                   <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
                     <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
+                  {/if}
+                  {#if entryLinks.get(entry.id)?.length}
+                    <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
                   {/if}
                 </div>
               </Table.Cell>

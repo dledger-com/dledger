@@ -16,6 +16,7 @@ import {
   computeEntryFingerprint,
   computeEntryAmountFingerprint,
 } from "./csv-presets/dedup.js";
+import { parseLinks, serializeLinksForExport } from "./utils/links.js";
 
 // ---- Helpers ----
 
@@ -1022,10 +1023,16 @@ export async function importLedger(
       // Store beancount tags/links/metadata
       if (fmt === "beancount") {
         if (tags) txnMetadata["tags"] = tags;
-        if (links) txnMetadata["links"] = links;
       }
       if (Object.keys(txnMetadata).length > 0) {
         await backend.setMetadata(entryId, txnMetadata);
+      }
+      // Store links in dedicated entry_link table
+      if (fmt === "beancount" && links) {
+        const parsedLinks = parseLinks(links);
+        if (parsedLinks.length > 0) {
+          await backend.setEntryLinks(entryId, parsedLinks);
+        }
       }
 
       // Collect unique (currency, date) pairs for historical rate backfill
@@ -1330,9 +1337,21 @@ export async function exportLedger(
     if (entry.status === "voided") continue;
     const statusMarker = entry.status === "confirmed" ? " *" : " !";
 
+    // Load links for this entry
+    let entryLinks: string[] = [];
+    try {
+      entryLinks = await backend.getEntryLinks(entry.id);
+    } catch {
+      // skip on error
+    }
+
     if (format === "beancount") {
-      // Beancount: quoted description
-      out += `${entry.date}${statusMarker} "${entry.description}"\n`;
+      // Beancount: quoted description with optional ^links
+      let header = `${entry.date}${statusMarker} "${entry.description}"`;
+      if (entryLinks.length > 0) {
+        header += ` ${serializeLinksForExport(entryLinks)}`;
+      }
+      out += header + "\n";
       // Emit transaction metadata
       try {
         const meta = await backend.getMetadata(entry.id);
@@ -1345,6 +1364,10 @@ export async function exportLedger(
       }
     } else if (format === "hledger") {
       out += `${entry.date}${statusMarker} ${entry.description}\n`;
+      // Emit links as comment (hledger has no native link syntax)
+      if (entryLinks.length > 0) {
+        out += `  ; links: ${serializeLinksForExport(entryLinks)}\n`;
+      }
       // Emit transaction metadata as comments
       try {
         const meta = await backend.getMetadata(entry.id);

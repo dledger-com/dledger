@@ -253,6 +253,13 @@ CREATE TABLE IF NOT EXISTS exchange_account (
     last_sync TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS entry_link (
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    link_name TEXT NOT NULL,
+    PRIMARY KEY (journal_entry_id, link_name)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name);
 `;
 
 // ---- Row type helpers ----
@@ -433,7 +440,14 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (account_id, key)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-    db.exec("INSERT INTO schema_version (version) VALUES (15)");
+    // Entry links (v16)
+    db.exec(`CREATE TABLE IF NOT EXISTS entry_link (
+      journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+      link_name TEXT NOT NULL,
+      PRIMARY KEY (journal_entry_id, link_name)
+    )`);
+    db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
+    db.exec("INSERT INTO schema_version (version) VALUES (16)");
     return backend;
   }
 
@@ -458,7 +472,7 @@ export class SqlJsBackend implements Backend {
         PRIMARY KEY (account_id, key)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-      db.exec("INSERT INTO schema_version (version) VALUES (15)");
+      db.exec("INSERT INTO schema_version (version) VALUES (16)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -616,9 +630,33 @@ export class SqlJsBackend implements Backend {
           db.exec("ALTER TABLE balance_assertion ADD COLUMN is_strict INTEGER NOT NULL DEFAULT 0");
           db.exec("ALTER TABLE balance_assertion ADD COLUMN include_subaccounts INTEGER NOT NULL DEFAULT 0");
         }
-        if (currentVersion < 15) {
+        if (currentVersion < 16) {
+          // Migrate v15 → v16: entry_link table
+          db.exec(`CREATE TABLE IF NOT EXISTS entry_link (
+            journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+            link_name TEXT NOT NULL,
+            PRIMARY KEY (journal_entry_id, link_name)
+          )`);
+          db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
+          // Migrate links from metadata to entry_link table
+          const linkRows = db.exec("SELECT journal_entry_id, value FROM journal_entry_metadata WHERE key = 'links'");
+          if (linkRows.length > 0 && linkRows[0].values.length > 0) {
+            const insertStmt = db.prepare("INSERT OR IGNORE INTO entry_link (journal_entry_id, link_name) VALUES (?, ?)");
+            for (const row of linkRows[0].values) {
+              const entryIdVal = row[0] as string;
+              const value = row[1] as string;
+              const links = value.split(/\s+/).map(l => l.replace(/^\^+/, "").toLowerCase()).filter(l => l.length > 0);
+              for (const link of links) {
+                insertStmt.bind([entryIdVal, link]);
+                insertStmt.step();
+                insertStmt.reset();
+              }
+            }
+            insertStmt.free();
+          }
+          db.exec("DELETE FROM journal_entry_metadata WHERE key = 'links'");
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (15)");
+          db.exec("INSERT INTO schema_version (version) VALUES (16)");
         }
       }
     }
@@ -2809,6 +2847,62 @@ export class SqlJsBackend implements Backend {
     );
   }
 
+  // ---- Backend: Entry Links ----
+
+  async setEntryLinks(entryId: string, links: string[]): Promise<void> {
+    this.run("DELETE FROM entry_link WHERE journal_entry_id = ?", [entryId]);
+    for (const link of links) {
+      const normalized = link.trim().toLowerCase();
+      if (normalized) {
+        this.run(
+          "INSERT OR IGNORE INTO entry_link (journal_entry_id, link_name) VALUES (?, ?)",
+          [entryId, normalized],
+        );
+      }
+    }
+    this.scheduleSave();
+  }
+
+  async getEntryLinks(entryId: string): Promise<string[]> {
+    return this.query(
+      "SELECT link_name FROM entry_link WHERE journal_entry_id = ? ORDER BY link_name",
+      [entryId],
+      (row) => row.link_name as string,
+    );
+  }
+
+  async getEntriesByLink(linkName: string): Promise<string[]> {
+    return this.query(
+      `SELECT el.journal_entry_id FROM entry_link el
+       JOIN journal_entry je ON je.id = el.journal_entry_id
+       WHERE el.link_name = ? AND je.status != 'voided'
+       ORDER BY je.date DESC`,
+      [linkName],
+      (row) => row.journal_entry_id as string,
+    );
+  }
+
+  async getAllLinkNames(): Promise<string[]> {
+    return this.query(
+      "SELECT DISTINCT link_name FROM entry_link ORDER BY link_name",
+      [],
+      (row) => row.link_name as string,
+    );
+  }
+
+  async getAllLinksWithCounts(): Promise<Array<{ link_name: string; entry_count: number }>> {
+    return this.query(
+      `SELECT el.link_name, COUNT(DISTINCT el.journal_entry_id) as entry_count
+       FROM entry_link el
+       JOIN journal_entry je ON je.id = el.journal_entry_id
+       WHERE je.status != 'voided'
+       GROUP BY el.link_name
+       ORDER BY el.link_name`,
+      [],
+      (row) => ({ link_name: row.link_name as string, entry_count: row.entry_count as number }),
+    );
+  }
+
   // ---- Backend: Account Metadata ----
 
   async setAccountMetadata(accountId: string, entries: Record<string, string>): Promise<void> {
@@ -3341,6 +3435,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM lot_disposal;
       DELETE FROM lot;
       DELETE FROM line_item;
+      DELETE FROM entry_link;
       DELETE FROM journal_entry_metadata;
       DELETE FROM balance_assertion;
       DELETE FROM audit_log;
@@ -3367,6 +3462,7 @@ export class SqlJsBackend implements Backend {
       DELETE FROM lot_disposal;
       DELETE FROM lot;
       DELETE FROM line_item;
+      DELETE FROM entry_link;
       DELETE FROM journal_entry_metadata;
       DELETE FROM balance_assertion;
       DELETE FROM audit_log;
