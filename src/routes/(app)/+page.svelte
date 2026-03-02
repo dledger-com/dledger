@@ -125,61 +125,67 @@
     }
   }
 
-  onMount(async () => {
-    try {
-      await Promise.all([
-        accountStore.load(),
-        getBackend().queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" }).then(entries => {
-          recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
-          recentLoaded = true;
-        }),
-        reportStore.loadBalanceSheet(today()),
-        reportStore.loadIncomeStatement(rangeFromDate(), today()),
-      ]);
-    } catch (e) {
-      console.error("Dashboard load failed:", e);
-    }
-
-    // Shared exchange rate cache for all conversions + charts
+  onMount(() => {
     const date = today();
     const base = settings.currency;
     const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
     const sharedCache = getOrCreateRateCache();
 
-    try {
-      const promises: Promise<void>[] = [];
+    // Stream 1: Recent entries (independent, fast single query)
+    getBackend()
+      .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
+      .then((entries) => {
+        recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
+        recentLoaded = true;
+      })
+      .catch((e) => console.error("Recent entries failed:", e));
+
+    // Stream 2: Account store (independent, for name lookups)
+    accountStore.load();
+
+    // Stream 3: Balance sheet → assets/liabilities cards (independent chain)
+    const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
       if (reportStore.balanceSheet) {
-        promises.push(
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet), base, date, sharedCache)
-            .then(s => { assetsSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet), base, date, sharedCache)
-            .then(s => { liabilitiesSummary = s; }),
-        );
+        convertBalances(
+          filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { assetsSummary = s; }).catch(() => {});
+        convertBalances(
+          filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { liabilitiesSummary = s; }).catch(() => {});
       }
+    });
+
+    // Stream 4: Income statement → revenue/net income cards (independent chain)
+    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
       if (reportStore.incomeStatement) {
-        promises.push(
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet), base, date, sharedCache)
-            .then(s => { revenueSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet), base, date, sharedCache)
-            .then(s => { netIncomeSummary = s; }),
-        );
+        convertBalances(
+          filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { revenueSummary = s; }).catch(() => {});
+        convertBalances(
+          filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { netIncomeSummary = s; }).catch(() => {});
       }
-      await Promise.all(promises);
-    } catch (e) {
-      console.error("Currency conversion failed:", e);
-    }
+    });
 
-    // Load charts (non-blocking), reusing the shared cache
-    loadCharts(sharedCache);
+    // Stream 5: Charts (need both reports, but NOT conversions)
+    Promise.all([bsPromise, isPromise])
+      .then(() => loadCharts(sharedCache))
+      .catch((e) => console.error("Charts failed:", e));
 
-    // Check for due recurring templates
-    countDueTemplates(getBackend()).then((count) => {
-      if (count > 0) {
-        toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
-          action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
-        });
-      }
-    }).catch(() => {});
+    // Stream 6: Recurring templates toast (independent)
+    countDueTemplates(getBackend())
+      .then((count) => {
+        if (count > 0) {
+          toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
+            action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
+          });
+        }
+      })
+      .catch(() => {});
   });
 
   // ── Invalidation subscriptions ──────────────────────────────────
@@ -192,40 +198,41 @@
     }
   }
 
-  async function refreshReports() {
-    try {
-      const sharedCache = getOrCreateRateCache();
-      const date = today();
-      const base = settings.currency;
-      const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
+  function refreshReports() {
+    const sharedCache = getOrCreateRateCache();
+    const date = today();
+    const base = settings.currency;
+    const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
 
-      await Promise.all([
-        reportStore.loadBalanceSheet(date),
-        reportStore.loadIncomeStatement(rangeFromDate(), date),
-      ]);
-
-      const promises: Promise<void>[] = [];
+    const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
       if (reportStore.balanceSheet) {
-        promises.push(
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet), base, date, sharedCache)
-            .then(s => { assetsSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet), base, date, sharedCache)
-            .then(s => { liabilitiesSummary = s; }),
-        );
+        convertBalances(
+          filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { assetsSummary = s; }).catch(() => {});
+        convertBalances(
+          filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { liabilitiesSummary = s; }).catch(() => {});
       }
+    });
+
+    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
       if (reportStore.incomeStatement) {
-        promises.push(
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet), base, date, sharedCache)
-            .then(s => { revenueSummary = s; }),
-          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet), base, date, sharedCache)
-            .then(s => { netIncomeSummary = s; }),
-        );
+        convertBalances(
+          filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { revenueSummary = s; }).catch(() => {});
+        convertBalances(
+          filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
+          base, date, sharedCache,
+        ).then((s) => { netIncomeSummary = s; }).catch(() => {});
       }
-      await Promise.all(promises);
-      loadCharts(sharedCache);
-    } catch (e) {
-      console.error("Failed to refresh reports:", e);
-    }
+    });
+
+    Promise.all([bsPromise, isPromise])
+      .then(() => loadCharts(sharedCache))
+      .catch((e) => console.error("Failed to refresh reports:", e));
   }
 
   const unsubJournal = onInvalidate("journal", refreshRecentEntries);

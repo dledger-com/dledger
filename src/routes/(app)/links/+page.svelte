@@ -1,21 +1,31 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { getBackend } from "$lib/backend.js";
   import { linkColor } from "$lib/utils/links.js";
+  import { getCachedLinks, setCachedLinks } from "$lib/data/links-cache.svelte.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import Link2 from "lucide-svelte/icons/link-2";
   import { cn } from "$lib/utils.js";
 
-  let linksWithCounts = $state<Array<{ link_name: string; entry_count: number }>>([]);
-  let loading = $state(true);
+  const cached = getCachedLinks();
+  let linksWithCounts = $state(cached ?? []);
+  let loading = $state(cached === null);
 
   onMount(async () => {
     linksWithCounts = await getBackend().getAllLinksWithCounts();
+    setCachedLinks(linksWithCounts);
     loading = false;
   });
+
+  const unsubJournal = onInvalidate("journal", async () => {
+    linksWithCounts = await getBackend().getAllLinksWithCounts();
+    setCachedLinks(linksWithCounts);
+  });
+  onDestroy(unsubJournal);
 </script>
 
 <div class="space-y-6">

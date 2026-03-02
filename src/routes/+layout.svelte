@@ -4,6 +4,7 @@
   import { Toaster } from "$lib/components/ui/sonner/index.js";
   import { initBackend, getBackend, disposeBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { preWarmAccountCache } from "$lib/data/accounts.svelte.js";
   import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { initInvalidationChannel, disposeInvalidationChannel } from "$lib/data/invalidation.js";
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
@@ -33,6 +34,14 @@
         // Configure account paths from saved settings before rendering children
         const settings = new SettingsStore();
         ready = true;
+
+        // Pre-warm account cache for faster first navigation
+        Promise.all([
+          backend.listAccounts(),
+          backend.listCurrencies(),
+        ]).then(([accounts, currencies]) => {
+          preWarmAccountCache(accounts, currencies);
+        }).catch(() => {});
         const today = new Date().toISOString().slice(0, 10);
         if (settings.lastRateSync !== today) {
           taskQueue.enqueue({

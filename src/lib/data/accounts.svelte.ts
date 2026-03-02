@@ -2,10 +2,21 @@ import type { Account, AccountType, Currency, CurrencyBalance } from "$lib/types
 import { getBackend } from "$lib/backend.js";
 import { invalidate } from "$lib/data/invalidation.js";
 
+// Module-level cache (persists across SPA navigations)
+let _cachedAccounts = $state<Account[]>([]);
+let _cachedCurrencies = $state<Currency[]>([]);
+let _cacheLoaded = false;
+
+export function preWarmAccountCache(accounts: Account[], currencies: Currency[]) {
+  _cachedAccounts = accounts;
+  _cachedCurrencies = currencies;
+  _cacheLoaded = true;
+}
+
 export class AccountStore {
-  accounts = $state<Account[]>([]);
-  currencies = $state<Currency[]>([]);
-  loading = $state(false);
+  accounts = $state<Account[]>(_cachedAccounts);
+  currencies = $state<Currency[]>(_cachedCurrencies);
+  loading = $state(!_cacheLoaded);
   error = $state<string | null>(null);
 
   readonly active = $derived(this.accounts.filter((a) => !a.is_archived));
@@ -33,13 +44,16 @@ export class AccountStore {
   );
 
   async load() {
-    this.loading = true;
+    if (!_cacheLoaded) this.loading = true;
     this.error = null;
     try {
       const [accounts, currencies] = await Promise.all([
         getBackend().listAccounts(),
         getBackend().listCurrencies(),
       ]);
+      _cachedAccounts = accounts;
+      _cachedCurrencies = currencies;
+      _cacheLoaded = true;
       this.accounts = accounts;
       this.currencies = currencies;
     } catch (e) {
