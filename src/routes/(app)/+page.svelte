@@ -71,6 +71,7 @@
   let netWorthData = $state<NetWorthPoint[]>(cachedCharts.netWorth);
   let expenseData = $state<ExpenseCategory[]>(cachedCharts.expenses);
   let chartsLoading = $state(!cachedCharts.loaded);
+  let chartsReady = $state(false);
 
   // Persistent exchange rate cache — rates are immutable by (from, to, date)
   let rateCache: ExchangeRateCache | undefined;
@@ -138,6 +139,8 @@
   }
 
   onMount(() => {
+    requestAnimationFrame(() => { chartsReady = true; });
+
     const date = today();
     const base = settings.currency;
     const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
@@ -370,7 +373,7 @@
         <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if chartsLoading}
+        {#if !chartsReady || chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
           <p class="text-sm text-muted-foreground py-12 text-center">
@@ -399,7 +402,7 @@
         <Card.Description>Breakdown by category.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if chartsLoading}
+        {#if !chartsReady || chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if expenseData.length === 0}
           <p class="text-sm text-muted-foreground py-12 text-center">No expenses in period.</p>

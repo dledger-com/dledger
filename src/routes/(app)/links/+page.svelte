@@ -8,6 +8,7 @@
   import { linkColor } from "$lib/utils/links.js";
   import { getCachedLinks, setCachedLinks } from "$lib/data/links-cache.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
+  import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
   import Link2 from "lucide-svelte/icons/link-2";
   import { cn } from "$lib/utils.js";
 
@@ -26,6 +27,25 @@
     setCachedLinks(linksWithCounts);
   });
   onDestroy(unsubJournal);
+
+  // Virtual scrolling
+  let scrollEl = $state<HTMLDivElement | null>(null);
+
+  const virtualizer = createVirtualizer(() => ({
+    count: linksWithCounts.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => 40,
+    overscan: 10,
+  }));
+
+  const virtualItems = $derived(
+    virtualizer.getVirtualItems().filter((row) => row.index < linksWithCounts.length)
+  );
+  const totalSize = $derived(virtualizer.getTotalSize());
+  const paddingTop = $derived(virtualItems.length > 0 ? virtualItems[0].start : 0);
+  const paddingBottom = $derived(
+    virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
+  );
 </script>
 
 <div class="space-y-6">
@@ -52,15 +72,20 @@
     </Card.Root>
   {:else}
     <Card.Root>
+      <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-180px)] [&_[data-slot=table-container]]:overflow-visible">
       <Table.Root>
-        <Table.Header>
+        <Table.Header class="sticky top-0 z-10 bg-background">
           <Table.Row>
             <Table.Head>Link</Table.Head>
             <Table.Head class="text-right">Entries</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each linksWithCounts as { link_name, entry_count } (link_name)}
+          {#if paddingTop > 0}
+            <tr><td style="height: {paddingTop}px;" colspan="2"></td></tr>
+          {/if}
+          {#each virtualItems as row (row.key)}
+            {@const { link_name, entry_count } = linksWithCounts[row.index]}
             <Table.Row>
               <Table.Cell>
                 <a href="/links/{encodeURIComponent(link_name)}" class="inline-flex">
@@ -73,8 +98,12 @@
               <Table.Cell class="text-right font-mono">{entry_count}</Table.Cell>
             </Table.Row>
           {/each}
+          {#if paddingBottom > 0}
+            <tr><td style="height: {paddingBottom}px;" colspan="2"></td></tr>
+          {/if}
         </Table.Body>
       </Table.Root>
+      </div>
     </Card.Root>
   {/if}
 </div>
