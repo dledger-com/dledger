@@ -214,6 +214,9 @@ export class KrakenAdapter implements CexAdapter {
           fee: entry.fee,
           timestamp: entry.time,
           txid: null, // Ledgers API doesn't include txid; enriched separately if needed
+          metadata: {
+            "ledger:aclass": entry.aclass,
+          },
         });
       }
 

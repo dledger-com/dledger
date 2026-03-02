@@ -19,6 +19,7 @@ export interface CexLedgerRecord {
   fee: string;
   timestamp: number;
   txid: string | null;
+  metadata?: Record<string, string>;
 }
 
 export interface CexSyncResult {

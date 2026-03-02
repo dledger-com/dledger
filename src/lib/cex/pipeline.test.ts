@@ -681,4 +681,96 @@ describe("CEX Pipeline", () => {
       expect(accounts[0].last_sync).toBeTruthy();
     });
   });
+
+  describe("Metadata enrichment", () => {
+    it("propagates record metadata to trade entries", async () => {
+      const records: CexLedgerRecord[] = [
+        {
+          refid: "META01", type: "trade", asset: "EUR", amount: "-1000", fee: "0",
+          timestamp: ts("2024-03-15"), txid: null,
+          metadata: { "trade:symbol": "BTCEUR", "trade:side": "buy", "trade:price": "20000" },
+        },
+        {
+          refid: "META01", type: "trade", asset: "BTC", amount: "0.05", fee: "0",
+          timestamp: ts("2024-03-15"), txid: null,
+          metadata: { "trade:symbol": "BTCEUR", "trade:side": "buy", "trade:price": "20000" },
+        },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      const entries = await backend.queryJournalEntries({ source: "kraken:META01" });
+      const meta = await backend.getMetadata(entries[0][0].id);
+
+      expect(meta.exchange).toBe("kraken");
+      expect(meta.refid).toBe("META01");
+      expect(meta["trade:symbol"]).toBe("BTCEUR");
+      expect(meta["trade:side"]).toBe("buy");
+      expect(meta["trade:price"]).toBe("20000");
+    });
+
+    it("propagates record metadata to deposit entries", async () => {
+      const records: CexLedgerRecord[] = [
+        {
+          refid: "META02", type: "deposit", asset: "ETH", amount: "5", fee: "0",
+          timestamp: ts("2024-03-01"), txid: null,
+          metadata: { "deposit:network": "ETH", "deposit:status": "1" },
+        },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      const entries = await backend.queryJournalEntries({ source: "kraken:META02" });
+      const meta = await backend.getMetadata(entries[0][0].id);
+
+      expect(meta.exchange).toBe("kraken");
+      expect(meta["deposit:network"]).toBe("ETH");
+      expect(meta["deposit:status"]).toBe("1");
+    });
+
+    it("propagates record metadata to withdrawal entries", async () => {
+      const records: CexLedgerRecord[] = [
+        {
+          refid: "META03", type: "withdrawal", asset: "BTC", amount: "-0.5", fee: "0.0005",
+          timestamp: ts("2024-03-01"), txid: null,
+          metadata: { "withdrawal:network": "BTC", "withdrawal:fee": "0.0005" },
+        },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      const entries = await backend.queryJournalEntries({ source: "kraken:META03" });
+      const meta = await backend.getMetadata(entries[0][0].id);
+
+      expect(meta.exchange).toBe("kraken");
+      expect(meta["withdrawal:network"]).toBe("BTC");
+      expect(meta["withdrawal:fee"]).toBe("0.0005");
+    });
+
+    it("propagates record metadata to staking entries", async () => {
+      const records: CexLedgerRecord[] = [
+        {
+          refid: "META04", type: "staking", asset: "DOT", amount: "1.5", fee: "0",
+          timestamp: ts("2024-03-01"), txid: null,
+          metadata: { "ledger:aclass": "currency" },
+        },
+      ];
+
+      const account = makeExchangeAccount();
+      await backend.addExchangeAccount(account);
+      await syncCexAccount(backend, makeMockAdapter(records), account);
+
+      const entries = await backend.queryJournalEntries({ source: "kraken:META04" });
+      const meta = await backend.getMetadata(entries[0][0].id);
+
+      expect(meta.exchange).toBe("kraken");
+      expect(meta["ledger:aclass"]).toBe("currency");
+    });
+  });
 });

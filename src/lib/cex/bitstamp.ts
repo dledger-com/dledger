@@ -195,6 +195,9 @@ export class BitstampAdapter implements CexAdapter {
         if (type === "trade") {
           // Create two records (one per currency), share the same refid
           const refid = `trade:${tx.id}`;
+          const tradeMeta: Record<string, string> | undefined = tx.order_id
+            ? { "trade:order_id": String(tx.order_id) }
+            : undefined;
           for (const [currKey, amount] of currencyFields) {
             const isSold = parseFloat(amount) < 0;
             records.push({
@@ -205,6 +208,7 @@ export class BitstampAdapter implements CexAdapter {
               fee: isSold ? tx.fee : "0",
               timestamp: timestamp_s,
               txid: null,
+              metadata: tradeMeta,
             });
           }
         } else if (type === "deposit") {

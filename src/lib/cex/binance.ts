@@ -240,6 +240,16 @@ export class BinanceAdapter implements CexAdapter {
           const refid = `${trade.symbol}:${trade.id}`;
           const { base, quote } = parsed;
 
+          const tradeMeta: Record<string, string> = {
+            "trade:symbol": trade.symbol,
+            "trade:side": trade.isBuyer ? "buy" : "sell",
+            "trade:price": trade.price,
+            "trade:quantity": trade.qty,
+            "trade:quote_amount": trade.quoteQty,
+            "trade:commission": trade.commission,
+            "trade:commission_asset": trade.commissionAsset,
+          };
+
           // Base asset record
           records.push({
             refid,
@@ -249,6 +259,7 @@ export class BinanceAdapter implements CexAdapter {
             fee: trade.commissionAsset === base ? trade.commission : "0",
             timestamp: trade.time / 1000,
             txid: null,
+            metadata: tradeMeta,
           });
 
           // Quote asset record
@@ -260,6 +271,7 @@ export class BinanceAdapter implements CexAdapter {
             fee: trade.commissionAsset === quote ? trade.commission : "0",
             timestamp: trade.time / 1000,
             txid: null,
+            metadata: tradeMeta,
           });
 
           // If commission asset is neither base nor quote, add a 3rd record
@@ -272,6 +284,7 @@ export class BinanceAdapter implements CexAdapter {
               fee: trade.commission,
               timestamp: trade.time / 1000,
               txid: null,
+              metadata: tradeMeta,
             });
           }
         }
@@ -336,6 +349,10 @@ export class BinanceAdapter implements CexAdapter {
             fee: "0",
             timestamp: dep.insertTime / 1000,
             txid: dep.txId ? normalizeTxid(dep.txId) : null,
+            metadata: {
+              "deposit:network": dep.network,
+              "deposit:status": String(dep.status),
+            },
           });
         }
 
@@ -396,6 +413,11 @@ export class BinanceAdapter implements CexAdapter {
             fee: wd.transactionFee,
             timestamp: Date.parse(wd.applyTime) / 1000,
             txid: wd.txId ? normalizeTxid(wd.txId) : null,
+            metadata: {
+              "withdrawal:network": wd.network,
+              "withdrawal:fee": wd.transactionFee,
+              "withdrawal:status": String(wd.status),
+            },
           });
         }
 

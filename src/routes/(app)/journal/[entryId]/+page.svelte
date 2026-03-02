@@ -52,13 +52,30 @@
   let loading = $state(true);
 
   function formatMetaKey(key: string): string {
-    let display = key.replace(/^handler:/, "");
+    let display = key
+      .replace(/^handler:/, "")
+      .replace(/^tx:/, "")
+      .replace(/^trade:/, "")
+      .replace(/^deposit:/, "")
+      .replace(/^withdrawal:/, "")
+      .replace(/^ledger:/, "")
+      .replace(/^v2:/, "");
     return display.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function truncateAddress(addr: string): string {
+    if (addr.length > 16 && addr.startsWith("0x")) {
+      return `${addr.slice(0, 6)}...${addr.slice(-6)}`;
+    }
+    return addr;
   }
 
   function formatMetaValue(key: string, value: string): string {
     if (key.endsWith("usd_value")) return `$${value}`;
     if (key.endsWith("implied_apy")) return `${value}%`;
+    if (key === "tx:from" || key === "tx:to" || key === "tx:hash") return truncateAddress(value);
+    if (key === "tx:gas_price_gwei") return `${value} gwei`;
+    if (key === "tx:contracts") return value.split(",").map(truncateAddress).join(", ");
     return value;
   }
 

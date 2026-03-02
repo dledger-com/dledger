@@ -255,6 +255,16 @@ export class BybitAdapter implements CexAdapter {
           // Compute quote amount = execQty * execPrice
           const quoteAmount = (parseFloat(qty) * parseFloat(price)).toString();
 
+          const tradeMeta: Record<string, string> = {
+            "trade:symbol": exec.symbol,
+            "trade:side": exec.side.toLowerCase(),
+            "trade:price": price,
+            "trade:quantity": qty,
+            "trade:commission": exec.execFee,
+            "trade:commission_asset": exec.feeCurrency,
+            "trade:order_id": exec.orderId,
+          };
+
           // Base leg
           records.push({
             refid: exec.execId,
@@ -264,6 +274,7 @@ export class BybitAdapter implements CexAdapter {
             fee: exec.feeCurrency === base ? exec.execFee : "0",
             timestamp: ts,
             txid: null,
+            metadata: tradeMeta,
           });
 
           // Quote leg
@@ -275,6 +286,7 @@ export class BybitAdapter implements CexAdapter {
             fee: exec.feeCurrency === quote ? exec.execFee : "0",
             timestamp: ts,
             txid: null,
+            metadata: tradeMeta,
           });
         }
 

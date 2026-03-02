@@ -202,6 +202,16 @@ export class OkxAdapter implements CexAdapter {
           const absFee = String(Math.abs(parseFloat(fill.fee)));
           const quoteAmount = String(parseFloat(fillSz) * parseFloat(fillPx));
 
+          const tradeMeta: Record<string, string> = {
+            "trade:symbol": fill.instId,
+            "trade:side": fill.side,
+            "trade:price": fillPx,
+            "trade:quantity": fillSz,
+            "trade:commission": absFee,
+            "trade:commission_asset": fill.feeCcy,
+            "trade:order_id": fill.ordId,
+          };
+
           // Base asset record
           records.push({
             refid,
@@ -211,6 +221,7 @@ export class OkxAdapter implements CexAdapter {
             fee: fill.feeCcy === base ? absFee : "0",
             timestamp: Number(fill.ts) / 1000,
             txid: null,
+            metadata: tradeMeta,
           });
 
           // Quote asset record
@@ -222,6 +233,7 @@ export class OkxAdapter implements CexAdapter {
             fee: fill.feeCcy === quote ? absFee : "0",
             timestamp: Number(fill.ts) / 1000,
             txid: null,
+            metadata: tradeMeta,
           });
         }
 

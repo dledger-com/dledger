@@ -4,6 +4,7 @@ import type { HandlerRegistry } from "./registry.js";
 import type { HandlerContext, TxHashGroup } from "./types.js";
 import type {
   Account,
+  ChainInfo,
   JournalEntry,
   LineItem,
   EtherscanSyncResult,
@@ -14,6 +15,8 @@ import {
   fetchPaginated,
   groupByHash,
   inferAccountType,
+  weiToNative,
+  calculateGasFee,
   type NormalTx,
   type InternalTx,
   type Erc20Tx,
@@ -58,6 +61,64 @@ export interface ReprocessResult {
   errors: string[];
   changes: ReprocessChange[];
   currencyHints: Record<string, { source: string | null; handler: string }>; // currency → { source hint, handler id }
+}
+
+/**
+ * Build tx-level metadata from a TxHashGroup for injection into journal entries.
+ * This captures raw transaction details (addresses, gas, chain info) that would
+ * otherwise be lost after handler processing.
+ */
+export function buildTxGroupMetadata(group: TxHashGroup, chain: ChainInfo): Record<string, string> {
+  const meta: Record<string, string> = {};
+
+  meta["tx:hash"] = group.hash;
+  meta["tx:chain_id"] = String(chain.chain_id);
+  meta["tx:chain_name"] = chain.name;
+
+  if (group.normal) {
+    const n = group.normal;
+    meta["tx:from"] = n.from;
+    meta["tx:to"] = n.to;
+    meta["tx:status"] = n.isError === "0" ? "success" : "failed";
+
+    if (n.value && n.value !== "0") {
+      meta["tx:value"] = weiToNative(n.value, chain.decimals).toFixed();
+    }
+    if (n.gasUsed && n.gasUsed !== "0") {
+      meta["tx:gas_used"] = n.gasUsed;
+    }
+    if (n.gasPrice && n.gasPrice !== "0") {
+      meta["tx:gas_price_gwei"] = new Decimal(n.gasPrice).dividedBy(1e9).toFixed();
+    }
+    const gasFee = calculateGasFee(n.gasUsed, n.gasPrice, chain.decimals);
+    if (!gasFee.isZero()) {
+      meta["tx:gas_fee"] = gasFee.toFixed();
+    }
+    if (n.blockNumber) {
+      meta["tx:block"] = n.blockNumber;
+    }
+    if (n.nonce) {
+      meta["tx:nonce"] = n.nonce;
+    }
+    if (n.functionName) {
+      meta["tx:function"] = n.functionName;
+    }
+  }
+
+  if (group.erc20s.length > 0) {
+    meta["tx:erc20_count"] = String(group.erc20s.length);
+    const contracts = [...new Set(group.erc20s.map((t) => t.contractAddress.toLowerCase()))];
+    meta["tx:contracts"] = contracts.join(",");
+  }
+  if (group.internals.length > 0) {
+    meta["tx:internal_count"] = String(group.internals.length);
+  }
+  const nftCount = group.erc721s.length + group.erc1155s.length;
+  if (nftCount > 0) {
+    meta["tx:nft_count"] = String(nftCount);
+  }
+
+  return meta;
 }
 
 export async function syncEtherscanWithHandlers(
@@ -402,7 +463,8 @@ export async function syncEtherscanWithHandlers(
 
                 await backend.postJournalEntry(newEntry, lineItems);
                 const cexExchangeId = cexEntry.source.split(":")[0];
-                await backend.setMetadata(entryId, { ...handlerEntry.metadata, cex_linked: cexExchangeId });
+                const txMeta = buildTxGroupMetadata(group, chain);
+                await backend.setMetadata(entryId, { ...txMeta, ...handlerEntry.metadata, cex_linked: cexExchangeId });
 
                 // Derive and record exchange rate from consolidated items
                 const cexRateItems: TradeRateItem[] = lineItems.map((li) => ({
@@ -448,9 +510,8 @@ export async function syncEtherscanWithHandlers(
 
           try {
             await backend.postJournalEntry(entry, items);
-            if (Object.keys(handlerEntry.metadata).length > 0) {
-              await backend.setMetadata(entryId, handlerEntry.metadata);
-            }
+            const txMeta = buildTxGroupMetadata(group, chain);
+            await backend.setMetadata(entryId, { ...txMeta, ...handlerEntry.metadata });
 
             // Derive and record exchange rate from handler items
             const normalRateItems: TradeRateItem[] = handlerEntry.items.map((item) => ({
@@ -828,9 +889,8 @@ export async function applyReprocess(
             }));
 
             await backend.postJournalEntry(entry, items);
-            if (Object.keys(handlerEntry.metadata).length > 0) {
-              await backend.setMetadata(entryId, handlerEntry.metadata);
-            }
+            const txMeta = buildTxGroupMetadata(group, chain);
+            await backend.setMetadata(entryId, { ...txMeta, ...handlerEntry.metadata });
           }
 
           // Store currency hints as rate source entries

@@ -345,6 +345,15 @@ export class CoinbaseAdapter implements CexAdapter {
         const quoteAmount = price.mul(size);
         const commission = fill.commission || "0";
 
+        const fillMeta: Record<string, string> = {
+          "trade:symbol": fill.product_id,
+          "trade:side": fill.side.toLowerCase(),
+          "trade:price": fill.price,
+          "trade:quantity": fill.size,
+          "trade:commission": commission,
+          "trade:order_id": fill.order_id,
+        };
+
         // Base asset record
         records.push({
           refid,
@@ -354,6 +363,7 @@ export class CoinbaseAdapter implements CexAdapter {
           fee: "0",
           timestamp,
           txid: null,
+          metadata: fillMeta,
         });
 
         // Quote asset record (fee applied here)
@@ -365,6 +375,7 @@ export class CoinbaseAdapter implements CexAdapter {
           fee: commission,
           timestamp,
           txid: null,
+          metadata: fillMeta,
         });
       }
 
@@ -436,6 +447,14 @@ export class CoinbaseAdapter implements CexAdapter {
 
           const txid = tx.network?.hash ? normalizeTxid(tx.network.hash) : null;
 
+          const v2Meta: Record<string, string> = {
+            "v2:type": tx.type,
+          };
+          if (tx.native_amount) {
+            v2Meta["v2:native_amount"] = tx.native_amount.amount;
+            v2Meta["v2:native_currency"] = tx.native_amount.currency;
+          }
+
           records.push({
             refid: tx.id,
             type: txType,
@@ -444,6 +463,7 @@ export class CoinbaseAdapter implements CexAdapter {
             fee: "0", // V2 API doesn't expose fees on transactions directly
             timestamp: txTimestamp,
             txid,
+            metadata: v2Meta,
           });
         }
 

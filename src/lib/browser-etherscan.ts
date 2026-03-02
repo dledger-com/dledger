@@ -15,6 +15,9 @@ export interface NormalTx {
   isError: string;
   gasUsed: string;
   gasPrice: string;
+  blockNumber?: string;
+  nonce?: string;
+  functionName?: string;
 }
 
 export interface InternalTx {

@@ -237,6 +237,15 @@ export class CryptocomAdapter implements CexAdapter {
         const quoteAmount = (qty * price).toString();
         const timestamp = trade.create_time / 1000;
 
+        const tradeMeta: Record<string, string> = {
+          "trade:symbol": trade.instrument_name,
+          "trade:side": trade.side.toLowerCase(),
+          "trade:price": trade.traded_price,
+          "trade:quantity": quantity,
+          "trade:commission": trade.fee,
+          "trade:commission_asset": trade.fee_instrument_name,
+        };
+
         // Base asset record
         records.push({
           refid,
@@ -246,6 +255,7 @@ export class CryptocomAdapter implements CexAdapter {
           fee: trade.fee_instrument_name === base ? trade.fee : "0",
           timestamp,
           txid: null,
+          metadata: tradeMeta,
         });
 
         // Quote asset record
@@ -257,6 +267,7 @@ export class CryptocomAdapter implements CexAdapter {
           fee: trade.fee_instrument_name === quote ? trade.fee : "0",
           timestamp,
           txid: null,
+          metadata: tradeMeta,
         });
       }
 

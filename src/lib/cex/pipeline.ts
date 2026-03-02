@@ -316,9 +316,14 @@ export async function syncCexAccount(
     }
 
     const description = `${exchangeName} trade: ${parts.join(" / ")}`;
+    const groupMeta: Record<string, string> = {};
+    for (const record of group) {
+      if (record.metadata) Object.assign(groupMeta, record.metadata);
+    }
     await postEntry(date, description, source, items, {
       exchange: adapter.exchangeId,
       refid,
+      ...groupMeta,
     });
 
     // Derive and record exchange rate from trade items
@@ -414,6 +419,7 @@ export async function syncCexAccount(
           exchange: adapter.exchangeId,
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
+          ...(record.metadata ?? {}),
         });
         break;
       }
@@ -431,6 +437,7 @@ export async function syncCexAccount(
           exchange: adapter.exchangeId,
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
+          ...(record.metadata ?? {}),
         });
         break;
       }
@@ -444,6 +451,7 @@ export async function syncCexAccount(
           await postEntry(date, `${exchangeName} staking reward: ${amount.toFixed()} ${record.asset}`, source, items, {
             exchange: adapter.exchangeId,
             refid: record.refid,
+            ...(record.metadata ?? {}),
           });
         } else {
           // Staking deduction (e.g., unstaking fee)
