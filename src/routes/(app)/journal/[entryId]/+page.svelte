@@ -182,12 +182,20 @@
 
     {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
     <Card.Root>
-      <Card.Header class="pb-3">
-        <Card.Title class="text-sm">Tags, Links & Metadata</Card.Title>
+      <Card.Header>
+        <Card.Title>Metadata</Card.Title>
       </Card.Header>
-      <Card.Content class="pt-0 space-y-3">
-        <TagInput {tags} onchange={handleTagsChange} />
-        <LinkInput links={entryLinks} onchange={handleLinksChange} suggestions={linkSuggestions} />
+      <Card.Content class="space-y-4">
+        <dl class="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt class="text-muted-foreground">Tags</dt>
+            <dd><TagInput {tags} onchange={handleTagsChange} /></dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">Links</dt>
+            <dd><LinkInput links={entryLinks} onchange={handleLinksChange} suggestions={linkSuggestions} /></dd>
+          </div>
+        </dl>
         {#if displayMeta.length > 0}
           <dl class="grid grid-cols-2 gap-4 text-sm">
             {#each displayMeta as [key, value]}

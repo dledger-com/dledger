@@ -215,14 +215,15 @@
           </select>
         </div>
 
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Tags</label>
-          <TagInput tags={tags} onchange={(t) => { tags = t; }} suggestions={tagSuggestions} />
-        </div>
-
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Links</label>
-          <LinkInput links={entryLinks} onchange={(l) => { entryLinks = l; }} suggestions={linkSuggestions} />
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Tags</label>
+            <TagInput tags={tags} onchange={(t) => { tags = t; }} suggestions={tagSuggestions} />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Links</label>
+            <LinkInput links={entryLinks} onchange={(l) => { entryLinks = l; }} suggestions={linkSuggestions} />
+          </div>
         </div>
 
         <details class="space-y-2">
