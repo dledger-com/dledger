@@ -25,6 +25,7 @@
   import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
 
   const store = new AccountStore();
+  store.loading = true; // Show skeleton before onMount fires store.load()
 
   // Reload when account data changes elsewhere (imports, cross-tab)
   const unsubAccounts = onInvalidate("accounts", () => { store.load(); });

@@ -28,7 +28,7 @@
   const settings = new SettingsStore();
 
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
-  let ready = $state(false);
+  let recentLoaded = $state(false);
   let assetsSummary = $state<ConvertedSummary | null>(null);
   let liabilitiesSummary = $state<ConvertedSummary | null>(null);
   let revenueSummary = $state<ConvertedSummary | null>(null);
@@ -131,14 +131,13 @@
         accountStore.load(),
         getBackend().queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" }).then(entries => {
           recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
+          recentLoaded = true;
         }),
         reportStore.loadBalanceSheet(today()),
         reportStore.loadIncomeStatement(rangeFromDate(), today()),
       ]);
     } catch (e) {
       console.error("Dashboard load failed:", e);
-    } finally {
-      ready = true;
     }
 
     // Shared exchange rate cache for all conversions + charts
@@ -252,7 +251,7 @@
     <Card.Header>
       <Card.Description>{title}</Card.Description>
       <Card.Title class="text-2xl">
-        {#if !ready}
+        {#if fallbackBalances === undefined}
           <Skeleton class="h-8 w-24" />
         {:else if summary && (summary.converted.length > 0 || summary.unconverted.length === 0)}
           {formatCurrency(summary.total, summary.baseCurrency)}
@@ -265,7 +264,7 @@
           --
         {/if}
       </Card.Title>
-      {#if ready && summary}
+      {#if summary}
         {@const count = summary.converted.length + summary.unconverted.length}
         {#if count > 1 || summary.unconverted.length > 0}
           <button onclick={toggleBreakdown}
@@ -415,7 +414,7 @@
     <h2 class="text-lg font-semibold tracking-tight">Recent Journal Entries</h2>
     <Button variant="link" size="sm" href="/journal">View all</Button>
   </div>
-  {#if !ready}
+  {#if !recentLoaded}
     <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-4">
         <div class="space-y-2">
