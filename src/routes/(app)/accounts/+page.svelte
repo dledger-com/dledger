@@ -345,7 +345,12 @@
     }
   }
 
-  onMount(() => store.load());
+  let contentReady = $state(false);
+
+  onMount(() => {
+    requestAnimationFrame(() => { contentReady = true; });
+    store.load();
+  });
 </script>
 
 <div class="space-y-6">
@@ -404,7 +409,7 @@
     </Dialog.Root>
   </div>
 
-  {#if store.loading}
+  {#if !contentReady || store.loading}
     <Card.Root>
       <Card.Content class="py-4">
         <div class="space-y-2">

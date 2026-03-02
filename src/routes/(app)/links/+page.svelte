@@ -14,8 +14,10 @@
   const cached = getCachedLinks();
   let linksWithCounts = $state(cached ?? []);
   let loading = $state(cached === null);
+  let contentReady = $state(false);
 
   onMount(async () => {
+    requestAnimationFrame(() => { contentReady = true; });
     linksWithCounts = await getBackend().getAllLinksWithCounts();
     setCachedLinks(linksWithCounts);
     loading = false;
@@ -34,7 +36,7 @@
     <p class="text-muted-foreground">Transaction links group related journal entries together.</p>
   </div>
 
-  {#if loading}
+  {#if !contentReady || loading}
     <Card.Root>
       <Card.Content class="py-4">
         <div class="space-y-2">

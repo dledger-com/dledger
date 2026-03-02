@@ -71,6 +71,7 @@
   let netWorthData = $state<NetWorthPoint[]>(cachedCharts.netWorth);
   let expenseData = $state<ExpenseCategory[]>(cachedCharts.expenses);
   let chartsLoading = $state(!cachedCharts.loaded);
+  let contentReady = $state(false);
 
   // Persistent exchange rate cache — rates are immutable by (from, to, date)
   let rateCache: ExchangeRateCache | undefined;
@@ -138,6 +139,7 @@
   }
 
   onMount(() => {
+    requestAnimationFrame(() => { contentReady = true; });
     const date = today();
     const base = settings.currency;
     const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
@@ -334,28 +336,28 @@
     {@render summaryCard(
       "Total Assets",
       assetsSummary,
-      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden) : undefined,
+      !contentReady ? undefined : reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden) : undefined,
       showAssets,
       () => { showAssets = !showAssets },
     )}
     {@render summaryCard(
       "Total Liabilities",
       liabilitiesSummary,
-      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden) : undefined,
+      !contentReady ? undefined : reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden) : undefined,
       showLiabilities,
       () => { showLiabilities = !showLiabilities },
     )}
     {@render summaryCard(
       `Revenue (${rangePreset.toUpperCase()})`,
       revenueSummary,
-      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden) : undefined,
+      !contentReady ? undefined : reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden) : undefined,
       showRevenue,
       () => { showRevenue = !showRevenue },
     )}
     {@render summaryCard(
       `Net Income (${rangePreset.toUpperCase()})`,
       netIncomeSummary,
-      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, hidden) : undefined,
+      !contentReady ? undefined : reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, hidden) : undefined,
       showNetIncome,
       () => { showNetIncome = !showNetIncome },
     )}
@@ -370,7 +372,7 @@
         <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if chartsLoading}
+        {#if !contentReady || chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
           <p class="text-sm text-muted-foreground py-12 text-center">
@@ -399,7 +401,7 @@
         <Card.Description>Breakdown by category.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if chartsLoading}
+        {#if !contentReady || chartsLoading}
           <Skeleton class="h-48 w-full" />
         {:else if expenseData.length === 0}
           <p class="text-sm text-muted-foreground py-12 text-center">No expenses in period.</p>
@@ -437,7 +439,7 @@
     <h2 class="text-lg font-semibold tracking-tight">Recent Journal Entries</h2>
     <Button variant="link" size="sm" href="/journal">View all</Button>
   </div>
-  {#if !recentLoaded}
+  {#if !contentReady || !recentLoaded}
     <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-4">
         <div class="space-y-2">
