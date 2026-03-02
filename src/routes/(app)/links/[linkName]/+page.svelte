@@ -16,8 +16,10 @@
   import LinkDisplay from "$lib/components/LinkDisplay.svelte";
   import Link2 from "lucide-svelte/icons/link-2";
   import ArrowLeft from "lucide-svelte/icons/arrow-left";
+  import ArrowUp from "lucide-svelte/icons/arrow-up";
   import { cn } from "$lib/utils.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
+  import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
 
   const accountStore = new AccountStore();
   const settings = new SettingsStore();
@@ -26,6 +28,25 @@
 
   let entries = $state<Array<{ entry: JournalEntry; items: LineItem[]; tags: string[]; links: string[] }>>([]);
   let loading = $state(true);
+
+  let scrollEl = $state<HTMLDivElement | null>(null);
+
+  const virtualizer = createVirtualizer(() => ({
+    count: entries.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => 44,
+    overscan: 10,
+  }));
+
+  const virtualItems = $derived(
+    virtualizer.getVirtualItems().filter((row) => row.index < entries.length)
+  );
+  const totalSize = $derived(virtualizer.getTotalSize());
+  const paddingTop = $derived(virtualItems.length > 0 ? virtualItems[0].start : 0);
+  const paddingBottom = $derived(
+    virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
+  );
+  const isScrolledDown = $derived(virtualItems.length > 0 && virtualItems[0].index > 0);
 
   function accountName(id: string): string {
     return accountStore.byId.get(id)?.full_name ?? id;
@@ -85,7 +106,7 @@
   </div>
 
   {#if loading}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-4">
         <div class="space-y-2">
           {#each [1, 2, 3] as _}
@@ -95,47 +116,74 @@
       </Card.Content>
     </Card.Root>
   {:else if entries.length === 0}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">No entries found for this link.</p>
       </Card.Content>
     </Card.Root>
   {:else}
-    <Card.Root>
-      <Table.Root>
-        <Table.Header>
-          <Table.Row>
-            <Table.Head>Date</Table.Head>
-            <Table.Head>Description</Table.Head>
-            <Table.Head class="hidden md:table-cell">Status</Table.Head>
-            <Table.Head class="text-right">Amount</Table.Head>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {#each entries as { entry, items, tags, links } (entry.id)}
-            <Table.Row>
-              <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
-              <Table.Cell class="max-w-[300px]">
-                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
-                  <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
-                  {#if tags.length > 0}
-                    <TagDisplay {tags} class="shrink-0" />
-                  {/if}
-                  {#if links.length > 0}
-                    <LinkDisplay {links} class="shrink-0" />
-                  {/if}
-                </div>
-              </Table.Cell>
-              <Table.Cell class="hidden md:table-cell">
-                <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
-                  {entry.status}
-                </Badge>
-              </Table.Cell>
-              <Table.Cell class="text-right font-mono">{totalDebits(items)}</Table.Cell>
-            </Table.Row>
-          {/each}
-        </Table.Body>
-      </Table.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none py-0">
+      <div class="relative">
+        <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible">
+          <Table.Root>
+            <Table.Header class="sticky top-0 z-10 bg-background">
+              <Table.Row>
+                <Table.Head>Date</Table.Head>
+                <Table.Head>Description</Table.Head>
+                <Table.Head class="hidden md:table-cell">Status</Table.Head>
+                <Table.Head class="text-right">Amount</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#if paddingTop > 0}
+                <tr><td style="height: {paddingTop}px;" colspan="4"></td></tr>
+              {/if}
+              {#each virtualItems as row (row.key)}
+                {@const { entry, items, tags, links } = entries[row.index]}
+                <Table.Row>
+                  <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
+                  <Table.Cell class="max-w-[300px]">
+                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                      <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+                      {#if tags.length > 0}
+                        <TagDisplay {tags} class="shrink-0" />
+                      {/if}
+                      {#if links.length > 0}
+                        <LinkDisplay {links} class="shrink-0" />
+                      {/if}
+                    </div>
+                  </Table.Cell>
+                  <Table.Cell class="hidden md:table-cell">
+                    <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
+                      {entry.status}
+                    </Badge>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono">{totalDebits(items)}</Table.Cell>
+                </Table.Row>
+              {/each}
+              {#if paddingBottom > 0}
+                <tr><td style="height: {paddingBottom}px;" colspan="4"></td></tr>
+              {/if}
+            </Table.Body>
+          </Table.Root>
+        </div>
+
+        {#if isScrolledDown}
+          <button type="button"
+            class="absolute bottom-3 right-4 z-20 flex h-8 w-8 items-center
+                   justify-center rounded-full border bg-background/95
+                   text-muted-foreground shadow-sm backdrop-blur-sm
+                   hover:text-foreground"
+            onclick={() => virtualizer.scrollToOffset(0, { behavior: "smooth" })}
+            title="Back to top">
+            <ArrowUp class="size-4" />
+          </button>
+        {/if}
+      </div>
     </Card.Root>
+
+    <span class="text-sm text-muted-foreground">
+      {entries.length} {entries.length === 1 ? "entry" : "entries"}
+    </span>
   {/if}
 </div>
