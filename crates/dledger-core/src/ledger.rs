@@ -297,6 +297,13 @@ impl LedgerEngine {
         Ok(self.storage.list_exchange_rates(from, to)?)
     }
 
+    pub fn get_exchange_rate_currencies_on_date(
+        &self,
+        date: NaiveDate,
+    ) -> LedgerResult<Vec<String>> {
+        Ok(self.storage.get_exchange_rate_currencies_on_date(date)?)
+    }
+
     // --- Reports ---
 
     pub fn trial_balance(&self, as_of: NaiveDate) -> LedgerResult<reports::TrialBalance> {

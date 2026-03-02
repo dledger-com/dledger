@@ -760,6 +760,25 @@ impl Storage for TestStorage {
             .collect()
     }
 
+    fn get_exchange_rate_currencies_on_date(
+        &self,
+        date: NaiveDate,
+    ) -> StorageResult<Vec<String>> {
+        let conn = self.conn.borrow();
+        let date_str = date.format("%Y-%m-%d").to_string();
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT from_currency FROM exchange_rate WHERE date = ?1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params![&date_str], |row| row.get::<_, String>(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| StorageError::Internal(e.to_string()))?);
+        }
+        Ok(result)
+    }
+
     fn sum_line_items(
         &self,
         account_ids: &[Uuid],

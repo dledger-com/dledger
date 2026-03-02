@@ -120,6 +120,7 @@ export interface Backend {
   getExchangeRate(from: string, to: string, date: string): Promise<string | null>;
   getExchangeRatesBatch?(pairs: { currency: string; date: string }[], baseCurrency: string): Promise<Map<string, boolean>>;
   getExchangeRatesBatchExact?(pairs: { currency: string; date: string }[], baseCurrency: string): Promise<Map<string, boolean>>;
+  getExchangeRateCurrenciesOnDate?(date: string): Promise<string[]>;
   listExchangeRates(from?: string, to?: string): Promise<ExchangeRate[]>;
 
   // Auto-backfill: determine which currencies need rates and for which dates
@@ -375,6 +376,9 @@ class TauriBackend implements Backend {
   }
   async listExchangeRates(from?: string, to?: string): Promise<ExchangeRate[]> {
     return this.invoke("list_exchange_rates", { from: from ?? null, to: to ?? null });
+  }
+  async getExchangeRateCurrenciesOnDate(date: string): Promise<string[]> {
+    return this.invoke("get_exchange_rate_currencies_on_date", { date });
   }
 
   // Ledger file import/export

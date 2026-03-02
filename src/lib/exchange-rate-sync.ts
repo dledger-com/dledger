@@ -131,6 +131,13 @@ export async function syncExchangeRates(
 
   if (codes.length === 0) return result;
 
+  // Batch query: which currencies already have a rate recorded for today (exact date)?
+  const filledToday = new Set(
+    backend.getExchangeRateCurrenciesOnDate
+      ? await backend.getExchangeRateCurrenciesOnDate(today)
+      : [],
+  );
+
   // Load stored rate source config
   const storedSources = await backend.getCurrencyRateSources();
   const sourceMap = new Map<string, CurrencyRateSource>();
@@ -166,9 +173,8 @@ export async function syncExchangeRates(
           continue;
         }
 
-        // Check if rate already exists today
-        const existing = await backend.getExchangeRate(code, baseCurrency, today);
-        if (existing !== null) {
+        // Check if rate already exists today (exact date)
+        if (filledToday.has(code)) {
           result.rates_skipped++;
           dpriceServed.add(code);
           continue;
@@ -184,6 +190,7 @@ export async function syncExchangeRates(
         });
         result.rates_fetched++;
         dpriceServed.add(code);
+        filledToday.add(code);
       }
     } catch {
       // dprice not available — fall through to other sources
@@ -203,6 +210,9 @@ export async function syncExchangeRates(
   for (const code of codes) {
     // Skip codes already served by the dprice-first pass
     if (dpriceServed.has(code)) continue;
+
+    // Skip codes that already have a rate recorded today
+    if (filledToday.has(code)) { result.rates_skipped++; continue; }
 
     const stored = sourceMap.get(code);
     if (stored && stored.rate_source !== null) {
@@ -259,12 +269,6 @@ export async function syncExchangeRates(
 
           if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
           allSucceeded.add(code);
-
-          const existing = await backend.getExchangeRate(code, baseCurrency, today);
-          if (existing !== null) {
-            result.rates_skipped++;
-            continue;
-          }
 
           const invertedRate = 1 / rateValue;
           await backend.recordExchangeRate({
@@ -338,12 +342,6 @@ export async function syncExchangeRates(
               if (autoDetectCodes.includes(ticker)) autoDetectSuccess.add(ticker);
               allSucceeded.add(ticker);
 
-              const existing = await backend.getExchangeRate(ticker, baseCurrency, today);
-              if (existing !== null) {
-                result.rates_skipped++;
-                continue;
-              }
-
               const rate = priceData[vsBase];
               await backend.recordExchangeRate({
                 id: uuidv7(),
@@ -379,14 +377,6 @@ export async function syncExchangeRates(
       const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
       try {
         for (const code of finnhubCodes) {
-          const existing = await backend.getExchangeRate(code, "USD", today);
-          if (existing !== null) {
-            result.rates_skipped++;
-            if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
-            allSucceeded.add(code);
-            continue;
-          }
-
           const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
           const resp = await finnhubFetch.fetch(url);
 
@@ -471,14 +461,8 @@ export async function syncExchangeRates(
           if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
           allSucceeded.add(code);
 
-          // DefiLlama returns USD prices; check if rate already exists
+          // DefiLlama returns USD prices
           const toCurrency = "USD";
-          const existing = await backend.getExchangeRate(code, toCurrency, today);
-          if (existing !== null) {
-            result.rates_skipped++;
-            continue;
-          }
-
           await backend.recordExchangeRate({
             id: uuidv7(),
             date: today,
@@ -530,12 +514,6 @@ export async function syncExchangeRates(
             if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
             allSucceeded.add(code);
 
-            const existing = await backend.getExchangeRate(code, baseCurrency, today);
-            if (existing !== null) {
-              result.rates_skipped++;
-              continue;
-            }
-
             await backend.recordExchangeRate({
               id: uuidv7(),
               date: today,
@@ -561,14 +539,6 @@ export async function syncExchangeRates(
         if (!pair) {
           if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
           allFailed.add(code);
-          continue;
-        }
-
-        const existing = await backend.getExchangeRate(code, baseCurrency, today);
-        if (existing !== null) {
-          result.rates_skipped++;
-          if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
-          allSucceeded.add(code);
           continue;
         }
 

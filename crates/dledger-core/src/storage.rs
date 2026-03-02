@@ -108,6 +108,11 @@ pub trait Storage: Send + Sync {
         from: Option<&str>,
         to: Option<&str>,
     ) -> StorageResult<Vec<ExchangeRate>>;
+    /// Get all distinct from_currency codes that have a rate on an exact date.
+    fn get_exchange_rate_currencies_on_date(
+        &self,
+        date: NaiveDate,
+    ) -> StorageResult<Vec<String>>;
 
     // -- Balances (computed by summing line items) --
 

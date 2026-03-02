@@ -2696,6 +2696,14 @@ export class SqlJsBackend implements Backend {
     return result;
   }
 
+  async getExchangeRateCurrenciesOnDate(date: string): Promise<string[]> {
+    return this.query(
+      "SELECT DISTINCT from_currency FROM exchange_rate WHERE date = ?",
+      [date],
+      (row) => row.from_currency as string,
+    );
+  }
+
   async getCurrencyDateRequirements(baseCurrency: string): Promise<import("./backend.js").CurrencyDateRequirement[]> {
     const rows = this.query(
       `SELECT li.currency, a.account_type,

@@ -176,6 +176,17 @@ pub fn get_exchange_rate(
 // -- Exchange rate listing --
 
 #[tauri::command]
+pub fn get_exchange_rate_currencies_on_date(
+    state: State<'_, AppState>,
+    date: NaiveDate,
+) -> Result<Vec<String>, String> {
+    state
+        .engine
+        .get_exchange_rate_currencies_on_date(date)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn list_exchange_rates(
     state: State<'_, AppState>,
     from: Option<String>,

@@ -76,6 +76,7 @@ pub fn run() {
             commands::get_account_balance_with_children,
             commands::record_exchange_rate,
             commands::get_exchange_rate,
+            commands::get_exchange_rate_currencies_on_date,
             commands::list_exchange_rates,
             commands::trial_balance,
             commands::income_statement,
