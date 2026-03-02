@@ -441,7 +441,7 @@
       </Card.Content>
     </Card.Root>
   {:else}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none py-0">
       <Table.Root>
         <Table.Header>
           <Table.Row>
