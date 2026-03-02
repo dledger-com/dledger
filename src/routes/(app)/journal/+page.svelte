@@ -45,16 +45,18 @@
   let searchTerm = $state("");
   let showDuplicates = $state(false);
 
-  // Extract #tag tokens and remaining text from search term
-  const tagFilters = $derived.by(() => {
+  // Extract #tag and ^link tokens and remaining text from search term
+  const searchFilters = $derived.by(() => {
     const tokens = searchTerm.trim().split(/\s+/);
     const tags: string[] = [];
+    const links: string[] = [];
     const rest: string[] = [];
     for (const t of tokens) {
       if (t.startsWith("#") && t.length > 1) tags.push(t.slice(1).toLowerCase());
+      else if (t.startsWith("^") && t.length > 1) links.push(t.slice(1).toLowerCase());
       else rest.push(t);
     }
-    return { tags, text: rest.join(" ") };
+    return { tags, links, text: rest.join(" ") };
   });
 
   type JournalSortKey = "date" | "description" | "status" | "amount";
@@ -103,7 +105,7 @@
   // Debounced backend search
   let debounceTimer: ReturnType<typeof setTimeout>;
   $effect(() => {
-    const { text } = tagFilters;
+    const { text } = searchFilters;
     const orderBy = sort.key !== "amount" ? sort.key : null;
     const orderDir = sort.direction;
     clearTimeout(debounceTimer);
@@ -190,14 +192,20 @@
     })();
   });
 
-  // Post-filter by #tag tokens
+  // Post-filter by #tag and ^link tokens
   const displayEntries = $derived.by(() => {
-    const { tags } = tagFilters;
-    if (tags.length === 0) return filteredEntries;
+    const { tags, links } = searchFilters;
+    if (tags.length === 0 && links.length === 0) return filteredEntries;
     return filteredEntries.filter(([entry]) => {
-      const eTags = entryTags.get(entry.id);
-      if (!eTags) return false;
-      return tags.every((t) => eTags.some((et) => et.toLowerCase() === t));
+      if (tags.length > 0) {
+        const eTags = entryTags.get(entry.id);
+        if (!eTags || !tags.every((t) => eTags.some((et) => et.toLowerCase() === t))) return false;
+      }
+      if (links.length > 0) {
+        const eLinks = entryLinks.get(entry.id);
+        if (!eLinks || !links.every((l) => eLinks.some((el) => el.toLowerCase() === l))) return false;
+      }
+      return true;
     });
   });
 
