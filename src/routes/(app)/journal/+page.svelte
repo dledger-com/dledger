@@ -500,7 +500,7 @@
   </div>
 
   {#if store.loading}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-4">
         <div class="space-y-2">
           {#each [1, 2, 3, 4, 5] as _}
@@ -510,7 +510,7 @@
       </Card.Content>
     </Card.Root>
   {:else if store.error}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-8">
         <p class="text-sm text-destructive text-center">{store.error}</p>
         <div class="flex justify-center mt-2">
@@ -519,7 +519,7 @@
       </Card.Content>
     </Card.Root>
   {:else if displayEntries.length === 0 && searchTerm}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
           No entries match "{searchTerm}".
@@ -530,7 +530,7 @@
       </Card.Content>
     </Card.Root>
   {:else if displayEntries.length === 0}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
           No journal entries yet. Create your first entry to start recording transactions.
