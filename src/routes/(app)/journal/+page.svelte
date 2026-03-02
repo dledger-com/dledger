@@ -25,12 +25,14 @@
   import ListFilter from "$lib/components/ListFilter.svelte";
   import TagDisplay from "$lib/components/TagDisplay.svelte";
   import { parseTags, TAGS_META_KEY } from "$lib/utils/tags.js";
-  import { formatExtension, formatLabel, type LedgerFormat } from "$lib/ledger-format.js";
+  import { formatExtension, type LedgerFormat } from "$lib/ledger-format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import type { TransactionFilter } from "$lib/types/index.js";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import Download from "lucide-svelte/icons/download";
   import Pagination from "$lib/components/Pagination.svelte";
 
   const store = new JournalStore();
@@ -39,7 +41,6 @@
   const filteredEntries = $derived(filterHiddenEntries(store.entries, hidden));
   let exporting = $state(false);
   let detectingDuplicates = $state(false);
-  let exportFormat = $state<LedgerFormat>("ledger");
   let searchTerm = $state("");
   let showDuplicates = $state(false);
 
@@ -208,15 +209,15 @@
     }
   });
 
-  async function handleExport() {
+  async function handleExport(format: LedgerFormat) {
     exporting = true;
     try {
-      const content = await getBackend().exportLedgerFile(exportFormat);
+      const content = await getBackend().exportLedgerFile(format);
       const blob = new Blob([content], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `dledger-export${formatExtension(exportFormat)}`;
+      a.download = `dledger-export${formatExtension(format)}`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Ledger file exported");
@@ -292,19 +293,27 @@
         {/if}
         {detectingDuplicates ? "Detecting..." : "Detect Duplicates"}
       </Button>
-      <select
-        class="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        bind:value={exportFormat}
-      >
-        <option value="ledger">Ledger (.ledger)</option>
-        <option value="beancount">Beancount (.beancount)</option>
-        <option value="hledger">hledger (.journal)</option>
-      </select>
-      <Button variant="outline" size="sm" onclick={handleExport} disabled={exporting}>
-        {exporting ? "Exporting..." : "Export"}
-      </Button>
-      <Button variant="outline" size="sm" href="/sources">Import CSV</Button>
-      <Button variant="outline" size="sm" href="/sources">Import</Button>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button variant="outline" size="sm" {...props} disabled={exporting}>
+              <Download class="h-3.5 w-3.5 mr-1" />
+              {exporting ? "Exporting..." : "Export"}
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.Item onclick={() => handleExport("ledger")}>
+            Ledger (.ledger)
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => handleExport("beancount")}>
+            Beancount (.beancount)
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => handleExport("hledger")}>
+            hledger (.journal)
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
       <Button size="sm" href="/journal/new">New Entry</Button>
     </div>
   </div>
