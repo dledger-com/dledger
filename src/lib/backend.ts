@@ -148,6 +148,10 @@ export interface Backend {
   getAllTagValues(): Promise<string[]>;
   getAllMetadataKeys(): Promise<string[]>;
 
+  // Batch metadata/links (for virtual scrolling visible-range loading)
+  getMetadataBatch?(entryIds: string[]): Promise<Map<string, Record<string, string>>>;
+  getEntryLinksBatch?(entryIds: string[]): Promise<Map<string, string[]>>;
+
   // Entry links
   setEntryLinks(entryId: string, links: string[]): Promise<void>;
   getEntryLinks(entryId: string): Promise<string[]>;
@@ -397,6 +401,27 @@ class TauriBackend implements Backend {
   }
   async getAllMetadataKeys(): Promise<string[]> {
     return [];
+  }
+
+  // Batch metadata/links
+  async getMetadataBatch(entryIds: string[]): Promise<Map<string, Record<string, string>>> {
+    if (entryIds.length === 0) return new Map();
+    const results = await Promise.all(entryIds.map(id => this.getMetadata(id)));
+    const map = new Map<string, Record<string, string>>();
+    for (let i = 0; i < entryIds.length; i++) {
+      map.set(entryIds[i], results[i]);
+    }
+    return map;
+  }
+
+  async getEntryLinksBatch(entryIds: string[]): Promise<Map<string, string[]>> {
+    if (entryIds.length === 0) return new Map();
+    const results = await Promise.all(entryIds.map(id => this.getEntryLinks(id)));
+    const map = new Map<string, string[]>();
+    for (let i = 0; i < entryIds.length; i++) {
+      map.set(entryIds[i], results[i]);
+    }
+    return map;
   }
 
   // Entry links

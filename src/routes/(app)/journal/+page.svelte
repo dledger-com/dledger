@@ -30,11 +30,11 @@
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import type { TransactionFilter } from "$lib/types/index.js";
+  import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
 
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import Download from "lucide-svelte/icons/download";
-  import Pagination from "$lib/components/Pagination.svelte";
 
   const store = new JournalStore();
   const settings = new SettingsStore();
@@ -132,12 +132,9 @@
         if (groups[0].links.length > 0) filter.link_filters = groups[0].links;
       }
 
-      if (groups.length > 1 && groups.some(g => g.tags.length > 0 || g.links.length > 0)) {
-        // Multi-group with tag/link filters: load all entries for correct client-side filtering
-        store.load({ ...filter, limit: 999999 });
-      } else {
-        store.load(filter);
-      }
+      store.load(filter).then(() => {
+        virtualizer.scrollToOffset(0);
+      });
     }, 300);
     return () => clearTimeout(debounceTimer);
   });
@@ -164,53 +161,115 @@
     return byCode.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
 
-  let entryTags = $state<Map<string, string[]>>(new Map());
-  let tagGen = 0;
-
-  $effect(() => {
-    const entries = filteredEntries;
-    if (entries.length === 0) {
-      entryTags = new Map();
-      return;
-    }
-    const gen = ++tagGen;
-    const backend = getBackend();
-    (async () => {
-      const map = new Map<string, string[]>();
-      const metas = await Promise.all(
-        entries.map(([e]) => backend.getMetadata(e.id).catch(() => ({}) as Record<string, string>)),
-      );
-      if (gen !== tagGen) return;
-      for (let i = 0; i < entries.length; i++) {
-        const tags = parseTags(metas[i][TAGS_META_KEY]);
-        if (tags.length > 0) map.set(entries[i][0].id, tags);
-      }
-      entryTags = map;
-    })();
+  // Sorted entries — needed in script block for virtualizer count
+  const sortedEntries = $derived.by(() => {
+    if (sort.key === "amount" && sort.direction)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return sortItems(displayEntries, ([, items]: [any, any]) => totalDebits(items), sort.direction);
+    return displayEntries;
   });
 
+  // Virtual scrolling
+  let scrollEl = $state<HTMLDivElement | null>(null);
+
+  const virtualizer = createVirtualizer(() => ({
+    count: sortedEntries.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => 44,
+    overscan: 10,
+  }));
+
+  const virtualItems = $derived(virtualizer.getVirtualItems());
+  const totalSize = $derived(virtualizer.getTotalSize());
+  const paddingTop = $derived(virtualItems.length > 0 ? virtualItems[0].start : 0);
+  const paddingBottom = $derived(
+    virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
+  );
+
+  // Visible-range metadata loading (tags)
+  let entryTags = $state<Map<string, string[]>>(new Map());
+  let tagGen = 0;
+  let prevSortedRef = $state<unknown>(null);
+
+  // Derive visible entry IDs
+  const visibleEntryIds = $derived(
+    virtualizer.getVirtualItems().map((item) => sortedEntries[item.index]?.[0]?.id).filter(Boolean)
+  );
+
+  let tagDebounce: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    const ids = visibleEntryIds;
+    // Clear maps when underlying data changes
+    if (sortedEntries !== prevSortedRef) {
+      prevSortedRef = sortedEntries;
+      entryTags = new Map();
+      entryLinks = new Map();
+      convertedTotals = new Map();
+    }
+    if (ids.length === 0) return;
+    clearTimeout(tagDebounce);
+    const gen = ++tagGen;
+    tagDebounce = setTimeout(async () => {
+      // Filter to IDs we haven't loaded yet
+      const needed = ids.filter(id => !entryTags.has(id));
+      if (needed.length === 0) return;
+      try {
+        const backend = getBackend();
+        let metaMap: Map<string, Record<string, string>>;
+        if (backend.getMetadataBatch) {
+          metaMap = await backend.getMetadataBatch(needed);
+        } else {
+          const metas = await Promise.all(needed.map(id => backend.getMetadata(id).catch(() => ({}) as Record<string, string>)));
+          metaMap = new Map(needed.map((id, i) => [id, metas[i]]));
+        }
+        if (gen !== tagGen) return;
+        const merged = new Map(entryTags);
+        for (const [id, meta] of metaMap) {
+          const tags = parseTags(meta[TAGS_META_KEY]);
+          if (tags.length > 0) merged.set(id, tags);
+          else merged.set(id, []); // Mark as loaded (empty)
+        }
+        entryTags = merged;
+      } catch { /* ignore */ }
+    }, 80);
+    return () => clearTimeout(tagDebounce);
+  });
+
+  // Visible-range metadata loading (links)
   let entryLinks = $state<Map<string, string[]>>(new Map());
   let linkGen = 0;
 
+  let linkDebounce: ReturnType<typeof setTimeout>;
   $effect(() => {
-    const entries = filteredEntries;
-    if (entries.length === 0) {
-      entryLinks = new Map();
-      return;
-    }
+    const ids = visibleEntryIds;
+    if (ids.length === 0) return;
+    clearTimeout(linkDebounce);
     const gen = ++linkGen;
-    const backend = getBackend();
-    (async () => {
-      const map = new Map<string, string[]>();
-      const links = await Promise.all(
-        entries.map(([e]) => backend.getEntryLinks(e.id).catch(() => [] as string[])),
-      );
-      if (gen !== linkGen) return;
-      for (let i = 0; i < entries.length; i++) {
-        if (links[i].length > 0) map.set(entries[i][0].id, links[i]);
-      }
-      entryLinks = map;
-    })();
+    linkDebounce = setTimeout(async () => {
+      const needed = ids.filter(id => !entryLinks.has(id));
+      if (needed.length === 0) return;
+      try {
+        const backend = getBackend();
+        let linkMap: Map<string, string[]>;
+        if (backend.getEntryLinksBatch) {
+          linkMap = await backend.getEntryLinksBatch(needed);
+        } else {
+          const links = await Promise.all(needed.map(id => backend.getEntryLinks(id).catch(() => [] as string[])));
+          linkMap = new Map(needed.map((id, i) => [id, links[i]]));
+        }
+        if (gen !== linkGen) return;
+        const merged = new Map(entryLinks);
+        for (const [id, links] of linkMap) {
+          merged.set(id, links);
+        }
+        // Mark entries with no links as loaded
+        for (const id of needed) {
+          if (!merged.has(id)) merged.set(id, []);
+        }
+        entryLinks = merged;
+      } catch { /* ignore */ }
+    }, 80);
+    return () => clearTimeout(linkDebounce);
   });
 
   // Post-filter: OR across comma-separated groups, AND within each group
@@ -244,60 +303,65 @@
     searchTerm = searchTerm ? `${searchTerm} ${token}` : token;
   }
 
+  // Visible-range currency conversion
   let convertedTotals = $state(new Map<string, string>());
   let conversionGen = 0;
 
+  let convDebounce: ReturnType<typeof setTimeout>;
   $effect(() => {
-    const entries = filteredEntries;
+    const ids = visibleEntryIds;
     const baseCurrency = settings.currency;
-    if (!baseCurrency || entries.length === 0) {
-      convertedTotals = new Map();
-      return;
-    }
+    if (!baseCurrency || ids.length === 0) return;
 
+    clearTimeout(convDebounce);
     const gen = ++conversionGen;
-    const cache = new ExchangeRateCache(getBackend());
-    const results = new Map<string, string>();
+    convDebounce = setTimeout(async () => {
+      // Filter to IDs we haven't converted yet
+      const needed = ids.filter(id => !convertedTotals.has(id));
+      if (needed.length === 0) return;
 
-    // Sync pass: entries where all debits are already in base currency
-    const asyncEntries: [string, CurrencyBalance[], string][] = [];
-    for (const [entry, items] of entries) {
-      const debits = debitsByCurrency(items);
-      if (debits.length === 0) {
-        results.set(entry.id, formatCurrency(0, baseCurrency));
-      } else if (debits.every((b) => b.currency === baseCurrency)) {
-        const total = debits.reduce((s, b) => s + parseFloat(b.amount), 0);
-        results.set(entry.id, formatCurrency(total, baseCurrency));
-      } else {
-        asyncEntries.push([entry.id, debits, entry.date]);
-      }
-    }
-    convertedTotals = new Map(results);
+      const cache = new ExchangeRateCache(getBackend());
+      const results = new Map(convertedTotals);
+      const asyncEntries: [string, CurrencyBalance[], string][] = [];
 
-    // Async pass: entries with foreign currencies
-    if (asyncEntries.length > 0) {
-      (async () => {
-        for (const [id, debits, date] of asyncEntries) {
-          if (gen !== conversionGen) return;
-          const summary = await convertBalances(debits, baseCurrency, date, cache);
-          if (gen !== conversionGen) return;
-
-          let formatted: string;
-          if (summary.unconverted.length === 0) {
-            formatted = formatCurrency(summary.total, baseCurrency);
-          } else {
-            const parts: string[] = [];
-            if (summary.total !== 0) parts.push(formatCurrency(summary.total, baseCurrency));
-            for (const u of summary.unconverted) {
-              parts.push(formatCurrency(u.amount, u.currency));
-            }
-            formatted = parts.join(" + ");
-          }
-          results.set(id, formatted);
-          convertedTotals = new Map(results);
+      for (const id of needed) {
+        const pair = sortedEntries.find(([e]) => e.id === id);
+        if (!pair) continue;
+        const [entry, items] = pair;
+        const debits = debitsByCurrency(items);
+        if (debits.length === 0) {
+          results.set(entry.id, formatCurrency(0, baseCurrency));
+        } else if (debits.every((b) => b.currency === baseCurrency)) {
+          const total = debits.reduce((s, b) => s + parseFloat(b.amount), 0);
+          results.set(entry.id, formatCurrency(total, baseCurrency));
+        } else {
+          asyncEntries.push([entry.id, debits, entry.date]);
         }
-      })();
-    }
+      }
+      if (gen !== conversionGen) return;
+      convertedTotals = new Map(results);
+
+      for (const [id, debits, date] of asyncEntries) {
+        if (gen !== conversionGen) return;
+        const summary = await convertBalances(debits, baseCurrency, date, cache);
+        if (gen !== conversionGen) return;
+
+        let formatted: string;
+        if (summary.unconverted.length === 0) {
+          formatted = formatCurrency(summary.total, baseCurrency);
+        } else {
+          const parts: string[] = [];
+          if (summary.total !== 0) parts.push(formatCurrency(summary.total, baseCurrency));
+          for (const u of summary.unconverted) {
+            parts.push(formatCurrency(u.amount, u.currency));
+          }
+          formatted = parts.join(" + ");
+        }
+        results.set(id, formatted);
+        convertedTotals = new Map(results);
+      }
+    }, 100);
+    return () => clearTimeout(convDebounce);
   });
 
   async function handleExport(format: LedgerFormat) {
@@ -449,54 +513,57 @@
     </Card.Root>
   {:else}
     <Card.Root>
-      <Table.Root>
-        <Table.Header>
-          <Table.Row>
-            <SortableHeader active={sort.key === "date"} direction={sort.direction} onclick={() => sort.toggle("date")}>Date</SortableHeader>
-            <SortableHeader active={sort.key === "description"} direction={sort.direction} onclick={() => sort.toggle("description")}>Description</SortableHeader>
-            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")} class="hidden md:table-cell">Status</SortableHeader>
-            <SortableHeader active={sort.key === "amount"} direction={sort.direction} onclick={() => sort.toggle("amount")} class="text-right">Amount</SortableHeader>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {@const sortedEntries = sort.key === "amount" && sort.direction ? sortItems(displayEntries, ([, items]: [any, any]) => totalDebits(items), sort.direction) : displayEntries}
-          {#each sortedEntries as [entry, items] (entry.id)}
+      <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)]">
+        <Table.Root>
+          <Table.Header class="sticky top-0 z-10 bg-background">
             <Table.Row>
-              <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
-              <Table.Cell class="max-w-[300px]">
-                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
-                  <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
-                  {#if entryTags.get(entry.id)?.length}
-                    <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" onclick={addTagFilter} />
-                  {/if}
-                  {#if entryLinks.get(entry.id)?.length}
-                    <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
-                  {/if}
-                </div>
-              </Table.Cell>
-              <Table.Cell class="hidden md:table-cell">
-                <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
-                  {entry.status}
-                </Badge>
-              </Table.Cell>
-              <Table.Cell class="text-right font-mono">
-                {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
-              </Table.Cell>
+              <SortableHeader active={sort.key === "date"} direction={sort.direction} onclick={() => sort.toggle("date")}>Date</SortableHeader>
+              <SortableHeader active={sort.key === "description"} direction={sort.direction} onclick={() => sort.toggle("description")}>Description</SortableHeader>
+              <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")} class="hidden md:table-cell">Status</SortableHeader>
+              <SortableHeader active={sort.key === "amount"} direction={sort.direction} onclick={() => sort.toggle("amount")} class="text-right">Amount</SortableHeader>
             </Table.Row>
-          {/each}
-        </Table.Body>
-      </Table.Root>
+          </Table.Header>
+          <Table.Body>
+            {#if paddingTop > 0}
+              <tr><td style="height: {paddingTop}px;" colspan="4"></td></tr>
+            {/if}
+            {#each virtualItems as row (row.key)}
+              {@const [entry, items] = sortedEntries[row.index]}
+              <Table.Row>
+                <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
+                <Table.Cell class="max-w-[300px]">
+                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                    <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+                    {#if entryTags.get(entry.id)?.length}
+                      <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" onclick={addTagFilter} />
+                    {/if}
+                    {#if entryLinks.get(entry.id)?.length}
+                      <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
+                    {/if}
+                  </div>
+                </Table.Cell>
+                <Table.Cell class="hidden md:table-cell">
+                  <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
+                    {entry.status}
+                  </Badge>
+                </Table.Cell>
+                <Table.Cell class="text-right font-mono">
+                  {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
+                </Table.Cell>
+              </Table.Row>
+            {/each}
+            {#if paddingBottom > 0}
+              <tr><td style="height: {paddingBottom}px;" colspan="4"></td></tr>
+            {/if}
+          </Table.Body>
+        </Table.Root>
+      </div>
     </Card.Root>
 
     <div class="flex items-center justify-between">
       <span class="text-sm text-muted-foreground">
         {store.totalCount} total {store.totalCount === 1 ? "entry" : "entries"}
       </span>
-      <Pagination
-        currentPage={store.currentPage}
-        totalPages={store.totalPages}
-        onPageChange={(page) => store.loadPage(page)}
-      />
     </div>
   {/if}
 </div>

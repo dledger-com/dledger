@@ -993,5 +993,43 @@ describe("SqlJsBackend", () => {
       const names = await backend.getAllLinkNames();
       expect(names).toHaveLength(0);
     });
+
+    it("getMetadataBatch returns grouped map for multiple entries", async () => {
+      const id1 = await seedEntry("Entry 1");
+      const id2 = await seedEntry("Entry 2");
+      await backend.setMetadata(id1, { tags: "foo,bar", source: "csv" });
+      await backend.setMetadata(id2, { tags: "baz" });
+      const result = await backend.getMetadataBatch([id1, id2]);
+      expect(result.get(id1)).toEqual({ tags: "foo,bar", source: "csv" });
+      expect(result.get(id2)).toEqual({ tags: "baz" });
+    });
+
+    it("getMetadataBatch returns empty map for empty input", async () => {
+      const result = await backend.getMetadataBatch([]);
+      expect(result.size).toBe(0);
+    });
+
+    it("getMetadataBatch omits entries with no metadata", async () => {
+      const id = await seedEntry("No meta");
+      const result = await backend.getMetadataBatch([id]);
+      expect(result.has(id)).toBe(false);
+    });
+
+    it("getEntryLinksBatch returns grouped map for multiple entries", async () => {
+      const id1 = await seedEntry("Entry 1");
+      const id2 = await seedEntry("Entry 2");
+      const id3 = await seedEntry("Entry 3");
+      await backend.setEntryLinks(id1, ["alpha", "beta"]);
+      await backend.setEntryLinks(id2, ["gamma"]);
+      const result = await backend.getEntryLinksBatch([id1, id2, id3]);
+      expect(result.get(id1)).toEqual(["alpha", "beta"]);
+      expect(result.get(id2)).toEqual(["gamma"]);
+      expect(result.has(id3)).toBe(false);
+    });
+
+    it("getEntryLinksBatch returns empty map for empty input", async () => {
+      const result = await backend.getEntryLinksBatch([]);
+      expect(result.size).toBe(0);
+    });
   });
 });

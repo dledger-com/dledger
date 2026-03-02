@@ -2856,6 +2856,46 @@ export class SqlJsBackend implements Backend {
     return result;
   }
 
+  async getMetadataBatch(entryIds: string[]): Promise<Map<string, Record<string, string>>> {
+    const result = new Map<string, Record<string, string>>();
+    if (entryIds.length === 0) return result;
+    const ph = entryIds.map(() => "?").join(", ");
+    const rows = this.query(
+      `SELECT journal_entry_id, key, value FROM journal_entry_metadata WHERE journal_entry_id IN (${ph}) ORDER BY key`,
+      entryIds,
+      (row) => ({ id: row.journal_entry_id as string, key: row.key as string, value: row.value as string }),
+    );
+    for (const { id, key, value } of rows) {
+      let rec = result.get(id);
+      if (!rec) {
+        rec = {};
+        result.set(id, rec);
+      }
+      rec[key] = value;
+    }
+    return result;
+  }
+
+  async getEntryLinksBatch(entryIds: string[]): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    if (entryIds.length === 0) return result;
+    const ph = entryIds.map(() => "?").join(", ");
+    const rows = this.query(
+      `SELECT journal_entry_id, link_name FROM entry_link WHERE journal_entry_id IN (${ph}) ORDER BY link_name`,
+      entryIds,
+      (row) => ({ id: row.journal_entry_id as string, link_name: row.link_name as string }),
+    );
+    for (const { id, link_name } of rows) {
+      let list = result.get(id);
+      if (!list) {
+        list = [];
+        result.set(id, list);
+      }
+      list.push(link_name);
+    }
+    return result;
+  }
+
   async getAllTagValues(): Promise<string[]> {
     const rows = this.query(
       "SELECT DISTINCT value FROM journal_entry_metadata WHERE key = 'tags'",

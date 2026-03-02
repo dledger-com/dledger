@@ -21,9 +21,9 @@
   import { toast } from "svelte-sonner";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
   import type { Account, CurrencyBalance, JournalEntry, LineItem, BalanceAssertion } from "$lib/types/index.js";
-  import Pagination from "$lib/components/Pagination.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
 
   type AssertionSortKey = "date" | "currency" | "expected" | "actual" | "status";
   const assertionSort = createSortState<AssertionSortKey>();
@@ -73,6 +73,23 @@
     // Reverse back to descending order for display
     return result.reverse();
   });
+
+  // Virtual scrolling for transaction history
+  let txScrollEl = $state<HTMLDivElement | null>(null);
+
+  const txVirtualizer = createVirtualizer(() => ({
+    count: entriesWithRunning.length,
+    getScrollElement: () => txScrollEl,
+    estimateSize: () => 44,
+    overscan: 10,
+  }));
+
+  const txVirtualItems = $derived(txVirtualizer.getVirtualItems());
+  const txTotalSize = $derived(txVirtualizer.getTotalSize());
+  const txPaddingTop = $derived(txVirtualItems.length > 0 ? txVirtualItems[0].start : 0);
+  const txPaddingBottom = $derived(
+    txVirtualItems.length > 0 ? txTotalSize - txVirtualItems[txVirtualItems.length - 1].end : 0
+  );
 
   async function loadBalanceChart(id: string, entries: [JournalEntry, LineItem[]][]) {
     chartLoading = true;
@@ -327,57 +344,59 @@
           </p>
         </Card.Content>
       {:else}
-        <Table.Root>
-          <Table.Header>
-            <Table.Row>
-              <Table.Head>Date</Table.Head>
-              <Table.Head>Description</Table.Head>
-              <Table.Head class="hidden md:table-cell">Status</Table.Head>
-              <Table.Head class="text-right">Amount</Table.Head>
-              <Table.Head class="text-right hidden lg:table-cell">Running Balance</Table.Head>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#each entriesWithRunning as { entry: [entry, items], running } (entry.id)}
-              {@const relevantItems = items.filter((i: LineItem) => i.account_id === accountId)}
+        <div bind:this={txScrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)]">
+          <Table.Root>
+            <Table.Header class="sticky top-0 z-10 bg-background">
               <Table.Row>
-                <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
-                <Table.Cell>
-                  <a href="/journal/{entry.id}" class="hover:underline">{entry.description}</a>
-                </Table.Cell>
-                <Table.Cell class="hidden md:table-cell">
-                  <Badge variant={entry.status === "confirmed" ? "default" : "secondary"}>
-                    {entry.status}
-                  </Badge>
-                </Table.Cell>
-                <Table.Cell class="text-right font-mono">
-                  {#each relevantItems as item}
-                    {@const amt = parseFloat(item.amount)}
-                    <span class={amt >= 0 ? "" : "text-red-600 dark:text-red-400"}>
-                      {formatCurrency(amt, item.currency)}
-                    </span>
-                  {/each}
-                </Table.Cell>
-                <Table.Cell class="text-right font-mono text-muted-foreground hidden lg:table-cell">
-                  {#each [...running.entries()] as [currency, amount]}
-                    <span>{formatCurrency(amount, currency)}</span>
-                  {/each}
-                </Table.Cell>
+                <Table.Head>Date</Table.Head>
+                <Table.Head>Description</Table.Head>
+                <Table.Head class="hidden md:table-cell">Status</Table.Head>
+                <Table.Head class="text-right">Amount</Table.Head>
+                <Table.Head class="text-right hidden lg:table-cell">Running Balance</Table.Head>
               </Table.Row>
-            {/each}
-          </Table.Body>
-        </Table.Root>
+            </Table.Header>
+            <Table.Body>
+              {#if txPaddingTop > 0}
+                <tr><td style="height: {txPaddingTop}px;" colspan="5"></td></tr>
+              {/if}
+              {#each txVirtualItems as row (row.key)}
+                {@const { entry: [entry, items], running } = entriesWithRunning[row.index]}
+                {@const relevantItems = items.filter((i: LineItem) => i.account_id === accountId)}
+                <Table.Row>
+                  <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
+                  <Table.Cell>
+                    <a href="/journal/{entry.id}" class="hover:underline">{entry.description}</a>
+                  </Table.Cell>
+                  <Table.Cell class="hidden md:table-cell">
+                    <Badge variant={entry.status === "confirmed" ? "default" : "secondary"}>
+                      {entry.status}
+                    </Badge>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono">
+                    {#each relevantItems as item}
+                      {@const amt = parseFloat(item.amount)}
+                      <span class={amt >= 0 ? "" : "text-red-600 dark:text-red-400"}>
+                        {formatCurrency(amt, item.currency)}
+                      </span>
+                    {/each}
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono text-muted-foreground hidden lg:table-cell">
+                    {#each [...running.entries()] as [currency, amount]}
+                      <span>{formatCurrency(amount, currency)}</span>
+                    {/each}
+                  </Table.Cell>
+                </Table.Row>
+              {/each}
+              {#if txPaddingBottom > 0}
+                <tr><td style="height: {txPaddingBottom}px;" colspan="5"></td></tr>
+              {/if}
+            </Table.Body>
+          </Table.Root>
+        </div>
         <div class="p-4">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-muted-foreground">
-              {journalStore.totalCount} total {journalStore.totalCount === 1 ? "transaction" : "transactions"}
-            </span>
-            <Pagination
-              currentPage={journalStore.currentPage}
-              totalPages={journalStore.totalPages}
-              onPageChange={(p) => journalStore.loadPage(p)}
-            />
-          </div>
+          <span class="text-sm text-muted-foreground">
+            {journalStore.totalCount} total {journalStore.totalCount === 1 ? "transaction" : "transactions"}
+          </span>
         </div>
       {/if}
     </Card.Root>
