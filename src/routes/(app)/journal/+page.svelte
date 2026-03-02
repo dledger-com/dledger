@@ -209,7 +209,9 @@
     overscan: 10,
   }));
 
-  const virtualItems = $derived(virtualizer.getVirtualItems());
+  const virtualItems = $derived(
+    virtualizer.getVirtualItems().filter((row) => row.index < sortedEntries.length)
+  );
   const totalSize = $derived(virtualizer.getTotalSize());
   const paddingTop = $derived(virtualItems.length > 0 ? virtualItems[0].start : 0);
   const paddingBottom = $derived(
