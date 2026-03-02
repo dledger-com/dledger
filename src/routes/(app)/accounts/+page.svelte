@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -23,6 +23,7 @@
   import ChevronRight from "lucide-svelte/icons/chevron-right";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
+  import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
 
   const store = new AccountStore();
 
@@ -278,6 +279,25 @@
     return result;
   });
 
+  // Virtual scrolling
+  let scrollEl = $state<HTMLDivElement | null>(null);
+
+  const virtualizer = createVirtualizer(() => ({
+    count: filteredAccounts.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => 44,
+    overscan: 10,
+  }));
+
+  const virtualItems = $derived(
+    virtualizer.getVirtualItems().filter((row) => row.index < filteredAccounts.length)
+  );
+  const totalSize = $derived(virtualizer.getTotalSize());
+  const paddingTop = $derived(virtualItems.length > 0 ? virtualItems[0].start : 0);
+  const paddingBottom = $derived(
+    virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
+  );
+
   function resetForm() {
     formName = "";
     formFullName = "";
@@ -345,10 +365,7 @@
     }
   }
 
-  let contentReady = $state(false);
-
   onMount(() => {
-    requestAnimationFrame(() => { contentReady = true; });
     store.load();
   });
 </script>
@@ -409,7 +426,7 @@
     </Dialog.Root>
   </div>
 
-  {#if !contentReady || store.loading}
+  {#if store.loading}
     <Card.Root>
       <Card.Content class="py-4">
         <div class="space-y-2">
@@ -453,8 +470,9 @@
     </Card.Root>
   {:else}
     <Card.Root class="border-x-0 rounded-none shadow-none py-0">
+      <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible">
       <Table.Root>
-        <Table.Header>
+        <Table.Header class="sticky top-0 z-10 bg-background">
           <Table.Row>
             <Table.Head>Account</Table.Head>
             <Table.Head>Type</Table.Head>
@@ -463,7 +481,11 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each filteredAccounts as account (account.id)}
+          {#if paddingTop > 0}
+            <tr><td style="height: {paddingTop}px;" colspan="4"></td></tr>
+          {/if}
+          {#each virtualItems as row (row.key)}
+            {@const account = filteredAccounts[row.index]}
             {#if editingId === account.id}
               <Table.Row
                 class={hoveredAncestorIds.has(account.id) ? "bg-muted/30" : ""}
@@ -595,8 +617,12 @@
               </Table.Row>
             {/if}
           {/each}
+          {#if paddingBottom > 0}
+            <tr><td style="height: {paddingBottom}px;" colspan="4"></td></tr>
+          {/if}
         </Table.Body>
       </Table.Root>
+      </div>
     </Card.Root>
   {/if}
 </div>
