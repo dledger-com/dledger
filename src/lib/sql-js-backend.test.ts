@@ -293,6 +293,120 @@ describe("SqlJsBackend", () => {
       expect(page2).toHaveLength(1);
       expect(page2[0][0].id).not.toBe(page1[0][0].id);
     });
+
+    it("filters by tag_filters", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      // Tag first entry with "groceries" and second with "groceries,salary"
+      await b.setMetadata(allEntries[0][0].id, { tags: "groceries" });
+      await b.setMetadata(allEntries[1][0].id, { tags: "groceries,salary" });
+
+      // Filter by single tag
+      const tagged = await b.queryJournalEntries({ tag_filters: ["groceries"] });
+      expect(tagged).toHaveLength(2);
+
+      // Filter by tag that only one entry has
+      const salaryOnly = await b.queryJournalEntries({ tag_filters: ["salary"] });
+      expect(salaryOnly).toHaveLength(1);
+      expect(salaryOnly[0][0].id).toBe(allEntries[1][0].id);
+
+      // Filter by multiple tags (AND): only entry with both
+      const both = await b.queryJournalEntries({ tag_filters: ["groceries", "salary"] });
+      expect(both).toHaveLength(1);
+      expect(both[0][0].id).toBe(allEntries[1][0].id);
+
+      // Non-existent tag
+      const none = await b.queryJournalEntries({ tag_filters: ["nonexistent"] });
+      expect(none).toHaveLength(0);
+    });
+
+    it("countJournalEntries respects tag_filters", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      await b.setMetadata(allEntries[0][0].id, { tags: "food" });
+
+      const count = await b.countJournalEntries({ tag_filters: ["food"] });
+      expect(count).toBe(1);
+
+      const countAll = await b.countJournalEntries({});
+      expect(countAll).toBe(allEntries.length);
+    });
+
+    it("filters by link_filters", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      await b.setEntryLinks(allEntries[0][0].id, ["invoice-001"]);
+      await b.setEntryLinks(allEntries[1][0].id, ["invoice-001", "receipt-42"]);
+
+      // Filter by single link
+      const linked = await b.queryJournalEntries({ link_filters: ["invoice-001"] });
+      expect(linked).toHaveLength(2);
+
+      // Filter by link that only one entry has
+      const receiptOnly = await b.queryJournalEntries({ link_filters: ["receipt-42"] });
+      expect(receiptOnly).toHaveLength(1);
+      expect(receiptOnly[0][0].id).toBe(allEntries[1][0].id);
+
+      // Filter by multiple links (AND)
+      const both = await b.queryJournalEntries({ link_filters: ["invoice-001", "receipt-42"] });
+      expect(both).toHaveLength(1);
+      expect(both[0][0].id).toBe(allEntries[1][0].id);
+
+      // Non-existent link
+      const none = await b.queryJournalEntries({ link_filters: ["nope"] });
+      expect(none).toHaveLength(0);
+    });
+
+    it("countJournalEntries respects link_filters", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      await b.setEntryLinks(allEntries[0][0].id, ["ref-abc"]);
+
+      const count = await b.countJournalEntries({ link_filters: ["ref-abc"] });
+      expect(count).toBe(1);
+    });
+
+    it("combines tag_filters and link_filters", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      await b.setMetadata(allEntries[0][0].id, { tags: "important" });
+      await b.setEntryLinks(allEntries[0][0].id, ["ref-1"]);
+      await b.setMetadata(allEntries[1][0].id, { tags: "important" });
+
+      // Both tag and link must match
+      const combined = await b.queryJournalEntries({ tag_filters: ["important"], link_filters: ["ref-1"] });
+      expect(combined).toHaveLength(1);
+      expect(combined[0][0].id).toBe(allEntries[0][0].id);
+    });
+
+    it("tag_filters are case-insensitive", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      await b.setMetadata(allEntries[0][0].id, { tags: "MyTag" });
+
+      const results = await b.queryJournalEntries({ tag_filters: ["mytag"] });
+      expect(results).toHaveLength(1);
+
+      const results2 = await b.queryJournalEntries({ tag_filters: ["MYTAG"] });
+      expect(results2).toHaveLength(1);
+    });
+
+    it("tag_filters with pagination", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      // Tag all entries
+      for (const [entry] of allEntries) {
+        await b.setMetadata(entry.id, { tags: "all" });
+      }
+      // Tag just the first one with a unique tag
+      await b.setMetadata(allEntries[0][0].id, { tags: "all,unique" });
+
+      // Paginated query with tag filter should respect both
+      const count = await b.countJournalEntries({ tag_filters: ["unique"] });
+      expect(count).toBe(1);
+      const page = await b.queryJournalEntries({ tag_filters: ["unique"], limit: 10, offset: 0 });
+      expect(page).toHaveLength(1);
+    });
   });
 
   // ---- Balances ----

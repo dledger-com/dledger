@@ -235,6 +235,8 @@ pub struct TransactionFilter {
     pub status: Option<JournalEntryStatus>,
     pub source: Option<String>,
     pub description_search: Option<String>,
+    pub tag_filters: Option<Vec<String>>,
+    pub link_filters: Option<Vec<String>>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
     pub order_by: Option<String>,

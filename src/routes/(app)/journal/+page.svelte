@@ -114,7 +114,7 @@
   // Debounced backend search
   let debounceTimer: ReturnType<typeof setTimeout>;
   $effect(() => {
-    const { backendText } = searchFilters;
+    const { groups, backendText } = searchFilters;
     const orderBy = sort.key !== "amount" ? sort.key : null;
     const orderDir = sort.direction;
     clearTimeout(debounceTimer);
@@ -125,7 +125,19 @@
         filter.order_by = orderBy;
         filter.order_direction = orderDir;
       }
-      store.load(filter);
+
+      // Single group: pass tags/links to backend for SQL-level filtering
+      if (groups.length === 1) {
+        if (groups[0].tags.length > 0) filter.tag_filters = groups[0].tags;
+        if (groups[0].links.length > 0) filter.link_filters = groups[0].links;
+      }
+
+      if (groups.length > 1 && groups.some(g => g.tags.length > 0 || g.links.length > 0)) {
+        // Multi-group with tag/link filters: load all entries for correct client-side filtering
+        store.load({ ...filter, limit: 999999 });
+      } else {
+        store.load(filter);
+      }
     }, 300);
     return () => clearTimeout(debounceTimer);
   });
@@ -206,11 +218,13 @@
     const { groups } = searchFilters;
     if (groups.length === 0) return filteredEntries;
     const single = groups.length === 1;
+    // Single group: tags/links already filtered by backend SQL, no client-side filtering needed
     if (single && groups[0].tags.length === 0 && groups[0].links.length === 0) return filteredEntries;
+    if (single) return filteredEntries;
+    // Multi-group: client-side OR filtering across groups
     return filteredEntries.filter(([entry]) => {
       return groups.some(({ tags, links, text }) => {
-        // Text match client-side only for multi-group (single-group text handled by backend)
-        if (!single && text && !entry.description.toLowerCase().includes(text.toLowerCase())) return false;
+        if (text && !entry.description.toLowerCase().includes(text.toLowerCase())) return false;
         if (tags.length > 0) {
           const eTags = entryTags.get(entry.id);
           if (!eTags || !tags.every(t => eTags.some(et => et.toLowerCase() === t))) return false;

@@ -402,6 +402,24 @@ impl Storage for SqliteStorage {
             param_values.push(format!("%{}%", search));
             conditions.push(format!("je.description LIKE ?{}", param_values.len()));
         }
+        if let Some(ref tags) = filter.tag_filters {
+            for tag in tags {
+                param_values.push(format!("%,{},%", tag.to_lowercase()));
+                conditions.push(format!(
+                    "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?{})",
+                    param_values.len()
+                ));
+            }
+        }
+        if let Some(ref links) = filter.link_filters {
+            for link in links {
+                param_values.push(link.to_lowercase());
+                conditions.push(format!(
+                    "je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?{})",
+                    param_values.len()
+                ));
+            }
+        }
 
         if !conditions.is_empty() {
             sql.push_str(" WHERE ");
@@ -1820,6 +1838,18 @@ impl Storage for SqliteStorage {
         if let Some(ref search) = filter.description_search {
             conditions.push("je.description LIKE ?");
             param_values.push(Box::new(format!("%{}%", search)));
+        }
+        if let Some(ref tags) = filter.tag_filters {
+            for tag in tags {
+                conditions.push("je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)");
+                param_values.push(Box::new(format!("%,{},%", tag.to_lowercase())));
+            }
+        }
+        if let Some(ref links) = filter.link_filters {
+            for link in links {
+                conditions.push("je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)");
+                param_values.push(Box::new(link.to_lowercase()));
+            }
         }
 
         let where_clause = if conditions.is_empty() {

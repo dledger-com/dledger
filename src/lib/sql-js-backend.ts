@@ -1712,6 +1712,22 @@ export class SqlJsBackend implements Backend {
       conditions.push("je.description LIKE ?");
       params.push(`%${filter.description_search}%`);
     }
+    if (filter.tag_filters && filter.tag_filters.length > 0) {
+      for (const tag of filter.tag_filters) {
+        conditions.push(
+          "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)",
+        );
+        params.push(`%,${tag.toLowerCase()},%`);
+      }
+    }
+    if (filter.link_filters && filter.link_filters.length > 0) {
+      for (const link of filter.link_filters) {
+        conditions.push(
+          "je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)",
+        );
+        params.push(link.toLowerCase());
+      }
+    }
     if (conditions.length > 0) {
       sql += " WHERE " + conditions.join(" AND ");
     }
@@ -1792,6 +1808,22 @@ export class SqlJsBackend implements Backend {
     if (filter.description_search) {
       conditions.push("je.description LIKE ?");
       params.push(`%${filter.description_search}%`);
+    }
+    if (filter.tag_filters && filter.tag_filters.length > 0) {
+      for (const tag of filter.tag_filters) {
+        conditions.push(
+          "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)",
+        );
+        params.push(`%,${tag.toLowerCase()},%`);
+      }
+    }
+    if (filter.link_filters && filter.link_filters.length > 0) {
+      for (const link of filter.link_filters) {
+        conditions.push(
+          "je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)",
+        );
+        params.push(link.toLowerCase());
+      }
     }
     if (conditions.length > 0) {
       sql += " WHERE " + conditions.join(" AND ");

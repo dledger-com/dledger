@@ -27,6 +27,8 @@ export interface TransactionFilter {
   status?: JournalEntryStatus;
   source?: string;
   description_search?: string;
+  tag_filters?: string[];
+  link_filters?: string[];
   limit?: number;
   offset?: number;
   order_by?: "date" | "description" | "status";
