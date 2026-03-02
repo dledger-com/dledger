@@ -30,7 +30,6 @@
     import { unzipSync, strFromU8 } from "fflate";
     import { filterLedgerFiles, resolveIncludes } from "$lib/ledger-include.js";
     import {
-        syncExchangeRates,
         fetchSingleRate,
     } from "$lib/exchange-rate-sync.js";
     import {
@@ -229,9 +228,6 @@
         for (const g of map.values()) g.chainIds.sort((a, b) => a - b);
         return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
     });
-
-    // -- Exchange rate sync state --
-    const syncingRates = $derived(taskQueue.isActive("rate-sync"));
 
     // -- Handler change suggestion state --
     let reprocessSuggested = $state(false);
@@ -583,51 +579,6 @@
                 return {
                     summary: `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
                     data: result,
-                };
-            },
-        });
-    }
-
-    function handleSyncRates() {
-        taskQueue.enqueue({
-            key: "rate-sync",
-            label: "Sync exchange rates",
-            async run() {
-                const backend = getBackend();
-                const r = await syncExchangeRates(
-                    backend,
-                    settings.currency,
-                    settings.coingeckoApiKey,
-                    settings.finnhubApiKey,
-                    getHiddenCurrencySet(),
-                    settings.cryptoCompareApiKey,
-                    settings.settings.dpriceMode,
-                    settings.settings.dpriceUrl,
-                );
-
-                settings.update({
-                    lastRateSync: new Date().toISOString().slice(0, 10),
-                });
-
-                if (r.autoHidden.length > 0) {
-                    for (const code of r.autoHidden) {
-                        await markCurrencyHidden(backend, code);
-                    }
-                    showAutoHideToast(r.autoHidden);
-                    loadAvailableCurrencies();
-                }
-
-                if (r.errors.length > 0) {
-                    toast.warning(
-                        `Synced ${r.rates_fetched} rate(s) with ${r.errors.length} warning(s)`,
-                    );
-                } else {
-                    toast.success(`Synced ${r.rates_fetched} exchange rate(s)`);
-                }
-
-                return {
-                    summary: `${r.rates_fetched} rate(s) synced`,
-                    data: r,
                 };
             },
         });
@@ -2099,13 +2050,6 @@
                 >
             </p>
         </Card.Content>
-        <Card.Footer class="flex justify-between">
-            <Button variant="outline" href="/journal">Back</Button>
-            <Button onclick={handleSyncRates} disabled={syncingRates}>
-                <RefreshCw class="mr-1 h-4 w-4" />
-                {syncingRates ? "Syncing..." : "Sync Rates"}
-            </Button>
-        </Card.Footer>
     </Card.Root>
 
     <!-- Historical Backfill -->

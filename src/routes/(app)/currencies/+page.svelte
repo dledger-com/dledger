@@ -15,11 +15,14 @@
   import { getHiddenCurrencySet, markCurrencyHidden, unmarkCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import type { Currency } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
-  import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
+  import { syncExchangeRates, fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
+  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
+  import RefreshCw from "lucide-svelte/icons/refresh-cw";
 
   const settings = new SettingsStore();
+  const syncingRates = $derived(taskQueue.isActive("rate-sync"));
 
   let currencies = $state<Currency[]>([]);
   let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
@@ -118,6 +121,53 @@
     });
   }
 
+  function handleSyncRates() {
+    taskQueue.enqueue({
+      key: "rate-sync",
+      label: "Sync exchange rates",
+      async run() {
+        const backend = getBackend();
+        const r = await syncExchangeRates(
+          backend,
+          settings.currency,
+          settings.coingeckoApiKey,
+          settings.finnhubApiKey,
+          getHiddenCurrencySet(),
+          settings.cryptoCompareApiKey,
+          settings.settings.dpriceMode,
+          settings.settings.dpriceUrl,
+        );
+
+        settings.update({
+          lastRateSync: new Date().toISOString().slice(0, 10),
+        });
+
+        if (r.autoHidden.length > 0) {
+          for (const code of r.autoHidden) {
+            await markCurrencyHidden(backend, code);
+          }
+          showAutoHideToast(r.autoHidden);
+        }
+
+        if (r.errors.length > 0) {
+          toast.warning(
+            `Synced ${r.rates_fetched} rate(s) with ${r.errors.length} warning(s)`,
+          );
+        } else {
+          toast.success(`Synced ${r.rates_fetched} exchange rate(s)`);
+        }
+
+        await loadCurrencies();
+        await loadRateSources();
+
+        return {
+          summary: `${r.rates_fetched} rate(s) synced`,
+          data: r,
+        };
+      },
+    });
+  }
+
   const unsubCurrencies = onInvalidate("currencies", () => {
     loadCurrencies();
     loadRateSources();
@@ -155,6 +205,10 @@
         }}
       >
         Re-detect Sources
+      </Button>
+      <Button size="sm" onclick={handleSyncRates} disabled={syncingRates}>
+        <RefreshCw class="mr-1 h-4 w-4" />
+        {syncingRates ? "Syncing..." : "Sync Rates"}
       </Button>
     </div>
   </div>
