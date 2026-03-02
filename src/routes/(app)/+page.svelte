@@ -32,7 +32,7 @@
 
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
 
-  // Dynamically loaded chart components (deferred past first paint)
+  // Dynamically loaded chart libraries (deferred past first paint)
   let AreaChart = $state<typeof import("layerchart").AreaChart | null>(null);
   let PieChart = $state<typeof import("layerchart").PieChart | null>(null);
   let scaleTime = $state<typeof import("d3-scale").scaleTime | null>(null);
@@ -138,7 +138,7 @@
   }
 
   onMount(() => {
-    // Dynamic import of heavy chart libraries (deferred past first paint)
+    // 1. Dynamic import of heavy chart libraries (truly async, non-blocking)
     Promise.all([import("layerchart"), import("d3-scale")]).then(([lc, d3]) => {
       AreaChart = lc.AreaChart;
       PieChart = lc.PieChart;
@@ -146,7 +146,7 @@
       scaleLinear = d3.scaleLinear;
     });
 
-    // Restore from cache (async callbacks defer past first paint)
+    // 2. Restore from cache BEFORE paint (synchronous, cheap reads)
     const cachedRecent = getCachedRecentEntries();
     if (cachedRecent.loaded) {
       recentEntries = cachedRecent.entries;
@@ -164,68 +164,73 @@
       chartsLoading = false;
     }
 
-    const date = today();
-    const base = settings.currency;
-    const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
-    const sharedCache = getOrCreateRateCache();
+    // 3. Defer ALL data queries past first paint — sql.js methods are
+    //    synchronous and block the main thread for 500ms+ with large DBs.
+    //    setTimeout(0) lets the browser paint cached data / skeletons first.
+    setTimeout(() => {
+      const date = today();
+      const base = settings.currency;
+      const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
+      const sharedCache = getOrCreateRateCache();
 
-    // Stream 1: Recent entries (independent, fast single query)
-    getBackend()
-      .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
-      .then((entries) => {
-        const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
-        recentEntries = filtered;
-        recentLoaded = true;
-        setCachedRecentEntries(filtered);
-      })
-      .catch((e) => console.error("Recent entries failed:", e));
+      // Stream 1: Recent entries (independent, fast single query)
+      getBackend()
+        .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
+        .then((entries) => {
+          const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
+          recentEntries = filtered;
+          recentLoaded = true;
+          setCachedRecentEntries(filtered);
+        })
+        .catch((e) => console.error("Recent entries failed:", e));
 
-    // Stream 2: Account store (independent, for name lookups)
-    accountStore.load();
+      // Stream 2: Account store (independent, for name lookups)
+      accountStore.load();
 
-    // Stream 3: Balance sheet → assets/liabilities cards (independent chain)
-    const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
-      if (reportStore.balanceSheet) {
-        convertBalances(
-          filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {});
-        convertBalances(
-          filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {});
-      }
-    });
-
-    // Stream 4: Income statement → revenue/net income cards (independent chain)
-    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
-      if (reportStore.incomeStatement) {
-        convertBalances(
-          filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {});
-        convertBalances(
-          filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {});
-      }
-    });
-
-    // Stream 5: Charts (need both reports, but NOT conversions)
-    Promise.all([bsPromise, isPromise])
-      .then(() => loadCharts(sharedCache))
-      .catch((e) => console.error("Charts failed:", e));
-
-    // Stream 6: Recurring templates toast (independent)
-    countDueTemplates(getBackend())
-      .then((count) => {
-        if (count > 0) {
-          toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
-            action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
-          });
+      // Stream 3: Balance sheet → assets/liabilities cards (independent chain)
+      const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
+        if (reportStore.balanceSheet) {
+          convertBalances(
+            filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {});
+          convertBalances(
+            filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {});
         }
-      })
-      .catch(() => {});
+      });
+
+      // Stream 4: Income statement → revenue/net income cards (independent chain)
+      const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
+        if (reportStore.incomeStatement) {
+          convertBalances(
+            filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {});
+          convertBalances(
+            filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {});
+        }
+      });
+
+      // Stream 5: Charts (need both reports, but NOT conversions)
+      Promise.all([bsPromise, isPromise])
+        .then(() => loadCharts(sharedCache))
+        .catch((e) => console.error("Charts failed:", e));
+
+      // Stream 6: Recurring templates toast (independent)
+      countDueTemplates(getBackend())
+        .then((count) => {
+          if (count > 0) {
+            toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
+              action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
+            });
+          }
+        })
+        .catch(() => {});
+    }, 0);
   });
 
   // ── Invalidation subscriptions ──────────────────────────────────
