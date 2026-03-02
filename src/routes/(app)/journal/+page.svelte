@@ -45,6 +45,18 @@
   let searchTerm = $state("");
   let showDuplicates = $state(false);
 
+  // Extract #tag tokens and remaining text from search term
+  const tagFilters = $derived.by(() => {
+    const tokens = searchTerm.trim().split(/\s+/);
+    const tags: string[] = [];
+    const rest: string[] = [];
+    for (const t of tokens) {
+      if (t.startsWith("#") && t.length > 1) tags.push(t.slice(1).toLowerCase());
+      else rest.push(t);
+    }
+    return { tags, text: rest.join(" ") };
+  });
+
   type JournalSortKey = "date" | "description" | "status" | "amount";
   const sort = createSortState<JournalSortKey>();
 
@@ -91,13 +103,13 @@
   // Debounced backend search
   let debounceTimer: ReturnType<typeof setTimeout>;
   $effect(() => {
-    const term = searchTerm.trim();
+    const { text } = tagFilters;
     const orderBy = sort.key !== "amount" ? sort.key : null;
     const orderDir = sort.direction;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       const filter: TransactionFilter = {};
-      if (term) filter.description_search = term;
+      if (text) filter.description_search = text;
       if (orderBy && orderDir) {
         filter.order_by = orderBy;
         filter.order_direction = orderDir;
@@ -177,6 +189,23 @@
       entryLinks = map;
     })();
   });
+
+  // Post-filter by #tag tokens
+  const displayEntries = $derived.by(() => {
+    const { tags } = tagFilters;
+    if (tags.length === 0) return filteredEntries;
+    return filteredEntries.filter(([entry]) => {
+      const eTags = entryTags.get(entry.id);
+      if (!eTags) return false;
+      return tags.every((t) => eTags.some((et) => et.toLowerCase() === t));
+    });
+  });
+
+  function addTagFilter(tag: string) {
+    const token = `#${tag}`;
+    if (searchTerm.toLowerCase().includes(token.toLowerCase())) return;
+    searchTerm = searchTerm ? `${searchTerm} ${token}` : token;
+  }
 
   let convertedTotals = $state(new Map<string, string>());
   let conversionGen = 0;
@@ -362,7 +391,7 @@
         </div>
       </Card.Content>
     </Card.Root>
-  {:else if filteredEntries.length === 0 && searchTerm}
+  {:else if displayEntries.length === 0 && searchTerm}
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
@@ -373,7 +402,7 @@
         </div>
       </Card.Content>
     </Card.Root>
-  {:else if filteredEntries.length === 0}
+  {:else if displayEntries.length === 0}
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
@@ -393,7 +422,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {@const sortedEntries = sort.key === "amount" && sort.direction ? sortItems(filteredEntries, ([, items]: [any, any]) => totalDebits(items), sort.direction) : filteredEntries}
+          {@const sortedEntries = sort.key === "amount" && sort.direction ? sortItems(displayEntries, ([, items]: [any, any]) => totalDebits(items), sort.direction) : displayEntries}
           {#each sortedEntries as [entry, items] (entry.id)}
             <Table.Row>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
@@ -401,7 +430,7 @@
                 <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
                   <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
-                    <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
+                    <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" onclick={addTagFilter} />
                   {/if}
                   {#if entryLinks.get(entry.id)?.length}
                     <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
