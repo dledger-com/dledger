@@ -20,8 +20,6 @@
   import { countDueTemplates } from "$lib/utils/recurring.js";
   import { toast } from "svelte-sonner";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
-  import { AreaChart, PieChart } from "layerchart";
-  import { scaleTime, scaleLinear } from "d3-scale";
   import {
     getCachedRecentEntries, setCachedRecentEntries,
     getCachedSummaries, setCachedSummary,
@@ -33,6 +31,12 @@
   const settings = new SettingsStore();
 
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
+
+  // Dynamically loaded chart components (deferred past first paint)
+  let AreaChart = $state<typeof import("layerchart").AreaChart | null>(null);
+  let PieChart = $state<typeof import("layerchart").PieChart | null>(null);
+  let scaleTime = $state<typeof import("d3-scale").scaleTime | null>(null);
+  let scaleLinear = $state<typeof import("d3-scale").scaleLinear | null>(null);
 
   // Start empty — cache is restored in onMount (like Journal)
   let recentLoaded = $state(false);
@@ -134,6 +138,14 @@
   }
 
   onMount(() => {
+    // Dynamic import of heavy chart libraries (deferred past first paint)
+    Promise.all([import("layerchart"), import("d3-scale")]).then(([lc, d3]) => {
+      AreaChart = lc.AreaChart;
+      PieChart = lc.PieChart;
+      scaleTime = d3.scaleTime;
+      scaleLinear = d3.scaleLinear;
+    });
+
     // Restore from cache (async callbacks defer past first paint)
     const cachedRecent = getCachedRecentEntries();
     if (cachedRecent.loaded) {
@@ -384,7 +396,7 @@
         <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if chartsLoading}
+        {#if chartsLoading || !AreaChart || !scaleTime || !scaleLinear}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
           <p class="text-sm text-muted-foreground py-12 text-center">
@@ -413,7 +425,7 @@
         <Card.Description>Breakdown by category.</Card.Description>
       </Card.Header>
       <Card.Content>
-        {#if chartsLoading}
+        {#if chartsLoading || !PieChart}
           <Skeleton class="h-48 w-full" />
         {:else if expenseData.length === 0}
           <p class="text-sm text-muted-foreground py-12 text-center">No expenses in period.</p>
