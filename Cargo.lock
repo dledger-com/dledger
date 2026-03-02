@@ -1541,6 +1541,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "ureq",
  "uuid",

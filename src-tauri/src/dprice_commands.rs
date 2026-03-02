@@ -8,6 +8,7 @@ use tauri::State;
 use dprice::config::DpriceConfig;
 use dprice::cross_rate;
 use dprice::db::PriceDb;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -161,7 +162,7 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
                 .enable_all()
                 .build()
                 .map_err(|e| format!("runtime error: {e}"))?;
-            rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None))
+            rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None, &CancellationToken::new()))
         };
         let elapsed = start.elapsed();
         match sync_result {
@@ -304,7 +305,7 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
                 .enable_all()
                 .build()
                 .map_err(|e| format!("runtime error: {e}"))?;
-            rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None))
+            rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None, &CancellationToken::new()))
         };
         let elapsed = start.elapsed();
         match sync_result {
