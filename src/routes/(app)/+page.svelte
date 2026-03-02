@@ -128,8 +128,8 @@
     try {
       await Promise.all([
         accountStore.load(),
-        getBackend().queryJournalEntries({ limit: 10, order_by: "date", order_direction: "desc" }).then(entries => {
-          recentEntries = filterHiddenEntries(entries, hidden);
+        getBackend().queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" }).then(entries => {
+          recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
         }),
         reportStore.loadBalanceSheet(today()),
         reportStore.loadIncomeStatement(rangeFromDate(), today()),
