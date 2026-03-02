@@ -536,7 +536,7 @@
       </Card.Content>
     </Card.Root>
   {:else}
-    <Card.Root>
+    <Card.Root class="border-x-0 rounded-none shadow-none py-0">
       <div class="relative">
         <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible">
           <Table.Root>
