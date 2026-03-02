@@ -15,6 +15,8 @@
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
   import Loader from "lucide-svelte/icons/loader";
+  import ArrowUp from "lucide-svelte/icons/arrow-up";
+  import { derivePositionLabel, type JournalSortKey } from "$lib/utils/scroll-position.js";
 
   import MatchDialog from "$lib/components/MatchDialog.svelte";
   import { extractAllCandidates } from "$lib/matching/extract.js";
@@ -68,7 +70,6 @@
     return { groups, backendText };
   });
 
-  type JournalSortKey = "date" | "description" | "status" | "amount";
   const sort = createSortState<JournalSortKey>();
 
   interface DuplicateGroup {
@@ -214,6 +215,29 @@
   const paddingBottom = $derived(
     virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
   );
+
+  // Scroll position indicators
+  const isScrolledDown = $derived(virtualItems.length > 0 && virtualItems[0].index > 0);
+
+  const positionLabel = $derived(
+    derivePositionLabel(
+      sortedEntries,
+      virtualItems[0]?.index ?? 0,
+      virtualItems[virtualItems.length - 1]?.index ?? 0,
+      sort.key, sort.direction, formatDebitTotal,
+    )
+  );
+
+  let showPill = $state(false);
+  let pillTimer: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    void virtualItems; // subscribe to scroll changes
+    if (!isScrolledDown) { showPill = false; return; }
+    showPill = true;
+    clearTimeout(pillTimer);
+    pillTimer = setTimeout(() => { showPill = false; }, 1500);
+    return () => clearTimeout(pillTimer);
+  });
 
   // Visible-range metadata loading
   let tagGen = 0;
@@ -513,56 +537,81 @@
     </Card.Root>
   {:else}
     <Card.Root>
-      <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)]">
-        <Table.Root>
-          <Table.Header class="sticky top-0 z-10 bg-background">
-            <Table.Row>
-              <SortableHeader active={sort.key === "date"} direction={sort.direction} onclick={() => sort.toggle("date")}>Date</SortableHeader>
-              <SortableHeader active={sort.key === "description"} direction={sort.direction} onclick={() => sort.toggle("description")}>Description</SortableHeader>
-              <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")} class="hidden md:table-cell">Status</SortableHeader>
-              <SortableHeader active={sort.key === "amount"} direction={sort.direction} onclick={() => sort.toggle("amount")} class="text-right">Amount</SortableHeader>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#if paddingTop > 0}
-              <tr><td style="height: {paddingTop}px;" colspan="4"></td></tr>
-            {/if}
-            {#each virtualItems as row (row.key)}
-              {@const [entry, items] = sortedEntries[row.index]}
+      <div class="relative">
+        <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)]">
+          <Table.Root>
+            <Table.Header class="sticky top-0 z-10 bg-background">
               <Table.Row>
-                <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
-                <Table.Cell class="max-w-[300px]">
-                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
-                    <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
-                    {#if entryTags.get(entry.id)?.length}
-                      <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" onclick={addTagFilter} />
-                    {/if}
-                    {#if entryLinks.get(entry.id)?.length}
-                      <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
-                    {/if}
-                  </div>
-                </Table.Cell>
-                <Table.Cell class="hidden md:table-cell">
-                  <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
-                    {entry.status}
-                  </Badge>
-                </Table.Cell>
-                <Table.Cell class="text-right font-mono">
-                  {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
-                </Table.Cell>
+                <SortableHeader active={sort.key === "date"} direction={sort.direction} onclick={() => sort.toggle("date")}>Date</SortableHeader>
+                <SortableHeader active={sort.key === "description"} direction={sort.direction} onclick={() => sort.toggle("description")}>Description</SortableHeader>
+                <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")} class="hidden md:table-cell">Status</SortableHeader>
+                <SortableHeader active={sort.key === "amount"} direction={sort.direction} onclick={() => sort.toggle("amount")} class="text-right">Amount</SortableHeader>
               </Table.Row>
-            {/each}
-            {#if paddingBottom > 0}
-              <tr><td style="height: {paddingBottom}px;" colspan="4"></td></tr>
-            {/if}
-          </Table.Body>
-        </Table.Root>
+            </Table.Header>
+            <Table.Body>
+              {#if paddingTop > 0}
+                <tr><td style="height: {paddingTop}px;" colspan="4"></td></tr>
+              {/if}
+              {#each virtualItems as row (row.key)}
+                {@const [entry, items] = sortedEntries[row.index]}
+                <Table.Row>
+                  <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
+                  <Table.Cell class="max-w-[300px]">
+                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                      <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+                      {#if entryTags.get(entry.id)?.length}
+                        <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" onclick={addTagFilter} />
+                      {/if}
+                      {#if entryLinks.get(entry.id)?.length}
+                        <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
+                      {/if}
+                    </div>
+                  </Table.Cell>
+                  <Table.Cell class="hidden md:table-cell">
+                    <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
+                      {entry.status}
+                    </Badge>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono">
+                    {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
+                  </Table.Cell>
+                </Table.Row>
+              {/each}
+              {#if paddingBottom > 0}
+                <tr><td style="height: {paddingBottom}px;" colspan="4"></td></tr>
+              {/if}
+            </Table.Body>
+          </Table.Root>
+        </div>
+
+        {#if showPill && positionLabel}
+          <div class="absolute bottom-12 right-4 z-20 rounded-full border
+                      bg-background/95 px-3 py-1 text-xs text-muted-foreground
+                      shadow-sm backdrop-blur-sm">
+            {positionLabel}
+          </div>
+        {/if}
+
+        {#if isScrolledDown}
+          <button type="button"
+            class="absolute bottom-3 right-4 z-20 flex h-8 w-8 items-center
+                   justify-center rounded-full border bg-background/95
+                   text-muted-foreground shadow-sm backdrop-blur-sm
+                   hover:text-foreground"
+            onclick={() => virtualizer.scrollToOffset(0, { behavior: "smooth" })}
+            title="Back to top">
+            <ArrowUp class="size-4" />
+          </button>
+        {/if}
       </div>
     </Card.Root>
 
     <div class="flex items-center justify-between">
       <span class="text-sm text-muted-foreground">
-        {store.totalCount} total {store.totalCount === 1 ? "entry" : "entries"}
+        {#if isScrolledDown}
+          {(virtualItems[0]?.index ?? 0) + 1}–{Math.min((virtualItems[virtualItems.length - 1]?.index ?? 0) + 1, sortedEntries.length)} of
+        {/if}
+        {store.totalCount} {store.totalCount === 1 ? "entry" : "entries"}
       </span>
     </div>
   {/if}
