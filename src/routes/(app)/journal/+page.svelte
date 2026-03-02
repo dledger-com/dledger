@@ -161,6 +161,35 @@
     return byCode.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
 
+  // Metadata state — declared before displayEntries to avoid TDZ
+  let entryTags = $state<Map<string, string[]>>(new Map());
+  let entryLinks = $state<Map<string, string[]>>(new Map());
+
+  // Post-filter: OR across comma-separated groups, AND within each group
+  const displayEntries = $derived.by(() => {
+    const { groups } = searchFilters;
+    if (groups.length === 0) return filteredEntries;
+    const single = groups.length === 1;
+    // Single group: tags/links already filtered by backend SQL, no client-side filtering needed
+    if (single && groups[0].tags.length === 0 && groups[0].links.length === 0) return filteredEntries;
+    if (single) return filteredEntries;
+    // Multi-group: client-side OR filtering across groups
+    return filteredEntries.filter(([entry]) => {
+      return groups.some(({ tags, links, text }) => {
+        if (text && !entry.description.toLowerCase().includes(text.toLowerCase())) return false;
+        if (tags.length > 0) {
+          const eTags = entryTags.get(entry.id);
+          if (!eTags || !tags.every(t => eTags.some(et => et.toLowerCase() === t))) return false;
+        }
+        if (links.length > 0) {
+          const eLinks = entryLinks.get(entry.id);
+          if (!eLinks || !links.every(l => eLinks.some(el => el.toLowerCase() === l))) return false;
+        }
+        return true;
+      });
+    });
+  });
+
   // Sorted entries — needed in script block for virtualizer count
   const sortedEntries = $derived.by(() => {
     if (sort.key === "amount" && sort.direction)
@@ -186,10 +215,10 @@
     virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
   );
 
-  // Visible-range metadata loading (tags)
-  let entryTags = $state<Map<string, string[]>>(new Map());
+  // Visible-range metadata loading
   let tagGen = 0;
-  let prevSortedRef = $state<unknown>(null);
+  let prevFilteredRef: unknown = null;
+  let linkGen = 0;
 
   // Derive visible entry IDs
   const visibleEntryIds = $derived(
@@ -200,8 +229,8 @@
   $effect(() => {
     const ids = visibleEntryIds;
     // Clear maps when underlying data changes
-    if (sortedEntries !== prevSortedRef) {
-      prevSortedRef = sortedEntries;
+    if (filteredEntries !== prevFilteredRef) {
+      prevFilteredRef = filteredEntries;
       entryTags = new Map();
       entryLinks = new Map();
       convertedTotals = new Map();
@@ -235,10 +264,6 @@
     return () => clearTimeout(tagDebounce);
   });
 
-  // Visible-range metadata loading (links)
-  let entryLinks = $state<Map<string, string[]>>(new Map());
-  let linkGen = 0;
-
   let linkDebounce: ReturnType<typeof setTimeout>;
   $effect(() => {
     const ids = visibleEntryIds;
@@ -270,31 +295,6 @@
       } catch { /* ignore */ }
     }, 80);
     return () => clearTimeout(linkDebounce);
-  });
-
-  // Post-filter: OR across comma-separated groups, AND within each group
-  const displayEntries = $derived.by(() => {
-    const { groups } = searchFilters;
-    if (groups.length === 0) return filteredEntries;
-    const single = groups.length === 1;
-    // Single group: tags/links already filtered by backend SQL, no client-side filtering needed
-    if (single && groups[0].tags.length === 0 && groups[0].links.length === 0) return filteredEntries;
-    if (single) return filteredEntries;
-    // Multi-group: client-side OR filtering across groups
-    return filteredEntries.filter(([entry]) => {
-      return groups.some(({ tags, links, text }) => {
-        if (text && !entry.description.toLowerCase().includes(text.toLowerCase())) return false;
-        if (tags.length > 0) {
-          const eTags = entryTags.get(entry.id);
-          if (!eTags || !tags.every(t => eTags.some(et => et.toLowerCase() === t))) return false;
-        }
-        if (links.length > 0) {
-          const eLinks = entryLinks.get(entry.id);
-          if (!eLinks || !links.every(l => eLinks.some(el => el.toLowerCase() === l))) return false;
-        }
-        return true;
-      });
-    });
   });
 
   function addTagFilter(tag: string) {
