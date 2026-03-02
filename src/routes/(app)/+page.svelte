@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -12,6 +12,7 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
@@ -180,6 +181,62 @@
         });
       }
     }).catch(() => {});
+  });
+
+  // ── Invalidation subscriptions ──────────────────────────────────
+  async function refreshRecentEntries() {
+    try {
+      const entries = await getBackend().queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" });
+      recentEntries = filterHiddenEntries(entries, hidden).slice(0, 10);
+    } catch (e) {
+      console.error("Failed to refresh recent entries:", e);
+    }
+  }
+
+  async function refreshReports() {
+    try {
+      const sharedCache = getOrCreateRateCache();
+      const date = today();
+      const base = settings.currency;
+      const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
+
+      await Promise.all([
+        reportStore.loadBalanceSheet(date),
+        reportStore.loadIncomeStatement(rangeFromDate(), date),
+      ]);
+
+      const promises: Promise<void>[] = [];
+      if (reportStore.balanceSheet) {
+        promises.push(
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet), base, date, sharedCache)
+            .then(s => { assetsSummary = s; }),
+          convertBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet), base, date, sharedCache)
+            .then(s => { liabilitiesSummary = s; }),
+        );
+      }
+      if (reportStore.incomeStatement) {
+        promises.push(
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet), base, date, sharedCache)
+            .then(s => { revenueSummary = s; }),
+          convertBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet), base, date, sharedCache)
+            .then(s => { netIncomeSummary = s; }),
+        );
+      }
+      await Promise.all(promises);
+      loadCharts(sharedCache);
+    } catch (e) {
+      console.error("Failed to refresh reports:", e);
+    }
+  }
+
+  const unsubJournal = onInvalidate("journal", refreshRecentEntries);
+  const unsubAccounts = onInvalidate("accounts", () => { accountStore.load(); });
+  const unsubReports = onInvalidate("reports", refreshReports);
+
+  onDestroy(() => {
+    unsubJournal();
+    unsubAccounts();
+    unsubReports();
   });
 
   async function selectRange(preset: RangePreset) {

@@ -1,5 +1,6 @@
 import type { Account, AccountType, Currency, CurrencyBalance } from "$lib/types/index.js";
 import { getBackend } from "$lib/backend.js";
+import { invalidate } from "$lib/data/invalidation.js";
 
 export class AccountStore {
   accounts = $state<Account[]>([]);
@@ -52,6 +53,7 @@ export class AccountStore {
     try {
       await getBackend().createAccount(account);
       await this.load();
+      invalidate("accounts");
       return true;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -63,6 +65,7 @@ export class AccountStore {
     try {
       await getBackend().updateAccount(id, updates);
       await this.load();
+      invalidate("accounts", "reports");
       return true;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -74,6 +77,7 @@ export class AccountStore {
     try {
       await getBackend().archiveAccount(id);
       await this.load();
+      invalidate("accounts");
       return true;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -85,6 +89,7 @@ export class AccountStore {
     try {
       await getBackend().createCurrency(currency);
       this.currencies = await getBackend().listCurrencies();
+      invalidate("currencies");
       return true;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -96,6 +101,7 @@ export class AccountStore {
     try {
       const result = await getBackend().mergeAccounts(sourceId, targetId);
       await this.load();
+      invalidate("accounts", "journal", "reports");
       return result;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);

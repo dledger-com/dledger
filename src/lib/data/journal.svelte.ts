@@ -1,5 +1,6 @@
 import type { JournalEntry, LineItem, TransactionFilter } from "$lib/types/index.js";
 import { getBackend } from "$lib/backend.js";
+import { invalidate } from "$lib/data/invalidation.js";
 
 export class JournalStore {
   entries = $state<[JournalEntry, LineItem[]][]>([]);
@@ -45,6 +46,7 @@ export class JournalStore {
     try {
       await getBackend().postJournalEntry(entry, items);
       await this.load(this.currentFilter);
+      invalidate("journal", "reports");
       return true;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -56,6 +58,7 @@ export class JournalStore {
     try {
       const reversal = await getBackend().voidJournalEntry(id);
       await this.load(this.currentFilter);
+      invalidate("journal", "reports");
       return reversal;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);

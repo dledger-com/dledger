@@ -5,6 +5,7 @@
   import { initBackend, getBackend, disposeBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
+  import { initInvalidationChannel, disposeInvalidationChannel } from "$lib/data/invalidation.js";
   import { syncExchangeRates } from "$lib/exchange-rate-sync.js";
   import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
@@ -15,10 +16,14 @@
 
   let ready = $state(false);
 
-  const handlePageHide = () => disposeBackend();
+  const handlePageHide = () => {
+    disposeInvalidationChannel();
+    disposeBackend();
+  };
 
   onMount(() => {
     window.addEventListener("pagehide", handlePageHide);
+    initInvalidationChannel();
 
     (async () => {
       try {
@@ -89,6 +94,7 @@
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
+      disposeInvalidationChannel();
     };
   });
 </script>

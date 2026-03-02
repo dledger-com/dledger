@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { invalidate } from "$lib/data/invalidation.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -122,6 +123,7 @@
         parts.push(`${result.duplicates_skipped} duplicate(s) skipped`);
       }
       toast.success(parts.join(", "));
+      if (result.transactions_imported > 0) invalidate("journal", "accounts", "reports");
 
       // Auto-backfill missing exchange rates for imported currencies
       if (result.transaction_currency_dates && result.transaction_currency_dates.length > 0) {

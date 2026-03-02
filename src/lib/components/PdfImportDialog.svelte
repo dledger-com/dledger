@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { invalidate } from "$lib/data/invalidation.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -342,6 +343,7 @@
       importResult = result;
       const skipMsg = result.duplicates_skipped > 0 ? `, ${result.duplicates_skipped} duplicates skipped` : "";
       toast.success(`Imported ${result.entries_created} entries${skipMsg}`);
+      if (result.entries_created > 0) invalidate("journal", "accounts", "reports");
 
       // Auto-backfill missing exchange rates for imported currencies
       if (result.transaction_currency_dates.length > 0) {

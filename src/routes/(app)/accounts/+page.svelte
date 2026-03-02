@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -12,6 +12,7 @@
   import AccountTypeBadge from "$lib/components/AccountTypeBadge.svelte";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import type { Account, AccountType } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
   import ListFilter from "$lib/components/ListFilter.svelte";
@@ -24,6 +25,11 @@
   import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
 
   const store = new AccountStore();
+
+  // Reload when account data changes elsewhere (imports, cross-tab)
+  const unsubAccounts = onInvalidate("accounts", () => { store.load(); });
+  onDestroy(unsubAccounts);
+
   let dialogOpen = $state(false);
 
   // Form state

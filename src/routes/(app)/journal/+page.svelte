@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import { convertBalances } from "$lib/utils/currency-convert.js";
@@ -42,6 +44,11 @@
   const settings = new SettingsStore();
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(store.entries, hidden));
+
+  // Reload when journal data changes elsewhere (imports, cross-tab)
+  const unsubJournal = onInvalidate("journal", () => { store.loadAll(); });
+  onDestroy(unsubJournal);
+
   let exporting = $state(false);
   let detectingDuplicates = $state(false);
   let searchTerm = $state("");

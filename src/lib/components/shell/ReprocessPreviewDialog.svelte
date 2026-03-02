@@ -9,6 +9,7 @@
   import { getDefaultRegistry, applyReprocess } from "$lib/handlers/index.js";
   import type { ReprocessResult } from "$lib/handlers/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { invalidate } from "$lib/data/invalidation.js";
   import { toast } from "svelte-sonner";
 
   const settings = new SettingsStore();
@@ -85,6 +86,8 @@
             await backend.setCurrencyRateSource(currency, rateSource, `handler:${hint.handler}`);
           }
         }
+
+        if (combined.changed > 0) invalidate("journal", "accounts", "reports");
 
         if (combined.errors.length > 0) {
           toast.warning(`Reprocessed ${combined.changed} transaction(s) with ${combined.errors.length} error(s)`);

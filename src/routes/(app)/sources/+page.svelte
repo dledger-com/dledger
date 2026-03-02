@@ -7,6 +7,7 @@
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { getBackend } from "$lib/backend.js";
     import { SettingsStore } from "$lib/data/settings.svelte.js";
+    import { invalidate } from "$lib/data/invalidation.js";
     import {
         getHiddenCurrencySet,
         markCurrencyHidden,
@@ -348,6 +349,7 @@
                     },
                 );
                 await loadCexAccounts();
+                if (result.entries_imported > 0) invalidate("journal", "accounts", "reports");
                 // Auto-trigger consolidation if entries were imported and etherscan accounts exist
                 if (result.entries_imported > 0 && ethAccounts.length > 0) {
                     handleConsolidateCex();
@@ -723,6 +725,7 @@
                     account.chain_id,
                 );
                 await loadEthAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
                 // Auto-trigger consolidation if entries were imported and CEX accounts exist
                 if (r.transactions_imported > 0 && cexAccounts.length > 0) {
                     handleConsolidateCex();
