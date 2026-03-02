@@ -165,22 +165,14 @@
       </Card.Content>
     </Card.Root>
 
+    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY)}
     <Card.Root>
       <Card.Header class="pb-3">
-        <Card.Title class="text-sm">Tags</Card.Title>
+        <Card.Title class="text-sm">Tags & Metadata</Card.Title>
       </Card.Header>
-      <Card.Content class="pt-0">
+      <Card.Content class="pt-0 space-y-3">
         <TagInput {tags} onchange={handleTagsChange} />
-      </Card.Content>
-    </Card.Root>
-
-    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY)}
-    {#if displayMeta.length > 0}
-      <Card.Root>
-        <Card.Header>
-          <Card.Title>Metadata</Card.Title>
-        </Card.Header>
-        <Card.Content>
+        {#if displayMeta.length > 0}
           <dl class="grid grid-cols-2 gap-4 text-sm">
             {#each displayMeta as [key, value]}
               <div>
@@ -195,9 +187,9 @@
               </div>
             {/each}
           </dl>
-        </Card.Content>
-      </Card.Root>
-    {/if}
+        {/if}
+      </Card.Content>
+    </Card.Root>
 
     <Card.Root>
       <Card.Header>
