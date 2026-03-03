@@ -34,7 +34,7 @@
 >
 	<button
 		type="button"
-		class="inline-flex w-full cursor-pointer select-none items-center gap-1 hover:text-foreground/70"
+		class="inline-flex w-full cursor-pointer select-none items-center gap-1 hover:text-foreground/70 [th.text-right_&]:justify-end"
 		onclick={onclick}
 	>
 		{@render children?.()}

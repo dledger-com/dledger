@@ -727,6 +727,7 @@
                                     active={sort.key === "date"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("date")}
+                                    class="w-0"
                                     >Date</SortableHeader
                                 >
                                 <SortableHeader
@@ -734,13 +735,6 @@
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("description")}
                                     >Description</SortableHeader
-                                >
-                                <SortableHeader
-                                    active={sort.key === "status"}
-                                    direction={sort.direction}
-                                    onclick={() => sort.toggle("status")}
-                                    class="hidden md:table-cell"
-                                    >Status</SortableHeader
                                 >
                                 <SortableHeader
                                     active={sort.key === "amount"}
@@ -755,14 +749,14 @@
                                 <tr
                                     ><td
                                         style="height: {paddingTop}px;"
-                                        colspan="4"
+                                        colspan="3"
                                     ></td></tr
                                 >
                             {/if}
                             {#each virtualItems as row (row.key)}
                                 {@const [entry, items] =
                                     sortedEntries[row.index]}
-                                <Table.Row>
+                                <Table.Row class={entry.status === "voided" ? "line-through opacity-50" : ""}>
                                     <Table.Cell class="text-muted-foreground"
                                         >{entry.date}</Table.Cell
                                     >
@@ -795,18 +789,6 @@
                                             {/if}
                                         </div>
                                     </Table.Cell>
-                                    <Table.Cell class="hidden md:table-cell">
-                                        <Badge
-                                            variant={entry.status ===
-                                            "confirmed"
-                                                ? "default"
-                                                : entry.status === "voided"
-                                                  ? "destructive"
-                                                  : "secondary"}
-                                        >
-                                            {entry.status}
-                                        </Badge>
-                                    </Table.Cell>
                                     <Table.Cell class="text-right font-mono">
                                         {convertedTotals.get(entry.id) ??
                                             formatDebitTotal(items)}
@@ -817,7 +799,7 @@
                                 <tr
                                     ><td
                                         style="height: {paddingBottom}px;"
-                                        colspan="4"
+                                        colspan="3"
                                     ></td></tr
                                 >
                             {/if}
