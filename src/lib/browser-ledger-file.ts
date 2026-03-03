@@ -184,6 +184,7 @@ export async function importLedger(
           is_postable: true,
           is_archived: false,
           created_at: date,
+          opened_at: null,
         };
         await backend.createAccount(acc);
         existingAccounts.set(ancestorName, acc);
@@ -203,6 +204,7 @@ export async function importLedger(
       is_postable: true,
       is_archived: false,
       created_at: date,
+      opened_at: null,
     };
     await backend.createAccount(acc);
     existingAccounts.set(fullName, acc);
@@ -267,6 +269,14 @@ export async function importLedger(
 
     const accountId = await ensureAccount(accountName, allowed, date);
 
+    // Set opened_at on the account (use the open directive date)
+    // Skip root accounts (parent_id === null) which can't be edited
+    const existing = existingAccounts.get(accountName);
+    if (existing && !existing.opened_at && existing.parent_id !== null) {
+      await backend.updateAccount(accountId, { opened_at: date });
+      existing.opened_at = date;
+    }
+
     // Parse beancount metadata lines after the directive
     if (fmt === "beancount") {
       const meta = collectBeancountMetadata(allLines, lineIdx + 1);
@@ -305,6 +315,14 @@ export async function importLedger(
     accountName: string;
     amountStr: string;
     commodity: string;
+    lineNum: number;
+  }[] = [];
+
+  // Deferred pad directives — processed alongside balance assertions
+  const deferredPadDirectives: {
+    date: string;
+    accountName: string;
+    padAccountName: string;
     lineNum: number;
   }[] = [];
 
@@ -1180,9 +1198,19 @@ export async function importLedger(
       }
 
       if (rest.startsWith("pad ")) {
-        result.warnings.push(
-          `line ${i + 1}: pad directive skipped`,
-        );
+        const padTokens = rest.substring(4).trim().split(/\s+/);
+        if (padTokens.length >= 2) {
+          deferredPadDirectives.push({
+            date,
+            accountName: padTokens[0],
+            padAccountName: padTokens[1],
+            lineNum: i + 1,
+          });
+        } else {
+          result.warnings.push(
+            `line ${i + 1}: pad directive missing pad account`,
+          );
+        }
         i++;
         continue;
       }
@@ -1255,6 +1283,14 @@ export async function importLedger(
     i++;
   }
 
+  // Process pad directives: for each balance assertion that fails,
+  // check if there's a pad directive for the same account and create a pad journal entry.
+  // Build a map of pad directives by account name for quick lookup.
+  const padByAccount = new Map<string, typeof deferredPadDirectives[number]>();
+  for (const pad of deferredPadDirectives) {
+    padByAccount.set(pad.accountName, pad);
+  }
+
   // Check deferred balance assertions now that all transactions are imported
   for (const ba of deferredBalanceAssertions) {
     const acc = existingAccounts.get(ba.accountName);
@@ -1270,9 +1306,54 @@ export async function importLedger(
     const expected = new Decimal(ba.amountStr);
 
     if (!actualAmount.eq(expected)) {
-      result.warnings.push(
-        `line ${ba.lineNum}: balance assertion failed for ${ba.accountName} ${ba.commodity} ${ba.date} (expected ${ba.amountStr}, actual ${actualAmount.toString()})`,
-      );
+      // Check if there's a pad directive for this account
+      const pad = padByAccount.get(ba.accountName);
+      if (pad) {
+        const difference = expected.minus(actualAmount);
+        if (!difference.isZero()) {
+          // Ensure pad account exists
+          const padAccountId = await ensureAccount(pad.padAccountName, [], pad.date);
+          await ensureCurrency(ba.commodity);
+
+          // Create pad journal entry
+          const entryId = uuidv7();
+          const entry: JournalEntry = {
+            id: entryId,
+            date: pad.date,
+            description: `Pad for ${ba.accountName}`,
+            status: "confirmed" as JournalEntryStatus,
+            source: "system:pad",
+            voided_by: null,
+            created_at: pad.date,
+          };
+          const items: LineItem[] = [
+            {
+              id: uuidv7(),
+              journal_entry_id: entryId,
+              account_id: acc.id,
+              currency: ba.commodity,
+              amount: difference.toString(),
+              lot_id: null,
+            },
+            {
+              id: uuidv7(),
+              journal_entry_id: entryId,
+              account_id: padAccountId,
+              currency: ba.commodity,
+              amount: difference.neg().toString(),
+              lot_id: null,
+            },
+          ];
+          await backend.postJournalEntry(entry, items);
+          result.transactions_imported++;
+          // Remove from pad map so it's not reused
+          padByAccount.delete(ba.accountName);
+        }
+      } else {
+        result.warnings.push(
+          `line ${ba.lineNum}: balance assertion failed for ${ba.accountName} ${ba.commodity} ${ba.date} (expected ${ba.amountStr}, actual ${actualAmount.toString()})`,
+        );
+      }
     }
   }
 
@@ -1314,7 +1395,7 @@ export async function exportLedger(
         acc.allowed_currencies.length > 0
           ? `  ${acc.allowed_currencies.join(",")}`
           : "";
-      out += `${acc.created_at} open ${acc.full_name}${commodities}\n`;
+      out += `${acc.opened_at ?? acc.created_at} open ${acc.full_name}${commodities}\n`;
       // Account metadata
       try {
         const meta = await backend.getAccountMetadata(acc.id);
@@ -1339,6 +1420,33 @@ export async function exportLedger(
 
   for (const [entry, items] of sortedEntries) {
     if (entry.status === "voided") continue;
+
+    // Handle system:pad entries in Beancount export → emit pad + balance directives
+    if (format === "beancount" && entry.source === "system:pad") {
+      // Find target account (non-equity line item) and counterparty
+      const targetItem = items.find((i) => {
+        const acc = accounts.find((a) => a.id === i.account_id);
+        return acc && acc.account_type !== "equity";
+      });
+      const counterItem = items.find((i) => i !== targetItem);
+      if (targetItem && counterItem) {
+        const targetAccName = accounts.find((a) => a.id === targetItem.account_id)?.full_name ?? "Unknown";
+        const counterAccName = accounts.find((a) => a.id === counterItem.account_id)?.full_name ?? "Unknown";
+        // Compute balance assertion date (day after pad date)
+        const padDate = new Date(entry.date + "T00:00:00");
+        padDate.setDate(padDate.getDate() + 1);
+        const balanceDate = padDate.toISOString().slice(0, 10);
+        // Compute expected balance = actual at pad date + pad amount
+        const balances = await backend.getAccountBalance(targetItem.account_id, balanceDate);
+        const actual = balances.find((b) => b.currency === targetItem.currency);
+        const expectedBalance = actual ? actual.amount : targetItem.amount;
+        out += `${entry.date} pad ${targetAccName} ${counterAccName}\n`;
+        out += `${balanceDate} balance ${targetAccName} ${expectedBalance} ${targetItem.currency}\n`;
+        out += "\n";
+      }
+      continue;
+    }
+
     const statusMarker = entry.status === "confirmed" ? " *" : " !";
 
     // Load links for this entry

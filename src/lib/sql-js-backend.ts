@@ -108,7 +108,8 @@ CREATE TABLE IF NOT EXISTS account (
     allowed_currencies TEXT NOT NULL DEFAULT '[]',
     is_postable INTEGER NOT NULL DEFAULT 1,
     is_archived INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    opened_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_account_parent ON account(parent_id);
 CREATE INDEX IF NOT EXISTS idx_account_type ON account(account_type);
@@ -331,6 +332,7 @@ function mapAccount(row: Row): Account {
     is_postable: row.is_postable !== 0,
     is_archived: row.is_archived !== 0,
     created_at: row.created_at,
+    opened_at: row.opened_at ?? null,
   };
 }
 
@@ -485,7 +487,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (17)");
+    db.exec("INSERT INTO schema_version (version) VALUES (18)");
     return backend;
   }
 
@@ -511,7 +513,7 @@ export class SqlJsBackend implements Backend {
         PRIMARY KEY (account_id, key)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-      db.exec("INSERT INTO schema_version (version) VALUES (17)");
+      db.exec("INSERT INTO schema_version (version) VALUES (18)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -883,8 +885,18 @@ PRAGMA foreign_keys = ON;
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (17)");
         }
+        if (currentVersion < 18) {
+          // Migrate v17 → v18: add opened_at column to account
+          db.exec("ALTER TABLE account ADD COLUMN opened_at TEXT");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (18)");
+        }
       }
     }
+    // Idempotent cleanup: handle DBs that had old v18 (opening_balance table)
+    // but lack the new v18 column (opened_at).
+    try { db.exec("ALTER TABLE account ADD COLUMN opened_at TEXT"); } catch { /* already exists */ }
+    try { db.exec("DROP TABLE IF EXISTS opening_balance"); } catch { /* ignore */ }
     // Ensure raw_transaction table exists (added post-v2)
     try {
       db.exec("CREATE TABLE IF NOT EXISTS raw_transaction (source TEXT PRIMARY KEY, data TEXT NOT NULL)");
@@ -1027,7 +1039,7 @@ PRAGMA foreign_keys = ON;
 
   private getAccountByFullName(fullName: string): Account | null {
     return this.queryOne(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE full_name = ?",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account WHERE full_name = ?",
       [fullName],
       mapAccount,
     );
@@ -1035,7 +1047,7 @@ PRAGMA foreign_keys = ON;
 
   private getAccountById(id: string): Account | null {
     return this.queryOne(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE id = ?",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account WHERE id = ?",
       [id],
       mapAccount,
     );
@@ -1215,7 +1227,7 @@ PRAGMA foreign_keys = ON;
       const ph = accountIdList.map(() => "?").join(", ");
       const accountMap = new Map<string, Account>();
       const accounts = this.query(
-        `SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE id IN (${ph})`,
+        `SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account WHERE id IN (${ph})`,
         accountIdList,
         mapAccount,
       );
@@ -1337,7 +1349,7 @@ PRAGMA foreign_keys = ON;
 
   async listAccounts(): Promise<Account[]> {
     return this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account ORDER BY full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
       [],
       mapAccount,
     );
@@ -1350,7 +1362,7 @@ PRAGMA foreign_keys = ON;
   async createAccount(account: Account): Promise<void> {
     try {
       this.run(
-        "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           account.id,
           account.parent_id,
@@ -1361,6 +1373,7 @@ PRAGMA foreign_keys = ON;
           account.is_postable ? 1 : 0,
           account.is_archived ? 1 : 0,
           account.created_at,
+          account.opened_at ?? null,
         ],
       );
     } catch (e: unknown) {
@@ -1383,7 +1396,7 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
-  async updateAccount(id: string, updates: { full_name?: string; is_postable?: boolean }): Promise<void> {
+  async updateAccount(id: string, updates: { full_name?: string; is_postable?: boolean; opened_at?: string | null }): Promise<void> {
     const account = this.getAccountById(id);
     if (!account) throw new Error(`account ${id} not found`);
 
@@ -1443,8 +1456,8 @@ PRAGMA foreign_keys = ON;
           created_at: new Date().toISOString().slice(0, 10),
         };
         this.run(
-          "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [intermediate.id, intermediate.parent_id, intermediate.account_type, intermediate.name, intermediate.full_name, "[]", 0, 0, intermediate.created_at],
+          "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [intermediate.id, intermediate.parent_id, intermediate.account_type, intermediate.name, intermediate.full_name, "[]", 0, 0, intermediate.created_at, null],
         );
         this.insertClosureEntries(intermediate.id, intermediate.parent_id);
         accountByFullName.set(path, intermediate);
@@ -1474,7 +1487,7 @@ PRAGMA foreign_keys = ON;
       // Rename all descendant accounts
       const oldPrefix = account.full_name + ":";
       const descendants = this.query(
-        "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE full_name LIKE ? ORDER BY length(full_name), full_name",
+        "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account WHERE full_name LIKE ? ORDER BY length(full_name), full_name",
         [`${account.full_name}:%`],
         mapAccount,
       );
@@ -1536,6 +1549,11 @@ PRAGMA foreign_keys = ON;
     if (updates.is_postable !== undefined && updates.is_postable !== account.is_postable) {
       this.run("UPDATE account SET is_postable = ? WHERE id = ?", [updates.is_postable ? 1 : 0, id]);
       this.audit("update", "account", id, `is_postable: ${updates.is_postable}`);
+    }
+
+    if ("opened_at" in updates) {
+      this.run("UPDATE account SET opened_at = ? WHERE id = ?", [updates.opened_at ?? null, id]);
+      this.audit("update", "account", id, `opened_at: ${updates.opened_at ?? "null"}`);
     }
 
     this.scheduleSave();
@@ -1619,7 +1637,7 @@ PRAGMA foreign_keys = ON;
 
     // Handle descendants of source in two passes
     const descendants = this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE full_name LIKE ? ORDER BY length(full_name), full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account WHERE full_name LIKE ? ORDER BY length(full_name), full_name",
       [`${source.full_name}:%`],
       mapAccount,
     );
@@ -1697,7 +1715,7 @@ PRAGMA foreign_keys = ON;
 
     // 1. Find all accounts whose full_name starts with oldPrefix: or equals oldPrefix
     const allAccounts = this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account WHERE full_name = ? OR full_name LIKE ? ORDER BY length(full_name), full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account WHERE full_name = ? OR full_name LIKE ? ORDER BY length(full_name), full_name",
       [oldPrefix, `${oldPrefix}:%`],
       mapAccount,
     );
@@ -1746,8 +1764,8 @@ PRAGMA foreign_keys = ON;
           created_at: new Date().toISOString().slice(0, 10),
         };
         this.run(
-          "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [intermediate.id, intermediate.parent_id, intermediate.account_type, intermediate.name, intermediate.full_name, "[]", 0, 0, intermediate.created_at],
+          "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [intermediate.id, intermediate.parent_id, intermediate.account_type, intermediate.name, intermediate.full_name, "[]", 0, 0, intermediate.created_at, null],
         );
         this.insertClosureEntries(intermediate.id, intermediate.parent_id);
         accountByFullName.set(path, intermediate);
@@ -2146,7 +2164,7 @@ PRAGMA foreign_keys = ON;
 
   async trialBalance(asOf: string): Promise<TrialBalance> {
     const accounts = this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account ORDER BY full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
       [],
       mapAccount,
     );
@@ -2269,7 +2287,7 @@ PRAGMA foreign_keys = ON;
     toDate: string,
   ): Promise<IncomeStatement> {
     const accounts = this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account ORDER BY full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
       [],
       mapAccount,
     );
@@ -2342,7 +2360,7 @@ PRAGMA foreign_keys = ON;
 
   async balanceSheet(asOf: string): Promise<BalanceSheet> {
     const accounts = this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account ORDER BY full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
       [],
       mapAccount,
     );
@@ -2420,7 +2438,7 @@ PRAGMA foreign_keys = ON;
 
     // Single-pass: query accounts once, scan line_items once up to max date
     const accounts = this.query(
-      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at FROM account ORDER BY full_name",
+      "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
       [],
       mapAccount,
     );

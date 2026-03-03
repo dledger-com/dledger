@@ -10,6 +10,7 @@ export interface Account {
   is_postable: boolean;
   is_archived: boolean;
   created_at: string;
+  opened_at?: string | null;
 }
 
 export type CurrencyAssetType = "crypto" | "fiat" | "stock" | "commodity" | "index" | "bond" | "";

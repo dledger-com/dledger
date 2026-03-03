@@ -69,6 +69,26 @@ pub fn archive_account(state: State<'_, AppState>, id: Uuid) -> Result<(), Strin
     state.engine.archive_account(&id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn update_account(
+    state: State<'_, AppState>,
+    id: Uuid,
+    updates: serde_json::Value,
+) -> Result<(), String> {
+    if let Some(opened_at) = updates.get("opened_at") {
+        let val = if opened_at.is_null() {
+            None
+        } else {
+            Some(
+                NaiveDate::parse_from_str(opened_at.as_str().ok_or("opened_at must be a string")?, "%Y-%m-%d")
+                    .map_err(|e| format!("invalid date: {e}"))?
+            )
+        };
+        state.engine.update_account_opened_at(&id, val).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // -- Journal entry commands --
 
 #[tauri::command]

@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, MIGRATION_V18, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -198,8 +198,8 @@ impl Storage for SqliteStorage {
         {
             let conn = self.conn.borrow();
             conn.execute(
-                "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     account.id.to_string(),
                     account.parent_id.map(|id| id.to_string()),
@@ -210,6 +210,7 @@ impl Storage for SqliteStorage {
                     account.is_postable as i32,
                     account.is_archived as i32,
                     account.created_at.format("%Y-%m-%d").to_string(),
+                    account.opened_at.map(|d| d.format("%Y-%m-%d").to_string()),
                 ],
             )
             .map_err(|e| {
@@ -229,7 +230,7 @@ impl Storage for SqliteStorage {
         let mut stmt = conn
             .prepare(
                 "SELECT id, parent_id, account_type, name, full_name, allowed_currencies,
-                        is_postable, is_archived, created_at
+                        is_postable, is_archived, created_at, opened_at
                  FROM account WHERE id = ?1",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -250,7 +251,7 @@ impl Storage for SqliteStorage {
         let mut stmt = conn
             .prepare(
                 "SELECT id, parent_id, account_type, name, full_name, allowed_currencies,
-                        is_postable, is_archived, created_at
+                        is_postable, is_archived, created_at, opened_at
                  FROM account WHERE full_name = ?1",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -269,7 +270,7 @@ impl Storage for SqliteStorage {
         let mut stmt = conn
             .prepare(
                 "SELECT id, parent_id, account_type, name, full_name, allowed_currencies,
-                        is_postable, is_archived, created_at
+                        is_postable, is_archived, created_at, opened_at
                  FROM account ORDER BY full_name",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -286,6 +287,23 @@ impl Storage for SqliteStorage {
             .execute(
                 "UPDATE account SET is_archived = ?1 WHERE id = ?2",
                 params![is_archived as i32, id.to_string()],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!("account {id}")));
+        }
+        Ok(())
+    }
+
+    fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        let affected = conn
+            .execute(
+                "UPDATE account SET opened_at = ?1 WHERE id = ?2",
+                params![
+                    opened_at.map(|d| d.format("%Y-%m-%d").to_string()),
+                    id.to_string()
+                ],
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         if affected == 0 {
@@ -2283,6 +2301,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
             storage.execute_sql(MIGRATION_V17)?;
             storage.set_schema_version(17)?;
         }
+        if current < 18 {
+            let _ = storage.execute_sql(MIGRATION_V18);
+            storage.set_schema_version(18)?;
+        }
     }
     Ok(())
 }
@@ -2317,6 +2339,9 @@ fn row_to_account(row: &rusqlite::Row<'_>) -> StorageResult<Account> {
     let created_at_str: String = row
         .get(8)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let opened_at_str: Option<String> = row
+        .get(9)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     let allowed_currencies: Vec<String> =
         serde_json::from_str(&allowed_json).unwrap_or_default();
@@ -2331,6 +2356,7 @@ fn row_to_account(row: &rusqlite::Row<'_>) -> StorageResult<Account> {
         is_postable: is_postable != 0,
         is_archived: is_archived != 0,
         created_at: parse_date(&created_at_str)?,
+        opened_at: opened_at_str.as_deref().map(parse_date).transpose()?,
     })
 }
 
@@ -2796,6 +2822,7 @@ mod tests {
             is_postable: true,
             is_archived: false,
             created_at: make_date(2024, 1, 1),
+            opened_at: None,
         }
     }
 

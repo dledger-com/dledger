@@ -94,6 +94,11 @@ impl LedgerEngine {
         Ok(())
     }
 
+    pub fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> LedgerResult<()> {
+        self.storage.update_account_opened_at(id, opened_at)?;
+        Ok(())
+    }
+
     // --- Journal entry operations ---
 
     /// Post a new journal entry with line items.

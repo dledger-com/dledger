@@ -499,6 +499,7 @@ fn ensure_account(
                 is_postable: true,
                 is_archived: false,
                 created_at: date,
+                opened_at: None,
             };
             engine.create_account(&acc).map_err(|e| e.to_string())?;
             result.accounts_created += 1;
@@ -519,6 +520,7 @@ fn ensure_account(
         is_postable: true,
         is_archived: false,
         created_at: date,
+        opened_at: None,
     };
     engine.create_account(&acc).map_err(|e| e.to_string())?;
     result.accounts_created += 1;

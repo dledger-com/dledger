@@ -225,14 +225,54 @@ describe("browser-ledger-file", () => {
       expect(result.transactions_imported).toBe(1);
     });
 
-    it("skips pad directives with warning", async () => {
+    it("collects pad directives for deferred processing", async () => {
       const content = `
 2024-01-01 open Assets:Bank
 2024-01-01 pad Assets:Bank Equity:Opening
 `;
       const result = await importLedger(backend, content);
+      // Pad directives are now collected (not warned) for pairing with balance assertions
       const padWarnings = result.warnings.filter((w) => w.includes("pad"));
-      expect(padWarnings).toHaveLength(1);
+      expect(padWarnings).toHaveLength(0);
+    });
+
+    it("imports pad+balance and creates system:pad journal entry", async () => {
+      const content = `
+2024-01-01 open Assets:Bank  USD
+2024-01-01 open Equity:Opening  USD
+2024-01-01 pad Assets:Bank Equity:Opening
+2024-01-02 balance Assets:Bank  5000 USD
+`;
+      const result = await importLedger(backend, content);
+      // Pad should create a journal entry to fill the gap
+      expect(result.transactions_imported).toBe(1);
+      // Check the created entry
+      const results = await backend.queryJournalEntries({});
+      expect(results).toHaveLength(1);
+      expect(results[0][0].source).toBe("system:pad");
+      expect(results[0][0].description).toContain("Pad");
+      // Verify the pad amount is correct (5000 USD in the bank)
+      const items = results[0][1];
+      const bankItem = items.find((i: { amount: string }) => parseFloat(i.amount) > 0);
+      expect(bankItem?.amount).toBe("5000");
+      expect(bankItem?.currency).toBe("USD");
+      // No warnings should be emitted for the balance assertion (pad resolved it)
+      const balanceWarnings = result.warnings.filter((w) => w.includes("balance assertion failed"));
+      expect(balanceWarnings).toHaveLength(0);
+    });
+
+    it("imports open directive and sets opened_at on account", async () => {
+      const content = `
+2023-06-15 open Assets:Bank  USD
+2024-01-01 * "Opening"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+`;
+      const result = await importLedger(backend, content);
+      expect(result.transactions_imported).toBe(1);
+      const accounts = await backend.listAccounts();
+      const bank = accounts.find((a) => a.full_name === "Assets:Bank");
+      expect(bank?.opened_at).toBe("2023-06-15");
     });
 
     it("bare amounts use first-seen commodity as default", async () => {
@@ -1128,6 +1168,38 @@ P 2024-01-01 EUR 1.10 USD
       const exported = await exportLedger(backend, "hledger");
 
       expect(exported).toContain('; links: ^invoice-jan');
+    });
+
+    it("exports system:pad entries as pad+balance in beancount", async () => {
+      const input = `
+2024-01-01 open Assets:Bank  USD
+2024-01-01 open Equity:Opening  USD
+2024-01-01 pad Assets:Bank Equity:Opening
+2024-01-02 balance Assets:Bank  5000 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "beancount");
+      // Should emit pad + balance directives, not a regular transaction
+      expect(exported).toContain("pad Assets:Bank Equity:Opening");
+      expect(exported).toContain("balance Assets:Bank");
+      expect(exported).toContain("5000 USD");
+      // Should NOT contain a regular txn line for the pad entry
+      expect(exported).not.toContain('"Pad for');
+    });
+
+    it("exports opened_at date in beancount open directive", async () => {
+      const input = `
+2023-06-15 open Assets:Bank  USD
+2024-01-01 open Equity:Opening  USD
+
+2024-01-01 * "Opening balance"
+  Assets:Bank  1000 USD
+  Equity:Opening  -1000 USD
+`;
+      await importLedger(backend, input, "beancount");
+      const exported = await exportLedger(backend, "beancount");
+      // Should use the opened_at date (2023-06-15) for the open directive
+      expect(exported).toContain("2023-06-15 open Assets:Bank");
     });
 
     it("round-trips beancount links: import → export → reimport", async () => {

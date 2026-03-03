@@ -1526,7 +1526,7 @@ dependencies = [
 
 [[package]]
 name = "dledger"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "chrono",
  "dledger-core",
@@ -1549,7 +1549,7 @@ dependencies = [
 
 [[package]]
 name = "dledger-core"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "dledger-web"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "dledger-core",
  "serde",
@@ -1614,7 +1614,7 @@ dependencies = [
 
 [[package]]
 name = "dprice"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "arrow",
  "async-graphql",

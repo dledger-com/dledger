@@ -75,6 +75,8 @@ pub struct Account {
     /// Whether this account is archived (hidden from active views)
     pub is_archived: bool,
     pub created_at: NaiveDate,
+    /// Optional explicit open date (for Beancount `open` directive). Falls back to `created_at`.
+    pub opened_at: Option<NaiveDate>,
 }
 
 /// Status of a journal entry.

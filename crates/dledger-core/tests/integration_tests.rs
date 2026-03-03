@@ -184,6 +184,7 @@ impl Storage for TestStorage {
                     is_postable: ip != 0,
                     is_archived: ia != 0,
                     created_at: parse_date(&ca_s)?,
+                    opened_at: None,
                 }))
             }
         }
@@ -234,6 +235,7 @@ impl Storage for TestStorage {
                 is_postable: ip != 0,
                 is_archived: ia != 0,
                 created_at: parse_date(&ca_s)?,
+                opened_at: None,
             });
         }
         Ok(accounts)
@@ -243,6 +245,15 @@ impl Storage for TestStorage {
         let conn = self.conn.borrow();
         conn.execute("UPDATE account SET is_archived = ?1 WHERE id = ?2", params![is_archived as i32, id.to_string()])
             .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "UPDATE account SET opened_at = ?1 WHERE id = ?2",
+            params![opened_at.map(|d| d.format("%Y-%m-%d").to_string()), id.to_string()],
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
         Ok(())
     }
 
@@ -1091,6 +1102,7 @@ fn make_account(name: &str, full_name: &str, account_type: AccountType, parent_i
         is_postable: true,
         is_archived: false,
         created_at: date(2025, 1, 1),
+        opened_at: None,
     }
 }
 

@@ -50,6 +50,10 @@
   let assertionDate = $state(new Date().toISOString().slice(0, 10));
   let assertionCurrency = $state("");
   let assertionAmount = $state("");
+  let paddingAssertionId = $state<string | null>(null);
+  let padCounterparty = $state("Equity:Opening-Balances");
+  let editingOpenedAt = $state(false);
+  let openedAtValue = $state("");
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(journalStore.entries, hidden));
   const filteredBalances = $derived(filterHiddenBalances(balances, hidden));
@@ -192,6 +196,23 @@
           {#if account.is_archived}
             <Badge variant="destructive">Archived</Badge>
           {/if}
+          {#if editingOpenedAt}
+            <span class="text-xs">Opened:</span>
+            <Input type="date" class="w-36 h-7 text-xs" bind:value={openedAtValue} />
+            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={async () => {
+              try {
+                await getBackend().updateAccount(accountId!, { opened_at: openedAtValue || null });
+                account = { ...account!, opened_at: openedAtValue || null };
+                editingOpenedAt = false;
+                toast.success("Opened date updated");
+              } catch (e) { toast.error(String(e)); }
+            }}>Save</Button>
+            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => { editingOpenedAt = false; }}>Cancel</Button>
+          {:else}
+            <button class="text-xs hover:underline cursor-pointer" onclick={() => { openedAtValue = account!.opened_at ?? account!.created_at; editingOpenedAt = true; }}>
+              Opened: {account.opened_at ?? account.created_at}
+            </button>
+          {/if}
         </p>
       </div>
       <Button variant="outline" href="/accounts/{accountId}/reconcile">Reconcile</Button>
@@ -282,6 +303,7 @@
                 <SortableHeader active={assertionSort.key === "expected"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("expected")} class="text-right">Expected</SortableHeader>
                 <SortableHeader active={assertionSort.key === "actual"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("actual")} class="text-right">Actual</SortableHeader>
                 <SortableHeader active={assertionSort.key === "status"} direction={assertionSort.direction} onclick={() => assertionSort.toggle("status")}>Status</SortableHeader>
+                <Table.Head>Actions</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -299,7 +321,92 @@
                       <Badge variant="destructive">Fail</Badge>
                     {/if}
                   </Table.Cell>
+                  <Table.Cell>
+                    {#if !a.is_passing}
+                      <Button variant="outline" size="sm" class="h-7 px-2 text-xs" onclick={() => {
+                        paddingAssertionId = paddingAssertionId === a.id ? null : a.id;
+                        padCounterparty = "Equity:Opening-Balances";
+                      }}>
+                        {paddingAssertionId === a.id ? "Cancel" : "Pad"}
+                      </Button>
+                    {/if}
+                  </Table.Cell>
                 </Table.Row>
+                {#if paddingAssertionId === a.id}
+                  {@const diff = parseFloat(a.expected_balance) - parseFloat(a.actual_balance ?? "0")}
+                  {@const padDate = (() => { const d = new Date(a.date + "T00:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}
+                  <Table.Row>
+                    <Table.Cell colspan={6}>
+                      <div class="flex items-end gap-3 p-3 rounded-md border bg-muted/30">
+                        <div class="space-y-1">
+                          <label class="text-xs font-medium">Counterparty Account</label>
+                          <Input type="text" bind:value={padCounterparty} class="w-64 h-8 text-sm" />
+                        </div>
+                        <div class="space-y-1">
+                          <label class="text-xs font-medium">Date</label>
+                          <span class="text-sm block h-8 leading-8">{padDate}</span>
+                        </div>
+                        <div class="space-y-1">
+                          <label class="text-xs font-medium">Amount</label>
+                          <span class="text-sm font-mono block h-8 leading-8">{diff > 0 ? "+" : ""}{diff.toFixed(2)} {a.currency}</span>
+                        </div>
+                        <Button size="sm" onclick={async () => {
+                          try {
+                            const backend = getBackend();
+                            // Ensure counterparty account exists
+                            const allAccounts = await backend.listAccounts();
+                            let counterpartyId = allAccounts.find((ac) => ac.full_name === padCounterparty)?.id;
+                            if (!counterpartyId) {
+                              // Create counterparty account hierarchy
+                              const parts = padCounterparty.split(":");
+                              let parentId: string | null = null;
+                              for (let depth = 1; depth <= parts.length; depth++) {
+                                const path = parts.slice(0, depth).join(":");
+                                const existing = allAccounts.find((ac) => ac.full_name === path);
+                                if (existing) {
+                                  parentId = existing.id;
+                                  continue;
+                                }
+                                const type = path.startsWith("Equity") ? "equity" : path.startsWith("Assets") ? "asset" : path.startsWith("Liabilities") ? "liability" : path.startsWith("Income") ? "revenue" : "expense";
+                                const newId = uuidv7();
+                                await backend.createAccount({
+                                  id: newId, parent_id: parentId, account_type: type,
+                                  name: parts[depth - 1], full_name: path, allowed_currencies: [],
+                                  is_postable: depth === parts.length, is_archived: false,
+                                  created_at: padDate, opened_at: null,
+                                });
+                                parentId = newId;
+                                if (depth === parts.length) counterpartyId = newId;
+                              }
+                            }
+                            // Create pad journal entry
+                            const entryId = uuidv7();
+                            const diffStr = diff.toString();
+                            await backend.postJournalEntry(
+                              { id: entryId, date: padDate, description: `Pad for ${account!.full_name}`, status: "confirmed", source: "system:pad", voided_by: null, created_at: padDate },
+                              [
+                                { id: uuidv7(), journal_entry_id: entryId, account_id: accountId!, currency: a.currency, amount: diffStr, lot_id: null },
+                                { id: uuidv7(), journal_entry_id: entryId, account_id: counterpartyId!, currency: a.currency, amount: (-diff).toString(), lot_id: null },
+                              ],
+                            );
+                            // Re-check assertions
+                            await backend.checkBalanceAssertions();
+                            assertions = await backend.listBalanceAssertions(accountId!);
+                            balances = await accountStore.getBalance(accountId!);
+                            await journalStore.load({ account_id: accountId! });
+                            paddingAssertionId = null;
+                            const { invalidate } = await import("$lib/data/invalidation.js");
+                            invalidate("journal", "accounts", "reports");
+                            toast.success("Pad entry created");
+                          } catch (e) {
+                            toast.error(String(e));
+                          }
+                        }}>Create Pad</Button>
+                        <Button variant="ghost" size="sm" onclick={() => { paddingAssertionId = null; }}>Cancel</Button>
+                      </div>
+                    </Table.Cell>
+                  </Table.Row>
+                {/if}
               {/each}
             </Table.Body>
           </Table.Root>

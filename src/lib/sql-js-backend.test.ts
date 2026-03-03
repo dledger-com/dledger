@@ -152,6 +152,34 @@ describe("SqlJsBackend", () => {
       expect(account?.is_archived).toBe(true);
     });
 
+    it("updates opened_at on an account", async () => {
+      const parentId = uuidv7();
+      await backend.createAccount({
+        id: parentId, parent_id: null, account_type: "asset",
+        name: "Assets", full_name: "Assets",
+        allowed_currencies: [], is_postable: false, is_archived: false,
+        created_at: "2024-01-01",
+      });
+      const id = uuidv7();
+      await backend.createAccount({
+        id, parent_id: parentId, account_type: "asset",
+        name: "Bank", full_name: "Assets:Bank",
+        allowed_currencies: [], is_postable: true, is_archived: false,
+        created_at: "2024-01-01",
+      });
+      // Initially null
+      let account = await backend.getAccount(id);
+      expect(account?.opened_at).toBeNull();
+      // Set opened_at
+      await backend.updateAccount(id, { opened_at: "2023-06-15" });
+      account = await backend.getAccount(id);
+      expect(account?.opened_at).toBe("2023-06-15");
+      // Clear opened_at
+      await backend.updateAccount(id, { opened_at: null });
+      account = await backend.getAccount(id);
+      expect(account?.opened_at).toBeNull();
+    });
+
     it("throws on duplicate full_name", async () => {
       const id1 = uuidv7();
       await backend.createAccount({
