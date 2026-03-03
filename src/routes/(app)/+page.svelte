@@ -3,7 +3,9 @@
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
+  import TagDisplay from "$lib/components/TagDisplay.svelte";
+  import LinkDisplay from "$lib/components/LinkDisplay.svelte";
+  import { parseTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
@@ -51,6 +53,33 @@
 
   // Recent journal entries (queried directly, not via JournalStore)
   let recentEntries = $state<[JournalEntry, LineItem[]][]>([]);
+  let entryTags = $state<Map<string, string[]>>(new Map());
+  let entryLinks = $state<Map<string, string[]>>(new Map());
+
+  async function loadTagsAndLinks(entries: [JournalEntry, LineItem[]][]) {
+    const ids = entries.map(([e]) => e.id);
+    if (ids.length === 0) return;
+    const backend = getBackend();
+    try {
+      const tagMap = new Map<string, string[]>();
+      if (backend.getMetadataBatch) {
+        const metas = await backend.getMetadataBatch(ids);
+        for (const [id, meta] of metas) tagMap.set(id, parseTags(meta[TAGS_META_KEY]));
+      } else {
+        const metas = await Promise.all(ids.map((id) => backend.getMetadata(id).catch(() => ({}) as Record<string, string>)));
+        ids.forEach((id, i) => tagMap.set(id, parseTags(metas[i][TAGS_META_KEY])));
+      }
+      entryTags = tagMap;
+    } catch { /* ignore */ }
+    try {
+      if (backend.getEntryLinksBatch) {
+        entryLinks = await backend.getEntryLinksBatch(ids);
+      } else {
+        const links = await Promise.all(ids.map((id) => backend.getEntryLinks(id).catch(() => [] as string[])));
+        entryLinks = new Map(ids.map((id, i) => [id, links[i]]));
+      }
+    } catch { /* ignore */ }
+  }
 
   function debitsByCurrency(items: { amount: string; currency: string }[]): { currency: string; amount: string }[] {
     const map = new Map<string, number>();
@@ -181,6 +210,7 @@
           recentEntries = filtered;
           recentLoaded = true;
           setCachedRecentEntries(filtered);
+          loadTagsAndLinks(filtered);
         })
         .catch((e) => console.error("Recent entries failed:", e));
 
@@ -240,6 +270,7 @@
       const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
       recentEntries = filtered;
       setCachedRecentEntries(filtered);
+      loadTagsAndLinks(filtered);
     } catch (e) {
       console.error("Failed to refresh recent entries:", e);
     }
@@ -491,23 +522,25 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Date</Table.Head>
+            <Table.Head class="w-0">Date</Table.Head>
             <Table.Head>Description</Table.Head>
-            <Table.Head class="hidden md:table-cell">Status</Table.Head>
             <Table.Head class="text-right">Amount</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {#each recentEntries as [entry, items]}
-            <Table.Row>
+            <Table.Row class={entry.status === "voided" ? "line-through opacity-50" : ""}>
               <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px]">
-                <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
-              </Table.Cell>
-              <Table.Cell class="hidden md:table-cell">
-                <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
-                  {entry.status}
-                </Badge>
+                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                  <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+                  {#if entryTags.get(entry.id)?.length}
+                    <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
+                  {/if}
+                  {#if entryLinks.get(entry.id)?.length}
+                    <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
+                  {/if}
+                </div>
               </Table.Cell>
               <Table.Cell class="text-right font-mono">
                 {formatDebitTotal(items)}
