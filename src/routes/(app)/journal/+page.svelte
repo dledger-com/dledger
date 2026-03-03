@@ -69,18 +69,18 @@
     let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
     let showDuplicates = $state(false);
 
-    // Sync searchTerm back to URL so back button works
-    $effect(() => {
+    // Sync searchTerm to URL param (called explicitly from ListFilter onchange)
+    function syncSearchToUrl(term: string) {
         const url = new URL(page.url);
-        if (searchTerm) {
-            url.searchParams.set("q", searchTerm);
+        if (term) {
+            url.searchParams.set("q", term);
         } else {
             url.searchParams.delete("q");
         }
         if (url.toString() !== page.url.toString()) {
             replaceState(url, {});
         }
-    });
+    }
 
     // Parse comma-separated OR groups, each with space-separated AND tokens (#tag, ^link, text)
     interface SearchGroup {
@@ -460,12 +460,14 @@
         const token = `#${tag}`;
         if (searchTerm.toLowerCase().includes(token.toLowerCase())) return;
         searchTerm = searchTerm ? `${searchTerm} ${token}` : token;
+        syncSearchToUrl(searchTerm);
     }
 
     function addLinkFilter(link: string) {
         const token = `^${link}`;
         if (searchTerm.toLowerCase().includes(token.toLowerCase())) return;
         searchTerm = searchTerm ? `${searchTerm} ${token}` : token;
+        syncSearchToUrl(searchTerm);
     }
 
     // Visible-range currency conversion
@@ -568,6 +570,7 @@
         </div>
         <ListFilter
             bind:value={searchTerm}
+            onchange={syncSearchToUrl}
             placeholder="Filter entries..."
             class="order-last sm:order-none"
         />
@@ -730,7 +733,7 @@
                     <Button
                         variant="outline"
                         size="sm"
-                        onclick={() => (searchTerm = "")}>Clear search</Button
+                        onclick={() => { searchTerm = ""; syncSearchToUrl(""); }}>Clear search</Button
                     >
                 </div>
             </Card.Content>
