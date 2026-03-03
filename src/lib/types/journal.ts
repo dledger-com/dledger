@@ -24,12 +24,14 @@ export interface JournalEntry {
 
 export interface TransactionFilter {
   account_id?: string;
+  account_ids?: string[];
   from_date?: string;
   to_date?: string;
   status?: JournalEntryStatus;
   source?: string;
   description_search?: string;
   tag_filters?: string[];
+  tag_filters_or?: string[];
   link_filters?: string[];
   limit?: number;
   offset?: number;

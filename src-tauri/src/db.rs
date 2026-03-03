@@ -392,14 +392,22 @@ impl Storage for SqliteStorage {
         let mut conditions: Vec<String> = Vec::new();
         let mut param_values: Vec<String> = Vec::new();
 
-        if filter.account_id.is_some() {
+        // account_ids takes precedence over account_id when both set
+        if filter.account_ids.as_ref().map_or(false, |ids| !ids.is_empty()) {
             sql.push_str(" JOIN line_item li ON li.journal_entry_id = je.id");
-        }
-
-        if let Some(ref account_id) = filter.account_id {
+            let ids = filter.account_ids.as_ref().unwrap();
+            let placeholders: Vec<String> = ids.iter().map(|id| {
+                param_values.push(id.to_string());
+                format!("?{}", param_values.len())
+            }).collect();
+            conditions.push(format!("li.account_id IN ({})", placeholders.join(", ")));
+        } else if filter.account_id.is_some() {
+            sql.push_str(" JOIN line_item li ON li.journal_entry_id = je.id");
+            let account_id = filter.account_id.as_ref().unwrap();
             param_values.push(account_id.to_string());
             conditions.push(format!("li.account_id = ?{}", param_values.len()));
         }
+
         if let Some(ref from_date) = filter.from_date {
             param_values.push(from_date.format("%Y-%m-%d").to_string());
             conditions.push(format!("je.date >= ?{}", param_values.len()));
@@ -426,6 +434,18 @@ impl Storage for SqliteStorage {
                 conditions.push(format!(
                     "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?{})",
                     param_values.len()
+                ));
+            }
+        }
+        if let Some(ref tags_or) = filter.tag_filters_or {
+            if !tags_or.is_empty() {
+                let or_parts: Vec<String> = tags_or.iter().map(|tag| {
+                    param_values.push(format!("%,{},%", tag.to_lowercase()));
+                    format!("(',' || LOWER(value) || ',') LIKE ?{}", param_values.len())
+                }).collect();
+                conditions.push(format!(
+                    "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND ({}))",
+                    or_parts.join(" OR ")
                 ));
             }
         }
@@ -1880,42 +1900,63 @@ impl Storage for SqliteStorage {
 
     fn count_journal_entries(&self, filter: &TransactionFilter) -> StorageResult<u64> {
         let conn = self.conn.borrow();
-        let mut conditions = Vec::new();
+        let mut conditions: Vec<String> = Vec::new();
         let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
-        if let Some(ref account_id) = filter.account_id {
-            conditions.push("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id = ?)");
+        // account_ids takes precedence over account_id when both set
+        if let Some(ref ids) = filter.account_ids {
+            if !ids.is_empty() {
+                let placeholders: Vec<&str> = ids.iter().map(|_| "?").collect();
+                conditions.push(format!("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id IN ({}))", placeholders.join(", ")));
+                for id in ids {
+                    param_values.push(Box::new(id.to_string()));
+                }
+            }
+        } else if let Some(ref account_id) = filter.account_id {
+            conditions.push("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id = ?)".to_string());
             param_values.push(Box::new(account_id.to_string()));
         }
         if let Some(ref from_date) = filter.from_date {
-            conditions.push("je.date >= ?");
+            conditions.push("je.date >= ?".to_string());
             param_values.push(Box::new(from_date.format("%Y-%m-%d").to_string()));
         }
         if let Some(ref to_date) = filter.to_date {
-            conditions.push("je.date <= ?");
+            conditions.push("je.date <= ?".to_string());
             param_values.push(Box::new(to_date.format("%Y-%m-%d").to_string()));
         }
         if let Some(ref status) = filter.status {
-            conditions.push("je.status = ?");
+            conditions.push("je.status = ?".to_string());
             param_values.push(Box::new(status.as_str().to_string()));
         }
         if let Some(ref source) = filter.source {
-            conditions.push("je.source = ?");
+            conditions.push("je.source = ?".to_string());
             param_values.push(Box::new(source.clone()));
         }
         if let Some(ref search) = filter.description_search {
-            conditions.push("je.description LIKE ?");
+            conditions.push("je.description LIKE ?".to_string());
             param_values.push(Box::new(format!("%{}%", search)));
         }
         if let Some(ref tags) = filter.tag_filters {
             for tag in tags {
-                conditions.push("je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)");
+                conditions.push("je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)".to_string());
                 param_values.push(Box::new(format!("%,{},%", tag.to_lowercase())));
+            }
+        }
+        if let Some(ref tags_or) = filter.tag_filters_or {
+            if !tags_or.is_empty() {
+                let or_parts: Vec<&str> = tags_or.iter().map(|_| "(',' || LOWER(value) || ',') LIKE ?").collect();
+                conditions.push(format!(
+                    "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND ({}))",
+                    or_parts.join(" OR ")
+                ));
+                for tag in tags_or {
+                    param_values.push(Box::new(format!("%,{},%", tag.to_lowercase())));
+                }
             }
         }
         if let Some(ref links) = filter.link_filters {
             for link in links {
-                conditions.push("je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)");
+                conditions.push("je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)".to_string());
                 param_values.push(Box::new(link.to_lowercase()));
             }
         }

@@ -264,12 +264,14 @@ pub struct CurrencyBalance {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TransactionFilter {
     pub account_id: Option<Uuid>,
+    pub account_ids: Option<Vec<Uuid>>,
     pub from_date: Option<NaiveDate>,
     pub to_date: Option<NaiveDate>,
     pub status: Option<JournalEntryStatus>,
     pub source: Option<String>,
     pub description_search: Option<String>,
     pub tag_filters: Option<Vec<String>>,
+    pub tag_filters_or: Option<Vec<String>>,
     pub link_filters: Option<Vec<String>>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,

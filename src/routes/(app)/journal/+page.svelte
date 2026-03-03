@@ -48,6 +48,9 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
     import Download from "lucide-svelte/icons/download";
+    import X from "lucide-svelte/icons/x";
+    import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
+    import FacetedFilter from "$lib/components/FacetedFilter.svelte";
 
     const store = new JournalStore();
     const settings = new SettingsStore();
@@ -61,13 +64,42 @@
     // Reload when journal data changes elsewhere (imports, cross-tab)
     const unsubJournal = onInvalidate("journal", () => {
         store.loadAll();
+        // Refresh tag options (new tags may have been added via import)
+        getBackend().getAllTagValues().then((tags) => {
+            tagOptions = tags.map((t) => ({ value: t, label: t }));
+        });
     });
     onDestroy(unsubJournal);
+
+    // Load faceted filter options
+    $effect(() => {
+        const backend = getBackend();
+        backend.listAccounts().then((accounts) => {
+            accountOptions = accounts
+                .filter((a: Account) => a.is_postable && !a.is_archived)
+                .map((a: Account) => ({ value: a.id, label: a.full_name }))
+                .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label));
+        });
+        backend.getAllTagValues().then((tags) => {
+            tagOptions = tags.map((t) => ({ value: t, label: t }));
+        });
+    });
 
     let exporting = $state(false);
     let detectingDuplicates = $state(false);
     let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
     let showDuplicates = $state(false);
+
+    // Faceted filters
+    let selectedAccounts = $state<Set<string>>(new Set());
+    let selectedTags = $state<Set<string>>(new Set());
+    let accountOptions = $state<{ value: string; label: string }[]>([]);
+    let tagOptions = $state<{ value: string; label: string }[]>([]);
+    const hasFacetedFilters = $derived(selectedAccounts.size > 0 || selectedTags.size > 0);
+
+    // Column visibility
+    let columnVisibility = $state({ date: true, description: true, amount: true });
+    const visibleColCount = $derived(Object.values(columnVisibility).filter(Boolean).length);
 
     // Sync searchTerm back to URL so back button works
     $effect(() => {
@@ -168,6 +200,8 @@
         const { groups, backendText } = searchFilters;
         const orderBy = sort.key !== "amount" ? sort.key : null;
         const orderDir = sort.direction;
+        const accountFilter = selectedAccounts;
+        const tagFilter = selectedTags;
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             const filter: TransactionFilter = {};
@@ -184,6 +218,10 @@
                 if (groups[0].links.length > 0)
                     filter.link_filters = groups[0].links;
             }
+
+            // Faceted filters
+            if (accountFilter.size > 0) filter.account_ids = [...accountFilter];
+            if (tagFilter.size > 0) filter.tag_filters_or = [...tagFilter];
 
             store.load(filter).then(() => {
                 virtualizer.scrollToOffset(0);
@@ -566,11 +604,6 @@
                 View and manage all journal entries.
             </p>
         </div>
-        <ListFilter
-            bind:value={searchTerm}
-            placeholder="Filter entries..."
-            class="order-last sm:order-none"
-        />
         <div class="flex flex-wrap gap-2 shrink-0">
             <Button
                 variant="outline"
@@ -695,6 +728,58 @@
         </div>
     </div>
 
+    <!-- Filter toolbar -->
+    <div class="flex flex-wrap items-center gap-2">
+        <ListFilter
+            bind:value={searchTerm}
+            placeholder="Filter entries..."
+            class="w-[200px] lg:w-[250px]"
+        />
+        <FacetedFilter
+            title="Account"
+            options={accountOptions}
+            bind:selected={selectedAccounts}
+        />
+        <FacetedFilter
+            title="Tags"
+            options={tagOptions}
+            bind:selected={selectedTags}
+        />
+        {#if hasFacetedFilters}
+            <Button
+                variant="ghost"
+                size="sm"
+                class="h-8 px-2 lg:px-3"
+                onclick={() => {
+                    selectedAccounts = new Set();
+                    selectedTags = new Set();
+                }}
+            >
+                Reset
+                <X class="size-4" />
+            </Button>
+        {/if}
+        <div class="ml-auto">
+            <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                    {#snippet child({ props })}
+                        <Button variant="outline" size="sm" class="h-8" {...props}>
+                            <SlidersHorizontal class="size-4" />
+                            View
+                        </Button>
+                    {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" class="w-[150px]">
+                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Toggle columns</DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.CheckboxItem bind:checked={columnVisibility.date}>Date</DropdownMenu.CheckboxItem>
+                    <DropdownMenu.CheckboxItem bind:checked={columnVisibility.description}>Description</DropdownMenu.CheckboxItem>
+                    <DropdownMenu.CheckboxItem bind:checked={columnVisibility.amount}>Amount</DropdownMenu.CheckboxItem>
+                </DropdownMenu.Content>
+            </DropdownMenu.Root>
+        </div>
+    </div>
+
     {#if store.loading}
         <Card.Root class="border-x-0 rounded-none shadow-none">
             <Card.Content class="py-4">
@@ -720,17 +805,21 @@
                 </div>
             </Card.Content>
         </Card.Root>
-    {:else if displayEntries.length === 0 && searchTerm}
+    {:else if displayEntries.length === 0 && (searchTerm || hasFacetedFilters)}
         <Card.Root class="border-x-0 rounded-none shadow-none">
             <Card.Content class="py-8">
                 <p class="text-sm text-muted-foreground text-center">
-                    No entries match "{searchTerm}".
+                    No entries match the current filters.
                 </p>
                 <div class="flex justify-center mt-2">
                     <Button
                         variant="outline"
                         size="sm"
-                        onclick={() => (searchTerm = "")}>Clear search</Button
+                        onclick={() => {
+                            searchTerm = "";
+                            selectedAccounts = new Set();
+                            selectedTags = new Set();
+                        }}>Clear all filters</Button
                     >
                 </div>
             </Card.Content>
@@ -754,6 +843,7 @@
                     <Table.Root class="table-fixed">
                         <Table.Header class="sticky top-0 z-10 bg-background">
                             <Table.Row>
+                                {#if columnVisibility.date}
                                 <SortableHeader
                                     active={sort.key === "date"}
                                     direction={sort.direction}
@@ -761,6 +851,8 @@
                                     class="hidden sm:table-cell sm:w-28"
                                     >Date</SortableHeader
                                 >
+                                {/if}
+                                {#if columnVisibility.description}
                                 <SortableHeader
                                     active={sort.key === "description"}
                                     direction={sort.direction}
@@ -768,12 +860,15 @@
                                     class="w-full"
                                     >Description</SortableHeader
                                 >
+                                {/if}
+                                {#if columnVisibility.amount}
                                 <SortableHeader
                                     active={sort.key === "amount"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("amount")}
                                     class="text-right hidden sm:table-cell sm:w-48">Amount</SortableHeader
                                 >
+                                {/if}
                             </Table.Row>
                         </Table.Header>
                         <Table.Body>
@@ -782,7 +877,7 @@
                                     ><td
                                         class="w-full"
                                         style="height: {paddingTop}px;"
-                                        colspan="3"
+                                        colspan={visibleColCount}
                                     ></td></tr
                                 >
                             {/if}
@@ -790,9 +885,12 @@
                                 {@const [entry, items] =
                                     sortedEntries[row.index]}
                                 <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
+                                    {#if columnVisibility.date}
                                     <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm shrink-0 py-2 pr-2 sm:p-2"
                                         >{entry.date}</Table.Cell
                                     >
+                                    {/if}
+                                    {#if columnVisibility.description}
                                     <Table.Cell class="order-3 w-full sm:w-auto whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
                                         <div
                                             class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
@@ -823,10 +921,13 @@
                                             {/if}
                                         </div>
                                     </Table.Cell>
+                                    {/if}
+                                    {#if columnVisibility.amount}
                                     <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2 overflow-hidden">
                                         {convertedTotals.get(entry.id) ??
                                             formatDebitTotal(items)}
                                     </Table.Cell>
+                                    {/if}
                                 </Table.Row>
                             {/each}
                             {#if paddingBottom > 0}
@@ -834,7 +935,7 @@
                                     ><td
                                         class="w-full"
                                         style="height: {paddingBottom}px;"
-                                        colspan="3"
+                                        colspan={visibleColCount}
                                     ></td></tr
                                 >
                             {/if}

@@ -1924,7 +1924,13 @@ PRAGMA foreign_keys = ON;
     const conditions: string[] = [];
     const params: unknown[] = [];
 
-    if (filter.account_id) {
+    // account_ids takes precedence over account_id when both set
+    if (filter.account_ids && filter.account_ids.length > 0) {
+      sql += " JOIN line_item li ON li.journal_entry_id = je.id";
+      const placeholders = filter.account_ids.map(() => "?").join(", ");
+      conditions.push(`li.account_id IN (${placeholders})`);
+      params.push(...filter.account_ids);
+    } else if (filter.account_id) {
       sql += " JOIN line_item li ON li.journal_entry_id = je.id";
       conditions.push("li.account_id = ?");
       params.push(filter.account_id);
@@ -1954,6 +1960,17 @@ PRAGMA foreign_keys = ON;
         conditions.push(
           "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)",
         );
+        params.push(`%,${tag.toLowerCase()},%`);
+      }
+    }
+    if (filter.tag_filters_or && filter.tag_filters_or.length > 0) {
+      const orParts = filter.tag_filters_or.map(() =>
+        "(',' || LOWER(value) || ',') LIKE ?"
+      );
+      conditions.push(
+        `je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (${orParts.join(" OR ")}))`
+      );
+      for (const tag of filter.tag_filters_or) {
         params.push(`%,${tag.toLowerCase()},%`);
       }
     }
@@ -2021,7 +2038,13 @@ PRAGMA foreign_keys = ON;
     const conditions: string[] = [];
     const params: unknown[] = [];
 
-    if (filter.account_id) {
+    // account_ids takes precedence over account_id when both set
+    if (filter.account_ids && filter.account_ids.length > 0) {
+      sql += " JOIN line_item li ON li.journal_entry_id = je.id";
+      const placeholders = filter.account_ids.map(() => "?").join(", ");
+      conditions.push(`li.account_id IN (${placeholders})`);
+      params.push(...filter.account_ids);
+    } else if (filter.account_id) {
       sql += " JOIN line_item li ON li.journal_entry_id = je.id";
       conditions.push("li.account_id = ?");
       params.push(filter.account_id);
@@ -2051,6 +2074,17 @@ PRAGMA foreign_keys = ON;
         conditions.push(
           "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)",
         );
+        params.push(`%,${tag.toLowerCase()},%`);
+      }
+    }
+    if (filter.tag_filters_or && filter.tag_filters_or.length > 0) {
+      const orParts = filter.tag_filters_or.map(() =>
+        "(',' || LOWER(value) || ',') LIKE ?"
+      );
+      conditions.push(
+        `je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (${orParts.join(" OR ")}))`
+      );
+      for (const tag of filter.tag_filters_or) {
         params.push(`%,${tag.toLowerCase()},%`);
       }
     }
