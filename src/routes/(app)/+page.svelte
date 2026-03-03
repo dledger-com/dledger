@@ -522,16 +522,16 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head class="w-0">Date</Table.Head>
+            <Table.Head class="w-0 hidden sm:table-cell">Date</Table.Head>
             <Table.Head>Description</Table.Head>
-            <Table.Head class="text-right">Amount</Table.Head>
+            <Table.Head class="text-right hidden sm:table-cell">Amount</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {#each recentEntries as [entry, items]}
-            <Table.Row class={entry.status === "voided" ? "line-through opacity-50" : ""}>
-              <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
-              <Table.Cell class="max-w-[300px]">
+            <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
+              <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm w-auto shrink-0 py-2 pr-2 sm:p-2">{entry.date}</Table.Cell>
+              <Table.Cell class="order-3 w-full sm:w-auto sm:max-w-[300px] whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
                 <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
                   <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
@@ -542,7 +542,7 @@
                   {/if}
                 </div>
               </Table.Cell>
-              <Table.Cell class="text-right font-mono">
+              <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2">
                 {formatDebitTotal(items)}
               </Table.Cell>
             </Table.Row>
