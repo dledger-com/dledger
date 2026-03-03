@@ -33,6 +33,8 @@ export interface AppSettings {
   accountPaths?: Partial<AccountPathConfig>;
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
+  spamCleanupDone?: boolean;
+  rateConfigHash?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -51,6 +53,21 @@ const DEFAULT_SETTINGS: AppSettings = {
   holdingPeriodDays: 365,
   handlers: { "generic-etherscan": { enabled: true } },
 };
+
+/**
+ * Compute a hash of rate-relevant config. When this changes, auto-detected
+ * "none" entries should be cleared so currencies get retried.
+ */
+export function computeRateConfigHash(s: AppSettings): string {
+  const parts = [
+    s.dpriceMode ?? "off",
+    s.coingeckoApiKey ? "set" : "",
+    s.finnhubApiKey ? "set" : "",
+    s.cryptoCompareApiKey ? "set" : "",
+    s.coingeckoPro ? "pro" : "",
+  ];
+  return parts.join("|");
+}
 
 const STORAGE_KEY = "dledger-settings";
 

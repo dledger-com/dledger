@@ -28,6 +28,7 @@ import type {
 } from "./types/index.js";
 import type { Backend, CurrencyRateSource, Reconciliation, RecurringTemplate, UnreconciledLineItem } from "./backend.js";
 import { parseTags } from "./utils/tags.js";
+import { isSpamCurrency } from "./currency-validation.js";
 
 // ---- IndexedDB persistence ----
 
@@ -1268,6 +1269,8 @@ PRAGMA foreign_keys = ON;
   }
 
   async createCurrency(currency: Currency): Promise<void> {
+    // Auto-hide spam currencies (garbage codes from DeFi imports)
+    const hidden = currency.is_hidden || isSpamCurrency(currency.code);
     try {
       this.run(
         "INSERT INTO currency (code, asset_type, param, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1278,7 +1281,7 @@ PRAGMA foreign_keys = ON;
           currency.name,
           currency.decimal_places,
           currency.is_base ? 1 : 0,
-          currency.is_hidden ? 1 : 0,
+          hidden ? 1 : 0,
         ],
       );
     } catch (e: unknown) {

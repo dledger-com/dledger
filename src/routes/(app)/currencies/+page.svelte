@@ -16,14 +16,16 @@
   import { getHiddenCurrencySet, markCurrencyHidden, unmarkCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import type { Currency } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
-  import { syncExchangeRates, fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
+  import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
-  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
-  import RefreshCw from "lucide-svelte/icons/refresh-cw";
+  import { rateHealth } from "$lib/data/rate-health.svelte.js";
+  import CircleCheck from "lucide-svelte/icons/circle-check";
+  import CircleAlert from "lucide-svelte/icons/circle-alert";
+  import Loader from "lucide-svelte/icons/loader";
 
   const settings = new SettingsStore();
-  const syncingRates = $derived(taskQueue.isActive("rate-sync"));
+  const syncing = $derived(taskQueue.isActive("rate-backfill"));
 
   let currencies = $state<Currency[]>([]);
   let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
@@ -125,52 +127,10 @@
     });
   }
 
-  function handleSyncRates() {
-    taskQueue.enqueue({
-      key: "rate-sync",
-      label: "Sync exchange rates",
-      async run() {
-        const backend = getBackend();
-        const r = await syncExchangeRates(
-          backend,
-          settings.currency,
-          settings.coingeckoApiKey,
-          settings.finnhubApiKey,
-          getHiddenCurrencySet(),
-          settings.cryptoCompareApiKey,
-          settings.settings.dpriceMode,
-          settings.settings.dpriceUrl,
-          settings.settings.coingeckoPro,
-        );
-
-        settings.update({
-          lastRateSync: new Date().toISOString().slice(0, 10),
-        });
-
-        if (r.autoHidden.length > 0) {
-          for (const code of r.autoHidden) {
-            await markCurrencyHidden(backend, code);
-          }
-          showAutoHideToast(r.autoHidden);
-        }
-
-        if (r.errors.length > 0) {
-          toast.warning(
-            `Synced ${r.rates_fetched} rate(s) with ${r.errors.length} warning(s)`,
-          );
-        } else {
-          toast.success(`Synced ${r.rates_fetched} exchange rate(s)`);
-        }
-
-        await loadCurrencies();
-        await loadRateSources();
-
-        return {
-          summary: `${r.rates_fetched} rate(s) synced`,
-          data: r,
-        };
-      },
-    });
+  async function handleDontConvert(code: string) {
+    await getBackend().setCurrencyRateSource(code, "none", "user");
+    await loadRateSources();
+    toast.success(`${code} marked as "don't convert"`);
   }
 
   const unsubCurrencies = onInvalidate("currencies", () => {
@@ -200,23 +160,51 @@
         />
         Show hidden
       </label>
-      <Button
-        variant="outline"
-        size="sm"
-        onclick={async () => {
-          await getBackend().clearAutoRateSources();
-          await loadRateSources();
-          toast.success("Auto-detected rate sources cleared. They will be re-detected on next sync.");
-        }}
-      >
-        Re-detect Sources
-      </Button>
-      <Button size="sm" onclick={handleSyncRates} disabled={syncingRates}>
-        <RefreshCw class="mr-1 h-4 w-4" />
-        {syncingRates ? "Syncing..." : "Sync Rates"}
-      </Button>
     </div>
   </div>
+
+  <!-- Rate health banner -->
+  {#if rateHealth.status === "syncing" || syncing}
+    <div class="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
+      <Loader class="h-4 w-4 animate-spin" />
+      <span>Syncing exchange rates...</span>
+    </div>
+  {:else if rateHealth.status === "missing" && rateHealth.missingCurrencies.length > 0}
+    <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950">
+      <div class="flex items-start gap-2">
+        <CircleAlert class="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+        <div class="space-y-2 w-full">
+          <p class="text-sm font-medium text-amber-800 dark:text-amber-200">
+            Missing rates for {rateHealth.missingCurrencies.length} currency(ies)
+          </p>
+          <div class="flex flex-wrap gap-2">
+            {#each rateHealth.missingCurrencies as code}
+              <div class="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs dark:border-amber-700 dark:bg-amber-900">
+                <a href="/currencies/{code}" class="font-mono font-medium text-amber-800 hover:underline dark:text-amber-200">{code}</a>
+                <span class="text-amber-400 dark:text-amber-600">|</span>
+                <button
+                  onclick={async () => { await markCurrencyHidden(getBackend(), code); await loadCurrencies(); }}
+                  class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
+                >Hide</button>
+                <span class="text-amber-400 dark:text-amber-600">|</span>
+                <a href="/currencies/{code}" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200">Enter Rate</a>
+                <span class="text-amber-400 dark:text-amber-600">|</span>
+                <button
+                  onclick={() => handleDontConvert(code)}
+                  class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
+                >Don't Convert</button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+    </div>
+  {:else if rateHealth.status === "ok"}
+    <div class="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+      <CircleCheck class="h-4 w-4" />
+      <span>All rates up to date</span>
+    </div>
+  {/if}
 
   <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
     <div class="space-y-1">

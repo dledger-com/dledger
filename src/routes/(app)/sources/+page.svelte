@@ -11,11 +11,8 @@
     import { invalidate } from "$lib/data/invalidation.js";
     import {
         getHiddenCurrencySet,
-        markCurrencyHidden,
     } from "$lib/data/hidden-currencies.svelte.js";
     import { toast } from "svelte-sonner";
-    import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
-
     import * as Command from "$lib/components/ui/command/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
     import { cn } from "$lib/utils.js";
@@ -31,13 +28,7 @@
     import { unzipSync, strFromU8 } from "fflate";
     import { filterLedgerFiles, resolveIncludes } from "$lib/ledger-include.js";
     import {
-        fetchSingleRate,
-    } from "$lib/exchange-rate-sync.js";
-    import {
-        findMissingRates,
-        fetchHistoricalRates,
         enqueueRateBackfill,
-        autoBackfillRates,
     } from "$lib/exchange-rate-historical.js";
     import type { ChainInfo, EtherscanAccount } from "$lib/types/index.js";
     import { SUPPORTED_CHAINS } from "$lib/types/index.js";
@@ -251,12 +242,7 @@
     const reprocessing = $derived(taskQueue.isActive("reprocess-dryrun"));
     const applyingReprocess = $derived(taskQueue.isActive("reprocess-apply"));
 
-    // -- Historical backfill state --
-    let backfillCurrencies = $state<string[]>([]);
-    let backfillFromDate = $state("");
-    let backfillToDate = $state(new Date().toISOString().slice(0, 10));
     const backfilling = $derived(taskQueue.isActive("rate-backfill"));
-    let availableCurrencies = $state<string[]>([]);
 
     // -- CEX state --
     let cexAccounts = $state<ExchangeAccount[]>([]);
@@ -404,190 +390,6 @@
         });
     }
 
-    async function loadAvailableCurrencies() {
-        try {
-            const backend = getBackend();
-            const currencies = await backend.listCurrencies();
-            const baseCurrency = settings.currency;
-            const rateSources = await backend.getCurrencyRateSources();
-            const rateSourceMap = new Map(
-                rateSources.map((rs) => [rs.currency, rs]),
-            );
-            availableCurrencies = currencies
-                .map((c) => c.code)
-                .filter(
-                    (c) => c !== baseCurrency && !getHiddenCurrencySet().has(c),
-                )
-                .filter((c) => rateSourceMap.get(c)?.rate_source !== "none")
-                .sort();
-        } catch {
-            // ignore
-        }
-    }
-
-    function toggleBackfillCurrency(code: string) {
-        if (backfillCurrencies.includes(code)) {
-            backfillCurrencies = backfillCurrencies.filter((c) => c !== code);
-        } else {
-            backfillCurrencies = [...backfillCurrencies, code];
-        }
-    }
-
-    function handleBackfill() {
-        if (
-            backfillCurrencies.length === 0 ||
-            !backfillFromDate ||
-            !backfillToDate
-        ) {
-            toast.error("Select currencies and date range");
-            return;
-        }
-
-        const currencies = [...backfillCurrencies];
-        const from = backfillFromDate;
-        const to = backfillToDate;
-
-        taskQueue.enqueue({
-            key: "rate-backfill",
-            label: `Backfill rates (${currencies.length} currencies)`,
-            async run(ctx) {
-                // Generate date targets for each currency
-                const currencyDates: { currency: string; date: string }[] = [];
-                for (const currency of currencies) {
-                    let current = new Date(from);
-                    const end = new Date(to);
-                    while (current <= end) {
-                        currencyDates.push({
-                            currency,
-                            date: current.toISOString().slice(0, 10),
-                        });
-                        current.setDate(current.getDate() + 1);
-                    }
-                }
-
-                const missing = await findMissingRates(
-                    getBackend(),
-                    settings.currency,
-                    currencyDates,
-                );
-
-                if (missing.length === 0) {
-                    toast.success(
-                        "All rates already available for the selected range",
-                    );
-                    return { summary: "All rates already available" };
-                }
-
-                const result = await fetchHistoricalRates(
-                    getBackend(),
-                    missing,
-                    {
-                        baseCurrency: settings.currency,
-                        coingeckoApiKey: settings.coingeckoApiKey,
-                        coingeckoPro: settings.settings.coingeckoPro,
-                        finnhubApiKey: settings.finnhubApiKey,
-                        cryptoCompareApiKey: settings.cryptoCompareApiKey,
-                        dpriceMode: settings.settings.dpriceMode,
-                        dpriceUrl: settings.settings.dpriceUrl,
-                        onProgress: (fetched, total) => {
-                            ctx.reportProgress({ current: fetched, total });
-                        },
-                    },
-                );
-
-                // Auto-hide currencies that failed all sources
-                if (result.failedCurrencies.length > 0) {
-                    const backend = getBackend();
-                    for (const code of result.failedCurrencies) {
-                        await backend.setCurrencyRateSource(
-                            code,
-                            "none",
-                            "auto",
-                        );
-                        await markCurrencyHidden(backend, code);
-                    }
-                    showAutoHideToast(result.failedCurrencies);
-                    loadAvailableCurrencies();
-                }
-
-                if (result.errors.length > 0) {
-                    toast.warning(
-                        `Fetched ${result.fetched} rate(s) with ${result.errors.length} warning(s)`,
-                    );
-                } else {
-                    toast.success(
-                        `Fetched ${result.fetched} historical rate(s)`,
-                    );
-                }
-
-                return {
-                    summary: `Fetched ${result.fetched} rate(s)`,
-                    data: result,
-                };
-            },
-        });
-    }
-
-    function handleAutoBackfill() {
-        taskQueue.enqueue({
-            key: "rate-backfill:auto",
-            label: "Auto-backfill all missing rates",
-            async run(ctx) {
-                const result = await autoBackfillRates(
-                    getBackend(),
-                    {
-                        baseCurrency: settings.currency,
-                        coingeckoApiKey: settings.coingeckoApiKey,
-                        coingeckoPro: settings.settings.coingeckoPro,
-                        finnhubApiKey: settings.finnhubApiKey,
-                        cryptoCompareApiKey: settings.cryptoCompareApiKey,
-                        dpriceMode: settings.settings.dpriceMode,
-                        dpriceUrl: settings.settings.dpriceUrl,
-                        onProgress: (fetched, total) => {
-                            ctx.reportProgress({ current: fetched, total });
-                        },
-                    },
-                    getHiddenCurrencySet(),
-                );
-
-                // Auto-hide currencies that failed all sources
-                if (result.failedCurrencies.length > 0) {
-                    const backend = getBackend();
-                    for (const code of result.failedCurrencies) {
-                        await backend.setCurrencyRateSource(
-                            code,
-                            "none",
-                            "auto",
-                        );
-                        await markCurrencyHidden(backend, code);
-                    }
-                    showAutoHideToast(result.failedCurrencies);
-                    loadAvailableCurrencies();
-                }
-
-                if (result.fetched === 0 && result.errors.length === 0) {
-                    toast.success("All rates already available");
-                    return { summary: "All rates already available" };
-                }
-
-                if (result.errors.length > 0) {
-                    toast.warning(
-                        `Fetched ${result.fetched} rate(s) with ${result.errors.length} warning(s)`,
-                    );
-                } else {
-                    toast.success(
-                        `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
-                    );
-                }
-
-                return {
-                    summary: `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
-                    data: result,
-                };
-            },
-        });
-    }
-
     function getChainName(chainId: number): string {
         const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
         return chain?.name ?? `Chain ${chainId}`;
@@ -605,7 +407,6 @@
     $effect(() => {
         loadEthAccounts();
         loadCexAccounts();
-        loadAvailableCurrencies();
     });
 
     // -- Etherscan handlers --
@@ -1903,102 +1704,4 @@
         </Card.Content>
     </Card.Root>
 
-
-    <!-- Historical Backfill -->
-    <Card.Root>
-        <Card.Header>
-            <Card.Title>Historical Backfill</Card.Title>
-            <Card.Description
-                >Fetch historical exchange rates for a date range. Frankfurter
-                (fiat) returns the full timeseries in one call. CoinGecko and
-                Finnhub fetch per-currency.</Card.Description
-            >
-        </Card.Header>
-        <Card.Content class="space-y-4">
-            <!-- Currency selection -->
-            <div class="space-y-2">
-                <span class="text-sm font-medium">Currencies</span>
-                {#if availableCurrencies.length === 0}
-                    <p class="text-sm text-muted-foreground">
-                        No non-base currencies found. Import data first.
-                    </p>
-                {:else}
-                    <div class="flex flex-wrap gap-1.5">
-                        {#each availableCurrencies as code}
-                            <button
-                                onclick={() => toggleBackfillCurrency(code)}
-                                class={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors cursor-pointer ${
-                                    backfillCurrencies.includes(code)
-                                        ? "bg-primary text-primary-foreground border-primary"
-                                        : "bg-muted text-muted-foreground border-input hover:bg-accent"
-                                }`}
-                            >
-                                {code}
-                            </button>
-                        {/each}
-                    </div>
-                    <div class="flex gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onclick={() => {
-                                backfillCurrencies = [...availableCurrencies];
-                            }}>Select All</Button
-                        >
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onclick={() => {
-                                backfillCurrencies = [];
-                            }}>Clear</Button
-                        >
-                    </div>
-                {/if}
-            </div>
-
-            <!-- Date range -->
-            <div class="flex items-end gap-4">
-                <div class="space-y-1">
-                    <label for="backfill-from" class="text-xs font-medium"
-                        >From</label
-                    >
-                    <Input
-                        id="backfill-from"
-                        type="date"
-                        bind:value={backfillFromDate}
-                        class="w-44"
-                    />
-                </div>
-                <div class="space-y-1">
-                    <label for="backfill-to" class="text-xs font-medium"
-                        >To</label
-                    >
-                    <Input
-                        id="backfill-to"
-                        type="date"
-                        bind:value={backfillToDate}
-                        class="w-44"
-                    />
-                </div>
-            </div>
-        </Card.Content>
-        <Card.Footer class="flex justify-end gap-2">
-            <Button
-                onclick={handleAutoBackfill}
-                disabled={backfilling}
-            >
-                {backfilling ? "Fetching..." : "Backfill All Missing Rates"}
-            </Button>
-            <Button
-                variant="outline"
-                onclick={handleBackfill}
-                disabled={backfilling ||
-                    backfillCurrencies.length === 0 ||
-                    !backfillFromDate ||
-                    !backfillToDate}
-            >
-                Fetch Selected Range
-            </Button>
-        </Card.Footer>
-    </Card.Root>
 </div>

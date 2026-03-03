@@ -4,6 +4,7 @@ import type { Backend, CurrencyRateSource, CurrencyDateRequirement } from "./bac
 import type { SourceName } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
+import { setRateHealthSyncing, updateRateHealth } from "./data/rate-health.svelte.js";
 
 
 // ECB/Frankfurter supported fiat currency codes
@@ -1182,10 +1183,24 @@ export function enqueueRateBackfill(
       key: "rate-backfill:auto",
       label: "Auto-backfill all missing rates",
       async run(ctx) {
+        setRateHealthSyncing();
         const result = await autoBackfillRates(backend, {
           ...config,
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total }),
         }, hiddenCurrencies, dpriceAssets);
+
+        // Mark failed currencies as unfetchable (rate_source = "none", set_by = "auto")
+        if (result.failedCurrencies.length > 0) {
+          for (const code of result.failedCurrencies) {
+            await backend.setCurrencyRateSource(code, "none", "auto");
+          }
+        }
+
+        // Update rate health store — only report non-hidden failed currencies
+        const failedNonHidden = result.failedCurrencies.filter(
+          (c) => !hiddenCurrencies.has(c),
+        );
+        updateRateHealth(result, failedNonHidden);
 
         if (result.fetched === 0 && result.errors.length === 0) {
           return { summary: "All rates already available" };
