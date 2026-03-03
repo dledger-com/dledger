@@ -280,9 +280,52 @@ export async function fetchHistoricalRates(
     }
   }
 
+  // Fallback: if dprice failed for some currencies, re-classify without dprice and retry
+  if (failedAfterPrimary.size > 0) {
+    // Load data needed for re-classification
+    const storedSources = await backend.getCurrencyRateSources();
+    const rateSourceMap = new Map<string, CurrencyRateSource>();
+    for (const src of storedSources) rateSourceMap.set(src.currency, src);
+    const tokenAddresses = await backend.getCurrencyTokenAddresses();
+    const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
+    const allCurrenciesList = await backend.listCurrencies();
+    const currencyTypeMap = new Map<string, string>();
+    for (const c of allCurrenciesList) currencyTypeMap.set(c.code, c.asset_type);
+
+    const failedDprice = requests.filter((r) => failedAfterPrimary.has(r.currency) && r.source === "dprice");
+    if (failedDprice.length > 0) {
+      // Re-classify without dprice (dpriceAssets = undefined) and group by fallback source
+      const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
+      for (const req of failedDprice) {
+        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined);
+        if (!fallback || fallback === "dprice") continue;
+        if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
+        fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
+      }
+
+      // Dispatch in priority order: coingecko before defillama
+      const sourceOrder: SourceName[] = ["frankfurter", "coingecko", "defillama", "finnhub", "cryptocompare", "binance"];
+      for (const source of sourceOrder) {
+        const reqs = fallbackBySource.get(source);
+        if (!reqs) continue;
+        if (source === "frankfurter") await fetchFrankfurterHistorical(backend, reqs, config, result, successCurrencies, tick);
+        else if (source === "coingecko" && config.coingeckoApiKey) await fetchCoinGeckoHistorical(backend, reqs, config, result, successCurrencies, tick);
+        else if (source === "defillama") await fetchDefiLlamaHistorical(backend, reqs, config, result, successCurrencies, tick);
+        else if (source === "finnhub" && config.finnhubApiKey) await fetchFinnhubHistorical(backend, reqs, config, result, successCurrencies, tick);
+        else if (source === "cryptocompare" && config.cryptoCompareApiKey) await fetchCryptoCompareHistorical(backend, reqs, config, result, successCurrencies, tick);
+        else if (source === "binance") await fetchBinanceHistorical(backend, reqs, config, result, successCurrencies, tick);
+      }
+    }
+  }
+
   if (failedAfterPrimary.size > 0 && config.coingeckoApiKey) {
+    // Recompute failedAfterPrimary since dprice fallback may have resolved some
+    const stillFailed = new Set<string>();
+    for (const currency of failedAfterPrimary) {
+      if (!successCurrencies.has(currency)) stillFailed.add(currency);
+    }
     const fallbackReqs = requests
-      .filter((r) => failedAfterPrimary.has(r.currency) && r.source === "defillama")
+      .filter((r) => stillFailed.has(r.currency) && r.source === "defillama")
       .map((r) => ({ ...r, source: "coingecko" as SourceName }));
     if (fallbackReqs.length > 0) {
       await fetchCoinGeckoHistorical(backend, fallbackReqs, config, result, successCurrencies, tick);

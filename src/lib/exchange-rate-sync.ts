@@ -251,6 +251,21 @@ export async function syncExchangeRates(
     }
   }
 
+  // If dprice-first pass failed entirely (dpriceAssets still undefined), re-route dpriceCodes to fallback sources
+  if (dpriceCodes.length > 0 && dpriceAssets === undefined) {
+    for (const code of dpriceCodes) {
+      const fallback = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), undefined);
+      if (fallback === "none" || fallback === "dprice") continue;
+      if (fallback === "frankfurter") frankfurterCodes.push(code);
+      else if (fallback === "coingecko") coingeckoCodes.push(code);
+      else if (fallback === "finnhub") finnhubCodes.push(code);
+      else if (fallback === "defillama") defillamaCodes.push(code);
+      else if (fallback === "cryptocompare") cryptocompareCodes.push(code);
+      else if (fallback === "binance") binanceCodes.push(code);
+    }
+    dpriceCodes.length = 0; // Clear — they've been re-routed
+  }
+
   // Track which auto-detect currencies succeeded
   const autoDetectSuccess = new Set<string>();
   const autoDetectFailed = new Set<string>();
