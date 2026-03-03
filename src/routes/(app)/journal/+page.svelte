@@ -288,13 +288,23 @@
         return displayEntries;
     });
 
+    // Mobile layout detection for virtual row height
+    let isMobileLayout = $state(false);
+    $effect(() => {
+        const mq = window.matchMedia("(max-width: 639px)");
+        isMobileLayout = mq.matches;
+        const handler = (e: MediaQueryListEvent) => { isMobileLayout = e.matches; };
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
+    });
+
     // Virtual scrolling
     let scrollEl = $state<HTMLDivElement | null>(null);
 
     const virtualizer = createVirtualizer(() => ({
         count: sortedEntries.length,
         getScrollElement: () => scrollEl,
-        estimateSize: () => 44,
+        estimateSize: () => isMobileLayout ? 64 : 44,
         overscan: 10,
     }));
 
@@ -748,7 +758,7 @@
                                     active={sort.key === "date"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("date")}
-                                    class="w-0"
+                                    class="w-0 hidden sm:table-cell"
                                     >Date</SortableHeader
                                 >
                                 <SortableHeader
@@ -761,14 +771,15 @@
                                     active={sort.key === "amount"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("amount")}
-                                    class="text-right">Amount</SortableHeader
+                                    class="text-right hidden sm:table-cell">Amount</SortableHeader
                                 >
                             </Table.Row>
                         </Table.Header>
                         <Table.Body>
                             {#if paddingTop > 0}
-                                <tr
+                                <tr class="flex sm:table-row"
                                     ><td
+                                        class="w-full"
                                         style="height: {paddingTop}px;"
                                         colspan="3"
                                     ></td></tr
@@ -777,11 +788,11 @@
                             {#each virtualItems as row (row.key)}
                                 {@const [entry, items] =
                                     sortedEntries[row.index]}
-                                <Table.Row class={entry.status === "voided" ? "line-through opacity-50" : ""}>
-                                    <Table.Cell class="text-muted-foreground"
+                                <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
+                                    <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm w-auto shrink-0 py-2 pr-2 sm:p-2"
                                         >{entry.date}</Table.Cell
                                     >
-                                    <Table.Cell class="max-w-[300px]">
+                                    <Table.Cell class="order-3 w-full sm:w-auto sm:max-w-[300px] whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
                                         <div
                                             class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
                                         >
@@ -811,15 +822,16 @@
                                             {/if}
                                         </div>
                                     </Table.Cell>
-                                    <Table.Cell class="text-right font-mono">
+                                    <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2">
                                         {convertedTotals.get(entry.id) ??
                                             formatDebitTotal(items)}
                                     </Table.Cell>
                                 </Table.Row>
                             {/each}
                             {#if paddingBottom > 0}
-                                <tr
+                                <tr class="flex sm:table-row"
                                     ><td
+                                        class="w-full"
                                         style="height: {paddingBottom}px;"
                                         colspan="3"
                                     ></td></tr
