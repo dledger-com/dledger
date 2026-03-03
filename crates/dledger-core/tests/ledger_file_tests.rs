@@ -118,6 +118,8 @@ impl Storage for TestStorage {
                 |row| {
                     Ok(Currency {
                         code: row.get(0)?,
+                        asset_type: String::new(),
+                        param: String::new(),
                         name: row.get(1)?,
                         decimal_places: row.get::<_, u8>(2)?,
                         is_base: row.get::<_, i32>(3)? != 0,
@@ -138,6 +140,8 @@ impl Storage for TestStorage {
             .query_map([], |row| {
                 Ok(Currency {
                     code: row.get(0)?,
+                    asset_type: String::new(),
+                    param: String::new(),
                     name: row.get(1)?,
                     decimal_places: row.get::<_, u8>(2)?,
                     is_base: row.get::<_, i32>(3)? != 0,
@@ -146,6 +150,15 @@ impl Storage for TestStorage {
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn set_currency_asset_type(&self, code: &str, asset_type: &str, param: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "UPDATE currency SET asset_type = ? WHERE code = ? AND param = ?",
+            params![asset_type, code, param],
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
     }
 
     fn create_account(&self, account: &Account) -> StorageResult<()> {
@@ -392,6 +405,8 @@ impl Storage for TestStorage {
                         journal_entry_id: parse_uuid(&ji)?,
                         account_id: parse_uuid(&ai)?,
                         currency: c,
+                        currency_asset_type: String::new(),
+                        currency_param: String::new(),
                         amount: parse_decimal(&a)?,
                         lot_id: li.as_deref().map(parse_uuid).transpose()?,
                     });
@@ -496,11 +511,15 @@ impl Storage for TestStorage {
                 id: parse_uuid(&ids)?,
                 account_id: parse_uuid(&ai)?,
                 currency: c,
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 acquired_date: parse_date(&ad)?,
                 original_quantity: parse_decimal(&oq)?,
                 remaining_quantity: parse_decimal(&rq)?,
                 cost_basis_per_unit: parse_decimal(&cb)?,
                 cost_basis_currency: cbc,
+                cost_basis_currency_asset_type: String::new(),
+                cost_basis_currency_param: String::new(),
                 journal_entry_id: parse_uuid(&ji)?,
                 is_closed: ic != 0,
             })),
@@ -543,11 +562,15 @@ impl Storage for TestStorage {
                 id: parse_uuid(&ids)?,
                 account_id: parse_uuid(&ai)?,
                 currency: c,
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 acquired_date: parse_date(&ad)?,
                 original_quantity: parse_decimal(&oq)?,
                 remaining_quantity: parse_decimal(&rq)?,
                 cost_basis_per_unit: parse_decimal(&cb)?,
                 cost_basis_currency: cbc,
+                cost_basis_currency_asset_type: String::new(),
+                cost_basis_currency_param: String::new(),
                 journal_entry_id: parse_uuid(&ji)?,
                 is_closed: ic != 0,
             });
@@ -633,6 +656,8 @@ impl Storage for TestStorage {
                 quantity: parse_decimal(&q)?,
                 proceeds_per_unit: parse_decimal(&pp)?,
                 proceeds_currency: pc,
+                proceeds_currency_asset_type: String::new(),
+                proceeds_currency_param: String::new(),
                 realized_gain_loss: parse_decimal(&gl)?,
                 disposal_date: parse_date(&dd)?,
             });
@@ -742,9 +767,13 @@ impl Storage for TestStorage {
                         from_currency: row
                             .get::<_, String>(2)
                             .map_err(|e| StorageError::Internal(e.to_string()))?,
+                        from_currency_asset_type: String::new(),
+                        from_currency_param: String::new(),
                         to_currency: row
                             .get::<_, String>(3)
                             .map_err(|e| StorageError::Internal(e.to_string()))?,
+                        to_currency_asset_type: String::new(),
+                        to_currency_param: String::new(),
                         rate: parse_decimal(
                             &row.get::<_, String>(4)
                                 .map_err(|e| StorageError::Internal(e.to_string()))?,
@@ -1023,6 +1052,8 @@ impl Storage for TestStorage {
         let rows = stmt.query_map([], |row| {
             Ok(CurrencyRateSource {
                 currency: row.get(0)?,
+                asset_type: String::new(),
+                param: String::new(),
                 rate_source: row.get(1)?,
                 set_by: row.get(2)?,
             })

@@ -58,11 +58,15 @@ pub fn create_acquisition_lot(
         id: Uuid::now_v7(),
         account_id,
         currency: currency.to_string(),
+        currency_asset_type: String::new(),
+        currency_param: String::new(),
         acquired_date,
         original_quantity: quantity,
         remaining_quantity: quantity,
         cost_basis_per_unit,
         cost_basis_currency: cost_basis_currency.to_string(),
+        cost_basis_currency_asset_type: String::new(),
+        cost_basis_currency_param: String::new(),
         journal_entry_id,
         is_closed: false,
     };
@@ -124,6 +128,8 @@ pub fn dispose_lots_fifo(
             quantity: dispose_from_this_lot,
             proceeds_per_unit,
             proceeds_currency: proceeds_currency.to_string(),
+            proceeds_currency_asset_type: String::new(),
+            proceeds_currency_param: String::new(),
             realized_gain_loss,
             disposal_date,
         };
@@ -174,6 +180,8 @@ pub fn dispose_specific_lot(
         quantity,
         proceeds_per_unit,
         proceeds_currency: proceeds_currency.to_string(),
+        proceeds_currency_asset_type: String::new(),
+        proceeds_currency_param: String::new(),
         realized_gain_loss,
         disposal_date,
     };

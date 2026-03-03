@@ -14,6 +14,7 @@ import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
 import { exchangeAssetsCurrency, exchangeFees, exchangeExternal, exchangeStaking, tradingAccount } from "../accounts/paths.js";
 
+
 /**
  * Normalize a transaction ID: lowercase and ensure 0x prefix for hex hashes.
  * Kraken may return txids without 0x prefix, while Etherscan always uses 0x.
@@ -111,6 +112,8 @@ export async function syncCexAccount(
     if (currencySet.has(code)) return;
     await backend.createCurrency({
       code,
+      asset_type: "",
+      param: "",
       name: code,
       decimal_places: 8,
       is_base: false,
@@ -621,6 +624,8 @@ async function consolidateWithEtherscan(
       if (currencySet.has(code)) return;
       await backend.createCurrency({
         code,
+        asset_type: "",
+        param: "",
         name: code,
         decimal_places: decimals,
         is_base: false,
@@ -761,7 +766,7 @@ async function consolidateWithCex(
     // Ensure accounts and currencies
     for (const item of newItems) {
       if (!currencySet.has(item.currency)) {
-        await backend.createCurrency({ code: item.currency, name: item.currency, decimal_places: 8, is_base: false });
+        await backend.createCurrency({ code: item.currency, asset_type: "", param: "", name: item.currency, decimal_places: 8, is_base: false });
         currencySet.add(item.currency);
       }
       if (!accountMap.has(item.account)) {

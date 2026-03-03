@@ -23,6 +23,8 @@ describe("runIntegrityChecks", () => {
     // Create a currency with 8 decimal places (like tBTC)
     await backend.createCurrency({
       code: "tBTC",
+      asset_type: "",
+      param: "",
       name: "tBTC",
       decimal_places: 8,
       is_base: false,

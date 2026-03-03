@@ -10,10 +10,10 @@ describe("getCurrencyDateRequirements", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "EUR", name: "Euro", decimal_places: 2, is_base: false });
-    await backend.createCurrency({ code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false });
-    await backend.createCurrency({ code: "ETH", name: "Ethereum", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "ETH", asset_type: "", param: "", name: "Ethereum", decimal_places: 8, is_base: false });
 
     // Create accounts
     const assetsId = uuidv7();
@@ -230,8 +230,8 @@ describe("getExchangeRatesBatchExact", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "EUR", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
   });
 
   it("returns true only for exact date matches", async () => {
@@ -272,8 +272,8 @@ describe("findMissingRates with exactDateMatch", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "EUR", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
   });
 
   it("detects gaps that on-or-before matching would miss", async () => {

@@ -89,11 +89,14 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 CREATE TABLE IF NOT EXISTS currency (
-    code TEXT PRIMARY KEY NOT NULL,
+    code TEXT NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    param TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     decimal_places INTEGER NOT NULL DEFAULT 2,
     is_base INTEGER NOT NULL DEFAULT 0,
-    is_hidden INTEGER NOT NULL DEFAULT 0
+    is_hidden INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (code, asset_type, param)
 );
 
 CREATE TABLE IF NOT EXISTS account (
@@ -134,9 +137,12 @@ CREATE TABLE IF NOT EXISTS line_item (
     id TEXT PRIMARY KEY NOT NULL,
     journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
     account_id TEXT NOT NULL REFERENCES account(id),
-    currency TEXT NOT NULL REFERENCES currency(code),
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
     amount TEXT NOT NULL,
-    lot_id TEXT REFERENCES lot(id)
+    lot_id TEXT REFERENCES lot(id),
+    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
 );
 CREATE INDEX IF NOT EXISTS idx_line_item_entry ON line_item(journal_entry_id);
 CREATE INDEX IF NOT EXISTS idx_line_item_account ON line_item(account_id);
@@ -145,14 +151,20 @@ CREATE INDEX IF NOT EXISTS idx_line_item_currency ON line_item(currency);
 CREATE TABLE IF NOT EXISTS lot (
     id TEXT PRIMARY KEY NOT NULL,
     account_id TEXT NOT NULL REFERENCES account(id),
-    currency TEXT NOT NULL REFERENCES currency(code),
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
     acquired_date TEXT NOT NULL,
     original_quantity TEXT NOT NULL,
     remaining_quantity TEXT NOT NULL,
     cost_basis_per_unit TEXT NOT NULL,
-    cost_basis_currency TEXT NOT NULL REFERENCES currency(code),
+    cost_basis_currency TEXT NOT NULL,
+    cost_basis_currency_asset_type TEXT NOT NULL DEFAULT '',
+    cost_basis_currency_param TEXT NOT NULL DEFAULT '',
     journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
-    is_closed INTEGER NOT NULL DEFAULT 0
+    is_closed INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param),
+    FOREIGN KEY (cost_basis_currency, cost_basis_currency_asset_type, cost_basis_currency_param) REFERENCES currency(code, asset_type, param)
 );
 CREATE INDEX IF NOT EXISTS idx_lot_account_currency ON lot(account_id, currency);
 CREATE INDEX IF NOT EXISTS idx_lot_open ON lot(account_id, currency, is_closed, acquired_date);
@@ -163,9 +175,12 @@ CREATE TABLE IF NOT EXISTS lot_disposal (
     journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
     quantity TEXT NOT NULL,
     proceeds_per_unit TEXT NOT NULL,
-    proceeds_currency TEXT NOT NULL REFERENCES currency(code),
+    proceeds_currency TEXT NOT NULL,
+    proceeds_currency_asset_type TEXT NOT NULL DEFAULT '',
+    proceeds_currency_param TEXT NOT NULL DEFAULT '',
     realized_gain_loss TEXT NOT NULL,
-    disposal_date TEXT NOT NULL
+    disposal_date TEXT NOT NULL,
+    FOREIGN KEY (proceeds_currency, proceeds_currency_asset_type, proceeds_currency_param) REFERENCES currency(code, asset_type, param)
 );
 CREATE INDEX IF NOT EXISTS idx_lot_disposal_lot ON lot_disposal(lot_id);
 CREATE INDEX IF NOT EXISTS idx_lot_disposal_date ON lot_disposal(disposal_date);
@@ -173,10 +188,16 @@ CREATE INDEX IF NOT EXISTS idx_lot_disposal_date ON lot_disposal(disposal_date);
 CREATE TABLE IF NOT EXISTS exchange_rate (
     id TEXT PRIMARY KEY NOT NULL,
     date TEXT NOT NULL,
-    from_currency TEXT NOT NULL REFERENCES currency(code),
-    to_currency TEXT NOT NULL REFERENCES currency(code),
+    from_currency TEXT NOT NULL,
+    from_currency_asset_type TEXT NOT NULL DEFAULT '',
+    from_currency_param TEXT NOT NULL DEFAULT '',
+    to_currency TEXT NOT NULL,
+    to_currency_asset_type TEXT NOT NULL DEFAULT '',
+    to_currency_param TEXT NOT NULL DEFAULT '',
     rate TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'manual'
+    source TEXT NOT NULL DEFAULT 'manual',
+    FOREIGN KEY (from_currency, from_currency_asset_type, from_currency_param) REFERENCES currency(code, asset_type, param),
+    FOREIGN KEY (to_currency, to_currency_asset_type, to_currency_param) REFERENCES currency(code, asset_type, param)
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_rate_pair_date ON exchange_rate(from_currency, to_currency, date);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency);
@@ -185,12 +206,15 @@ CREATE TABLE IF NOT EXISTS balance_assertion (
     id TEXT PRIMARY KEY NOT NULL,
     account_id TEXT NOT NULL REFERENCES account(id),
     date TEXT NOT NULL,
-    currency TEXT NOT NULL REFERENCES currency(code),
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
     expected_balance TEXT NOT NULL,
     is_passing INTEGER NOT NULL DEFAULT 1,
     actual_balance TEXT,
     is_strict INTEGER NOT NULL DEFAULT 0,
-    include_subaccounts INTEGER NOT NULL DEFAULT 0
+    include_subaccounts INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
 );
 CREATE INDEX IF NOT EXISTS idx_balance_assertion_account ON balance_assertion(account_id);
 
@@ -225,10 +249,13 @@ CREATE TABLE IF NOT EXISTS raw_transaction (
 );
 
 CREATE TABLE IF NOT EXISTS currency_rate_source (
-    currency TEXT PRIMARY KEY NOT NULL,
-    rate_source TEXT,
+    currency TEXT NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    param TEXT NOT NULL DEFAULT '',
+    rate_source TEXT NOT NULL,
     set_by TEXT NOT NULL DEFAULT 'auto',
-    updated_at TEXT NOT NULL DEFAULT ''
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (currency, asset_type, param)
 );
 
 CREATE TABLE IF NOT EXISTS budget (
@@ -237,6 +264,8 @@ CREATE TABLE IF NOT EXISTS budget (
     period_type TEXT NOT NULL DEFAULT 'monthly',
     amount TEXT NOT NULL,
     currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
     start_date TEXT,
     end_date TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -270,6 +299,8 @@ type Row = Record<string, any>;
 function mapCurrency(row: Row): Currency {
   return {
     code: row.code,
+    asset_type: row.asset_type ?? "",
+    param: row.param ?? "",
     name: row.name,
     decimal_places: row.decimal_places,
     is_base: row.is_base !== 0,
@@ -321,6 +352,8 @@ function mapLineItem(row: Row): LineItem {
     journal_entry_id: row.journal_entry_id,
     account_id: row.account_id,
     currency: row.currency,
+    currency_asset_type: row.currency_asset_type ?? "",
+    currency_param: row.currency_param ?? "",
     amount: row.amount,
     lot_id: row.lot_id ?? null,
   };
@@ -331,7 +364,11 @@ function mapExchangeRate(row: Row): ExchangeRate {
     id: row.id,
     date: row.date,
     from_currency: row.from_currency,
+    from_currency_asset_type: row.from_currency_asset_type ?? "",
+    from_currency_param: row.from_currency_param ?? "",
     to_currency: row.to_currency,
+    to_currency_asset_type: row.to_currency_asset_type ?? "",
+    to_currency_param: row.to_currency_param ?? "",
     rate: row.rate,
     source: row.source,
   };
@@ -428,10 +465,11 @@ export class SqlJsBackend implements Backend {
       interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
       is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
     )`);
-    // Token address mapping (v12)
+    // Token address mapping (v12, updated v17)
     db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
-      currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
-      PRIMARY KEY (currency, chain)
+      currency TEXT NOT NULL, asset_type TEXT NOT NULL DEFAULT '', param TEXT NOT NULL DEFAULT '',
+      chain TEXT NOT NULL, contract_address TEXT NOT NULL,
+      PRIMARY KEY (currency, asset_type, param, chain)
     )`);
     // Account metadata (v14)
     db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
@@ -447,7 +485,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (16)");
+    db.exec("INSERT INTO schema_version (version) VALUES (17)");
     return backend;
   }
 
@@ -463,8 +501,9 @@ export class SqlJsBackend implements Backend {
       db.exec(SCHEMA_SQL);
       db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
       db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
-        currency TEXT NOT NULL, chain TEXT NOT NULL, contract_address TEXT NOT NULL,
-        PRIMARY KEY (currency, chain)
+        currency TEXT NOT NULL, asset_type TEXT NOT NULL DEFAULT '', param TEXT NOT NULL DEFAULT '',
+        chain TEXT NOT NULL, contract_address TEXT NOT NULL,
+        PRIMARY KEY (currency, asset_type, param, chain)
       )`);
       db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
         account_id TEXT NOT NULL REFERENCES account(id),
@@ -472,7 +511,7 @@ export class SqlJsBackend implements Backend {
         PRIMARY KEY (account_id, key)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-      db.exec("INSERT INTO schema_version (version) VALUES (16)");
+      db.exec("INSERT INTO schema_version (version) VALUES (17)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -655,8 +694,194 @@ export class SqlJsBackend implements Backend {
             insertStmt.free();
           }
           db.exec("DELETE FROM journal_entry_metadata WHERE key = 'links'");
+        }
+        if (currentVersion < 17) {
+          // Migrate v16 → v17: add asset_type + param composite key columns
+          db.exec(`
+PRAGMA foreign_keys = OFF;
+
+-- 1. Recreate currency with composite PK (code, asset_type, param)
+CREATE TABLE currency_new (
+    code TEXT NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    param TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    decimal_places INTEGER NOT NULL DEFAULT 2,
+    is_base INTEGER NOT NULL DEFAULT 0,
+    is_hidden INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (code, asset_type, param)
+);
+INSERT INTO currency_new (code, name, decimal_places, is_base, is_hidden)
+    SELECT code, name, decimal_places, is_base, is_hidden FROM currency;
+DROP TABLE currency;
+ALTER TABLE currency_new RENAME TO currency;
+
+-- 2. Recreate line_item with currency_asset_type + currency_param
+CREATE TABLE line_item_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    account_id TEXT NOT NULL REFERENCES account(id),
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
+    amount TEXT NOT NULL,
+    lot_id TEXT REFERENCES lot(id),
+    is_reconciled INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
+);
+INSERT INTO line_item_new (id, journal_entry_id, account_id, currency, amount, lot_id, is_reconciled)
+    SELECT id, journal_entry_id, account_id, currency, amount, lot_id, is_reconciled FROM line_item;
+DROP TABLE line_item;
+ALTER TABLE line_item_new RENAME TO line_item;
+CREATE INDEX idx_line_item_entry ON line_item(journal_entry_id);
+CREATE INDEX idx_line_item_account ON line_item(account_id);
+CREATE INDEX idx_line_item_currency ON line_item(currency);
+
+-- 3. Recreate lot with currency + cost_basis_currency type/param
+CREATE TABLE lot_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    account_id TEXT NOT NULL REFERENCES account(id),
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
+    acquired_date TEXT NOT NULL,
+    original_quantity TEXT NOT NULL,
+    remaining_quantity TEXT NOT NULL,
+    cost_basis_per_unit TEXT NOT NULL,
+    cost_basis_currency TEXT NOT NULL,
+    cost_basis_currency_asset_type TEXT NOT NULL DEFAULT '',
+    cost_basis_currency_param TEXT NOT NULL DEFAULT '',
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    is_closed INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param),
+    FOREIGN KEY (cost_basis_currency, cost_basis_currency_asset_type, cost_basis_currency_param) REFERENCES currency(code, asset_type, param)
+);
+INSERT INTO lot_new (id, account_id, currency, acquired_date, original_quantity, remaining_quantity,
+                     cost_basis_per_unit, cost_basis_currency, journal_entry_id, is_closed)
+    SELECT id, account_id, currency, acquired_date, original_quantity, remaining_quantity,
+           cost_basis_per_unit, cost_basis_currency, journal_entry_id, is_closed FROM lot;
+DROP TABLE lot;
+ALTER TABLE lot_new RENAME TO lot;
+CREATE INDEX idx_lot_account_currency ON lot(account_id, currency);
+CREATE INDEX idx_lot_open ON lot(account_id, currency, is_closed, acquired_date);
+
+-- 4. Recreate lot_disposal with proceeds_currency type/param
+CREATE TABLE lot_disposal_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    lot_id TEXT NOT NULL REFERENCES lot(id),
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    quantity TEXT NOT NULL,
+    proceeds_per_unit TEXT NOT NULL,
+    proceeds_currency TEXT NOT NULL,
+    proceeds_currency_asset_type TEXT NOT NULL DEFAULT '',
+    proceeds_currency_param TEXT NOT NULL DEFAULT '',
+    realized_gain_loss TEXT NOT NULL,
+    disposal_date TEXT NOT NULL,
+    FOREIGN KEY (proceeds_currency, proceeds_currency_asset_type, proceeds_currency_param) REFERENCES currency(code, asset_type, param)
+);
+INSERT INTO lot_disposal_new (id, lot_id, journal_entry_id, quantity, proceeds_per_unit,
+                               proceeds_currency, realized_gain_loss, disposal_date)
+    SELECT id, lot_id, journal_entry_id, quantity, proceeds_per_unit,
+           proceeds_currency, realized_gain_loss, disposal_date FROM lot_disposal;
+DROP TABLE lot_disposal;
+ALTER TABLE lot_disposal_new RENAME TO lot_disposal;
+CREATE INDEX idx_lot_disposal_lot ON lot_disposal(lot_id);
+CREATE INDEX idx_lot_disposal_date ON lot_disposal(disposal_date);
+
+-- 5. Recreate exchange_rate with from/to currency type/param
+CREATE TABLE exchange_rate_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    date TEXT NOT NULL,
+    from_currency TEXT NOT NULL,
+    from_currency_asset_type TEXT NOT NULL DEFAULT '',
+    from_currency_param TEXT NOT NULL DEFAULT '',
+    to_currency TEXT NOT NULL,
+    to_currency_asset_type TEXT NOT NULL DEFAULT '',
+    to_currency_param TEXT NOT NULL DEFAULT '',
+    rate TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    FOREIGN KEY (from_currency, from_currency_asset_type, from_currency_param) REFERENCES currency(code, asset_type, param),
+    FOREIGN KEY (to_currency, to_currency_asset_type, to_currency_param) REFERENCES currency(code, asset_type, param)
+);
+INSERT INTO exchange_rate_new (id, date, from_currency, to_currency, rate, source)
+    SELECT id, date, from_currency, to_currency, rate, source FROM exchange_rate;
+DROP TABLE exchange_rate;
+ALTER TABLE exchange_rate_new RENAME TO exchange_rate;
+CREATE INDEX idx_exchange_rate_pair_date ON exchange_rate(from_currency, to_currency, date);
+CREATE UNIQUE INDEX idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency);
+
+-- 6. Recreate balance_assertion with currency type/param
+CREATE TABLE balance_assertion_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    account_id TEXT NOT NULL REFERENCES account(id),
+    date TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
+    expected_balance TEXT NOT NULL,
+    is_passing INTEGER NOT NULL DEFAULT 1,
+    actual_balance TEXT,
+    is_strict INTEGER NOT NULL DEFAULT 0,
+    include_subaccounts INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
+);
+INSERT INTO balance_assertion_new (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts)
+    SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion;
+DROP TABLE balance_assertion;
+ALTER TABLE balance_assertion_new RENAME TO balance_assertion;
+CREATE INDEX idx_balance_assertion_account ON balance_assertion(account_id);
+
+-- 7. Recreate budget with currency type/param
+CREATE TABLE budget_new (
+    id TEXT PRIMARY KEY,
+    account_pattern TEXT NOT NULL,
+    period_type TEXT NOT NULL DEFAULT 'monthly',
+    amount TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    currency_asset_type TEXT NOT NULL DEFAULT '',
+    currency_param TEXT NOT NULL DEFAULT '',
+    start_date TEXT,
+    end_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT INTO budget_new (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
+    SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget;
+DROP TABLE budget;
+ALTER TABLE budget_new RENAME TO budget;
+
+-- 8. Recreate currency_rate_source with composite PK
+CREATE TABLE currency_rate_source_new (
+    currency TEXT NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    param TEXT NOT NULL DEFAULT '',
+    rate_source TEXT NOT NULL,
+    set_by TEXT NOT NULL DEFAULT 'auto',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (currency, asset_type, param)
+);
+INSERT INTO currency_rate_source_new (currency, rate_source, set_by, updated_at)
+    SELECT currency, rate_source, set_by, updated_at FROM currency_rate_source;
+DROP TABLE currency_rate_source;
+ALTER TABLE currency_rate_source_new RENAME TO currency_rate_source;
+
+-- 9. Recreate currency_token_address with composite PK
+CREATE TABLE currency_token_address_new (
+    currency TEXT NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    param TEXT NOT NULL DEFAULT '',
+    chain TEXT NOT NULL,
+    contract_address TEXT NOT NULL,
+    PRIMARY KEY (currency, asset_type, param, chain)
+);
+INSERT INTO currency_token_address_new (currency, chain, contract_address)
+    SELECT currency, chain, contract_address FROM currency_token_address;
+DROP TABLE currency_token_address;
+ALTER TABLE currency_token_address_new RENAME TO currency_token_address;
+
+PRAGMA foreign_keys = ON;
+          `);
           db.exec("DELETE FROM schema_version");
-          db.exec("INSERT INTO schema_version (version) VALUES (16)");
+          db.exec("INSERT INTO schema_version (version) VALUES (17)");
         }
       }
     }
@@ -794,7 +1019,7 @@ export class SqlJsBackend implements Backend {
 
   private getCurrencyByCode(code: string): Currency | null {
     return this.queryOne(
-      "SELECT code, name, decimal_places, is_base, is_hidden FROM currency WHERE code = ?",
+      "SELECT code, asset_type, param, name, decimal_places, is_base, is_hidden FROM currency WHERE code = ?",
       [code],
       mapCurrency,
     );
@@ -842,7 +1067,7 @@ export class SqlJsBackend implements Backend {
 
   private fetchLineItemsForEntry(entryId: string): LineItem[] {
     return this.query(
-      "SELECT id, journal_entry_id, account_id, currency, amount, lot_id FROM line_item WHERE journal_entry_id = ?",
+      "SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id FROM line_item WHERE journal_entry_id = ?",
       [entryId],
       mapLineItem,
     );
@@ -1023,7 +1248,7 @@ export class SqlJsBackend implements Backend {
 
   async listCurrencies(): Promise<Currency[]> {
     return this.query(
-      "SELECT code, name, decimal_places, is_base, is_hidden FROM currency ORDER BY code",
+      "SELECT code, asset_type, param, name, decimal_places, is_base, is_hidden FROM currency ORDER BY code",
       [],
       mapCurrency,
     );
@@ -1032,9 +1257,11 @@ export class SqlJsBackend implements Backend {
   async createCurrency(currency: Currency): Promise<void> {
     try {
       this.run(
-        "INSERT INTO currency (code, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO currency (code, asset_type, param, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
           currency.code,
+          currency.asset_type ?? "",
+          currency.param ?? "",
           currency.name,
           currency.decimal_places,
           currency.is_base ? 1 : 0,
@@ -1049,6 +1276,14 @@ export class SqlJsBackend implements Backend {
       throw e;
     }
     this.audit("create", "currency", "", currency.code);
+    this.scheduleSave();
+  }
+
+  async setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void> {
+    this.run(
+      "UPDATE currency SET asset_type = ? WHERE code = ? AND asset_type = ? AND param = ?",
+      [assetType, code, "", param ?? ""],
+    );
     this.scheduleSave();
   }
 
@@ -1069,8 +1304,8 @@ export class SqlJsBackend implements Backend {
 
   async setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void> {
     this.run(
-      "INSERT OR IGNORE INTO currency_token_address (currency, chain, contract_address) VALUES (?, ?, ?)",
-      [currency, chain, contractAddress],
+      "INSERT OR IGNORE INTO currency_token_address (currency, asset_type, param, chain, contract_address) VALUES (?, ?, ?, ?, ?)",
+      [currency, "", "", chain, contractAddress],
     );
     this.scheduleSave();
   }
@@ -1592,12 +1827,14 @@ export class SqlJsBackend implements Backend {
     );
     for (const item of items) {
       this.run(
-        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
           item.id,
           item.journal_entry_id,
           item.account_id,
           item.currency,
+          item.currency_asset_type ?? "",
+          item.currency_param ?? "",
           item.amount,
           item.lot_id,
         ],
@@ -1647,8 +1884,8 @@ export class SqlJsBackend implements Backend {
     for (const item of items) {
       const negAmount = new Decimal(item.amount).neg().toString();
       this.run(
-        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?)",
-        [uuidv7(), reversalId, item.account_id, item.currency, negAmount, null],
+        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [uuidv7(), reversalId, item.account_id, item.currency, item.currency_asset_type ?? "", item.currency_param ?? "", negAmount, null],
       );
     }
 
@@ -1759,7 +1996,7 @@ export class SqlJsBackend implements Backend {
     const entryIds = entries.map((e) => e.id);
     const ph = entryIds.map(() => "?").join(", ");
     const allItems = this.query(
-      `SELECT id, journal_entry_id, account_id, currency, amount, lot_id
+      `SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
        FROM line_item WHERE journal_entry_id IN (${ph})`,
       entryIds,
       mapLineItem,
@@ -2380,16 +2617,16 @@ export class SqlJsBackend implements Backend {
 
   async createBudget(budget: Budget): Promise<void> {
     this.run(
-      `INSERT INTO budget (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [budget.id, budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.start_date, budget.end_date],
+      `INSERT INTO budget (id, account_pattern, period_type, amount, currency, currency_asset_type, currency_param, start_date, end_date, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [budget.id, budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.currency_asset_type ?? "", budget.currency_param ?? "", budget.start_date, budget.end_date],
     );
     this.scheduleSave();
   }
 
   async listBudgets(): Promise<Budget[]> {
     return this.query(
-      "SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget ORDER BY account_pattern",
+      "SELECT id, account_pattern, period_type, amount, currency, currency_asset_type, currency_param, start_date, end_date, created_at FROM budget ORDER BY account_pattern",
       [],
       (row) => ({
         id: row.id as string,
@@ -2397,6 +2634,8 @@ export class SqlJsBackend implements Backend {
         period_type: row.period_type as "monthly" | "yearly",
         amount: row.amount as string,
         currency: row.currency as string,
+        currency_asset_type: (row.currency_asset_type as string) ?? "",
+        currency_param: (row.currency_param as string) ?? "",
         start_date: (row.start_date as string) || null,
         end_date: (row.end_date as string) || null,
         created_at: row.created_at as string,
@@ -2406,8 +2645,8 @@ export class SqlJsBackend implements Backend {
 
   async updateBudget(budget: Budget): Promise<void> {
     this.run(
-      `UPDATE budget SET account_pattern = ?, period_type = ?, amount = ?, currency = ?, start_date = ?, end_date = ? WHERE id = ?`,
-      [budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.start_date, budget.end_date, budget.id],
+      `UPDATE budget SET account_pattern = ?, period_type = ?, amount = ?, currency = ?, currency_asset_type = ?, currency_param = ?, start_date = ?, end_date = ? WHERE id = ?`,
+      [budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.currency_asset_type ?? "", budget.currency_param ?? "", budget.start_date, budget.end_date, budget.id],
     );
     this.scheduleSave();
   }
@@ -2435,12 +2674,16 @@ export class SqlJsBackend implements Backend {
       [rate.date, rate.from_currency, rate.to_currency],
     );
     this.run(
-      "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO exchange_rate (id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         rate.id,
         rate.date,
         rate.from_currency,
+        rate.from_currency_asset_type ?? "",
+        rate.from_currency_param ?? "",
         rate.to_currency,
+        rate.to_currency_asset_type ?? "",
+        rate.to_currency_param ?? "",
         rate.rate,
         rate.source,
       ],
@@ -2491,8 +2734,8 @@ export class SqlJsBackend implements Backend {
           [rate.date, rate.from_currency, rate.to_currency],
         );
         this.run(
-          "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source) VALUES (?, ?, ?, ?, ?, ?)",
-          [rate.id, rate.date, rate.from_currency, rate.to_currency, rate.rate, rate.source],
+          "INSERT INTO exchange_rate (id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [rate.id, rate.date, rate.from_currency, rate.from_currency_asset_type ?? "", rate.from_currency_param ?? "", rate.to_currency, rate.to_currency_asset_type ?? "", rate.to_currency_param ?? "", rate.rate, rate.source],
         );
       }
       if (!wasInTransaction) this.commitTransaction();
@@ -2799,7 +3042,7 @@ export class SqlJsBackend implements Backend {
     to?: string,
   ): Promise<ExchangeRate[]> {
     let sql =
-      "SELECT id, date, from_currency, to_currency, rate, source FROM exchange_rate";
+      "SELECT id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source FROM exchange_rate";
     const conditions: string[] = [];
     const params: unknown[] = [];
 
@@ -3176,10 +3419,12 @@ export class SqlJsBackend implements Backend {
 
   async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
     return this.query(
-      "SELECT currency, rate_source, set_by, updated_at FROM currency_rate_source ORDER BY currency",
+      "SELECT currency, asset_type, param, rate_source, set_by, updated_at FROM currency_rate_source ORDER BY currency",
       [],
       (row) => ({
         currency: row.currency as string,
+        asset_type: (row.asset_type as string) ?? "",
+        param: (row.param as string) ?? "",
         rate_source: (row.rate_source as string | null) ?? null,
         set_by: row.set_by as string,
         updated_at: row.updated_at as string,
@@ -3190,27 +3435,33 @@ export class SqlJsBackend implements Backend {
   async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean> {
     const today = new Date().toISOString().slice(0, 10);
 
-    // Check existing row for priority
+    // Check existing row for priority (composite PK: currency, asset_type, param)
     const existing = this.queryOne(
-      "SELECT set_by FROM currency_rate_source WHERE currency = ?",
+      "SELECT set_by FROM currency_rate_source WHERE currency = ? AND asset_type = '' AND param = ''",
       [currency],
       (row) => row.set_by as string,
     );
 
-    if (existing !== null) {
+    if (rateSource === null) {
+      // null means "clear" — delete the row
+      this.run(
+        "DELETE FROM currency_rate_source WHERE currency = ? AND asset_type = '' AND param = ''",
+        [currency],
+      );
+    } else if (existing !== null) {
       const existingPriority = setByPriority(existing);
       const newPriority = setByPriority(setBy);
       if (newPriority < existingPriority) {
         return false; // Skip: existing has higher priority
       }
       this.run(
-        "UPDATE currency_rate_source SET rate_source = ?, set_by = ?, updated_at = ? WHERE currency = ?",
+        "UPDATE currency_rate_source SET rate_source = ?, set_by = ?, updated_at = ? WHERE currency = ? AND asset_type = '' AND param = ''",
         [rateSource, setBy, today, currency],
       );
     } else {
       this.run(
-        "INSERT INTO currency_rate_source (currency, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?)",
-        [currency, rateSource, setBy, today],
+        "INSERT INTO currency_rate_source (currency, asset_type, param, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [currency, "", "", rateSource, setBy, today],
       );
     }
     this.scheduleSave();
@@ -3241,14 +3492,14 @@ export class SqlJsBackend implements Backend {
       new Decimal(actualAmount).eq(new Decimal(assertion.expected_balance));
 
     this.run(
-      "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.expected_balance, isPassing ? 1 : 0, actualAmount, assertion.is_strict ? 1 : 0, assertion.include_subaccounts ? 1 : 0],
+      "INSERT INTO balance_assertion (id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.currency_asset_type ?? "", assertion.currency_param ?? "", assertion.expected_balance, isPassing ? 1 : 0, actualAmount, assertion.is_strict ? 1 : 0, assertion.include_subaccounts ? 1 : 0],
     );
     this.scheduleSave();
   }
 
   async listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]> {
-    let sql = "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion";
+    let sql = "SELECT id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion";
     const params: unknown[] = [];
     if (accountId) {
       sql += " WHERE account_id = ?";
@@ -3260,6 +3511,8 @@ export class SqlJsBackend implements Backend {
       account_id: row.account_id as string,
       date: row.date as string,
       currency: row.currency as string,
+      currency_asset_type: (row.currency_asset_type as string) ?? "",
+      currency_param: (row.currency_param as string) ?? "",
       expected_balance: row.expected_balance as string,
       is_passing: (row.is_passing as number) !== 0,
       actual_balance: row.actual_balance as string | null,

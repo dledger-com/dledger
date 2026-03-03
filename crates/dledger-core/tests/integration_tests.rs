@@ -95,6 +95,8 @@ impl Storage for TestStorage {
             params![code],
             |row| Ok(Currency {
                 code: row.get(0)?,
+                asset_type: String::new(),
+                param: String::new(),
                 name: row.get(1)?,
                 decimal_places: row.get::<_, u8>(2)?,
                 is_base: row.get::<_, i32>(3)? != 0,
@@ -109,11 +111,22 @@ impl Storage for TestStorage {
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt.query_map([], |row| Ok(Currency {
             code: row.get(0)?,
+            asset_type: String::new(),
+            param: String::new(),
             name: row.get(1)?,
             decimal_places: row.get::<_, u8>(2)?,
             is_base: row.get::<_, i32>(3)? != 0,
         })).map_err(|e| StorageError::Internal(e.to_string()))?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn set_currency_asset_type(&self, code: &str, asset_type: &str, param: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "UPDATE currency SET asset_type = ? WHERE code = ? AND param = ?",
+            params![asset_type, code, param],
+        ).map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
     }
 
     fn create_account(&self, account: &Account) -> StorageResult<()> {
@@ -325,6 +338,8 @@ impl Storage for TestStorage {
                         journal_entry_id: parse_uuid(&ji)?,
                         account_id: parse_uuid(&ai)?,
                         currency: c,
+                        currency_asset_type: String::new(),
+                        currency_param: String::new(),
                         amount: parse_decimal(&a)?,
                         lot_id: li.as_deref().map(parse_uuid).transpose()?,
                     });
@@ -406,11 +421,15 @@ impl Storage for TestStorage {
                 id: parse_uuid(&ids)?,
                 account_id: parse_uuid(&ai)?,
                 currency: c,
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 acquired_date: parse_date(&ad)?,
                 original_quantity: parse_decimal(&oq)?,
                 remaining_quantity: parse_decimal(&rq)?,
                 cost_basis_per_unit: parse_decimal(&cb)?,
                 cost_basis_currency: cbc,
+                cost_basis_currency_asset_type: String::new(),
+                cost_basis_currency_param: String::new(),
                 journal_entry_id: parse_uuid(&ji)?,
                 is_closed: ic != 0,
             })),
@@ -444,11 +463,15 @@ impl Storage for TestStorage {
                 id: parse_uuid(&ids)?,
                 account_id: parse_uuid(&ai)?,
                 currency: c,
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 acquired_date: parse_date(&ad)?,
                 original_quantity: parse_decimal(&oq)?,
                 remaining_quantity: parse_decimal(&rq)?,
                 cost_basis_per_unit: parse_decimal(&cb)?,
                 cost_basis_currency: cbc,
+                cost_basis_currency_asset_type: String::new(),
+                cost_basis_currency_param: String::new(),
                 journal_entry_id: parse_uuid(&ji)?,
                 is_closed: ic != 0,
             });
@@ -509,6 +532,8 @@ impl Storage for TestStorage {
                 quantity: parse_decimal(&q)?,
                 proceeds_per_unit: parse_decimal(&pp)?,
                 proceeds_currency: pc,
+                proceeds_currency_asset_type: String::new(),
+                proceeds_currency_param: String::new(),
                 realized_gain_loss: parse_decimal(&gl)?,
                 disposal_date: parse_date(&dd)?,
             });
@@ -574,7 +599,11 @@ impl Storage for TestStorage {
                     id: parse_uuid(&row.get::<_, String>(0).map_err(|e| StorageError::Internal(e.to_string()))?)?,
                     date: parse_date(&row.get::<_, String>(1).map_err(|e| StorageError::Internal(e.to_string()))?)?,
                     from_currency: row.get::<_, String>(2).map_err(|e| StorageError::Internal(e.to_string()))?,
+                    from_currency_asset_type: String::new(),
+                    from_currency_param: String::new(),
                     to_currency: row.get::<_, String>(3).map_err(|e| StorageError::Internal(e.to_string()))?,
+                    to_currency_asset_type: String::new(),
+                    to_currency_param: String::new(),
                     rate: parse_decimal(&row.get::<_, String>(4).map_err(|e| StorageError::Internal(e.to_string()))?)?,
                     source: row.get::<_, String>(5).map_err(|e| StorageError::Internal(e.to_string()))?,
                 })
@@ -758,6 +787,8 @@ impl Storage for TestStorage {
         let rows = stmt.query_map([], |row| {
             Ok(CurrencyRateSource {
                 currency: row.get(0)?,
+                asset_type: String::new(),
+                param: String::new(),
                 rate_source: row.get(1)?,
                 set_by: row.get(2)?,
             })
@@ -972,6 +1003,8 @@ impl Storage for TestStorage {
                 id: parse_uuid(&id_str)?,
                 account_id: parse_uuid(&acc_str)?,
                 currency: cur,
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 acquired_date: NaiveDate::parse_from_str(&ad_str, "%Y-%m-%d")
                     .map_err(|e| StorageError::Internal(e.to_string()))?,
                 original_quantity: Decimal::from_str(&oq_str)
@@ -981,6 +1014,8 @@ impl Storage for TestStorage {
                 cost_basis_per_unit: Decimal::from_str(&cb_str)
                     .map_err(|e| StorageError::Internal(e.to_string()))?,
                 cost_basis_currency: cbc,
+                cost_basis_currency_asset_type: String::new(),
+                cost_basis_currency_param: String::new(),
                 journal_entry_id: parse_uuid(&je_str)?,
                 is_closed: ic != 0,
             });
@@ -1035,13 +1070,13 @@ fn new_engine() -> LedgerEngine {
 
 fn setup_currencies(engine: &LedgerEngine) {
     engine.create_currency(&Currency {
-        code: "EUR".into(), name: "Euro".into(), decimal_places: 2, is_base: true,
+        code: "EUR".into(), asset_type: String::new(), param: String::new(), name: "Euro".into(), decimal_places: 2, is_base: true,
     }).unwrap();
     engine.create_currency(&Currency {
-        code: "BTC".into(), name: "Bitcoin".into(), decimal_places: 8, is_base: false,
+        code: "BTC".into(), asset_type: String::new(), param: String::new(), name: "Bitcoin".into(), decimal_places: 8, is_base: false,
     }).unwrap();
     engine.create_currency(&Currency {
-        code: "ETH".into(), name: "Ethereum".into(), decimal_places: 18, is_base: false,
+        code: "ETH".into(), asset_type: String::new(), param: String::new(), name: "Ethereum".into(), decimal_places: 18, is_base: false,
     }).unwrap();
 }
 
@@ -1078,6 +1113,8 @@ fn make_line(entry_id: Uuid, account_id: Uuid, currency: &str, amount: Decimal) 
         journal_entry_id: entry_id,
         account_id,
         currency: currency.into(),
+        currency_asset_type: String::new(),
+        currency_param: String::new(),
         amount,
         lot_id: None,
     }
@@ -1482,6 +1519,8 @@ fn test_balance_assertion_passing() {
         account_id: checking.id,
         date: date(2025, 2, 1), // After the entry date
         currency: "EUR".into(),
+        currency_asset_type: String::new(),
+        currency_param: String::new(),
         expected_balance: dec!(3000),
         is_passing: false,
         actual_balance: None,
@@ -1514,6 +1553,8 @@ fn test_balance_assertion_failing() {
         account_id: checking.id,
         date: date(2025, 2, 1),
         currency: "EUR".into(),
+        currency_asset_type: String::new(),
+        currency_param: String::new(),
         expected_balance: dec!(5000), // Wrong!
         is_passing: false,
         actual_balance: None,
@@ -1558,7 +1599,11 @@ fn test_exchange_rate() {
         id: Uuid::now_v7(),
         date: date(2025, 1, 1),
         from_currency: "BTC".into(),
+        from_currency_asset_type: String::new(),
+        from_currency_param: String::new(),
         to_currency: "EUR".into(),
+        to_currency_asset_type: String::new(),
+        to_currency_param: String::new(),
         rate: dec!(42000),
         source: "manual".into(),
     }).unwrap();
@@ -1567,7 +1612,11 @@ fn test_exchange_rate() {
         id: Uuid::now_v7(),
         date: date(2025, 1, 15),
         from_currency: "BTC".into(),
+        from_currency_asset_type: String::new(),
+        from_currency_param: String::new(),
         to_currency: "EUR".into(),
+        to_currency_asset_type: String::new(),
+        to_currency_param: String::new(),
         rate: dec!(45000),
         source: "manual".into(),
     }).unwrap();

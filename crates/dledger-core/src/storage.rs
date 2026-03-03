@@ -27,6 +27,7 @@ pub trait Storage: Send + Sync {
     fn create_currency(&self, currency: &Currency) -> StorageResult<()>;
     fn get_currency(&self, code: &str) -> StorageResult<Option<Currency>>;
     fn list_currencies(&self) -> StorageResult<Vec<Currency>>;
+    fn set_currency_asset_type(&self, code: &str, asset_type: &str, param: &str) -> StorageResult<()>;
 
     // -- Accounts --
 

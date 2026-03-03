@@ -12,6 +12,7 @@ import type {
 } from "./types/index.js";
 import { detectFormat, type LedgerFormat } from "./ledger-format.js";
 import { tradingAccount } from "./accounts/paths.js";
+
 import {
   computeEntryFingerprint,
   computeEntryAmountFingerprint,
@@ -143,6 +144,8 @@ export async function importLedger(
     if (existingCurrencies.has(code)) return;
     await backend.createCurrency({
       code,
+      asset_type: "",
+      param: "",
       name: code,
       decimal_places: code.length <= 3 ? 2 : 8,
       is_base: false,

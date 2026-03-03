@@ -1186,54 +1186,12 @@
             >
         </Card.Header>
         <Card.Content class="space-y-4">
-            <!-- API Key -->
-            <div class="space-y-2">
-                <label for="etherscan-api-key" class="text-sm font-medium"
-                    >API Key</label
-                >
-                <Input
-                    id="etherscan-api-key"
-                    type="password"
-                    placeholder="Etherscan API key"
-                    value={settings.etherscanApiKey}
-                    oninput={(e: Event) => {
-                        const val = (e.target as HTMLInputElement).value;
-                        settings.update({ etherscanApiKey: val });
-                    }}
-                />
-                <p class="text-xs text-muted-foreground">
-                    Get a free API key at <a
-                        href="https://etherscan.io/apis"
-                        target="_blank"
-                        class="underline hover:text-foreground">etherscan.io</a
-                    >. One key works for most chains. BSC, Base, OP, and
-                    Avalanche use Routescan (configured below).
-                </p>
-            </div>
-
-            <!-- Routescan API Key -->
-            <div class="space-y-2">
-                <label for="routescan-api-key" class="text-sm font-medium"
-                    >Routescan API Key (optional)</label
-                >
-                <Input
-                    id="routescan-api-key"
-                    type="password"
-                    placeholder="Routescan API key"
-                    value={settings.settings.routescanApiKey}
-                    oninput={(e: Event) => {
-                        const val = (e.target as HTMLInputElement).value;
-                        settings.update({ routescanApiKey: val });
-                    }}
-                />
-                <p class="text-xs text-muted-foreground">
-                    Used for BSC, Base, Optimism, and Avalanche (free at <a
-                        href="https://routescan.io"
-                        target="_blank"
-                        class="underline hover:text-foreground">routescan.io</a
-                    >). Leave blank for keyless access (slower rate limit).
-                </p>
-            </div>
+            <p class="text-sm text-muted-foreground">
+                API keys are configured in <a href="/settings" class="underline hover:text-foreground">Settings</a> under External Services.
+                {#if !settings.etherscanApiKey}
+                    <span class="text-amber-600 dark:text-amber-400 ml-1">No Etherscan API key set.</span>
+                {/if}
+            </p>
 
             <!-- Tracked Addresses Table -->
             {#if groupedAddresses.length > 0}
@@ -1938,119 +1896,6 @@
         </Card.Content>
     </Card.Root>
 
-    <!-- External Services -->
-    <Card.Root>
-        <Card.Header>
-            <Card.Title>External Services</Card.Title>
-            <Card.Description
-                >API keys for external data providers. Rates: ECB (fiat),
-                DefiLlama/CoinGecko/CryptoCompare/Binance (crypto), Finnhub
-                (stocks). Enrichment: The Graph (Uniswap pools).</Card.Description
-            >
-        </Card.Header>
-        <Card.Content class="space-y-4">
-            <div class="space-y-2">
-                <label for="coingecko-api-key" class="text-sm font-medium"
-                    >CoinGecko API Key</label
-                >
-                <Input
-                    id="coingecko-api-key"
-                    type="password"
-                    placeholder="CoinGecko demo API key (optional)"
-                    value={settings.coingeckoApiKey}
-                    oninput={(e: Event) => {
-                        const val = (e.target as HTMLInputElement).value;
-                        settings.update({ coingeckoApiKey: val });
-                    }}
-                />
-                <p class="text-xs text-muted-foreground">
-                    Get a free demo key at <a
-                        href="https://www.coingecko.com/en/api"
-                        target="_blank"
-                        class="underline hover:text-foreground">coingecko.com</a
-                    >. Required for crypto rates. Fiat rates work without a key.
-                </p>
-            </div>
-
-            <div class="space-y-2">
-                <label for="cryptocompare-api-key" class="text-sm font-medium"
-                    >CryptoCompare API Key</label
-                >
-                <Input
-                    id="cryptocompare-api-key"
-                    type="password"
-                    placeholder="CryptoCompare API key (optional)"
-                    value={settings.cryptoCompareApiKey}
-                    oninput={(e: Event) => {
-                        const val = (e.target as HTMLInputElement).value;
-                        settings.update({ cryptoCompareApiKey: val });
-                    }}
-                />
-                <p class="text-xs text-muted-foreground">
-                    Get a free key at <a
-                        href="https://www.cryptocompare.com/cryptopian/api-keys"
-                        target="_blank"
-                        class="underline hover:text-foreground"
-                        >cryptocompare.com</a
-                    >. Optional fallback for crypto historical rates.
-                </p>
-            </div>
-
-            <div class="space-y-2">
-                <label for="finnhub-api-key" class="text-sm font-medium"
-                    >Finnhub API Key</label
-                >
-                <Input
-                    id="finnhub-api-key"
-                    type="password"
-                    placeholder="Finnhub API key (optional)"
-                    value={settings.finnhubApiKey}
-                    oninput={(e: Event) => {
-                        const val = (e.target as HTMLInputElement).value;
-                        settings.update({ finnhubApiKey: val });
-                    }}
-                />
-                <p class="text-xs text-muted-foreground">
-                    Get a free key at <a
-                        href="https://finnhub.io"
-                        target="_blank"
-                        class="underline hover:text-foreground">finnhub.io</a
-                    >. Required for stock prices (AAPL, GOOG, etc.).
-                </p>
-            </div>
-
-            <div class="space-y-2">
-                <label for="thegraph-api-key" class="text-sm font-medium"
-                    >The Graph API Key</label
-                >
-                <Input
-                    id="thegraph-api-key"
-                    type="password"
-                    placeholder="The Graph API key (optional)"
-                    value={settings.theGraphApiKey}
-                    oninput={(e: Event) => {
-                        const val = (e.target as HTMLInputElement).value;
-                        settings.update({ theGraphApiKey: val });
-                    }}
-                />
-                <p class="text-xs text-muted-foreground">
-                    Get a free key at <a
-                        href="https://thegraph.com/studio/apikeys/"
-                        target="_blank"
-                        class="underline hover:text-foreground"
-                        >thegraph.com/studio</a
-                    >. Required for Uniswap pool enrichment.
-                </p>
-            </div>
-
-            <p class="text-sm text-muted-foreground">
-                Base currency: <strong>{settings.currency}</strong>
-                <a href="/settings" class="ml-1 underline hover:text-foreground"
-                    >Change</a
-                >
-            </p>
-        </Card.Content>
-    </Card.Root>
 
     <!-- Historical Backfill -->
     <Card.Root>

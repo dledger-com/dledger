@@ -5,6 +5,7 @@ import type { SourceName } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 
+
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
   "AUD", "BGN", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK",
@@ -70,6 +71,7 @@ export interface HistoricalFetchResult {
 
 function classifySource(
   currency: string,
+  assetType: string,
   baseCurrency: string,
   rateSourceMap: Map<string, CurrencyRateSource>,
   tokenAddressCurrencies?: Set<string>,
@@ -88,7 +90,15 @@ function classifySource(
   if (stored?.rate_source) {
     return stored.rate_source as SourceName;
   }
-  // 3. Static heuristic fallback
+  // 3. Asset-type based routing (when classified)
+  if (assetType === "fiat" && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
+  if (assetType === "crypto") {
+    if (tokenAddressCurrencies?.has(currency)) return "defillama";
+    if (COINGECKO_IDS[currency]) return "defillama";
+    return null;
+  }
+  if (assetType === "stock" || assetType === "commodity" || assetType === "index" || assetType === "bond") return null;
+  // 4. Unclassified fallback: existing heuristics
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
   if (tokenAddressCurrencies?.has(currency)) return "defillama";
   if (COINGECKO_IDS[currency]) return "defillama";
@@ -126,6 +136,13 @@ export async function findMissingRates(
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
 
+  // Build code → asset_type lookup for source classification
+  const allCurrencies = await backend.listCurrencies();
+  const currencyTypeMap = new Map<string, string>();
+  for (const c of allCurrencies) {
+    currencyTypeMap.set(c.code, c.asset_type);
+  }
+
   // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
 
@@ -138,7 +155,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
       if (!source) continue;
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -152,7 +169,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -165,7 +182,7 @@ export async function findMissingRates(
       const rate = await backend.getExchangeRate(currency, baseCurrency, date);
       if (rate !== null) continue;
 
-      const source = classifySource(currency, baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -236,11 +253,6 @@ export async function fetchHistoricalRates(
     }
   }
 
-  // ---- DefiLlama: batch historical ----
-  if (defillamaReqs.length > 0) {
-    await fetchDefiLlamaHistorical(backend, defillamaReqs, config, result, successCurrencies, tick);
-  }
-
   // ---- CryptoCompare: histoday per symbol ----
   if (cryptocompareReqs.length > 0) {
     if (!config.cryptoCompareApiKey) {
@@ -248,6 +260,11 @@ export async function fetchHistoricalRates(
     } else {
       await fetchCryptoCompareHistorical(backend, cryptocompareReqs, config, result, successCurrencies, tick);
     }
+  }
+
+  // ---- DefiLlama: batch historical ----
+  if (defillamaReqs.length > 0) {
+    await fetchDefiLlamaHistorical(backend, defillamaReqs, config, result, successCurrencies, tick);
   }
 
   // ---- Binance: klines per symbol ----
@@ -1099,6 +1116,8 @@ async function ensureCurrency(backend: Backend, code: string): Promise<void> {
   try {
     await backend.createCurrency({
       code,
+      asset_type: "",
+      param: "",
       name: code,
       decimal_places: code.length <= 3 ? 2 : 8,
       is_base: false,

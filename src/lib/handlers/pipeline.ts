@@ -205,6 +205,8 @@ export async function syncEtherscanWithHandlers(
     if (currencySet.has(code)) return;
     await backend.createCurrency({
       code,
+      asset_type: "",
+      param: "",
       name: code,
       decimal_places: decimals,
       is_base: false,
@@ -562,6 +564,8 @@ function buildHandlerContext(
     if (currencySet.has(code)) return;
     await backend.createCurrency({
       code,
+      asset_type: "",
+      param: "",
       name: code,
       decimal_places: decimals,
       is_base: false,

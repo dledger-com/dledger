@@ -5,8 +5,8 @@ import type { Account, Currency, JournalEntry, LineItem } from "$lib/types/index
 
 async function setupExchangeAccounts(backend: Awaited<ReturnType<typeof createTestBackend>>) {
 	// Create currencies
-	const USD: Currency = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
-	const BTC: Currency = { code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false };
+	const USD: Currency = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
+	const BTC: Currency = { code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false };
 	await backend.createCurrency(USD);
 	await backend.createCurrency(BTC);
 

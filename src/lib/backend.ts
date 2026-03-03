@@ -63,6 +63,8 @@ export interface TemplateLineItem {
 
 export interface CurrencyRateSource {
   currency: string;
+  asset_type?: string;
+  param?: string;
   rate_source: string | null; // null = auto-detect needed
   set_by: string;             // "user" | "handler:<id>" | "auto"
   updated_at: string;
@@ -81,6 +83,7 @@ export interface Backend {
   // Currencies
   listCurrencies(): Promise<Currency[]>;
   createCurrency(currency: Currency): Promise<void>;
+  setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void>;
 
   // Accounts
   listAccounts(): Promise<Account[]>;
@@ -260,6 +263,9 @@ class TauriBackend implements Backend {
   }
   async createCurrency(currency: Currency): Promise<void> {
     return this.invoke("create_currency", { currency });
+  }
+  async setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void> {
+    return this.invoke("set_currency_asset_type", { code, assetType, param: param ?? "" });
   }
 
   // Accounts

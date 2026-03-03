@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -118,9 +118,11 @@ impl Storage for SqliteStorage {
     fn create_currency(&self, currency: &Currency) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT INTO currency (code, name, decimal_places, is_base) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO currency (code, asset_type, param, name, decimal_places, is_base) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 currency.code,
+                currency.asset_type,
+                currency.param,
                 currency.name,
                 currency.decimal_places,
                 currency.is_base as i32,
@@ -139,15 +141,17 @@ impl Storage for SqliteStorage {
     fn get_currency(&self, code: &str) -> StorageResult<Option<Currency>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
-            .prepare("SELECT code, name, decimal_places, is_base FROM currency WHERE code = ?1")
+            .prepare("SELECT code, asset_type, param, name, decimal_places, is_base FROM currency WHERE code = ?1")
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let result = stmt
             .query_row(params![code], |row| {
                 Ok(Currency {
                     code: row.get(0)?,
-                    name: row.get(1)?,
-                    decimal_places: row.get::<_, u8>(2)?,
-                    is_base: row.get::<_, i32>(3)? != 0,
+                    asset_type: row.get(1)?,
+                    param: row.get(2)?,
+                    name: row.get(3)?,
+                    decimal_places: row.get::<_, u8>(4)?,
+                    is_base: row.get::<_, i32>(5)? != 0,
                 })
             })
             .optional()
@@ -158,20 +162,32 @@ impl Storage for SqliteStorage {
     fn list_currencies(&self) -> StorageResult<Vec<Currency>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
-            .prepare("SELECT code, name, decimal_places, is_base FROM currency ORDER BY code")
+            .prepare("SELECT code, asset_type, param, name, decimal_places, is_base FROM currency ORDER BY code")
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
                 Ok(Currency {
                     code: row.get(0)?,
-                    name: row.get(1)?,
-                    decimal_places: row.get::<_, u8>(2)?,
-                    is_base: row.get::<_, i32>(3)? != 0,
+                    asset_type: row.get(1)?,
+                    param: row.get(2)?,
+                    name: row.get(3)?,
+                    decimal_places: row.get::<_, u8>(4)?,
+                    is_base: row.get::<_, i32>(5)? != 0,
                 })
             })
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| StorageError::Internal(e.to_string()))
+    }
+
+    fn set_currency_asset_type(&self, code: &str, asset_type: &str, param: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "UPDATE currency SET asset_type = ? WHERE code = ? AND asset_type = '' AND param = ?",
+            rusqlite::params![asset_type, code, param],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
     }
 
     // -- Accounts --
@@ -322,13 +338,15 @@ impl Storage for SqliteStorage {
 
         for item in items {
             conn.execute(
-                "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     item.id.to_string(),
                     item.journal_entry_id.to_string(),
                     item.account_id.to_string(),
                     item.currency,
+                    item.currency_asset_type,
+                    item.currency_param,
                     item.amount.to_string(),
                     item.lot_id.map(|id| id.to_string()),
                 ],
@@ -505,19 +523,25 @@ impl Storage for SqliteStorage {
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT INTO lot (id, account_id, currency, acquired_date, original_quantity,
+            "INSERT INTO lot (id, account_id, currency, currency_asset_type, currency_param,
+                              acquired_date, original_quantity,
                               remaining_quantity, cost_basis_per_unit, cost_basis_currency,
+                              cost_basis_currency_asset_type, cost_basis_currency_param,
                               journal_entry_id, is_closed)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 lot.id.to_string(),
                 lot.account_id.to_string(),
                 lot.currency,
+                lot.currency_asset_type,
+                lot.currency_param,
                 lot.acquired_date.format("%Y-%m-%d").to_string(),
                 lot.original_quantity.to_string(),
                 lot.remaining_quantity.to_string(),
                 lot.cost_basis_per_unit.to_string(),
                 lot.cost_basis_currency,
+                lot.cost_basis_currency_asset_type,
+                lot.cost_basis_currency_param,
                 lot.journal_entry_id.to_string(),
                 lot.is_closed as i32,
             ],
@@ -530,8 +554,10 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let mut stmt = conn
             .prepare(
-                "SELECT id, account_id, currency, acquired_date, original_quantity,
+                "SELECT id, account_id, currency, currency_asset_type, currency_param,
+                        acquired_date, original_quantity,
                         remaining_quantity, cost_basis_per_unit, cost_basis_currency,
+                        cost_basis_currency_asset_type, cost_basis_currency_param,
                         journal_entry_id, is_closed
                  FROM lot WHERE id = ?1",
             )
@@ -554,8 +580,10 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let mut stmt = conn
             .prepare(
-                "SELECT id, account_id, currency, acquired_date, original_quantity,
+                "SELECT id, account_id, currency, currency_asset_type, currency_param,
+                        acquired_date, original_quantity,
                         remaining_quantity, cost_basis_per_unit, cost_basis_currency,
+                        cost_basis_currency_asset_type, cost_basis_currency_param,
                         journal_entry_id, is_closed
                  FROM lot
                  WHERE account_id = ?1 AND currency = ?2 AND is_closed = 0
@@ -595,8 +623,9 @@ impl Storage for SqliteStorage {
         conn.execute(
             "INSERT INTO lot_disposal (id, lot_id, journal_entry_id, quantity,
                                        proceeds_per_unit, proceeds_currency,
+                                       proceeds_currency_asset_type, proceeds_currency_param,
                                        realized_gain_loss, disposal_date)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 disposal.id.to_string(),
                 disposal.lot_id.to_string(),
@@ -604,6 +633,8 @@ impl Storage for SqliteStorage {
                 disposal.quantity.to_string(),
                 disposal.proceeds_per_unit.to_string(),
                 disposal.proceeds_currency,
+                disposal.proceeds_currency_asset_type,
+                disposal.proceeds_currency_param,
                 disposal.realized_gain_loss.to_string(),
                 disposal.disposal_date.format("%Y-%m-%d").to_string(),
             ],
@@ -622,6 +653,7 @@ impl Storage for SqliteStorage {
             .prepare(
                 "SELECT id, lot_id, journal_entry_id, quantity,
                         proceeds_per_unit, proceeds_currency,
+                        proceeds_currency_asset_type, proceeds_currency_param,
                         realized_gain_loss, disposal_date
                  FROM lot_disposal
                  WHERE disposal_date >= ?1 AND disposal_date <= ?2
@@ -672,13 +704,18 @@ impl Storage for SqliteStorage {
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO exchange_rate (id, date, from_currency, from_currency_asset_type, from_currency_param,
+                                        to_currency, to_currency_asset_type, to_currency_param, rate, source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 rate.id.to_string(),
                 date_str,
                 rate.from_currency,
+                rate.from_currency_asset_type,
+                rate.from_currency_param,
                 rate.to_currency,
+                rate.to_currency_asset_type,
+                rate.to_currency_param,
                 rate.rate.to_string(),
                 rate.source,
             ],
@@ -867,7 +904,7 @@ impl Storage for SqliteStorage {
     ) -> StorageResult<Vec<ExchangeRate>> {
         let conn = self.conn.borrow();
         let mut sql = String::from(
-            "SELECT id, date, from_currency, to_currency, rate, source FROM exchange_rate",
+            "SELECT id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source FROM exchange_rate",
         );
         let mut conditions: Vec<String> = Vec::new();
         let mut param_values: Vec<String> = Vec::new();
@@ -997,13 +1034,15 @@ impl Storage for SqliteStorage {
     fn insert_balance_assertion(&self, assertion: &BalanceAssertion) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO balance_assertion (id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 assertion.id.to_string(),
                 assertion.account_id.to_string(),
                 assertion.date.format("%Y-%m-%d").to_string(),
                 assertion.currency,
+                assertion.currency_asset_type,
+                assertion.currency_param,
                 assertion.expected_balance.to_string(),
                 assertion.is_passing as i32,
                 assertion.actual_balance.map(|d| d.to_string()),
@@ -1045,12 +1084,12 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let (sql, param_val) = match account_id {
             Some(id) => (
-                "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts
+                "SELECT id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts
                  FROM balance_assertion WHERE account_id = ?1 ORDER BY date",
                 Some(id.to_string()),
             ),
             None => (
-                "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts
+                "SELECT id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts
                  FROM balance_assertion ORDER BY date",
                 None,
             ),
@@ -1241,8 +1280,10 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let mut stmt = conn
             .prepare(
-                "SELECT id, account_id, currency, acquired_date, original_quantity,
+                "SELECT id, account_id, currency, currency_asset_type, currency_param,
+                        acquired_date, original_quantity,
                         remaining_quantity, cost_basis_per_unit, cost_basis_currency,
+                        cost_basis_currency_asset_type, cost_basis_currency_param,
                         journal_entry_id, is_closed
                  FROM lot
                  WHERE is_closed = 0 AND CAST(remaining_quantity AS REAL) > 0
@@ -1347,14 +1388,16 @@ impl Storage for SqliteStorage {
     fn get_currency_rate_sources(&self) -> StorageResult<Vec<CurrencyRateSource>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
-            .prepare("SELECT currency, rate_source, set_by FROM currency_rate_source")
+            .prepare("SELECT currency, asset_type, param, rate_source, set_by FROM currency_rate_source")
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
                 Ok(CurrencyRateSource {
                     currency: row.get(0)?,
-                    rate_source: row.get(1)?,
-                    set_by: row.get(2)?,
+                    asset_type: row.get(1)?,
+                    param: row.get(2)?,
+                    rate_source: row.get(3)?,
+                    set_by: row.get(4)?,
                 })
             })
             .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1366,9 +1409,9 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let priority = set_by_priority(set_by) as i32;
         conn.execute(
-            "INSERT INTO currency_rate_source (currency, rate_source, set_by, updated_at)
-             VALUES (?1, ?2, ?3, datetime('now'))
-             ON CONFLICT(currency) DO UPDATE SET
+            "INSERT INTO currency_rate_source (currency, asset_type, param, rate_source, set_by, updated_at)
+             VALUES (?1, '', '', ?2, ?3, datetime('now'))
+             ON CONFLICT(currency, asset_type, param) DO UPDATE SET
                rate_source = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN ?2 ELSE rate_source END,
                set_by = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN ?3 ELSE set_by END,
                updated_at = CASE WHEN ?4 >= (CASE WHEN set_by = 'user' THEN 3 WHEN set_by LIKE 'handler:%' THEN 2 ELSE 1 END) THEN datetime('now') ELSE updated_at END",
@@ -1545,14 +1588,16 @@ impl Storage for SqliteStorage {
     fn create_budget(&self, budget: &Budget) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT INTO budget (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO budget (id, account_pattern, period_type, amount, currency, currency_asset_type, currency_param, start_date, end_date, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 budget.id.to_string(),
                 budget.account_pattern,
                 budget.period_type,
                 budget.amount.to_string(),
                 budget.currency,
+                budget.currency_asset_type,
+                budget.currency_param,
                 budget.start_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 budget.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 budget.created_at.format("%Y-%m-%d").to_string(),
@@ -1565,7 +1610,7 @@ impl Storage for SqliteStorage {
     fn list_budgets(&self) -> StorageResult<Vec<Budget>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
-            .prepare("SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget ORDER BY created_at")
+            .prepare("SELECT id, account_pattern, period_type, amount, currency, currency_asset_type, currency_param, start_date, end_date, created_at FROM budget ORDER BY created_at")
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
@@ -1580,13 +1625,15 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         let affected = conn
             .execute(
-                "UPDATE budget SET account_pattern = ?2, period_type = ?3, amount = ?4, currency = ?5, start_date = ?6, end_date = ?7 WHERE id = ?1",
+                "UPDATE budget SET account_pattern = ?2, period_type = ?3, amount = ?4, currency = ?5, currency_asset_type = ?6, currency_param = ?7, start_date = ?8, end_date = ?9 WHERE id = ?1",
                 params![
                     budget.id.to_string(),
                     budget.account_pattern,
                     budget.period_type,
                     budget.amount.to_string(),
                     budget.currency,
+                    budget.currency_asset_type,
+                    budget.currency_param,
                     budget.start_date.map(|d| d.format("%Y-%m-%d").to_string()),
                     budget.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 ],
@@ -2014,7 +2061,7 @@ impl Storage for SqliteStorage {
     fn set_currency_token_address(&self, currency: &str, chain: &str, contract_address: &str) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
-            "INSERT OR REPLACE INTO currency_token_address (currency, chain, contract_address) VALUES (?1, ?2, ?3)",
+            "INSERT OR REPLACE INTO currency_token_address (currency, asset_type, param, chain, contract_address) VALUES (?1, '', '', ?2, ?3)",
             params![currency, chain, contract_address],
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -2024,7 +2071,7 @@ impl Storage for SqliteStorage {
     fn get_currency_token_addresses(&self) -> StorageResult<Vec<(String, String, String)>> {
         let conn = self.conn.borrow();
         let mut stmt = conn
-            .prepare("SELECT currency, chain, contract_address FROM currency_token_address ORDER BY currency")
+            .prepare("SELECT currency, chain, contract_address FROM currency_token_address ORDER BY currency, asset_type, param")
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
@@ -2189,6 +2236,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
             storage.execute_sql("DELETE FROM journal_entry_metadata WHERE key = 'links'")?;
             storage.set_schema_version(16)?;
         }
+        if current < 17 {
+            storage.execute_sql(MIGRATION_V17)?;
+            storage.set_schema_version(17)?;
+        }
     }
     Ok(())
 }
@@ -2287,11 +2338,17 @@ fn row_to_line_item(row: &rusqlite::Row<'_>) -> StorageResult<LineItem> {
     let currency: String = row
         .get(3)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let amount_str: String = row
+    let currency_asset_type: String = row
         .get(4)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let lot_id_str: Option<String> = row
+    let currency_param: String = row
         .get(5)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let amount_str: String = row
+        .get(6)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let lot_id_str: Option<String> = row
+        .get(7)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     Ok(LineItem {
@@ -2299,6 +2356,8 @@ fn row_to_line_item(row: &rusqlite::Row<'_>) -> StorageResult<LineItem> {
         journal_entry_id: parse_uuid(&je_id_str)?,
         account_id: parse_uuid(&account_id_str)?,
         currency,
+        currency_asset_type,
+        currency_param,
         amount: parse_decimal(&amount_str)?,
         lot_id: lot_id_str.as_deref().map(parse_uuid).transpose()?,
     })
@@ -2314,37 +2373,53 @@ fn row_to_lot(row: &rusqlite::Row<'_>) -> StorageResult<Lot> {
     let currency: String = row
         .get(2)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let acquired_date_str: String = row
+    let currency_asset_type: String = row
         .get(3)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let original_quantity_str: String = row
+    let currency_param: String = row
         .get(4)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let remaining_quantity_str: String = row
+    let acquired_date_str: String = row
         .get(5)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let cost_basis_str: String = row
+    let original_quantity_str: String = row
         .get(6)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let cost_basis_currency: String = row
+    let remaining_quantity_str: String = row
         .get(7)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let je_id_str: String = row
+    let cost_basis_str: String = row
         .get(8)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let is_closed: i32 = row
+    let cost_basis_currency: String = row
         .get(9)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let cost_basis_currency_asset_type: String = row
+        .get(10)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let cost_basis_currency_param: String = row
+        .get(11)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let je_id_str: String = row
+        .get(12)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let is_closed: i32 = row
+        .get(13)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     Ok(Lot {
         id: parse_uuid(&id_str)?,
         account_id: parse_uuid(&account_id_str)?,
         currency,
+        currency_asset_type,
+        currency_param,
         acquired_date: parse_date(&acquired_date_str)?,
         original_quantity: parse_decimal(&original_quantity_str)?,
         remaining_quantity: parse_decimal(&remaining_quantity_str)?,
         cost_basis_per_unit: parse_decimal(&cost_basis_str)?,
         cost_basis_currency,
+        cost_basis_currency_asset_type,
+        cost_basis_currency_param,
         journal_entry_id: parse_uuid(&je_id_str)?,
         is_closed: is_closed != 0,
     })
@@ -2369,11 +2444,17 @@ fn row_to_lot_disposal(row: &rusqlite::Row<'_>) -> StorageResult<LotDisposal> {
     let proceeds_currency: String = row
         .get(5)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let gain_loss_str: String = row
+    let proceeds_currency_asset_type: String = row
         .get(6)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let disposal_date_str: String = row
+    let proceeds_currency_param: String = row
         .get(7)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let gain_loss_str: String = row
+        .get(8)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let disposal_date_str: String = row
+        .get(9)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     Ok(LotDisposal {
@@ -2383,6 +2464,8 @@ fn row_to_lot_disposal(row: &rusqlite::Row<'_>) -> StorageResult<LotDisposal> {
         quantity: parse_decimal(&quantity_str)?,
         proceeds_per_unit: parse_decimal(&proceeds_str)?,
         proceeds_currency,
+        proceeds_currency_asset_type,
+        proceeds_currency_param,
         realized_gain_loss: parse_decimal(&gain_loss_str)?,
         disposal_date: parse_date(&disposal_date_str)?,
     })
@@ -2398,21 +2481,37 @@ fn row_to_exchange_rate(row: &rusqlite::Row<'_>) -> StorageResult<ExchangeRate> 
     let from_currency: String = row
         .get(2)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let to_currency: String = row
+    let from_currency_asset_type: String = row
         .get(3)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let rate_str: String = row
+    let from_currency_param: String = row
         .get(4)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let source: String = row
+    let to_currency: String = row
         .get(5)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let to_currency_asset_type: String = row
+        .get(6)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let to_currency_param: String = row
+        .get(7)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let rate_str: String = row
+        .get(8)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let source: String = row
+        .get(9)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     Ok(ExchangeRate {
         id: parse_uuid(&id_str)?,
         date: parse_date(&date_str)?,
         from_currency,
+        from_currency_asset_type,
+        from_currency_param,
         to_currency,
+        to_currency_asset_type,
+        to_currency_param,
         rate: parse_decimal(&rate_str)?,
         source,
     })
@@ -2431,21 +2530,27 @@ fn row_to_balance_assertion(row: &rusqlite::Row<'_>) -> StorageResult<BalanceAss
     let currency: String = row
         .get(3)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let expected_str: String = row
+    let currency_asset_type: String = row
         .get(4)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let is_passing: i32 = row
+    let currency_param: String = row
         .get(5)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
-    let actual_str: Option<String> = row
+    let expected_str: String = row
         .get(6)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let is_passing: i32 = row
+        .get(7)
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+    let actual_str: Option<String> = row
+        .get(8)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     let is_strict: i32 = row
-        .get(7)
+        .get(9)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
     let include_subaccounts: i32 = row
-        .get(8)
+        .get(10)
         .map_err(|e| StorageError::Internal(e.to_string()))?;
 
     Ok(BalanceAssertion {
@@ -2453,6 +2558,8 @@ fn row_to_balance_assertion(row: &rusqlite::Row<'_>) -> StorageResult<BalanceAss
         account_id: parse_uuid(&account_id_str)?,
         date: parse_date(&date_str)?,
         currency,
+        currency_asset_type,
+        currency_param,
         expected_balance: parse_decimal(&expected_str)?,
         is_passing: is_passing != 0,
         actual_balance: actual_str
@@ -2488,9 +2595,11 @@ fn row_to_budget(row: &rusqlite::Row<'_>) -> StorageResult<Budget> {
     let period_type: String = row.get(2).map_err(|e| StorageError::Internal(e.to_string()))?;
     let amount_str: String = row.get(3).map_err(|e| StorageError::Internal(e.to_string()))?;
     let currency: String = row.get(4).map_err(|e| StorageError::Internal(e.to_string()))?;
-    let start_date_str: Option<String> = row.get(5).map_err(|e| StorageError::Internal(e.to_string()))?;
-    let end_date_str: Option<String> = row.get(6).map_err(|e| StorageError::Internal(e.to_string()))?;
-    let created_at_str: String = row.get(7).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let currency_asset_type: String = row.get(5).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let currency_param: String = row.get(6).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let start_date_str: Option<String> = row.get(7).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let end_date_str: Option<String> = row.get(8).map_err(|e| StorageError::Internal(e.to_string()))?;
+    let created_at_str: String = row.get(9).map_err(|e| StorageError::Internal(e.to_string()))?;
 
     Ok(Budget {
         id: parse_uuid(&id_str)?,
@@ -2498,6 +2607,8 @@ fn row_to_budget(row: &rusqlite::Row<'_>) -> StorageResult<Budget> {
         period_type,
         amount: parse_decimal(&amount_str)?,
         currency,
+        currency_asset_type,
+        currency_param,
         start_date: start_date_str.as_deref().map(parse_date).transpose()?,
         end_date: end_date_str.as_deref().map(parse_date).transpose()?,
         created_at: parse_date(&created_at_str)?,
@@ -2576,7 +2687,7 @@ fn fetch_line_items_for_entry(
 ) -> StorageResult<Vec<LineItem>> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, journal_entry_id, account_id, currency, amount, lot_id
+            "SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
              FROM line_item WHERE journal_entry_id = ?1",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -2618,6 +2729,8 @@ mod tests {
     fn make_currency(code: &str, name: &str, decimal_places: u8, is_base: bool) -> Currency {
         Currency {
             code: code.to_string(),
+            asset_type: String::new(),
+            param: String::new(),
             name: name.to_string(),
             decimal_places,
             is_base,
@@ -2820,6 +2933,8 @@ mod tests {
                 journal_entry_id: entry_id,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(12.50),
                 lot_id: None,
             },
@@ -2828,6 +2943,8 @@ mod tests {
                 journal_entry_id: entry_id,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-12.50),
                 lot_id: None,
             },
@@ -2868,6 +2985,8 @@ mod tests {
                     journal_entry_id: eid,
                     account_id: expense_id,
                     currency: "USD".to_string(),
+                    currency_asset_type: String::new(),
+                    currency_param: String::new(),
                     amount: dec!(10),
                     lot_id: None,
                 },
@@ -2876,6 +2995,8 @@ mod tests {
                     journal_entry_id: eid,
                     account_id: asset_id,
                     currency: "USD".to_string(),
+                    currency_asset_type: String::new(),
+                    currency_param: String::new(),
                     amount: dec!(-10),
                     lot_id: None,
                 },
@@ -2923,6 +3044,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(100),
                 lot_id: None,
             },
@@ -2931,6 +3054,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-100),
                 lot_id: None,
             },
@@ -2961,7 +3086,11 @@ mod tests {
             id: Uuid::now_v7(),
             date: make_date(2024, 6, 1),
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.08),
             source: "manual".to_string(),
         };
@@ -2981,7 +3110,11 @@ mod tests {
             id: Uuid::now_v7(),
             date: make_date(2024, 6, 1),
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(2), // 1 EUR = 2 USD
             source: "manual".to_string(),
         };
@@ -3005,7 +3138,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.05),
             source: "coingecko".to_string(),
         };
@@ -3017,7 +3154,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.08),
             source: "ledger-file".to_string(),
         };
@@ -3029,7 +3170,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.10),
             source: "manual".to_string(),
         };
@@ -3041,7 +3186,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(0.99),
             source: "frankfurter".to_string(),
         };
@@ -3063,7 +3212,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "BTC".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(50000),
             source: "coingecko".to_string(),
         };
@@ -3075,7 +3228,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "BTC".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(50500),
             source: "transaction".to_string(),
         };
@@ -3087,7 +3244,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "BTC".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(51000),
             source: "manual".to_string(),
         };
@@ -3099,7 +3260,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "BTC".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(49000),
             source: "transaction".to_string(),
         };
@@ -3118,7 +3283,11 @@ mod tests {
             id: Uuid::now_v7(),
             date,
             from_currency: "BTC".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(60000),
             source: "coingecko".to_string(),
         };
@@ -3143,12 +3312,14 @@ mod tests {
         // EUR→USD and GLD→USD on same date
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "EUR".into(), to_currency: "USD".into(),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(1.10), source: "api".into(),
         }).unwrap();
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "GLD".into(), to_currency: "USD".into(),
+            from_currency: "GLD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(2000), source: "api".into(),
         }).unwrap();
 
@@ -3168,12 +3339,14 @@ mod tests {
         // EUR→USD and USD→GLD on same date
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "EUR".into(), to_currency: "USD".into(),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(1.10), source: "api".into(),
         }).unwrap();
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "USD".into(), to_currency: "GLD".into(),
+            from_currency: "USD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "GLD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(0.0005), source: "api".into(),
         }).unwrap();
 
@@ -3193,18 +3366,21 @@ mod tests {
         // Direct EUR→GLD
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "EUR".into(), to_currency: "GLD".into(),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "GLD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(0.00060), source: "manual".into(),
         }).unwrap();
         // Transitive path EUR→USD→GLD
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "EUR".into(), to_currency: "USD".into(),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(1.10), source: "api".into(),
         }).unwrap();
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "USD".into(), to_currency: "GLD".into(),
+            from_currency: "USD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "GLD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(0.0005), source: "api".into(),
         }).unwrap();
 
@@ -3223,12 +3399,14 @@ mod tests {
         // EUR→USD on 2024-01-15, GLD→USD on 2024-01-10
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date: make_date(2024, 1, 15),
-            from_currency: "EUR".into(), to_currency: "USD".into(),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(1.10), source: "api".into(),
         }).unwrap();
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date: make_date(2024, 1, 10),
-            from_currency: "GLD".into(), to_currency: "USD".into(),
+            from_currency: "GLD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(2000), source: "api".into(),
         }).unwrap();
 
@@ -3248,12 +3426,14 @@ mod tests {
         // EUR→USD exists, JPY→GBP exists — no path from EUR to GBP
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "EUR".into(), to_currency: "USD".into(),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(1.10), source: "api".into(),
         }).unwrap();
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date,
-            from_currency: "JPY".into(), to_currency: "GBP".into(),
+            from_currency: "JPY".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "GBP".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(0.005), source: "api".into(),
         }).unwrap();
 
@@ -3347,6 +3527,8 @@ mod tests {
             account_id: asset_id,
             date: make_date(2024, 6, 30),
             currency: "USD".to_string(),
+            currency_asset_type: String::new(),
+            currency_param: String::new(),
             expected_balance: dec!(1000),
             is_passing: true,
             actual_balance: Some(dec!(1000)),
@@ -3372,6 +3554,8 @@ mod tests {
             account_id: asset_id,
             date: make_date(2024, 6, 30),
             currency: "USD".to_string(),
+            currency_asset_type: String::new(),
+            currency_param: String::new(),
             expected_balance: dec!(1000),
             is_passing: true,
             actual_balance: None,
@@ -3405,6 +3589,8 @@ mod tests {
                 account_id: acct_id,
                 date: make_date(2024, 12, 31),
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 expected_balance: dec!(0),
                 is_passing: true,
                 actual_balance: Some(dec!(0)),
@@ -3444,6 +3630,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(50),
                 lot_id: None,
             },
@@ -3452,6 +3640,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-50),
                 lot_id: None,
             },
@@ -3484,6 +3674,8 @@ mod tests {
                     journal_entry_id: eid,
                     account_id: expense_id,
                     currency: "USD".to_string(),
+                    currency_asset_type: String::new(),
+                    currency_param: String::new(),
                     amount: dec!(10),
                     lot_id: None,
                 },
@@ -3492,6 +3684,8 @@ mod tests {
                     journal_entry_id: eid,
                     account_id: asset_id,
                     currency: "USD".to_string(),
+                    currency_asset_type: String::new(),
+                    currency_param: String::new(),
                     amount: dec!(-10),
                     lot_id: None,
                 },
@@ -3518,7 +3712,11 @@ mod tests {
             id: Uuid::now_v7(),
             date: make_date(2024, 1, 1),
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.10),
             source: "manual".to_string(),
         };
@@ -3541,6 +3739,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(25),
                 lot_id: None,
             },
@@ -3549,6 +3749,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-25),
                 lot_id: None,
             },
@@ -3581,7 +3783,11 @@ mod tests {
             id: Uuid::now_v7(),
             date: make_date(2024, 1, 1),
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.10),
             source: "manual".to_string(),
         };
@@ -3622,6 +3828,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(10),
                 lot_id: None,
             },
@@ -3630,6 +3838,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-10),
                 lot_id: None,
             },
@@ -3669,6 +3879,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(50),
                 lot_id: None,
             },
@@ -3677,6 +3889,8 @@ mod tests {
                 journal_entry_id: eid,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-50),
                 lot_id: None,
             },
@@ -3700,6 +3914,8 @@ mod tests {
                 journal_entry_id: reversal_id,
                 account_id: asset_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(50),
                 lot_id: None,
             },
@@ -3708,6 +3924,8 @@ mod tests {
                 journal_entry_id: reversal_id,
                 account_id: expense_id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-50),
                 lot_id: None,
             },
@@ -3732,7 +3950,11 @@ mod tests {
             id: Uuid::now_v7(),
             date: make_date(2024, 1, 1),
             from_currency: "EUR".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.10),
             source: "manual".to_string(),
         };
@@ -3740,7 +3962,11 @@ mod tests {
             id: Uuid::now_v7(),
             date: make_date(2024, 1, 1),
             from_currency: "GBP".to_string(),
+            from_currency_asset_type: String::new(),
+            from_currency_param: String::new(),
             to_currency: "USD".to_string(),
+            to_currency_asset_type: String::new(),
+            to_currency_param: String::new(),
             rate: dec!(1.27),
             source: "manual".to_string(),
         };
@@ -3828,6 +4054,8 @@ mod tests {
             period_type: "monthly".to_string(),
             amount: dec!(500),
             currency: "USD".to_string(),
+            currency_asset_type: String::new(),
+            currency_param: String::new(),
             start_date: Some(make_date(2024, 1, 1)),
             end_date: None,
             created_at: make_date(2024, 1, 1),
@@ -3881,6 +4109,8 @@ mod tests {
                 journal_entry_id: entry.id,
                 account_id: bank.id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(1000),
                 lot_id: None,
             },
@@ -3889,6 +4119,8 @@ mod tests {
                 journal_entry_id: entry.id,
                 account_id: equity.id,
                 currency: "USD".to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: dec!(-1000),
                 lot_id: None,
             },
@@ -3992,6 +4224,8 @@ mod tests {
                     journal_entry_id: eid,
                     account_id: expense_id,
                     currency: "USD".to_string(),
+                    currency_asset_type: String::new(),
+                    currency_param: String::new(),
                     amount: dec!(100),
                     lot_id: None,
                 },
@@ -4000,6 +4234,8 @@ mod tests {
                     journal_entry_id: eid,
                     account_id: asset_id,
                     currency: "USD".to_string(),
+                    currency_asset_type: String::new(),
+                    currency_param: String::new(),
                     amount: dec!(-100),
                     lot_id: None,
                 },
@@ -4035,7 +4271,7 @@ mod tests {
 
         apply_migrations(&storage).unwrap();
 
-        assert_eq!(storage.get_schema_version().unwrap(), 16);
+        assert_eq!(storage.get_schema_version().unwrap(), SCHEMA_VERSION);
 
         // Verify budget table exists
         storage.execute_sql("INSERT INTO budget (id, account_pattern, amount, currency, created_at) VALUES ('test', 'Expenses:*', '100', 'USD', '2024-01-01')").unwrap();
@@ -4049,8 +4285,8 @@ mod tests {
         // Verify exchange_account table exists with passphrase column (v13)
         storage.execute_sql("INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, passphrase, created_at) VALUES ('test', 'binance', 'My Binance', 'key', 'secret', 'pass', '2024-01-01')").unwrap();
 
-        // Verify currency_token_address table exists
-        storage.execute_sql("INSERT INTO currency_token_address (currency, chain, contract_address) VALUES ('USDC', 'ethereum', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48')").unwrap();
+        // Verify currency_token_address table exists (v17 has composite PK with asset_type, param)
+        storage.execute_sql("INSERT INTO currency_token_address (currency, asset_type, param, chain, contract_address) VALUES ('USDC', '', '', 'ethereum', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48')").unwrap();
 
         // Verify entry_link table exists (v16)
         storage.execute_sql("INSERT INTO journal_entry (id, date, description, status, source, created_at) VALUES ('test-je', '2024-01-01', 'test', 'confirmed', 'manual', '2024-01-01')").unwrap();

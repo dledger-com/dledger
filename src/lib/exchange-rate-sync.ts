@@ -75,18 +75,23 @@ export type SourceName = "frankfurter" | "coingecko" | "finnhub" | "defillama" |
 /** Auto-detect the best source for a currency using static heuristics */
 function autoDetectSource(
   code: string,
+  assetType: string,
   baseCurrency: string,
   hasTokenAddress: boolean,
   dpriceAssets?: Set<string>,
 ): SourceName | "none" {
   // When dprice is enabled and the asset is available locally, prefer it
   if (dpriceAssets && dpriceAssets.has(code)) return "dprice";
-  if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
-    return "frankfurter";
-  }
-  if (hasTokenAddress) return "defillama";     // DeFi tokens with known contract
-  if (COINGECKO_IDS[code]) return "defillama"; // Known crypto → DefiLlama via coingecko: alias
-  return "none";                               // Unknown token — skip to avoid garbage API calls
+  // Asset-type based routing (when classified)
+  if (assetType === "fiat" && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
+  if (assetType === "crypto") return hasTokenAddress ? "defillama" : (COINGECKO_IDS[code] ? "defillama" : "none");
+  if (assetType === "stock") return "none"; // finnhub requires API key; dprice handles stocks
+  if (assetType === "commodity" || assetType === "index" || assetType === "bond") return "none";
+  // Unclassified fallback: existing heuristics
+  if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
+  if (hasTokenAddress) return "defillama";
+  if (COINGECKO_IDS[code]) return "defillama";
+  return "none";
 }
 
 /** Map base currency to Binance quote currency and construct trading pair */
@@ -148,6 +153,12 @@ export async function syncExchangeRates(
   // Load token addresses for auto-detection
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrSet = new Set(tokenAddresses.map((t) => t.currency));
+
+  // Build code → asset_type lookup for source detection
+  const currencyTypeMap = new Map<string, string>();
+  for (const c of currencies) {
+    currencyTypeMap.set(c.code, c.asset_type);
+  }
 
   // When dprice is enabled, try it FIRST for all currencies.
   // This dprice-first pass fetches actual rates and records them, avoiding redundant external API calls.
@@ -227,7 +238,7 @@ export async function syncExchangeRates(
       else if (stored.rate_source === "dprice") dpriceCodes.push(code);
     } else {
       // No stored source → auto-detect
-      const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code), dpriceAssets);
+      const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets);
       if (detected === "none") continue; // No known pricing path — skip
       if (detected === "frankfurter") frankfurterCodes.push(code);
       else if (detected === "coingecko") coingeckoCodes.push(code);
@@ -416,6 +427,58 @@ export async function syncExchangeRates(
     }
   }
 
+  // ---- CryptoCompare rates (current prices, batch) ----
+  if (cryptocompareCodes.length > 0) {
+    if (!cryptoCompareApiKey) {
+      result.errors.push(
+        `CryptoCompare: no API key provided; skipping ${cryptocompareCodes.length} rate(s)`,
+      );
+      for (const code of cryptocompareCodes) {
+        if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+        allFailed.add(code);
+      }
+    } else {
+      try {
+        const fsyms = cryptocompareCodes.join(",");
+        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${fsyms}&tsyms=${baseCurrency}&api_key=${cryptoCompareApiKey}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          result.errors.push(`CryptoCompare HTTP ${resp.status}: ${resp.statusText}`);
+          for (const code of cryptocompareCodes) {
+            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+            allFailed.add(code);
+          }
+        } else {
+          const data = await resp.json() as Record<string, Record<string, number>>;
+          for (const code of cryptocompareCodes) {
+            const priceData = data[code];
+            if (!priceData || priceData[baseCurrency] == null) {
+              result.errors.push(`CryptoCompare: no rate for ${code}`);
+              if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+              allFailed.add(code);
+              continue;
+            }
+
+            if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
+            allSucceeded.add(code);
+
+            await backend.recordExchangeRate({
+              id: uuidv7(),
+              date: today,
+              from_currency: code,
+              to_currency: baseCurrency,
+              rate: priceData[baseCurrency].toString(),
+              source: "cryptocompare",
+            });
+            result.rates_fetched++;
+          }
+        }
+      } catch (err) {
+        result.errors.push(`CryptoCompare: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   // ---- DefiLlama rates (current prices, batch) ----
   if (defillamaCodes.length > 0) {
     try {
@@ -476,58 +539,6 @@ export async function syncExchangeRates(
       }
     } catch (err) {
       result.errors.push(`DefiLlama: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // ---- CryptoCompare rates (current prices, batch) ----
-  if (cryptocompareCodes.length > 0) {
-    if (!cryptoCompareApiKey) {
-      result.errors.push(
-        `CryptoCompare: no API key provided; skipping ${cryptocompareCodes.length} rate(s)`,
-      );
-      for (const code of cryptocompareCodes) {
-        if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-        allFailed.add(code);
-      }
-    } else {
-      try {
-        const fsyms = cryptocompareCodes.join(",");
-        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${fsyms}&tsyms=${baseCurrency}&api_key=${cryptoCompareApiKey}`;
-        const resp = await fetch(url);
-        if (!resp.ok) {
-          result.errors.push(`CryptoCompare HTTP ${resp.status}: ${resp.statusText}`);
-          for (const code of cryptocompareCodes) {
-            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-            allFailed.add(code);
-          }
-        } else {
-          const data = await resp.json() as Record<string, Record<string, number>>;
-          for (const code of cryptocompareCodes) {
-            const priceData = data[code];
-            if (!priceData || priceData[baseCurrency] == null) {
-              result.errors.push(`CryptoCompare: no rate for ${code}`);
-              if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-              allFailed.add(code);
-              continue;
-            }
-
-            if (autoDetectCodes.includes(code)) autoDetectSuccess.add(code);
-            allSucceeded.add(code);
-
-            await backend.recordExchangeRate({
-              id: uuidv7(),
-              date: today,
-              from_currency: code,
-              to_currency: baseCurrency,
-              rate: priceData[baseCurrency].toString(),
-              source: "cryptocompare",
-            });
-            result.rates_fetched++;
-          }
-        }
-      } catch (err) {
-        result.errors.push(`CryptoCompare: ${err instanceof Error ? err.message : String(err)}`);
-      }
     }
   }
 
@@ -598,7 +609,7 @@ export async function syncExchangeRates(
   }
   for (const code of autoDetectSuccess) {
     if (dpriceServed.has(code)) continue; // already handled above
-    const detected = autoDetectSource(code, baseCurrency, tokenAddrSet.has(code), dpriceAssets);
+    const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets);
     await backend.setCurrencyRateSource(code, detected, "auto");
     result.newlyDetected.push(code);
   }

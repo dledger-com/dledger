@@ -9,6 +9,7 @@ import { inferAccountType } from "../browser-etherscan.js";
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "../handlers/item-builder.js";
 import type { ItemAccum } from "../handlers/item-builder.js";
 import { normalizeTxid } from "./pipeline.js";
+
 import type { TaskProgress } from "../task-queue.svelte.js";
 
 interface CexIndexEntry {
@@ -403,7 +404,7 @@ async function consolidateViaHandlers(
     },
     async ensureCurrency(code: string, decimals: number): Promise<void> {
       if (currencySet.has(code)) return;
-      await backend.createCurrency({ code, name: code, decimal_places: decimals, is_base: false });
+      await backend.createCurrency({ code, asset_type: "", param: "", name: code, decimal_places: decimals, is_base: false });
       currencySet.add(code);
     },
   };
@@ -519,7 +520,7 @@ async function consolidateDirectRemap(
   // Ensure accounts and currencies
   for (const item of newItems) {
     if (!currencySet.has(item.currency)) {
-      await backend.createCurrency({ code: item.currency, name: item.currency, decimal_places: 8, is_base: false });
+      await backend.createCurrency({ code: item.currency, asset_type: "", param: "", name: item.currency, decimal_places: 8, is_base: false });
       currencySet.add(item.currency);
     }
     await ensureAccountHelper(backend, accountMap, item.account, etherscanEntry.date);

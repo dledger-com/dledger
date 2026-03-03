@@ -65,6 +65,11 @@ impl LedgerEngine {
         Ok(self.storage.get_currency(code)?)
     }
 
+    pub fn set_currency_asset_type(&self, code: &str, asset_type: &str, param: &str) -> LedgerResult<()> {
+        self.storage.set_currency_asset_type(code, asset_type, param)?;
+        Ok(())
+    }
+
     // --- Account operations ---
 
     pub fn create_account(&self, account: &Account) -> LedgerResult<()> {
@@ -221,6 +226,8 @@ impl LedgerEngine {
                 journal_entry_id: reversal_id,
                 account_id: item.account_id,
                 currency: item.currency.clone(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: -item.amount,
                 lot_id: None,
             })

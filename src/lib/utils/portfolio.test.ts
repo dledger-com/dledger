@@ -35,8 +35,8 @@ describe("computePortfolioReport", () => {
   beforeEach(async () => {
     backend = await createTestBackend();
 
-    USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
-    ETH = { code: "ETH", name: "Ether", decimal_places: 18, is_base: false };
+    USD = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
+    ETH = { code: "ETH", asset_type: "", param: "", name: "Ether", decimal_places: 18, is_base: false };
     await backend.createCurrency(USD);
     await backend.createCurrency(ETH);
   });
@@ -307,7 +307,7 @@ describe("computePortfolioReport", () => {
     );
 
     // Create a spam currency + holding
-    const SPAM: Currency = { code: "SPAM", name: "Spam Token", decimal_places: 18, is_base: false };
+    const SPAM: Currency = { code: "SPAM", asset_type: "", param: "", name: "Spam Token", decimal_places: 18, is_base: false };
     await backend.createCurrency(SPAM);
     await backend.setCurrencyHidden("SPAM", true);
 

@@ -31,6 +31,19 @@ pub fn create_currency(state: State<'_, AppState>, currency: Currency) -> Result
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn set_currency_asset_type(
+    state: State<'_, AppState>,
+    code: String,
+    asset_type: String,
+    param: String,
+) -> Result<(), String> {
+    state
+        .engine
+        .set_currency_asset_type(&code, &asset_type, &param)
+        .map_err(|e| e.to_string())
+}
+
 // -- Account commands --
 
 #[tauri::command]

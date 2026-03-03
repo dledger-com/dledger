@@ -11,7 +11,7 @@ async function setupTestScenario() {
 	const backend = await createTestBackend();
 
 	// Create currencies
-	await backend.createCurrency({ code: "EUR", name: "Euro", decimal_places: 2, is_base: true });
+	await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: true });
 
 	// Create accounts
 	const accounts: Record<string, Account> = {};

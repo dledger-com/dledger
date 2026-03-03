@@ -1,3 +1,5 @@
+export type DpriceAssetType = "crypto" | "fiat" | "stock" | "commodity" | "index" | "bond";
+
 export interface DpriceHealthResponse {
   assets: number;
   prices: number;
@@ -16,13 +18,30 @@ export interface DpricePriceEntry {
 
 export interface DpriceClient {
   health(): Promise<DpriceHealthResponse>;
-  getRate(from: string, to: string, date?: string): Promise<string | null>;
-  getRates(currencies: string[], date?: string): Promise<DpriceRateEntry[]>;
-  getPriceRange(symbol: string, fromDate: string, toDate: string): Promise<DpricePriceEntry[]>;
+  getRate(
+    from: string,
+    to: string,
+    date?: string,
+    opts?: { fromType?: DpriceAssetType; toType?: DpriceAssetType; fromParam?: string; toParam?: string },
+  ): Promise<string | null>;
+  getRates(
+    currencies: string[],
+    date?: string,
+    opts?: { type?: DpriceAssetType },
+  ): Promise<DpriceRateEntry[]>;
+  getPriceRange(
+    symbol: string,
+    fromDate: string,
+    toDate: string,
+    opts?: { type?: DpriceAssetType; param?: string },
+  ): Promise<DpricePriceEntry[]>;
   sync(): Promise<string>;
   syncLatest(): Promise<string>;
   latestDate(): Promise<string | null>;
-  ensurePrices(requests: Array<{ symbol: string; date: string }>): Promise<string[]>;
+  ensurePrices(
+    requests: Array<{ symbol: string; date: string }>,
+    opts?: { type?: DpriceAssetType; param?: string },
+  ): Promise<string[]>;
   exportDb(): Promise<Uint8Array>;
   importDb(data: Uint8Array): Promise<string>;
 }
@@ -37,16 +56,48 @@ class TauriDpriceClient implements DpriceClient {
     return this.invoke("dprice_health");
   }
 
-  async getRate(from: string, to: string, date?: string): Promise<string | null> {
-    return this.invoke("dprice_get_rate", { from, to, date });
+  async getRate(
+    from: string,
+    to: string,
+    date?: string,
+    opts?: { fromType?: DpriceAssetType; toType?: DpriceAssetType; fromParam?: string; toParam?: string },
+  ): Promise<string | null> {
+    return this.invoke("dprice_get_rate", {
+      from,
+      to,
+      date,
+      fromType: opts?.fromType,
+      toType: opts?.toType,
+      fromParam: opts?.fromParam,
+      toParam: opts?.toParam,
+    });
   }
 
-  async getRates(currencies: string[], date?: string): Promise<DpriceRateEntry[]> {
-    return this.invoke("dprice_get_rates", { currencies, date });
+  async getRates(
+    currencies: string[],
+    date?: string,
+    opts?: { type?: DpriceAssetType },
+  ): Promise<DpriceRateEntry[]> {
+    return this.invoke("dprice_get_rates", {
+      currencies,
+      date,
+      assetType: opts?.type,
+    });
   }
 
-  async getPriceRange(symbol: string, fromDate: string, toDate: string): Promise<DpricePriceEntry[]> {
-    return this.invoke("dprice_get_price_range", { symbol, fromDate, toDate });
+  async getPriceRange(
+    symbol: string,
+    fromDate: string,
+    toDate: string,
+    opts?: { type?: DpriceAssetType; param?: string },
+  ): Promise<DpricePriceEntry[]> {
+    return this.invoke("dprice_get_price_range", {
+      symbol,
+      fromDate,
+      toDate,
+      assetType: opts?.type,
+      param: opts?.param,
+    });
   }
 
   async sync(): Promise<string> {
@@ -61,9 +112,16 @@ class TauriDpriceClient implements DpriceClient {
     return this.invoke("dprice_latest_date");
   }
 
-  async ensurePrices(requests: Array<{ symbol: string; date: string }>): Promise<string[]> {
+  async ensurePrices(
+    requests: Array<{ symbol: string; date: string }>,
+    opts?: { type?: DpriceAssetType; param?: string },
+  ): Promise<string[]> {
     const tuples = requests.map((r) => [r.symbol, r.date]);
-    return this.invoke("dprice_ensure_prices", { requests: tuples });
+    return this.invoke("dprice_ensure_prices", {
+      requests: tuples,
+      assetType: opts?.type,
+      param: opts?.param,
+    });
   }
 
   async exportDb(): Promise<Uint8Array> {
@@ -92,9 +150,18 @@ class HttpDpriceClient implements DpriceClient {
     return this.fetchJson("/api/v1/health");
   }
 
-  async getRate(from: string, to: string, date?: string): Promise<string | null> {
+  async getRate(
+    from: string,
+    to: string,
+    date?: string,
+    opts?: { fromType?: DpriceAssetType; toType?: DpriceAssetType; fromParam?: string; toParam?: string },
+  ): Promise<string | null> {
     const params = new URLSearchParams({ from, to });
     if (date) params.set("date", date);
+    if (opts?.fromType) params.set("from_type", opts.fromType);
+    if (opts?.toType) params.set("to_type", opts.toType);
+    if (opts?.fromParam) params.set("from_param", opts.fromParam);
+    if (opts?.toParam) params.set("to_param", opts.toParam);
     try {
       const resp = await this.fetchJson<{ rate: string }>(`/api/v1/rate?${params}`);
       return resp.rate;
@@ -103,14 +170,24 @@ class HttpDpriceClient implements DpriceClient {
     }
   }
 
-  async getRates(currencies: string[], date?: string): Promise<DpriceRateEntry[]> {
+  async getRates(
+    currencies: string[],
+    date?: string,
+    opts?: { type?: DpriceAssetType },
+  ): Promise<DpriceRateEntry[]> {
     const params = new URLSearchParams({ currencies: currencies.join(",") });
     if (date) params.set("date", date);
+    if (opts?.type) params.set("type", opts.type);
     const resp = await this.fetchJson<{ rates: DpriceRateEntry[] }>(`/api/v1/rates?${params}`);
     return resp.rates;
   }
 
-  async getPriceRange(symbol: string, fromDate: string, toDate: string): Promise<DpricePriceEntry[]> {
+  async getPriceRange(
+    symbol: string,
+    fromDate: string,
+    toDate: string,
+    _opts?: { type?: DpriceAssetType; param?: string },
+  ): Promise<DpricePriceEntry[]> {
     // HTTP mode uses GraphQL for price range (REST has no range endpoint)
     const query = `{ priceHistory(symbol: "${symbol}", from: "${fromDate}", to: "${toDate}") { date priceUsd } }`;
     const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
@@ -155,7 +232,10 @@ class HttpDpriceClient implements DpriceClient {
     }
   }
 
-  async ensurePrices(requests: Array<{ symbol: string; date: string }>): Promise<string[]> {
+  async ensurePrices(
+    requests: Array<{ symbol: string; date: string }>,
+    _opts?: { type?: DpriceAssetType; param?: string },
+  ): Promise<string[]> {
     const missing: string[] = [];
     for (const { symbol, date } of requests) {
       const params = new URLSearchParams({ symbol, date });

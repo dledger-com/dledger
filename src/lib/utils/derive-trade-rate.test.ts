@@ -115,8 +115,8 @@ describe("deriveTradeRate", () => {
 describe("deriveAndRecordTradeRate integration", () => {
   it("records rate from ledger import with @ PRICE", async () => {
     const backend = await createTestBackend();
-    await backend.createCurrency({ code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false });
-    await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
 
     const items: TradeRateItem[] = [
       { account_name: "Assets:Exchange:BTC", currency: "BTC", amount: "1" },
@@ -135,8 +135,8 @@ describe("deriveAndRecordTradeRate integration", () => {
 
   it("transaction rate overwrites API rate but not manual rate", async () => {
     const backend = await createTestBackend();
-    await backend.createCurrency({ code: "ETH", name: "Ethereum", decimal_places: 18, is_base: false });
-    await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "ETH", asset_type: "", param: "", name: "Ethereum", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
 
     // First: record an API rate
     await backend.recordExchangeRate({
@@ -179,7 +179,7 @@ describe("deriveAndRecordTradeRate integration", () => {
 
   it("returns null and records nothing for non-trade entries", async () => {
     const backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
 
     const items: TradeRateItem[] = [
       { account_name: "Assets:Bank", currency: "USD", amount: "100" },

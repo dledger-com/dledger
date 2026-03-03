@@ -68,7 +68,7 @@ describe("matchRule", () => {
 
 describe("buildHistoricalExamples", () => {
   async function setupAccounts(backend: Awaited<ReturnType<typeof createTestBackend>>) {
-    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    const USD = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
     await backend.createCurrency(USD);
 
     const assetsId = uuidv7();
@@ -284,7 +284,7 @@ describe("applyRuleTags", () => {
 
 describe("buildHistoricalTagExamples", () => {
   async function setupAndPost(backend: Awaited<ReturnType<typeof createTestBackend>>) {
-    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    const USD = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
     await backend.createCurrency(USD);
 
     const assetsId = uuidv7();
@@ -376,7 +376,7 @@ describe("getAllTagValues", () => {
 
   it("returns deduplicated sorted tags", async () => {
     const backend = await createTestBackend();
-    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    const USD = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
     await backend.createCurrency(USD);
     const acctId = uuidv7();
     const acctId2 = uuidv7();
@@ -426,7 +426,7 @@ describe("getAllMetadataKeys", () => {
 
   it("returns distinct keys excluding tags", async () => {
     const backend = await createTestBackend();
-    const USD = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: true };
+    const USD = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
     await backend.createCurrency(USD);
     const acctId = uuidv7();
     const acctId2 = uuidv7();

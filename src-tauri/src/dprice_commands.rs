@@ -80,7 +80,7 @@ pub async fn dprice_get_rate(
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let rate =
-            cross_rate::get_rate(&db, &from, &to, &date).map_err(|e| e.to_string())?;
+            cross_rate::get_rate(&db, &from, &to, &date, None, None, None, None).map_err(|e| e.to_string())?;
         Ok(rate.map(|r| r.to_string()))
     })
     .await
@@ -97,7 +97,7 @@ pub async fn dprice_get_rates(
     let date = date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
-        let matrix = cross_rate::get_rate_matrix(&db, &currencies, &date)
+        let matrix = cross_rate::get_rate_matrix(&db, &currencies, &date, None)
             .map_err(|e| e.to_string())?;
         Ok(matrix
             .into_iter()
@@ -125,7 +125,7 @@ pub async fn dprice_get_price_range(
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let prices = db
-            .get_price_range(&symbol, &from_date, &to_date)
+            .get_price_range(&symbol, &from_date, &to_date, None, None)
             .map_err(|e| e.to_string())?;
         Ok(prices
             .into_iter()
@@ -224,7 +224,7 @@ pub async fn dprice_ensure_prices(
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let mut missing = Vec::new();
         for (symbol, date) in requests {
-            let price = db.get_price(&symbol, &date).map_err(|e| e.to_string())?;
+            let price = db.get_price(&symbol, &date, None, None).map_err(|e| e.to_string())?;
             if price.is_none() {
                 missing.push(symbol);
             }
@@ -426,7 +426,7 @@ mod tests {
         let _db = PriceDb::open(&db_path).unwrap();
 
         let db = PriceDb::open_readonly(&db_path).unwrap();
-        let rate = cross_rate::get_rate(&db, "BTC", "USD", "2024-01-01").unwrap();
+        let rate = cross_rate::get_rate(&db, "BTC", "USD", "2024-01-01", None, None, None, None).unwrap();
         assert!(rate.is_none()); // No data in fresh DB
     }
 
@@ -438,7 +438,7 @@ mod tests {
 
         let db = PriceDb::open_readonly(&db_path).unwrap();
         let currencies = vec!["BTC".to_string(), "ETH".to_string(), "USD".to_string()];
-        let matrix = cross_rate::get_rate_matrix(&db, &currencies, "2024-01-01").unwrap();
+        let matrix = cross_rate::get_rate_matrix(&db, &currencies, "2024-01-01", None).unwrap();
         // No data → all rates are None, so filter_map yields empty
         let with_rates: Vec<_> = matrix.into_iter().filter(|(_, _, r)| r.is_some()).collect();
         assert!(with_rates.is_empty());
@@ -451,7 +451,7 @@ mod tests {
         let _db = PriceDb::open(&db_path).unwrap();
 
         let db = PriceDb::open_readonly(&db_path).unwrap();
-        let prices = db.get_price_range("BTC", "2024-01-01", "2024-12-31").unwrap();
+        let prices = db.get_price_range("BTC", "2024-01-01", "2024-12-31", None, None).unwrap();
         assert!(prices.is_empty());
     }
 
@@ -474,7 +474,7 @@ mod tests {
 
         let db = PriceDb::open_readonly(&db_path).unwrap();
         // No data → all requests should be missing
-        let price = db.get_price("BTC", "2024-01-01").unwrap();
+        let price = db.get_price("BTC", "2024-01-01", None, None).unwrap();
         assert!(price.is_none());
     }
 

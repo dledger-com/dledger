@@ -42,6 +42,12 @@ impl AccountType {
 pub struct Currency {
     /// Short code, e.g. "EUR", "BTC", "ETH"
     pub code: String,
+    /// Asset type: "crypto", "fiat", "stock", "commodity", "index", "bond", or "" (unclassified)
+    #[serde(default)]
+    pub asset_type: String,
+    /// Optional qualifier, e.g. "ethereum:0xabc..." for chain-specific tokens
+    #[serde(default)]
+    pub param: String,
     /// Human-readable name
     pub name: String,
     /// Number of decimal places for display (e.g. 2 for EUR, 8 for BTC)
@@ -124,6 +130,10 @@ pub struct LineItem {
     pub journal_entry_id: Uuid,
     pub account_id: Uuid,
     pub currency: String,
+    #[serde(default)]
+    pub currency_asset_type: String,
+    #[serde(default)]
+    pub currency_param: String,
     /// Positive = debit, negative = credit
     pub amount: Decimal,
     /// Optional lot ID this posting is associated with
@@ -138,6 +148,10 @@ pub struct Lot {
     pub account_id: Uuid,
     /// Currency of the asset
     pub currency: String,
+    #[serde(default)]
+    pub currency_asset_type: String,
+    #[serde(default)]
+    pub currency_param: String,
     /// Date the lot was acquired
     pub acquired_date: NaiveDate,
     /// Original quantity acquired
@@ -148,6 +162,10 @@ pub struct Lot {
     pub cost_basis_per_unit: Decimal,
     /// Base currency used for cost basis
     pub cost_basis_currency: String,
+    #[serde(default)]
+    pub cost_basis_currency_asset_type: String,
+    #[serde(default)]
+    pub cost_basis_currency_param: String,
     /// Journal entry that created this lot
     pub journal_entry_id: Uuid,
     /// Whether this lot is fully consumed
@@ -167,6 +185,10 @@ pub struct LotDisposal {
     pub proceeds_per_unit: Decimal,
     /// Base currency for proceeds
     pub proceeds_currency: String,
+    #[serde(default)]
+    pub proceeds_currency_asset_type: String,
+    #[serde(default)]
+    pub proceeds_currency_param: String,
     /// Realized gain or loss (total, not per-unit)
     pub realized_gain_loss: Decimal,
     pub disposal_date: NaiveDate,
@@ -178,7 +200,15 @@ pub struct ExchangeRate {
     pub id: Uuid,
     pub date: NaiveDate,
     pub from_currency: String,
+    #[serde(default)]
+    pub from_currency_asset_type: String,
+    #[serde(default)]
+    pub from_currency_param: String,
     pub to_currency: String,
+    #[serde(default)]
+    pub to_currency_asset_type: String,
+    #[serde(default)]
+    pub to_currency_param: String,
     pub rate: Decimal,
     /// Source of this rate (e.g. "manual", "plugin:coingecko")
     pub source: String,
@@ -191,6 +221,10 @@ pub struct BalanceAssertion {
     pub account_id: Uuid,
     pub date: NaiveDate,
     pub currency: String,
+    #[serde(default)]
+    pub currency_asset_type: String,
+    #[serde(default)]
+    pub currency_param: String,
     pub expected_balance: Decimal,
     pub is_passing: bool,
     pub actual_balance: Option<Decimal>,
@@ -269,6 +303,10 @@ pub struct CurrencyOrigin {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrencyRateSource {
     pub currency: String,
+    #[serde(default)]
+    pub asset_type: String,
+    #[serde(default)]
+    pub param: String,
     pub rate_source: String,
     pub set_by: String,
 }
@@ -281,6 +319,10 @@ pub struct Budget {
     pub period_type: String,
     pub amount: Decimal,
     pub currency: String,
+    #[serde(default)]
+    pub currency_asset_type: String,
+    #[serde(default)]
+    pub currency_param: String,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
     pub created_at: NaiveDate,

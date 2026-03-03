@@ -8,6 +8,7 @@ import { parseAmount } from "./parse-amount.js";
 import { buildDedupIndex, isDuplicate, computeRecordFingerprint, computeAmountFingerprint } from "./dedup.js";
 import { ASSETS_IMPORT, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 
+
 export interface TransformOptions {
   dateColumn: string;
   dateFormat: DateFormatId;
@@ -166,6 +167,8 @@ async function ensureCurrency(
   if (currencyCache.has(code)) return;
   const currency: Currency = {
     code,
+    asset_type: "",
+    param: "",
     name: code,
     decimal_places: code.length <= 3 ? 2 : 8,
     is_base: false,

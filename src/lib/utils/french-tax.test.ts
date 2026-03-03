@@ -16,11 +16,11 @@ async function createCryptoTaxBackend() {
   const backend = await createTestBackend();
 
   // Currencies
-  const EUR: Currency = { code: "EUR", name: "Euro", decimal_places: 2, is_base: true };
-  const USD: Currency = { code: "USD", name: "US Dollar", decimal_places: 2, is_base: false };
-  const BTC: Currency = { code: "BTC", name: "Bitcoin", decimal_places: 8, is_base: false };
-  const ETH: Currency = { code: "ETH", name: "Ethereum", decimal_places: 18, is_base: false };
-  const USDT: Currency = { code: "USDT", name: "Tether", decimal_places: 6, is_base: false };
+  const EUR: Currency = { code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: true };
+  const USD: Currency = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: false };
+  const BTC: Currency = { code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false };
+  const ETH: Currency = { code: "ETH", asset_type: "", param: "", name: "Ethereum", decimal_places: 18, is_base: false };
+  const USDT: Currency = { code: "USDT", asset_type: "", param: "", name: "Tether", decimal_places: 6, is_base: false };
   await backend.createCurrency(EUR);
   await backend.createCurrency(USD);
   await backend.createCurrency(BTC);

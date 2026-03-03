@@ -444,6 +444,8 @@ fn ensure_currency(
     if existing.is_none() {
         let currency = Currency {
             code: code.to_string(),
+            asset_type: String::new(),
+            param: String::new(),
             name: code.to_string(),
             decimal_places: if code.len() <= 3 { 2 } else { 8 },
             is_base: false,
@@ -600,6 +602,8 @@ fn parse_balance_directive(
         account_id,
         date,
         currency: commodity.to_string(),
+        currency_asset_type: String::new(),
+        currency_param: String::new(),
         expected_balance: amount,
         is_passing: false,
         actual_balance: None,
@@ -645,7 +649,11 @@ fn parse_price_directive(
         id: Uuid::now_v7(),
         date,
         from_currency: from_commodity.to_string(),
+        from_currency_asset_type: String::new(),
+        from_currency_param: String::new(),
         to_currency: to_commodity.to_string(),
+        to_currency_asset_type: String::new(),
+        to_currency_param: String::new(),
         rate,
         source: "ledger-file".to_string(),
     };
@@ -873,6 +881,8 @@ fn parse_transaction_body(
             journal_entry_id: entry_id,
             account_id,
             currency: commodity.to_string(),
+            currency_asset_type: String::new(),
+            currency_param: String::new(),
             amount,
             lot_id: None,
         });
@@ -893,6 +903,8 @@ fn parse_transaction_body(
                 journal_entry_id: entry_id,
                 account_id: trading_id,
                 currency: commodity.to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: -amount,
                 lot_id: None,
             });
@@ -904,6 +916,8 @@ fn parse_transaction_body(
                 journal_entry_id: entry_id,
                 account_id: trading_id,
                 currency: price_commodity.to_string(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
                 amount: cost_total,
                 lot_id: None,
             });
@@ -919,7 +933,11 @@ fn parse_transaction_body(
                 id: Uuid::now_v7(),
                 date,
                 from_currency: commodity.to_string(),
+                from_currency_asset_type: String::new(),
+                from_currency_param: String::new(),
                 to_currency: price_commodity.to_string(),
+                to_currency_asset_type: String::new(),
+                to_currency_param: String::new(),
                 rate: *price,
                 source: "transaction".to_string(),
             };

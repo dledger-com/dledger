@@ -475,7 +475,7 @@ commodity EUR
 `;
       const result = await importLedger(backend, content, "beancount");
       expect(result.transactions_imported).toBe(1);
-      expect(result.errors ?? []).toHaveLength(0);
+      expect(result.warnings).toHaveLength(0);
     });
 
     it("handles @ COMMODITY with separate fee legs", async () => {
@@ -518,7 +518,7 @@ commodity EUR
 `;
       const result = await importLedger(backend, content, "beancount");
       expect(result.transactions_imported).toBe(1);
-      expect(result.errors ?? []).toHaveLength(0);
+      expect(result.warnings).toHaveLength(0);
     });
 
     it("handles @ price multiplication precision dust across many postings", async () => {
@@ -569,7 +569,7 @@ commodity EUR
   Expenses:Crypto:Fees:Tx  0.00209928 SOL
 `;
       const result = await importLedger(backend, content, "beancount");
-      expect(result.errors ?? []).toHaveLength(0);
+      expect(result.warnings).toHaveLength(0);
       expect(result.transactions_imported).toBe(1);
     });
 
