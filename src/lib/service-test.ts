@@ -128,15 +128,17 @@ export async function testEtherscan(apiKey: string): Promise<TestResult> {
 export async function testRoutescan(apiKey?: string): Promise<TestResult> {
   try {
     const url = apiKey
-      ? `https://api.routescan.io/v2/network/mainnet/evm/56/etherscan/api?module=stats&action=bnbprice&apikey=${encodeURIComponent(apiKey)}`
-      : "https://api.routescan.io/v2/network/mainnet/evm/56/etherscan/api?module=stats&action=bnbprice";
+      ? `https://api.routescan.io/v2/network/mainnet/evm/1/etherscan/api?module=proxy&action=eth_blockNumber&apikey=${encodeURIComponent(apiKey)}`
+      : "https://api.routescan.io/v2/network/mainnet/evm/1/etherscan/api?module=proxy&action=eth_blockNumber";
     const resp = await safeFetch(url);
     const data = await resp.json();
-    if (data?.status === "0") return { ok: false, error: data.result ?? "API error" };
-    const price = data?.result?.bnbusd;
-    return price != null
-      ? { ok: true, detail: `BNB: $${Number(price).toLocaleString()}` }
-      : { ok: false, error: "Unexpected response format" };
+    if (data?.error) return { ok: false, error: data.error.message ?? "API error" };
+    const hex = data?.result;
+    if (typeof hex === "string" && hex.startsWith("0x")) {
+      const blockNum = parseInt(hex, 16);
+      return { ok: true, detail: `Block #${blockNum.toLocaleString()}` };
+    }
+    return { ok: false, error: "Unexpected response format" };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
