@@ -52,6 +52,7 @@
   let assertionAmount = $state("");
   let paddingAssertionId = $state<string | null>(null);
   let padCounterparty = $state("Equity:Opening-Balances");
+  let padDate = $state("");
   let editingOpenedAt = $state(false);
   let openedAtValue = $state("");
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
@@ -326,6 +327,7 @@
                       <Button variant="outline" size="sm" class="h-7 px-2 text-xs" onclick={() => {
                         paddingAssertionId = paddingAssertionId === a.id ? null : a.id;
                         padCounterparty = "Equity:Opening-Balances";
+                        const d = new Date(a.date + "T00:00:00"); d.setDate(d.getDate() - 1); padDate = d.toISOString().slice(0, 10);
                       }}>
                         {paddingAssertionId === a.id ? "Cancel" : "Pad"}
                       </Button>
@@ -334,7 +336,7 @@
                 </Table.Row>
                 {#if paddingAssertionId === a.id}
                   {@const diff = parseFloat(a.expected_balance) - parseFloat(a.actual_balance ?? "0")}
-                  {@const padDate = (() => { const d = new Date(a.date + "T00:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}
+
                   <Table.Row>
                     <Table.Cell colspan={6}>
                       <div class="flex items-end gap-3 p-3 rounded-md border bg-muted/30">
@@ -344,7 +346,7 @@
                         </div>
                         <div class="space-y-1">
                           <label class="text-xs font-medium">Date</label>
-                          <span class="text-sm block h-8 leading-8">{padDate}</span>
+                          <Input type="date" bind:value={padDate} class="w-40 h-8 text-sm" />
                         </div>
                         <div class="space-y-1">
                           <label class="text-xs font-medium">Amount</label>
