@@ -53,6 +53,7 @@ export interface HistoricalRateRequest {
 export interface HistoricalFetchConfig {
   baseCurrency: string;
   coingeckoApiKey: string;
+  coingeckoPro?: boolean;
   finnhubApiKey: string;
   cryptoCompareApiKey?: string;
   dpriceMode?: DpriceMode;
@@ -459,8 +460,11 @@ async function fetchCoinGeckoHistorical(
       const vsBase = config.baseCurrency.toLowerCase();
 
       try {
-        const url = `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}&x_cg_demo_api_key=${config.coingeckoApiKey}`;
-        const resp = await geckoFetch.fetch(url);
+        const url = config.coingeckoPro
+          ? `https://pro-api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}`
+          : `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}&x_cg_demo_api_key=${config.coingeckoApiKey}`;
+        const headers: Record<string, string> = config.coingeckoPro ? { "x-cg-pro-api-key": config.coingeckoApiKey } : {};
+        const resp = await geckoFetch.fetch(url, { headers });
         if (!resp.ok) {
           result.errors.push(`CoinGecko HTTP ${resp.status} for ${req.currency}`);
           continue;

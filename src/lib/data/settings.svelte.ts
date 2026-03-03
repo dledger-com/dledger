@@ -13,6 +13,7 @@ export interface AppSettings {
   fiscalYearStart: string;
   etherscanApiKey: string;
   coingeckoApiKey: string;
+  coingeckoPro?: boolean;
   finnhubApiKey: string;
   cryptoCompareApiKey: string;
   theGraphApiKey: string;

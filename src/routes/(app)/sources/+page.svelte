@@ -359,6 +359,7 @@
                         {
                             baseCurrency: settings.currency,
                             coingeckoApiKey: settings.coingeckoApiKey,
+                            coingeckoPro: settings.settings.coingeckoPro,
                             finnhubApiKey: settings.finnhubApiKey,
                             cryptoCompareApiKey: settings.cryptoCompareApiKey,
                             dpriceMode: settings.settings.dpriceMode,
@@ -483,6 +484,7 @@
                     {
                         baseCurrency: settings.currency,
                         coingeckoApiKey: settings.coingeckoApiKey,
+                        coingeckoPro: settings.settings.coingeckoPro,
                         finnhubApiKey: settings.finnhubApiKey,
                         cryptoCompareApiKey: settings.cryptoCompareApiKey,
                         dpriceMode: settings.settings.dpriceMode,
@@ -536,6 +538,7 @@
                     {
                         baseCurrency: settings.currency,
                         coingeckoApiKey: settings.coingeckoApiKey,
+                        coingeckoPro: settings.settings.coingeckoPro,
                         finnhubApiKey: settings.finnhubApiKey,
                         cryptoCompareApiKey: settings.cryptoCompareApiKey,
                         dpriceMode: settings.settings.dpriceMode,
@@ -690,6 +693,7 @@
                         {
                             baseCurrency: settings.currency,
                             coingeckoApiKey: settings.coingeckoApiKey,
+                            coingeckoPro: settings.settings.coingeckoPro,
                             finnhubApiKey: settings.finnhubApiKey,
                             cryptoCompareApiKey: settings.cryptoCompareApiKey,
                             dpriceMode: settings.settings.dpriceMode,

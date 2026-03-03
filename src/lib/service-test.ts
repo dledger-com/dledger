@@ -43,12 +43,14 @@ export async function testFinnhub(apiKey: string): Promise<TestResult> {
   }
 }
 
-export async function testCoinGecko(apiKey: string): Promise<TestResult> {
+export async function testCoinGecko(apiKey: string, pro?: boolean): Promise<TestResult> {
   if (!apiKey) return { ok: false, error: "API key required" };
   try {
-    const resp = await safeFetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&x_cg_demo_api_key=${encodeURIComponent(apiKey)}`,
-    );
+    const url = pro
+      ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd`
+      : `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&x_cg_demo_api_key=${encodeURIComponent(apiKey)}`;
+    const headers: Record<string, string> = pro ? { "x-cg-pro-api-key": apiKey } : {};
+    const resp = await safeFetch(url, { headers });
     const data = await resp.json();
     const price = data?.bitcoin?.usd;
     return price != null

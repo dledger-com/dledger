@@ -56,6 +56,7 @@
                 settings.cryptoCompareApiKey,
                 settings.settings.dpriceMode,
                 settings.settings.dpriceUrl,
+                settings.settings.coingeckoPro,
               );
               settings.update({ lastRateSync: today });
               for (const code of syncResult.autoHidden) {

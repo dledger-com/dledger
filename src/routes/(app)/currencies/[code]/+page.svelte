@@ -180,6 +180,7 @@
           settings.cryptoCompareApiKey,
           settings.settings.dpriceMode,
           settings.settings.dpriceUrl,
+          settings.settings.coingeckoPro,
         );
         await loadRateSource();
         await loadExchangeRates();

@@ -119,6 +119,7 @@ export async function syncExchangeRates(
   cryptoCompareApiKey?: string,
   dpriceMode?: DpriceMode,
   dpriceUrl?: string,
+  coingeckoPro?: boolean,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -345,8 +346,11 @@ export async function syncExchangeRates(
         if (geckoIds.length > 0) {
           const ids = geckoIds.join(",");
           const vsBase = baseCurrency.toLowerCase();
-          const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
-          const resp = await geckoFetch.fetch(url);
+          const url = coingeckoPro
+            ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}`
+            : `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
+          const headers: Record<string, string> = coingeckoPro ? { "x-cg-pro-api-key": coingeckoApiKey } : {};
+          const resp = await geckoFetch.fetch(url, { headers });
 
           if (!resp.ok) {
             result.errors.push(`CoinGecko HTTP ${resp.status}: ${resp.statusText}`);
@@ -652,6 +656,7 @@ export async function fetchSingleRate(
   cryptoCompareApiKey?: string,
   dpriceMode?: DpriceMode,
   dpriceUrl?: string,
+  coingeckoPro?: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   const today = todayISO();
 
@@ -684,8 +689,11 @@ export async function fetchSingleRate(
       try {
         const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
         const vsBase = baseCurrency.toLowerCase();
-        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
-        const resp = await fetch(url);
+        const url = coingeckoPro
+          ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}`
+          : `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
+        const headers: Record<string, string> = coingeckoPro ? { "x-cg-pro-api-key": coingeckoApiKey } : {};
+        const resp = await fetch(url, { headers });
         if (!resp.ok) return { success: false, error: `CoinGecko HTTP ${resp.status}: ${resp.statusText}` };
         const data: CoinGeckoResponse = await resp.json();
         const priceData = data[geckoId];

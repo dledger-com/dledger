@@ -1271,7 +1271,7 @@
                             <Input
                                 id="coingecko-api-key"
                                 type="password"
-                                placeholder="CoinGecko demo API key (optional)"
+                                placeholder={settings.settings.coingeckoPro ? "CoinGecko Pro API key" : "CoinGecko demo API key (optional)"}
                                 value={settings.coingeckoApiKey}
                                 oninput={(e) =>
                                     settings.update({
@@ -1282,9 +1282,17 @@
                             />
                             <Button variant="outline" size="sm"
                                 disabled={testResults.coingecko?.status === 'testing'}
-                                onclick={() => handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey))}>
+                                onclick={() => handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey, settings.settings.coingeckoPro))}>
                                 {testResults.coingecko?.status === 'testing' ? 'Testing...' : 'Test'}
                             </Button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <Switch
+                                id="coingecko-pro"
+                                checked={settings.settings.coingeckoPro ?? false}
+                                onCheckedChange={(checked) => settings.update({ coingeckoPro: checked })}
+                            />
+                            <label for="coingecko-pro" class="text-sm">Pro API</label>
                         </div>
                         {#if testResults.coingecko?.status === 'success'}
                             <span class="text-xs text-green-600 dark:text-green-400">{testResults.coingecko.message ?? 'OK'}</span>
@@ -1292,13 +1300,22 @@
                             <span class="text-xs text-destructive">{testResults.coingecko.message}</span>
                         {/if}
                         <p class="text-xs text-muted-foreground">
-                            Get a free demo key at <a
-                                href="https://www.coingecko.com/en/api"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >coingecko.com</a
-                            >. Required for crypto rates. Fiat rates work
-                            without a key.
+                            {#if settings.settings.coingeckoPro}
+                                Using Pro endpoint (<a
+                                    href="https://www.coingecko.com/en/api/pricing"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >pro-api.coingecko.com</a
+                                >). 500 req/min.
+                            {:else}
+                                Get a free demo key at <a
+                                    href="https://www.coingecko.com/en/api"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >coingecko.com</a
+                                >. Required for crypto rates. Fiat rates work
+                                without a key.
+                            {/if}
                         </p>
                     </div>
                     <div class="space-y-2">

@@ -112,6 +112,7 @@
           settings.cryptoCompareApiKey,
           settings.settings.dpriceMode,
           settings.settings.dpriceUrl,
+          settings.settings.coingeckoPro,
         );
         await loadRateSources();
         if (res.success) {
@@ -139,6 +140,7 @@
           settings.cryptoCompareApiKey,
           settings.settings.dpriceMode,
           settings.settings.dpriceUrl,
+          settings.settings.coingeckoPro,
         );
 
         settings.update({
