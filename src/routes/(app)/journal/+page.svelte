@@ -48,9 +48,10 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
-    import { Input } from "$lib/components/ui/input/index.js";
-    import { serializeTags, normalizeTag } from "$lib/utils/tags.js";
-    import { normalizeLink } from "$lib/utils/links.js";
+    import * as ButtonGroup from "$lib/components/ui/button-group/index.js";
+    import { serializeTags } from "$lib/utils/tags.js";
+    import TagInput from "$lib/components/TagInput.svelte";
+    import LinkInput from "$lib/components/LinkInput.svelte";
     import Download from "lucide-svelte/icons/download";
     import X from "lucide-svelte/icons/x";
     import Tag from "lucide-svelte/icons/tag";
@@ -386,14 +387,18 @@
     let batchVoiding = $state(false);
 
     let batchTagOpen = $state(false);
-    let batchTagValue = $state("");
+    let batchTags = $state<string[]>([]);
     let batchTagMode = $state<"add" | "remove">("add");
     let batchTagBusy = $state(false);
 
     let batchLinkOpen = $state(false);
-    let batchLinkValue = $state("");
+    let batchLinks = $state<string[]>([]);
     let batchLinkMode = $state<"add" | "remove">("add");
     let batchLinkBusy = $state(false);
+
+    // Reset batch arrays when popovers close
+    $effect(() => { if (!batchTagOpen) batchTags = []; });
+    $effect(() => { if (!batchLinkOpen) batchLinks = []; });
 
     async function handleBatchVoid() {
         batchVoiding = true;
@@ -430,8 +435,7 @@
     }
 
     async function handleBatchTag() {
-        const tag = normalizeTag(batchTagValue);
-        if (!tag) return;
+        if (batchTags.length === 0) return;
         batchTagBusy = true;
         try {
             const selectedRows = table.getFilteredSelectedRowModel().rows;
@@ -440,30 +444,33 @@
             let changed = 0;
             for (const id of ids) {
                 const meta = await backend.getMetadata(id);
-                const tags = parseTags(meta[TAGS_META_KEY]);
-                const has = tags.some((t) => t === tag);
-                if (batchTagMode === "add" && !has) {
-                    tags.push(tag);
-                } else if (batchTagMode === "remove" && has) {
-                    const idx = tags.indexOf(tag);
-                    if (idx >= 0) tags.splice(idx, 1);
-                } else {
-                    continue;
+                const existing = parseTags(meta[TAGS_META_KEY]);
+                let modified = false;
+                for (const tag of batchTags) {
+                    const has = existing.includes(tag);
+                    if (batchTagMode === "add" && !has) {
+                        existing.push(tag);
+                        modified = true;
+                    } else if (batchTagMode === "remove" && has) {
+                        const idx = existing.indexOf(tag);
+                        if (idx >= 0) { existing.splice(idx, 1); modified = true; }
+                    }
                 }
-                await backend.setMetadata(id, { [TAGS_META_KEY]: serializeTags(tags) });
-                changed++;
+                if (modified) {
+                    await backend.setMetadata(id, { [TAGS_META_KEY]: serializeTags(existing) });
+                    changed++;
+                }
             }
             await store.load();
             invalidate("journal");
-            // Refresh tag options
             backend.getAllTagValues().then((tags) => {
                 tagOptions = tags.map((t) => ({ value: t, label: t }));
             });
-            // Clear entryTags cache so visible rows refetch
             entryTags = new Map();
             const verb = batchTagMode === "add" ? "added to" : "removed from";
-            toast.success(`Tag "${tag}" ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`);
-            batchTagValue = "";
+            const label = batchTags.length === 1 ? `"${batchTags[0]}"` : `${batchTags.length} tags`;
+            toast.success(`${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`);
+            batchTags = [];
             batchTagOpen = false;
         } catch (err) {
             toast.error(String(err));
@@ -473,8 +480,7 @@
     }
 
     async function handleBatchLink() {
-        const link = normalizeLink(batchLinkValue);
-        if (!link) return;
+        if (batchLinks.length === 0) return;
         batchLinkBusy = true;
         try {
             const selectedRows = table.getFilteredSelectedRowModel().rows;
@@ -482,30 +488,33 @@
             const backend = getBackend();
             let changed = 0;
             for (const id of ids) {
-                const links = await backend.getEntryLinks(id);
-                const has = links.some((l) => l === link);
-                if (batchLinkMode === "add" && !has) {
-                    links.push(link);
-                } else if (batchLinkMode === "remove" && has) {
-                    const idx = links.indexOf(link);
-                    if (idx >= 0) links.splice(idx, 1);
-                } else {
-                    continue;
+                const existing = await backend.getEntryLinks(id);
+                let modified = false;
+                for (const link of batchLinks) {
+                    const has = existing.includes(link);
+                    if (batchLinkMode === "add" && !has) {
+                        existing.push(link);
+                        modified = true;
+                    } else if (batchLinkMode === "remove" && has) {
+                        const idx = existing.indexOf(link);
+                        if (idx >= 0) { existing.splice(idx, 1); modified = true; }
+                    }
                 }
-                await backend.setEntryLinks(id, links);
-                changed++;
+                if (modified) {
+                    await backend.setEntryLinks(id, existing);
+                    changed++;
+                }
             }
             await store.load();
             invalidate("journal");
-            // Refresh link options
             backend.getAllLinkNames().then((ls) => {
                 linkOptions = ls.map((l) => ({ value: l, label: l }));
             });
-            // Clear entryLinks cache so visible rows refetch
             entryLinks = new Map();
             const verb = batchLinkMode === "add" ? "added to" : "removed from";
-            toast.success(`Link "${link}" ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`);
-            batchLinkValue = "";
+            const label = batchLinks.length === 1 ? `"${batchLinks[0]}"` : `${batchLinks.length} links`;
+            toast.success(`${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`);
+            batchLinks = [];
             batchLinkOpen = false;
         } catch (err) {
             toast.error(String(err));
@@ -1205,41 +1214,32 @@
                             </Button>
                         {/snippet}
                     </Popover.Trigger>
-                    <Popover.Content side="top" class="w-64 p-3">
-                        <div class="space-y-2">
-                            <div class="flex gap-1">
+                    <Popover.Content side="top" class="w-72 p-3">
+                        <div class="space-y-3">
+                            <ButtonGroup.Root class="w-full">
                                 <Button
                                     variant={batchTagMode === "add" ? "default" : "outline"}
-                                    size="sm" class="h-7 text-xs flex-1"
+                                    size="sm" class="flex-1"
                                     onclick={() => { batchTagMode = "add"; }}
                                 >Add</Button>
                                 <Button
                                     variant={batchTagMode === "remove" ? "default" : "outline"}
-                                    size="sm" class="h-7 text-xs flex-1"
+                                    size="sm" class="flex-1"
                                     onclick={() => { batchTagMode = "remove"; }}
                                 >Remove</Button>
-                            </div>
-                            <div class="relative">
-                                <Input
-                                    placeholder="Tag name..."
-                                    bind:value={batchTagValue}
-                                    list="batch-tag-suggestions"
-                                    onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); handleBatchTag(); } }}
-                                    class="h-8 text-sm"
-                                />
-                                <datalist id="batch-tag-suggestions">
-                                    {#each tagOptions as opt}
-                                        <option value={opt.value}></option>
-                                    {/each}
-                                </datalist>
-                            </div>
+                            </ButtonGroup.Root>
+                            <TagInput
+                                tags={batchTags}
+                                onchange={(t) => { batchTags = t; }}
+                                suggestions={tagOptions.map((o) => o.value)}
+                            />
                             <Button
-                                size="sm" class="w-full h-7 text-xs"
-                                disabled={batchTagBusy || !batchTagValue.trim()}
+                                size="sm" class="w-full"
+                                disabled={batchTagBusy || batchTags.length === 0}
                                 onclick={handleBatchTag}
                             >
                                 {#if batchTagBusy}<Loader class="size-3 mr-1 animate-spin" />{/if}
-                                {batchTagMode === "add" ? "Add" : "Remove"} Tag
+                                {batchTagMode === "add" ? "Add" : "Remove"} {batchTags.length} tag{batchTags.length !== 1 ? "s" : ""}
                             </Button>
                         </div>
                     </Popover.Content>
@@ -1252,41 +1252,32 @@
                             </Button>
                         {/snippet}
                     </Popover.Trigger>
-                    <Popover.Content side="top" class="w-64 p-3">
-                        <div class="space-y-2">
-                            <div class="flex gap-1">
+                    <Popover.Content side="top" class="w-72 p-3">
+                        <div class="space-y-3">
+                            <ButtonGroup.Root class="w-full">
                                 <Button
                                     variant={batchLinkMode === "add" ? "default" : "outline"}
-                                    size="sm" class="h-7 text-xs flex-1"
+                                    size="sm" class="flex-1"
                                     onclick={() => { batchLinkMode = "add"; }}
                                 >Add</Button>
                                 <Button
                                     variant={batchLinkMode === "remove" ? "default" : "outline"}
-                                    size="sm" class="h-7 text-xs flex-1"
+                                    size="sm" class="flex-1"
                                     onclick={() => { batchLinkMode = "remove"; }}
                                 >Remove</Button>
-                            </div>
-                            <div class="relative">
-                                <Input
-                                    placeholder="Link name..."
-                                    bind:value={batchLinkValue}
-                                    list="batch-link-suggestions"
-                                    onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); handleBatchLink(); } }}
-                                    class="h-8 text-sm"
-                                />
-                                <datalist id="batch-link-suggestions">
-                                    {#each linkOptions as opt}
-                                        <option value={opt.value}></option>
-                                    {/each}
-                                </datalist>
-                            </div>
+                            </ButtonGroup.Root>
+                            <LinkInput
+                                links={batchLinks}
+                                onchange={(l) => { batchLinks = l; }}
+                                suggestions={linkOptions.map((o) => o.value)}
+                            />
                             <Button
-                                size="sm" class="w-full h-7 text-xs"
-                                disabled={batchLinkBusy || !batchLinkValue.trim()}
+                                size="sm" class="w-full"
+                                disabled={batchLinkBusy || batchLinks.length === 0}
                                 onclick={handleBatchLink}
                             >
                                 {#if batchLinkBusy}<Loader class="size-3 mr-1 animate-spin" />{/if}
-                                {batchLinkMode === "add" ? "Add" : "Remove"} Link
+                                {batchLinkMode === "add" ? "Add" : "Remove"} {batchLinks.length} link{batchLinks.length !== 1 ? "s" : ""}
                             </Button>
                         </div>
                     </Popover.Content>
