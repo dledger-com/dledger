@@ -51,6 +51,10 @@
     import X from "lucide-svelte/icons/x";
     import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
     import FacetedFilter from "$lib/components/FacetedFilter.svelte";
+    import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+    import { createSvelteTable } from "$lib/components/ui/data-table/data-table.svelte.js";
+    import { type ColumnDef, getCoreRowModel, type RowSelectionState, type VisibilityState } from "@tanstack/table-core";
+    import { invalidate } from "$lib/data/invalidation.js";
 
     const store = new JournalStore();
     const settings = new SettingsStore();
@@ -97,9 +101,18 @@
     let tagOptions = $state<{ value: string; label: string }[]>([]);
     const hasFacetedFilters = $derived(selectedAccounts.size > 0 || selectedTags.size > 0);
 
-    // Column visibility
-    let columnVisibility = $state({ date: true, description: true, amount: true });
-    const visibleColCount = $derived(Object.values(columnVisibility).filter(Boolean).length);
+    // TanStack Table state
+    type JournalRow = [JournalEntry, LineItem[]];
+
+    const columns: ColumnDef<JournalRow>[] = [
+        { id: "select", enableSorting: false, enableHiding: false },
+        { id: "date", header: "Date", enableHiding: true },
+        { id: "description", header: "Description", enableHiding: true },
+        { id: "amount", header: "Amount", enableHiding: true },
+    ];
+
+    let rowSelection = $state<RowSelectionState>({});
+    let columnVisibility = $state<VisibilityState>({});
 
     // Sync searchTerm back to URL so back button works
     $effect(() => {
@@ -325,6 +338,72 @@
             );
         return displayEntries;
     });
+
+    // TanStack Table instance
+    const table = createSvelteTable({
+        get data() { return sortedEntries; },
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+        getRowId: (row) => row[0].id,
+        state: {
+            get rowSelection() { return rowSelection; },
+            get columnVisibility() { return columnVisibility; },
+        },
+        onRowSelectionChange: (updater) => {
+            rowSelection = typeof updater === "function" ? updater(rowSelection) : updater;
+        },
+        onColumnVisibilityChange: (updater) => {
+            columnVisibility = typeof updater === "function" ? updater(columnVisibility) : updater;
+        },
+        enableRowSelection: (row) => row.original[0].status !== "voided",
+    });
+
+    const visibleColCount = $derived(table.getVisibleLeafColumns().length);
+    const selectedCount = $derived(table.getFilteredSelectedRowModel().rows.length);
+    function clearSelection() { rowSelection = {}; }
+
+    // Clear selection when filters/sort change
+    $effect(() => {
+        void searchTerm; void selectedAccounts; void selectedTags;
+        void sort.key; void sort.direction;
+        rowSelection = {};
+    });
+
+    let batchVoiding = $state(false);
+
+    async function handleBatchVoid() {
+        batchVoiding = true;
+        try {
+            const selectedRows = table.getFilteredSelectedRowModel().rows;
+            const ids = selectedRows
+                .map((r) => r.original[0])
+                .filter((e) => e.status !== "voided")
+                .map((e) => e.id);
+            let success = 0;
+            let failed = 0;
+            const backend = getBackend();
+            for (const id of ids) {
+                try {
+                    await backend.voidJournalEntry(id);
+                    success++;
+                } catch {
+                    failed++;
+                }
+            }
+            await store.load();
+            invalidate("journal", "reports");
+            if (failed === 0) {
+                toast.success(`${success} ${success === 1 ? "entry" : "entries"} voided`);
+            } else {
+                toast.warning(`${success} voided, ${failed} failed`);
+            }
+        } catch (err) {
+            toast.error(String(err));
+        } finally {
+            batchVoiding = false;
+            clearSelection();
+        }
+    }
 
     // Mobile layout detection for virtual row height
     let isMobileLayout = $state(false);
@@ -772,9 +851,12 @@
                 <DropdownMenu.Content align="end" class="w-[150px]">
                     <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Toggle columns</DropdownMenu.Item>
                     <DropdownMenu.Separator />
-                    <DropdownMenu.CheckboxItem bind:checked={columnVisibility.date}>Date</DropdownMenu.CheckboxItem>
-                    <DropdownMenu.CheckboxItem bind:checked={columnVisibility.description}>Description</DropdownMenu.CheckboxItem>
-                    <DropdownMenu.CheckboxItem bind:checked={columnVisibility.amount}>Amount</DropdownMenu.CheckboxItem>
+                    {#each table.getAllColumns().filter((col) => col.getCanHide()) as column}
+                        <DropdownMenu.CheckboxItem
+                            checked={column.getIsVisible()}
+                            onCheckedChange={(v) => column.toggleVisibility(!!v)}
+                        >{column.columnDef.header}</DropdownMenu.CheckboxItem>
+                    {/each}
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
@@ -842,34 +924,45 @@
                 >
                     <Table.Root class="table-fixed">
                         <Table.Header class="sticky top-0 z-10 bg-background">
+                            {#each table.getHeaderGroups() as headerGroup}
                             <Table.Row>
-                                {#if columnVisibility.date}
-                                <SortableHeader
-                                    active={sort.key === "date"}
-                                    direction={sort.direction}
-                                    onclick={() => sort.toggle("date")}
-                                    class="hidden sm:table-cell sm:w-28"
-                                    >Date</SortableHeader
-                                >
-                                {/if}
-                                {#if columnVisibility.description}
-                                <SortableHeader
-                                    active={sort.key === "description"}
-                                    direction={sort.direction}
-                                    onclick={() => sort.toggle("description")}
-                                    class="w-full"
-                                    >Description</SortableHeader
-                                >
-                                {/if}
-                                {#if columnVisibility.amount}
-                                <SortableHeader
-                                    active={sort.key === "amount"}
-                                    direction={sort.direction}
-                                    onclick={() => sort.toggle("amount")}
-                                    class="text-right hidden sm:table-cell sm:w-48">Amount</SortableHeader
-                                >
-                                {/if}
+                                {#each headerGroup.headers as header}
+                                    {#if header.column.id === "select"}
+                                        <Table.Head class="w-10 sm:w-12">
+                                            <Checkbox
+                                                checked={table.getIsAllPageRowsSelected()}
+                                                indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+                                                onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+                                                aria-label="Select all"
+                                            />
+                                        </Table.Head>
+                                    {:else if header.column.id === "date"}
+                                        <SortableHeader
+                                            active={sort.key === "date"}
+                                            direction={sort.direction}
+                                            onclick={() => sort.toggle("date")}
+                                            class="hidden sm:table-cell sm:w-28"
+                                            >Date</SortableHeader
+                                        >
+                                    {:else if header.column.id === "description"}
+                                        <SortableHeader
+                                            active={sort.key === "description"}
+                                            direction={sort.direction}
+                                            onclick={() => sort.toggle("description")}
+                                            class="w-full"
+                                            >Description</SortableHeader
+                                        >
+                                    {:else if header.column.id === "amount"}
+                                        <SortableHeader
+                                            active={sort.key === "amount"}
+                                            direction={sort.direction}
+                                            onclick={() => sort.toggle("amount")}
+                                            class="text-right hidden sm:table-cell sm:w-48">Amount</SortableHeader
+                                        >
+                                    {/if}
+                                {/each}
                             </Table.Row>
+                            {/each}
                         </Table.Header>
                         <Table.Body>
                             {#if paddingTop > 0}
@@ -881,54 +974,69 @@
                                     ></td></tr
                                 >
                             {/if}
-                            {#each virtualItems as row (row.key)}
-                                {@const [entry, items] =
-                                    sortedEntries[row.index]}
-                                <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
-                                    {#if columnVisibility.date}
-                                    <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm shrink-0 py-2 pr-2 sm:p-2"
-                                        >{entry.date}</Table.Cell
-                                    >
-                                    {/if}
-                                    {#if columnVisibility.description}
-                                    <Table.Cell class="order-3 w-full sm:w-auto whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
-                                        <div
-                                            class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
-                                        >
-                                            <a
-                                                href="/journal/{entry.id}"
-                                                class="font-medium hover:underline truncate"
-                                                title={entry.description}
-                                                >{entry.description}</a
+                            {@const rows = table.getRowModel().rows}
+                            {#each virtualItems as vItem (vItem.key)}
+                                {@const row = rows[vItem.index]}
+                                {#if row}
+                                {@const [entry, items] = row.original}
+                                <Table.Row
+                                    class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}"
+                                    data-state={row.getIsSelected() ? "selected" : undefined}
+                                >
+                                    {#each row.getVisibleCells() as cell}
+                                        {#if cell.column.id === "select"}
+                                            <Table.Cell class="order-0 py-2 px-2 sm:w-12">
+                                                <Checkbox
+                                                    checked={row.getIsSelected()}
+                                                    disabled={!row.getCanSelect()}
+                                                    onCheckedChange={(v) => row.toggleSelected(!!v)}
+                                                    aria-label="Select row"
+                                                />
+                                            </Table.Cell>
+                                        {:else if cell.column.id === "date"}
+                                            <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm shrink-0 py-2 pr-2 sm:p-2"
+                                                >{entry.date}</Table.Cell
                                             >
-                                            {#if entryTags.get(entry.id)?.length}
-                                                <TagDisplay
-                                                    tags={entryTags.get(
-                                                        entry.id,
-                                                    )!}
-                                                    class="shrink-0"
-                                                    onclick={addTagFilter}
-                                                />
-                                            {/if}
-                                            {#if entryLinks.get(entry.id)?.length}
-                                                <LinkDisplay
-                                                    links={entryLinks.get(
-                                                        entry.id,
-                                                    )!}
-                                                    class="shrink-0"
-                                                    onclick={addLinkFilter}
-                                                />
-                                            {/if}
-                                        </div>
-                                    </Table.Cell>
-                                    {/if}
-                                    {#if columnVisibility.amount}
-                                    <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2 overflow-hidden">
-                                        {convertedTotals.get(entry.id) ??
-                                            formatDebitTotal(items)}
-                                    </Table.Cell>
-                                    {/if}
+                                        {:else if cell.column.id === "description"}
+                                            <Table.Cell class="order-3 w-full sm:w-auto whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
+                                                <div
+                                                    class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
+                                                >
+                                                    <a
+                                                        href="/journal/{entry.id}"
+                                                        class="font-medium hover:underline truncate"
+                                                        title={entry.description}
+                                                        >{entry.description}</a
+                                                    >
+                                                    {#if entryTags.get(entry.id)?.length}
+                                                        <TagDisplay
+                                                            tags={entryTags.get(
+                                                                entry.id,
+                                                            )!}
+                                                            class="shrink-0"
+                                                            onclick={addTagFilter}
+                                                        />
+                                                    {/if}
+                                                    {#if entryLinks.get(entry.id)?.length}
+                                                        <LinkDisplay
+                                                            links={entryLinks.get(
+                                                                entry.id,
+                                                            )!}
+                                                            class="shrink-0"
+                                                            onclick={addLinkFilter}
+                                                        />
+                                                    {/if}
+                                                </div>
+                                            </Table.Cell>
+                                        {:else if cell.column.id === "amount"}
+                                            <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2 overflow-hidden">
+                                                {convertedTotals.get(entry.id) ??
+                                                    formatDebitTotal(items)}
+                                            </Table.Cell>
+                                        {/if}
+                                    {/each}
                                 </Table.Row>
+                                {/if}
                             {/each}
                             {#if paddingBottom > 0}
                                 <tr class="flex sm:table-row"
@@ -972,9 +1080,29 @@
             </div>
         </Card.Root>
 
+        {#if selectedCount > 0}
+            <div class="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-50
+                        flex items-center gap-3 rounded-lg border bg-background/95
+                        px-4 py-2.5 shadow-lg backdrop-blur-sm">
+                <span class="text-sm text-muted-foreground whitespace-nowrap">
+                    {selectedCount} {selectedCount === 1 ? "entry" : "entries"} selected
+                </span>
+                <div class="h-4 w-px bg-border"></div>
+                <Button variant="destructive" size="sm" disabled={batchVoiding}
+                    onclick={handleBatchVoid}>
+                    {#if batchVoiding}<Loader class="size-3.5 mr-1 animate-spin" />Voiding...{:else}Void Selected{/if}
+                </Button>
+                <Button variant="ghost" size="sm" onclick={clearSelection}>
+                    <X class="size-4" />
+                </Button>
+            </div>
+        {/if}
+
         <div class="flex items-center justify-between">
             <span class="text-sm text-muted-foreground">
-                {#if isScrolledDown}
+                {#if selectedCount > 0}
+                    {selectedCount} of {sortedEntries.length} row(s) selected
+                {:else if isScrolledDown}
                     {(virtualItems[0]?.index ?? 0) + 1}–{Math.min(
                         (virtualItems[virtualItems.length - 1]?.index ?? 0) + 1,
                         sortedEntries.length,
