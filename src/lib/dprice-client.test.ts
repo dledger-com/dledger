@@ -48,6 +48,7 @@ describe("dprice-client", () => {
       getRate: async () => null,
       getRates: async () => [],
       getPriceRange: async () => [],
+      getPriceRangeBatch: async () => ({ from: "", to: "", currencies: [] }),
       sync: async () => "ok",
       syncLatest: async () => "ok",
       latestDate: async () => null,

@@ -912,6 +912,14 @@ async function fetchBinanceHistorical(
 
 // ---- dprice historical (local price DB) ----
 
+/** Convert YYYYMMDD integer to "YYYY-MM-DD" string. */
+function dateIntToString(n: number): string {
+  const year = Math.floor(n / 10000);
+  const month = Math.floor((n % 10000) / 100);
+  const day = n % 100;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 async function fetchDpriceHistorical(
   backend: Backend,
   requests: HistoricalRateRequest[],
@@ -923,30 +931,66 @@ async function fetchDpriceHistorical(
   const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
+  // Collect all symbols and compute a global date range for the batch call
+  const allSymbols = new Set<string>();
+  let globalFrom = "9999-12-31";
+  let globalTo = "0000-01-01";
+
   for (const req of requests) {
-    const sortedDates = [...req.dates].sort();
-    if (sortedDates.length === 0) continue;
+    if (req.dates.length === 0) continue;
+    allSymbols.add(req.currency);
+    const sorted = [...req.dates].sort();
+    if (sorted[0] < globalFrom) globalFrom = sorted[0];
+    if (sorted[sorted.length - 1] > globalTo) globalTo = sorted[sorted.length - 1];
+  }
 
-    const fromDate = sortedDates[0];
-    const toDate = sortedDates[sortedDates.length - 1];
+  // Include base currency if non-USD (needed for cross-rates)
+  if (config.baseCurrency !== "USD") {
+    allSymbols.add(config.baseCurrency);
+  }
 
-    try {
-      // Fetch USD prices in bulk from dprice
-      const prices = await client.getPriceRange(req.currency, fromDate, toDate);
-      const dateMap = new Map(prices.map((p) => [p.date, p.price_usd]));
+  if (allSymbols.size === 0) {
+    for (const req of requests) {
+      for (const _d of req.dates) onDateDone();
+    }
+    return;
+  }
 
-      // If baseCurrency is not USD, also fetch baseCurrency USD price for cross-rate
-      let basePriceMap: Map<string, string> | null = null;
-      if (config.baseCurrency !== "USD") {
-        const basePrices = await client.getPriceRange(config.baseCurrency, fromDate, toDate);
-        basePriceMap = new Map(basePrices.map((p) => [p.date, p.price_usd]));
+  try {
+    // Single batch request for all symbols across the full date range
+    const batch = await client.getPriceRangeBatch([...allSymbols], globalFrom, globalTo);
+
+    // Build per-symbol lookup maps: date string → price_usd string
+    const priceMaps = new Map<string, Map<string, string>>();
+    for (const entry of batch.currencies) {
+      const dateMap = new Map<string, string>();
+      for (const [dateInt, priceUsd] of entry.prices) {
+        dateMap.set(dateIntToString(dateInt), priceUsd);
       }
+      priceMaps.set(entry.symbol.toUpperCase(), dateMap);
+    }
 
-      await ensureCurrency(backend, req.currency);
-      await ensureCurrency(backend, config.baseCurrency);
+    const basePriceMap = config.baseCurrency !== "USD"
+      ? priceMaps.get(config.baseCurrency.toUpperCase()) ?? new Map<string, string>()
+      : null;
+
+    // Ensure currencies exist in ledger
+    const currenciesToEnsure = new Set<string>();
+    for (const req of requests) currenciesToEnsure.add(req.currency);
+    currenciesToEnsure.add(config.baseCurrency);
+    for (const c of currenciesToEnsure) {
+      await ensureCurrency(backend, c);
+    }
+
+    // Process each request using pre-built maps
+    for (const req of requests) {
+      const sortedDates = [...req.dates].sort();
+      if (sortedDates.length === 0) continue;
+
+      const dateMap = priceMaps.get(req.currency.toUpperCase());
 
       for (const date of sortedDates) {
-        const usdPrice = dateMap.get(date);
+        const usdPrice = dateMap?.get(date);
         if (usdPrice == null) {
           result.skipped++;
           onDateDone();
@@ -956,7 +1000,6 @@ async function fetchDpriceHistorical(
         let finalRate: string;
         let toCurrency: string;
         if (basePriceMap) {
-          // Cross-rate: asset_USD / base_USD
           const baseUsd = basePriceMap.get(date);
           if (baseUsd == null || parseFloat(baseUsd) === 0) {
             result.skipped++;
@@ -982,8 +1025,10 @@ async function fetchDpriceHistorical(
         result.fetched++;
         onDateDone();
       }
-    } catch (err) {
-      result.errors.push(`dprice ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } catch (err) {
+    result.errors.push(`dprice batch: ${err instanceof Error ? err.message : String(err)}`);
+    for (const req of requests) {
       for (const _d of req.dates) onDateDone();
     }
   }

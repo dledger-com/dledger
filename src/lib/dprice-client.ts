@@ -16,6 +16,17 @@ export interface DpricePriceEntry {
   price_usd: string;
 }
 
+export interface DpriceBatchCurrency {
+  symbol: string;
+  prices: [number, string][]; // [YYYYMMDD, price_usd]
+}
+
+export interface DpriceBatchResult {
+  from: string;
+  to: string;
+  currencies: DpriceBatchCurrency[];
+}
+
 export interface DpriceClient {
   health(): Promise<DpriceHealthResponse>;
   getRate(
@@ -35,6 +46,11 @@ export interface DpriceClient {
     toDate: string,
     opts?: { type?: DpriceAssetType; param?: string },
   ): Promise<DpricePriceEntry[]>;
+  getPriceRangeBatch(
+    symbols: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<DpriceBatchResult>;
   sync(): Promise<string>;
   syncLatest(): Promise<string>;
   latestDate(): Promise<string | null>;
@@ -97,6 +113,18 @@ class TauriDpriceClient implements DpriceClient {
       toDate,
       assetType: opts?.type,
       param: opts?.param,
+    });
+  }
+
+  async getPriceRangeBatch(
+    symbols: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<DpriceBatchResult> {
+    return this.invoke("dprice_get_price_ranges_batch", {
+      symbols,
+      fromDate,
+      toDate,
     });
   }
 
@@ -205,6 +233,19 @@ class HttpDpriceClient implements DpriceClient {
     return (json.data.priceHistory.points as Array<{ date: string; priceUsd: string }>).map(
       (p) => ({ date: p.date, price_usd: p.priceUsd }),
     );
+  }
+
+  async getPriceRangeBatch(
+    symbols: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<DpriceBatchResult> {
+    const params = new URLSearchParams({
+      symbols: symbols.join(","),
+      from: fromDate,
+      to: toDate,
+    });
+    return this.fetchJson(`/api/v1/prices/batch?${params}`);
   }
 
   async sync(): Promise<string> {

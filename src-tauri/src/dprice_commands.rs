@@ -139,6 +139,52 @@ pub async fn dprice_get_price_range(
     .map_err(|e| format!("task join error: {e}"))?
 }
 
+#[derive(Serialize)]
+pub struct DpriceBatchCurrencyPrices {
+    pub symbol: String,
+    pub prices: Vec<(i32, String)>, // (YYYYMMDD, price_usd)
+}
+
+#[derive(Serialize)]
+pub struct DpriceBatchResult {
+    pub from: String,
+    pub to: String,
+    pub currencies: Vec<DpriceBatchCurrencyPrices>,
+}
+
+#[tauri::command]
+pub async fn dprice_get_price_ranges_batch(
+    state: State<'_, DpriceState>,
+    symbols: Vec<String>,
+    from_date: String,
+    to_date: String,
+) -> Result<DpriceBatchResult, String> {
+    let db_path = state.active_db_path();
+    let from_clone = from_date.clone();
+    let to_clone = to_date.clone();
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
+        let symbol_refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
+        let batch = db
+            .get_price_ranges_batch(&symbol_refs, &from_clone, &to_clone)
+            .map_err(|e| e.to_string())?;
+        let currencies: Vec<DpriceBatchCurrencyPrices> = batch
+            .into_iter()
+            .map(|(symbol, prices)| DpriceBatchCurrencyPrices {
+                symbol,
+                prices: prices.into_iter().map(|(d, p)| (d, p.to_string())).collect(),
+            })
+            .collect();
+        Ok(DpriceBatchResult {
+            from: from_date,
+            to: to_date,
+            currencies,
+        })
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
 #[tauri::command]
 pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String, String> {
     // Guard: prevent concurrent syncs
@@ -542,6 +588,39 @@ mod tests {
             syncing: AtomicBool::new(false),
         };
         assert_eq!(state.active_db_path(), local);
+    }
+
+    #[test]
+    fn test_dprice_get_price_ranges_batch() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        {
+            let db = PriceDb::open(&db_path).unwrap();
+            use dprice::db::models::{Asset, DailyPrice};
+            use chrono::NaiveDate;
+            db.upsert_asset(&Asset::new_crypto("btc", "BTC", "Bitcoin", Some("BTC"))).unwrap();
+            db.upsert_asset(&Asset::new_fiat("eur", "EUR", "Euro")).unwrap();
+            db.upsert_prices_batch(&[
+                DailyPrice {
+                    asset_id: "btc".into(), date: NaiveDate::from_ymd_opt(2024, 1, 26).unwrap(),
+                    close_usd: 42150.0, open_usd: None, high_usd: None, low_usd: None, volume_usd: None, source: "test".into(),
+                },
+                DailyPrice {
+                    asset_id: "eur".into(), date: NaiveDate::from_ymd_opt(2024, 1, 26).unwrap(),
+                    close_usd: 1.085, open_usd: None, high_usd: None, low_usd: None, volume_usd: None, source: "test".into(),
+                },
+            ]).unwrap();
+        }
+
+        let db = PriceDb::open_readonly(&db_path).unwrap();
+        let symbols = vec!["BTC", "EUR"];
+        let symbol_refs: Vec<&str> = symbols.iter().copied().collect();
+        let batch = db.get_price_ranges_batch(&symbol_refs, "2024-01-01", "2024-12-31").unwrap();
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch["BTC"].len(), 1);
+        assert_eq!(batch["BTC"][0].0, 20240126);
+        assert!((batch["BTC"][0].1 - 42150.0).abs() < 0.01);
+        assert_eq!(batch["EUR"].len(), 1);
     }
 
     #[test]
