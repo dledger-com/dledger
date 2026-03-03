@@ -366,6 +366,22 @@ describe("SqlJsBackend", () => {
       expect(count).toBe(1);
     });
 
+    it("filters by link_filters_or (OR logic)", async () => {
+      const { backend: b } = await seedBasicLedger();
+      const allEntries = await b.queryJournalEntries({});
+      await b.setEntryLinks(allEntries[0][0].id, ["alpha"]);
+      await b.setEntryLinks(allEntries[1][0].id, ["beta"]);
+
+      const either = await b.queryJournalEntries({ link_filters_or: ["alpha", "beta"] });
+      expect(either).toHaveLength(2);
+
+      const one = await b.queryJournalEntries({ link_filters_or: ["alpha"] });
+      expect(one).toHaveLength(1);
+
+      const count = await b.countJournalEntries({ link_filters_or: ["alpha", "beta"] });
+      expect(count).toBe(2);
+    });
+
     it("combines tag_filters and link_filters", async () => {
       const { backend: b } = await seedBasicLedger();
       const allEntries = await b.queryJournalEntries({});

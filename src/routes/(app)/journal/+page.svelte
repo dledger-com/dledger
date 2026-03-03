@@ -111,10 +111,11 @@
     // Faceted filters
     let selectedAccounts = $state<Set<string>>(new Set());
     let selectedTags = $state<Set<string>>(new Set());
+    let selectedLinks = $state<Set<string>>(new Set());
     let accountOptions = $state<{ value: string; label: string }[]>([]);
     let tagOptions = $state<{ value: string; label: string }[]>([]);
     let linkOptions = $state<{ value: string; label: string }[]>([]);
-    const hasFacetedFilters = $derived(selectedAccounts.size > 0 || selectedTags.size > 0);
+    const hasFacetedFilters = $derived(selectedAccounts.size > 0 || selectedTags.size > 0 || selectedLinks.size > 0);
 
     // TanStack Table state
     type JournalRow = [JournalEntry, LineItem[]];
@@ -230,6 +231,7 @@
         const orderDir = sort.direction;
         const accountFilter = selectedAccounts;
         const tagFilter = selectedTags;
+        const linkFilter = selectedLinks;
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             const filter: TransactionFilter = {};
@@ -250,6 +252,7 @@
             // Faceted filters
             if (accountFilter.size > 0) filter.account_ids = [...accountFilter];
             if (tagFilter.size > 0) filter.tag_filters_or = [...tagFilter];
+            if (linkFilter.size > 0) filter.link_filters_or = [...linkFilter];
 
             store.load(filter).then(() => {
                 virtualizer.scrollToOffset(0);
@@ -379,7 +382,7 @@
 
     // Clear selection when filters/sort change
     $effect(() => {
-        void searchTerm; void selectedAccounts; void selectedTags;
+        void searchTerm; void selectedAccounts; void selectedTags; void selectedLinks;
         void sort.key; void sort.direction;
         rowSelection = {};
     });
@@ -999,6 +1002,11 @@
             options={tagOptions}
             bind:selected={selectedTags}
         />
+        <FacetedFilter
+            title="Links"
+            options={linkOptions}
+            bind:selected={selectedLinks}
+        />
         {#if hasFacetedFilters}
             <Button
                 variant="ghost"
@@ -1007,6 +1015,7 @@
                 onclick={() => {
                     selectedAccounts = new Set();
                     selectedTags = new Set();
+                    selectedLinks = new Set();
                 }}
             >
                 Reset
@@ -1076,6 +1085,7 @@
                             searchTerm = "";
                             selectedAccounts = new Set();
                             selectedTags = new Set();
+                            selectedLinks = new Set();
                         }}>Clear all filters</Button
                     >
                 </div>

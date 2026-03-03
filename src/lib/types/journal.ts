@@ -33,6 +33,7 @@ export interface TransactionFilter {
   tag_filters?: string[];
   tag_filters_or?: string[];
   link_filters?: string[];
+  link_filters_or?: string[];
   limit?: number;
   offset?: number;
   order_by?: "date" | "description" | "status";

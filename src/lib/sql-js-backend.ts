@@ -1983,6 +1983,15 @@ PRAGMA foreign_keys = ON;
         params.push(link.toLowerCase());
       }
     }
+    if (filter.link_filters_or && filter.link_filters_or.length > 0) {
+      const orParts = filter.link_filters_or.map(() => "link_name = ?");
+      conditions.push(
+        `je.id IN (SELECT journal_entry_id FROM entry_link WHERE ${orParts.join(" OR ")})`,
+      );
+      for (const link of filter.link_filters_or) {
+        params.push(link.toLowerCase());
+      }
+    }
     if (conditions.length > 0) {
       sql += " WHERE " + conditions.join(" AND ");
     }
@@ -2095,6 +2104,15 @@ PRAGMA foreign_keys = ON;
         conditions.push(
           "je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)",
         );
+        params.push(link.toLowerCase());
+      }
+    }
+    if (filter.link_filters_or && filter.link_filters_or.length > 0) {
+      const orParts = filter.link_filters_or.map(() => "link_name = ?");
+      conditions.push(
+        `je.id IN (SELECT journal_entry_id FROM entry_link WHERE ${orParts.join(" OR ")})`,
+      );
+      for (const link of filter.link_filters_or) {
         params.push(link.toLowerCase());
       }
     }
