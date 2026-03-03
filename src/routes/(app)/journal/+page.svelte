@@ -76,7 +76,7 @@
         const backend = getBackend();
         backend.listAccounts().then((accounts) => {
             accountOptions = accounts
-                .filter((a: Account) => a.is_postable && !a.is_archived)
+                .filter((a: Account) => !a.is_archived)
                 .map((a: Account) => ({ value: a.id, label: a.full_name }))
                 .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label));
         });

@@ -393,6 +393,7 @@ impl Storage for SqliteStorage {
         let mut param_values: Vec<String> = Vec::new();
 
         // account_ids takes precedence over account_id when both set
+        // Use account_closure to include sub-account transactions
         if filter.account_ids.as_ref().map_or(false, |ids| !ids.is_empty()) {
             sql.push_str(" JOIN line_item li ON li.journal_entry_id = je.id");
             let ids = filter.account_ids.as_ref().unwrap();
@@ -400,12 +401,12 @@ impl Storage for SqliteStorage {
                 param_values.push(id.to_string());
                 format!("?{}", param_values.len())
             }).collect();
-            conditions.push(format!("li.account_id IN ({})", placeholders.join(", ")));
+            conditions.push(format!("li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id IN ({}))", placeholders.join(", ")));
         } else if filter.account_id.is_some() {
             sql.push_str(" JOIN line_item li ON li.journal_entry_id = je.id");
             let account_id = filter.account_id.as_ref().unwrap();
             param_values.push(account_id.to_string());
-            conditions.push(format!("li.account_id = ?{}", param_values.len()));
+            conditions.push(format!("li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id = ?{})", param_values.len()));
         }
 
         if let Some(ref from_date) = filter.from_date {
@@ -1904,16 +1905,17 @@ impl Storage for SqliteStorage {
         let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
         // account_ids takes precedence over account_id when both set
+        // Use account_closure to include sub-account transactions
         if let Some(ref ids) = filter.account_ids {
             if !ids.is_empty() {
                 let placeholders: Vec<&str> = ids.iter().map(|_| "?").collect();
-                conditions.push(format!("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id IN ({}))", placeholders.join(", ")));
+                conditions.push(format!("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id IN ({})))", placeholders.join(", ")));
                 for id in ids {
                     param_values.push(Box::new(id.to_string()));
                 }
             }
         } else if let Some(ref account_id) = filter.account_id {
-            conditions.push("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id = ?)".to_string());
+            conditions.push("je.id IN (SELECT journal_entry_id FROM line_item WHERE account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id = ?))".to_string());
             param_values.push(Box::new(account_id.to_string()));
         }
         if let Some(ref from_date) = filter.from_date {

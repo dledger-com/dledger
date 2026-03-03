@@ -1925,14 +1925,15 @@ PRAGMA foreign_keys = ON;
     const params: unknown[] = [];
 
     // account_ids takes precedence over account_id when both set
+    // Use account_closure to include sub-account transactions
     if (filter.account_ids && filter.account_ids.length > 0) {
       sql += " JOIN line_item li ON li.journal_entry_id = je.id";
       const placeholders = filter.account_ids.map(() => "?").join(", ");
-      conditions.push(`li.account_id IN (${placeholders})`);
+      conditions.push(`li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id IN (${placeholders}))`);
       params.push(...filter.account_ids);
     } else if (filter.account_id) {
       sql += " JOIN line_item li ON li.journal_entry_id = je.id";
-      conditions.push("li.account_id = ?");
+      conditions.push("li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id = ?)");
       params.push(filter.account_id);
     }
     if (filter.from_date) {
@@ -2039,14 +2040,15 @@ PRAGMA foreign_keys = ON;
     const params: unknown[] = [];
 
     // account_ids takes precedence over account_id when both set
+    // Use account_closure to include sub-account transactions
     if (filter.account_ids && filter.account_ids.length > 0) {
       sql += " JOIN line_item li ON li.journal_entry_id = je.id";
       const placeholders = filter.account_ids.map(() => "?").join(", ");
-      conditions.push(`li.account_id IN (${placeholders})`);
+      conditions.push(`li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id IN (${placeholders}))`);
       params.push(...filter.account_ids);
     } else if (filter.account_id) {
       sql += " JOIN line_item li ON li.journal_entry_id = je.id";
-      conditions.push("li.account_id = ?");
+      conditions.push("li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id = ?)");
       params.push(filter.account_id);
     }
     if (filter.from_date) {
