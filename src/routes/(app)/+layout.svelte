@@ -15,15 +15,15 @@
     <AppSidebar />
     <Sidebar.Inset>
       <TopBar showSidebarTrigger={true} />
-      <main class="flex-1 overflow-auto p-4">
+      <main class="flex-1 flex flex-col overflow-auto p-4">
         {@render children?.()}
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
 {:else}
-  <div class="flex min-h-screen flex-col">
+  <div class="flex h-screen flex-col">
     <TopBar showSidebarTrigger={false} />
-    <main class="flex-1 overflow-auto p-4 pb-20">
+    <main class="flex-1 flex flex-col overflow-auto p-4 pb-20">
       {@render children?.()}
     </main>
     <BottomTabBar />

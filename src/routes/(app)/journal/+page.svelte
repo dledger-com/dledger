@@ -793,7 +793,7 @@
     }
 </script>
 
-<div class="space-y-6">
+<div class="flex flex-col gap-6 flex-1 min-h-0">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="shrink-0">
             <h1 class="text-2xl font-bold tracking-tight">Journal</h1>
@@ -1034,11 +1034,11 @@
             </Card.Content>
         </Card.Root>
     {:else}
-        <Card.Root class="border-x-0 rounded-none shadow-none py-0">
-            <div class="relative">
+        <Card.Root class="border-x-0 rounded-none shadow-none py-0 flex-1 min-h-0 flex flex-col">
+            <div class="relative flex-1 min-h-0 flex flex-col">
                 <div
                     bind:this={scrollEl}
-                    class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible"
+                    class="overflow-y-auto flex-1 min-h-0 [&_[data-slot=table-container]]:overflow-visible"
                 >
                     <Table.Root class="table-fixed">
                         <Table.Header class="sticky top-0 z-10 bg-background">
