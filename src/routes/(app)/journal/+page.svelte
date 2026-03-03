@@ -754,27 +754,28 @@
                     bind:this={scrollEl}
                     class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible"
                 >
-                    <Table.Root>
+                    <Table.Root class="table-fixed">
                         <Table.Header class="sticky top-0 z-10 bg-background">
                             <Table.Row>
                                 <SortableHeader
                                     active={sort.key === "date"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("date")}
-                                    class="w-0 hidden sm:table-cell"
+                                    class="hidden sm:table-cell sm:w-28"
                                     >Date</SortableHeader
                                 >
                                 <SortableHeader
                                     active={sort.key === "description"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("description")}
+                                    class="w-full"
                                     >Description</SortableHeader
                                 >
                                 <SortableHeader
                                     active={sort.key === "amount"}
                                     direction={sort.direction}
                                     onclick={() => sort.toggle("amount")}
-                                    class="text-right hidden sm:table-cell">Amount</SortableHeader
+                                    class="text-right hidden sm:table-cell sm:w-48">Amount</SortableHeader
                                 >
                             </Table.Row>
                         </Table.Header>
@@ -792,10 +793,10 @@
                                 {@const [entry, items] =
                                     sortedEntries[row.index]}
                                 <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
-                                    <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm w-auto shrink-0 py-2 pr-2 sm:p-2"
+                                    <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm shrink-0 py-2 pr-2 sm:p-2"
                                         >{entry.date}</Table.Cell
                                     >
-                                    <Table.Cell class="order-3 w-full sm:w-auto sm:max-w-[300px] whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
+                                    <Table.Cell class="order-3 w-full sm:w-auto whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
                                         <div
                                             class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
                                         >
@@ -825,7 +826,7 @@
                                             {/if}
                                         </div>
                                     </Table.Cell>
-                                    <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2">
+                                    <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2 overflow-hidden">
                                         {convertedTotals.get(entry.id) ??
                                             formatDebitTotal(items)}
                                     </Table.Cell>
