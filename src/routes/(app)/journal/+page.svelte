@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onDestroy } from "svelte";
     import { page } from "$app/state";
-    import { replaceState } from "$app/navigation";
+    import { goto, replaceState } from "$app/navigation";
     import * as Card from "$lib/components/ui/card/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -533,15 +533,72 @@
         return () => mq.removeEventListener("change", handler);
     });
 
+    let multiSelectMode = $state(false);
+
+    // Exit multi-select when all rows deselected
+    $effect(() => { if (selectedCount === 0 && multiSelectMode) multiSelectMode = false; });
+    // Exit multi-select when switching to desktop
+    $effect(() => { if (!isMobileLayout) multiSelectMode = false; });
+
+    function createLongPressHandlers(entryId: string, row: ReturnType<typeof table.getRowModel>["rows"][number]) {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let startX = 0;
+        let startY = 0;
+        let fired = false;
+
+        return {
+            onpointerdown(e: PointerEvent) {
+                if (!isMobileLayout) return;
+                startX = e.clientX;
+                startY = e.clientY;
+                fired = false;
+                timer = setTimeout(() => {
+                    fired = true;
+                    multiSelectMode = true;
+                    if (!row.getIsSelected()) row.toggleSelected(true);
+                    navigator.vibrate?.(50);
+                }, 500);
+            },
+            onpointermove(e: PointerEvent) {
+                if (!timer) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                if (dx * dx + dy * dy > 100) { // >10px movement
+                    clearTimeout(timer);
+                    timer = null;
+                }
+            },
+            onpointerup() {
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                if (fired) return; // long-press already handled
+                if (!isMobileLayout) return;
+                if (multiSelectMode) {
+                    row.toggleSelected(!row.getIsSelected());
+                } else {
+                    goto(`/journal/${entryId}`);
+                }
+            },
+            onpointercancel() {
+                if (timer) { clearTimeout(timer); timer = null; }
+            },
+        };
+    }
+
     // Virtual scrolling
     let scrollEl = $state<HTMLDivElement | null>(null);
 
     const virtualizer = createVirtualizer(() => ({
         count: sortedEntries.length,
         getScrollElement: () => scrollEl,
-        estimateSize: () => isMobileLayout ? 64 : 44,
+        estimateSize: () => isMobileLayout ? 56 : 44,
         overscan: 10,
     }));
+
+    // Remeasure when multiSelectMode toggles (checkbox column changes row width)
+    $effect(() => { void multiSelectMode; virtualizer.measure(); });
 
     const virtualItems = $derived(
         virtualizer
@@ -1040,13 +1097,34 @@
                     bind:this={scrollEl}
                     class="overflow-y-auto flex-1 min-h-0 [&_[data-slot=table-container]]:overflow-visible"
                 >
-                    <Table.Root class="table-fixed">
+                    <Table.Root>
                         <Table.Header class="sticky top-0 z-10 bg-background">
+                            {#if isMobileLayout}
+                            <Table.Row>
+                                {#if multiSelectMode}
+                                    <Table.Head class="w-10">
+                                        <Checkbox
+                                            checked={table.getIsAllPageRowsSelected()}
+                                            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+                                            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+                                            aria-label="Select all"
+                                        />
+                                    </Table.Head>
+                                {/if}
+                                <SortableHeader
+                                    active={sort.key === "description"}
+                                    direction={sort.direction}
+                                    onclick={() => sort.toggle("description")}
+                                    colspan={multiSelectMode ? undefined : visibleColCount}
+                                    >Description</SortableHeader
+                                >
+                            </Table.Row>
+                            {:else}
                             {#each table.getHeaderGroups() as headerGroup}
                             <Table.Row>
                                 {#each headerGroup.headers as header}
                                     {#if header.column.id === "select"}
-                                        <Table.Head class="w-10 sm:w-12">
+                                        <Table.Head class="w-12">
                                             <Checkbox
                                                 checked={table.getIsAllPageRowsSelected()}
                                                 indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
@@ -1059,7 +1137,7 @@
                                             active={sort.key === "date"}
                                             direction={sort.direction}
                                             onclick={() => sort.toggle("date")}
-                                            class="hidden sm:table-cell sm:w-28"
+                                            class="w-28"
                                             >Date</SortableHeader
                                         >
                                     {:else if header.column.id === "description"}
@@ -1075,18 +1153,18 @@
                                             active={sort.key === "amount"}
                                             direction={sort.direction}
                                             onclick={() => sort.toggle("amount")}
-                                            class="text-right hidden sm:table-cell sm:w-48">Amount</SortableHeader
+                                            class="text-right">Amount</SortableHeader
                                         >
                                     {/if}
                                 {/each}
                             </Table.Row>
                             {/each}
+                            {/if}
                         </Table.Header>
                         <Table.Body>
                             {#if paddingTop > 0}
-                                <tr class="flex sm:table-row"
+                                <tr
                                     ><td
-                                        class="w-full"
                                         style="height: {paddingTop}px;"
                                         colspan={visibleColCount}
                                     ></td></tr
@@ -1097,13 +1175,73 @@
                                 {@const row = rows[vItem.index]}
                                 {#if row}
                                 {@const [entry, items] = row.original}
+                                {#if isMobileLayout}
+                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                {@const handlers = createLongPressHandlers(entry.id, row)}
+                                <tr
+                                    class="border-b touch-manipulation select-none {entry.status === 'voided' ? 'line-through opacity-50' : ''} {row.getIsSelected() ? 'bg-muted' : ''}"
+                                    data-state={row.getIsSelected() ? "selected" : undefined}
+                                    onpointerdown={handlers.onpointerdown}
+                                    onpointermove={handlers.onpointermove}
+                                    onpointerup={handlers.onpointerup}
+                                    onpointercancel={handlers.onpointercancel}
+                                    oncontextmenu={(e) => e.preventDefault()}
+                                >
+                                    {#if multiSelectMode}
+                                    <td class="w-10 p-2 align-middle">
+                                        <Checkbox
+                                            checked={row.getIsSelected()}
+                                            disabled={!row.getCanSelect()}
+                                            onCheckedChange={(v) => row.toggleSelected(!!v)}
+                                            aria-label="Select row"
+                                        />
+                                    </td>
+                                    {/if}
+                                    <td class="p-2 align-middle" colspan={multiSelectMode ? undefined : visibleColCount}>
+                                        <div class="flex justify-between items-baseline gap-2">
+                                            <span class="text-muted-foreground text-xs">{entry.date}</span>
+                                            <span class="font-mono text-sm text-right shrink-0">
+                                                {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
+                                            </span>
+                                        </div>
+                                        <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5">
+                                            <span
+                                                class="font-medium truncate"
+                                                title={entry.description}
+                                            >{entry.description}</span>
+                                            {#if entryLinks.get(entry.id)?.length}
+                                                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                <span onclick={(e) => e.stopPropagation()}>
+                                                    <LinkDisplay
+                                                        links={entryLinks.get(entry.id)!}
+                                                        class="shrink-0"
+                                                        onclick={addLinkFilter}
+                                                    />
+                                                </span>
+                                            {/if}
+                                            {#if entryTags.get(entry.id)?.length}
+                                                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                <span onclick={(e) => e.stopPropagation()}>
+                                                    <TagDisplay
+                                                        tags={entryTags.get(entry.id)!}
+                                                        class="shrink-0"
+                                                        onclick={addTagFilter}
+                                                    />
+                                                </span>
+                                            {/if}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {:else}
                                 <Table.Row
-                                    class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}"
+                                    class={entry.status === 'voided' ? 'line-through opacity-50' : ''}
                                     data-state={row.getIsSelected() ? "selected" : undefined}
                                 >
                                     {#each row.getVisibleCells() as cell}
                                         {#if cell.column.id === "select"}
-                                            <Table.Cell class="order-0 py-2 px-2 sm:w-12">
+                                            <Table.Cell class="py-2 px-2 w-12">
                                                 <Checkbox
                                                     checked={row.getIsSelected()}
                                                     disabled={!row.getCanSelect()}
@@ -1112,11 +1250,11 @@
                                                 />
                                             </Table.Cell>
                                         {:else if cell.column.id === "date"}
-                                            <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm shrink-0 py-2 pr-2 sm:p-2"
+                                            <Table.Cell class="text-muted-foreground text-sm p-2"
                                                 >{entry.date}</Table.Cell
                                             >
                                         {:else if cell.column.id === "description"}
-                                            <Table.Cell class="order-3 w-full sm:w-auto whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
+                                            <Table.Cell class="p-2">
                                                 <div
                                                     class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
                                                 >
@@ -1147,7 +1285,7 @@
                                                 </div>
                                             </Table.Cell>
                                         {:else if cell.column.id === "amount"}
-                                            <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2 overflow-hidden">
+                                            <Table.Cell class="text-right font-mono p-2">
                                                 {convertedTotals.get(entry.id) ??
                                                     formatDebitTotal(items)}
                                             </Table.Cell>
@@ -1155,11 +1293,11 @@
                                     {/each}
                                 </Table.Row>
                                 {/if}
+                                {/if}
                             {/each}
                             {#if paddingBottom > 0}
-                                <tr class="flex sm:table-row"
+                                <tr
                                     ><td
-                                        class="w-full"
                                         style="height: {paddingBottom}px;"
                                         colspan={visibleColCount}
                                     ></td></tr
