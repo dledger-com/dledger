@@ -10,7 +10,6 @@
   import Settings from "lucide-svelte/icons/settings";
   import PiggyBank from "lucide-svelte/icons/piggy-bank";
   import Coins from "lucide-svelte/icons/coins";
-  import Link2 from "lucide-svelte/icons/link-2";
 
   const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
 
@@ -18,7 +17,6 @@
     { title: "Dashboard", href: "/", icon: LayoutDashboard },
     { title: "Accounts", href: "/accounts", icon: BookOpen },
     { title: "Journal", href: "/journal", icon: FileText },
-    { title: "Links", href: "/links", icon: Link2 },
     { title: "Reports", href: "/reports", icon: BarChart3 },
     { title: "Budgets", href: "/budgets", icon: PiggyBank },
     { title: "Currencies", href: "/currencies", icon: Coins },

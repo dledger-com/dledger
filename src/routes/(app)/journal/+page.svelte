@@ -1,5 +1,7 @@
 <script lang="ts">
     import { onDestroy } from "svelte";
+    import { page } from "$app/state";
+    import { replaceState } from "$app/navigation";
     import * as Card from "$lib/components/ui/card/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -64,8 +66,21 @@
 
     let exporting = $state(false);
     let detectingDuplicates = $state(false);
-    let searchTerm = $state("");
+    let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
     let showDuplicates = $state(false);
+
+    // Sync searchTerm back to URL so back button works
+    $effect(() => {
+        const url = new URL(page.url);
+        if (searchTerm) {
+            url.searchParams.set("q", searchTerm);
+        } else {
+            url.searchParams.delete("q");
+        }
+        if (url.toString() !== page.url.toString()) {
+            replaceState(url, {});
+        }
+    });
 
     // Parse comma-separated OR groups, each with space-separated AND tokens (#tag, ^link, text)
     interface SearchGroup {
@@ -437,6 +452,12 @@
         searchTerm = searchTerm ? `${searchTerm} ${token}` : token;
     }
 
+    function addLinkFilter(link: string) {
+        const token = `^${link}`;
+        if (searchTerm.toLowerCase().includes(token.toLowerCase())) return;
+        searchTerm = searchTerm ? `${searchTerm} ${token}` : token;
+    }
+
     // Visible-range currency conversion
     let convertedTotals = $state(new Map<string, string>());
     let conversionGen = 0;
@@ -785,6 +806,7 @@
                                                         entry.id,
                                                     )!}
                                                     class="shrink-0"
+                                                    onclick={addLinkFilter}
                                                 />
                                             {/if}
                                         </div>
