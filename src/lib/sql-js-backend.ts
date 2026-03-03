@@ -34,6 +34,7 @@ import { parseTags } from "./utils/tags.js";
 const IDB_NAME = "dledger";
 const IDB_STORE = "database";
 const IDB_KEY = "main";
+const SQL_VAR_LIMIT = 900;
 
 function openIDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -2766,18 +2767,20 @@ PRAGMA foreign_keys = ON;
   async recordExchangeRateBatch(rates: ExchangeRate[]): Promise<void> {
     if (rates.length === 0) return;
 
-    // Fetch existing sources for all (date, from, to) tuples in one query
+    // Fetch existing sources for all (date, from, to) tuples, chunked to stay under SQL variable limit
     const keys = rates.map((r) => `${r.date}|${r.from_currency}|${r.to_currency}`);
     const uniqueKeys = [...new Set(keys)];
-    const placeholders = uniqueKeys.map(() => "(?, ?, ?)").join(", ");
-    const params: unknown[] = [];
-    for (const key of uniqueKeys) {
-      const [date, from, to] = key.split("|");
-      params.push(date, from, to);
-    }
 
     const existingSources = new Map<string, string>();
-    if (uniqueKeys.length > 0) {
+    const chunkSize = Math.floor(SQL_VAR_LIMIT / 3); // 3 vars per key
+    for (let i = 0; i < uniqueKeys.length; i += chunkSize) {
+      const chunk = uniqueKeys.slice(i, i + chunkSize);
+      const placeholders = chunk.map(() => "(?, ?, ?)").join(", ");
+      const params: unknown[] = [];
+      for (const key of chunk) {
+        const [date, from, to] = key.split("|");
+        params.push(date, from, to);
+      }
       const rows = this.query(
         `SELECT date, from_currency, to_currency, source FROM exchange_rate WHERE (date, from_currency, to_currency) IN (VALUES ${placeholders})`,
         params,
@@ -2910,32 +2913,35 @@ PRAGMA foreign_keys = ON;
     const currencies = [...new Set(pairs.map((p) => p.currency))];
     if (currencies.length === 0) return new Map();
 
-    // Fetch all rates for these currencies to/from baseCurrency in two queries
-    const ph = currencies.map(() => "?").join(", ");
-
-    // Direct: from_currency IN currencies, to_currency = baseCurrency
-    const directRows = this.query(
-      `SELECT from_currency, date FROM exchange_rate WHERE from_currency IN (${ph}) AND to_currency = ?`,
-      [...currencies, baseCurrency],
-      (row) => ({ currency: row.from_currency as string, date: row.date as string }),
-    );
-
-    // Inverse: from_currency = baseCurrency, to_currency IN currencies
-    const inverseRows = this.query(
-      `SELECT to_currency AS currency, date FROM exchange_rate WHERE from_currency = ? AND to_currency IN (${ph})`,
-      [baseCurrency, ...currencies],
-      (row) => ({ currency: row.currency as string, date: row.date as string }),
-    );
-
-    // Build index: currency → sorted dates with rates
+    // Fetch all rates for these currencies to/from baseCurrency, chunked to stay under SQL variable limit
     const rateIndex = new Map<string, string[]>();
-    for (const row of [...directRows, ...inverseRows]) {
-      let dates = rateIndex.get(row.currency);
-      if (!dates) {
-        dates = [];
-        rateIndex.set(row.currency, dates);
+    const currChunkSize = SQL_VAR_LIMIT - 1; // reserve 1 var for baseCurrency
+    for (let i = 0; i < currencies.length; i += currChunkSize) {
+      const chunk = currencies.slice(i, i + currChunkSize);
+      const ph = chunk.map(() => "?").join(", ");
+
+      // Direct: from_currency IN chunk, to_currency = baseCurrency
+      const directRows = this.query(
+        `SELECT from_currency, date FROM exchange_rate WHERE from_currency IN (${ph}) AND to_currency = ?`,
+        [...chunk, baseCurrency],
+        (row) => ({ currency: row.from_currency as string, date: row.date as string }),
+      );
+
+      // Inverse: from_currency = baseCurrency, to_currency IN chunk
+      const inverseRows = this.query(
+        `SELECT to_currency AS currency, date FROM exchange_rate WHERE from_currency = ? AND to_currency IN (${ph})`,
+        [baseCurrency, ...chunk],
+        (row) => ({ currency: row.currency as string, date: row.date as string }),
+      );
+
+      for (const row of [...directRows, ...inverseRows]) {
+        let dates = rateIndex.get(row.currency);
+        if (!dates) {
+          dates = [];
+          rateIndex.set(row.currency, dates);
+        }
+        dates.push(row.date);
       }
-      dates.push(row.date);
     }
     // Sort each currency's dates
     for (const dates of rateIndex.values()) {
@@ -2979,26 +2985,30 @@ PRAGMA foreign_keys = ON;
     const currencies = [...new Set(pairs.map((p) => p.currency))];
     if (currencies.length === 0) return new Map();
 
-    const ph = currencies.map(() => "?").join(", ");
-
-    // Direct: from_currency IN currencies, to_currency = baseCurrency
-    const directRows = this.query(
-      `SELECT from_currency, date FROM exchange_rate WHERE from_currency IN (${ph}) AND to_currency = ?`,
-      [...currencies, baseCurrency],
-      (row) => ({ currency: row.from_currency as string, date: row.date as string }),
-    );
-
-    // Inverse: from_currency = baseCurrency, to_currency IN currencies
-    const inverseRows = this.query(
-      `SELECT to_currency AS currency, date FROM exchange_rate WHERE from_currency = ? AND to_currency IN (${ph})`,
-      [baseCurrency, ...currencies],
-      (row) => ({ currency: row.currency as string, date: row.date as string }),
-    );
-
-    // Build exact set of "currency:date" entries
+    // Fetch rates chunked to stay under SQL variable limit
     const exactSet = new Set<string>();
-    for (const row of [...directRows, ...inverseRows]) {
-      exactSet.add(`${row.currency}:${row.date}`);
+    const exactChunkSize = SQL_VAR_LIMIT - 1; // reserve 1 var for baseCurrency
+    for (let i = 0; i < currencies.length; i += exactChunkSize) {
+      const chunk = currencies.slice(i, i + exactChunkSize);
+      const ph = chunk.map(() => "?").join(", ");
+
+      // Direct: from_currency IN chunk, to_currency = baseCurrency
+      const directRows = this.query(
+        `SELECT from_currency, date FROM exchange_rate WHERE from_currency IN (${ph}) AND to_currency = ?`,
+        [...chunk, baseCurrency],
+        (row) => ({ currency: row.from_currency as string, date: row.date as string }),
+      );
+
+      // Inverse: from_currency = baseCurrency, to_currency IN chunk
+      const inverseRows = this.query(
+        `SELECT to_currency AS currency, date FROM exchange_rate WHERE from_currency = ? AND to_currency IN (${ph})`,
+        [baseCurrency, ...chunk],
+        (row) => ({ currency: row.currency as string, date: row.date as string }),
+      );
+
+      for (const row of [...directRows, ...inverseRows]) {
+        exactSet.add(`${row.currency}:${row.date}`);
+      }
     }
 
     // For each pair, check exact match only
