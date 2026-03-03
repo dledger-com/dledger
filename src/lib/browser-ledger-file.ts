@@ -18,6 +18,7 @@ import {
   computeEntryAmountFingerprint,
 } from "./csv-presets/dedup.js";
 import { parseLinks, serializeLinksForExport } from "./utils/links.js";
+import { parseTags, serializeTags } from "./utils/tags.js";
 
 // ---- Helpers ----
 
@@ -1025,7 +1026,7 @@ export async function importLedger(
 
       // Store beancount tags/links/metadata
       if (fmt === "beancount") {
-        if (tags) txnMetadata["tags"] = tags;
+        if (tags) txnMetadata["tags"] = serializeTags(parseTags(tags));
       }
       if (Object.keys(txnMetadata).length > 0) {
         await backend.setMetadata(entryId, txnMetadata);
@@ -1349,22 +1350,30 @@ export async function exportLedger(
     }
 
     if (format === "beancount") {
-      // Beancount: quoted description with optional ^links
+      // Beancount: quoted description with optional #tags and ^links
       let header = `${entry.date}${statusMarker} "${entry.description}"`;
-      if (entryLinks.length > 0) {
-        header += ` ${serializeLinksForExport(entryLinks)}`;
-      }
-      out += header + "\n";
-      // Emit transaction metadata
+      // Collect tags for header line, and other metadata for indented lines
+      let metaTags: string[] = [];
+      let metaLines = "";
       try {
         const meta = await backend.getMetadata(entry.id);
+        const tagValue = meta["tags"];
+        if (tagValue) metaTags = parseTags(tagValue);
         for (const [key, value] of Object.entries(meta)) {
           if (key === "tags" || key === "links") continue;
-          out += `  ${key}: "${value}"\n`;
+          metaLines += `  ${key}: "${value}"\n`;
         }
       } catch {
         // skip on error
       }
+      if (metaTags.length > 0) {
+        header += ` ${metaTags.map((t) => `#${t}`).join(" ")}`;
+      }
+      if (entryLinks.length > 0) {
+        header += ` ${serializeLinksForExport(entryLinks)}`;
+      }
+      out += header + "\n";
+      out += metaLines;
     } else if (format === "hledger") {
       out += `${entry.date}${statusMarker} ${entry.description}\n`;
       // Emit links as comment (hledger has no native link syntax)

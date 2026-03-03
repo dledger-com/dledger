@@ -357,7 +357,7 @@ commodity EUR
       expect(entries[0][0].description).toBe("Payment");
 
       const meta = await backend.getMetadata(entries[0][0].id);
-      expect(meta.tags).toBe("#groceries");
+      expect(meta.tags).toBe("groceries");
       expect(meta.links).toBeUndefined();
 
       // Links stored in dedicated entry_link table
