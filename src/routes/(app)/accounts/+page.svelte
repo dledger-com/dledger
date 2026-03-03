@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
@@ -398,21 +399,36 @@
             <Input id="fullName" bind:value={formFullName} placeholder="e.g. Assets:Bank:Checking" />
           </div>
           <div class="space-y-2">
-            <label for="type" class="text-sm font-medium">Type</label>
-            <select id="type" bind:value={formType} class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-              {#each accountTypes as t}
-                <option value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-              {/each}
-            </select>
+            <span class="text-sm font-medium">Type</span>
+            <Select.Root type="single" bind:value={formType}>
+              <Select.Trigger class="w-full">
+                {formType.charAt(0).toUpperCase() + formType.slice(1)}
+              </Select.Trigger>
+              <Select.Content>
+                {#each accountTypes as t (t)}
+                  <Select.Item value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
           </div>
           <div class="space-y-2">
-            <label for="parent" class="text-sm font-medium">Parent Account</label>
-            <select id="parent" bind:value={formParentId} class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-              <option value={null}>None (top-level)</option>
-              {#each store.accounts.filter(a => !a.is_postable || a.account_type === formType) as acc}
-                <option value={acc.id}>{acc.full_name}</option>
-              {/each}
-            </select>
+            <span class="text-sm font-medium">Parent Account</span>
+            <Select.Root type="single" value={formParentId ?? ""} onValueChange={(val) => { formParentId = val === "" ? null : val; }}>
+              <Select.Trigger class="w-full">
+                {#if formParentId}
+                  {@const parent = store.accounts.find(a => a.id === formParentId)}
+                  {parent?.full_name ?? formParentId}
+                {:else}
+                  None (top-level)
+                {/if}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="">None (top-level)</Select.Item>
+                {#each store.accounts.filter(a => !a.is_postable || a.account_type === formType) as acc (acc.id)}
+                  <Select.Item value={acc.id}>{acc.full_name}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
           </div>
           <div class="flex items-center gap-2">
             <Switch id="postable" bind:checked={formIsPostable} />
@@ -443,14 +459,16 @@
           No accounts configured yet. Start with a default chart of accounts, or add accounts manually.
         </p>
         <div class="flex items-center justify-center gap-3">
-          <select
-            bind:value={defaultSet}
-            class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-          >
-            <option value="minimal">Minimal (~25 accounts)</option>
-            <option value="standard">Standard (~45 accounts)</option>
-            <option value="comprehensive">Comprehensive (~65 accounts)</option>
-          </select>
+          <Select.Root type="single" bind:value={defaultSet}>
+            <Select.Trigger>
+              {defaultSet === "minimal" ? "Minimal (~25 accounts)" : defaultSet === "standard" ? "Standard (~45 accounts)" : "Comprehensive (~65 accounts)"}
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="minimal">Minimal (~25 accounts)</Select.Item>
+              <Select.Item value="standard">Standard (~45 accounts)</Select.Item>
+              <Select.Item value="comprehensive">Comprehensive (~65 accounts)</Select.Item>
+            </Select.Content>
+          </Select.Root>
           <Button onclick={handleCreateDefaults} disabled={creatingDefaults}>
             {creatingDefaults ? "Creating..." : "Create default accounts"}
           </Button>

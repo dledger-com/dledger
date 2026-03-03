@@ -28,6 +28,8 @@
         type DpriceMode,
     } from "$lib/data/settings.svelte.js";
     import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+    import * as Select from "$lib/components/ui/select/index.js";
+    import ListFilter from "$lib/components/ListFilter.svelte";
     import { invalidate } from "$lib/data/invalidation.js";
     import {
         DEFAULT_PATH_CONFIG,
@@ -273,6 +275,14 @@
     ];
     let assetTypeEdits = $state<Map<string, CurrencyAssetType>>(new Map());
     let savingAssetTypes = $state(false);
+    let assetTypesOpen = $state(false);
+    let assetTypeSearch = $state("");
+    const visibleCurrencies = $derived.by(() => {
+        const visible = currencies.filter((c) => !c.is_hidden);
+        if (!assetTypeSearch) return visible;
+        const q = assetTypeSearch.toLowerCase();
+        return visible.filter((c) => c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
+    });
 
     async function saveAssetTypeOverrides() {
         if (assetTypeEdits.size === 0) return;
@@ -322,19 +332,16 @@
         }
     }
 
-    function handleCurrencyChange(e: Event) {
-        const target = e.target as HTMLSelectElement;
-        settings.update({ currency: target.value });
+    function handleCurrencyChange(val: string) {
+        settings.update({ currency: val });
     }
 
-    function handleDateFormatChange(e: Event) {
-        const target = e.target as HTMLSelectElement;
-        settings.update({ dateFormat: target.value });
+    function handleDateFormatChange(val: string) {
+        settings.update({ dateFormat: val });
     }
 
-    function handleFiscalYearChange(e: Event) {
-        const target = e.target as HTMLSelectElement;
-        const month = parseInt(target.value, 10);
+    function handleFiscalYearChange(val: string) {
+        const month = parseInt(val, 10);
         const mm = String(month).padStart(2, "0");
         settings.update({ fiscalYearStart: `${mm}-01` });
     }
@@ -613,62 +620,54 @@
         <Card.Content class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="space-y-2">
-                    <label for="currency" class="text-sm font-medium"
-                        >Base Currency</label
-                    >
-                    <select
-                        id="currency"
-                        value={settings.currency}
-                        onchange={handleCurrencyChange}
-                        class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    >
-                        {#if currencies.length === 0}
-                            <option value={settings.currency}
-                                >{settings.currency}</option
-                            >
-                        {:else}
-                            {#each currencies as c}
-                                <option value={c.code}
-                                    >{c.code} - {c.name}</option
-                                >
+                    <span class="text-sm font-medium">Base Currency</span>
+                    <Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
+                        <Select.Trigger class="w-full">
+                            {#if currencies.length === 0}
+                                {settings.currency}
+                            {:else}
+                                {@const cur = currencies.find((c) => c.code === settings.currency)}
+                                {cur ? `${cur.code} - ${cur.name}` : settings.currency}
+                            {/if}
+                        </Select.Trigger>
+                        <Select.Content>
+                            {#if currencies.length === 0}
+                                <Select.Item value={settings.currency}>{settings.currency}</Select.Item>
+                            {:else}
+                                {#each currencies as c (c.code)}
+                                    <Select.Item value={c.code}>{c.code} - {c.name}</Select.Item>
+                                {/each}
+                            {/if}
+                        </Select.Content>
+                    </Select.Root>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-sm font-medium">Date Format</span>
+                    <Select.Root type="single" value={settings.dateFormat} onValueChange={handleDateFormatChange}>
+                        <Select.Trigger class="w-full">
+                            {dateFormats.find((df) => df.value === settings.dateFormat)?.label ?? settings.dateFormat}
+                        </Select.Trigger>
+                        <Select.Content>
+                            {#each dateFormats as df (df.value)}
+                                <Select.Item value={df.value}>{df.label}</Select.Item>
                             {/each}
-                        {/if}
-                    </select>
+                        </Select.Content>
+                    </Select.Root>
                 </div>
 
                 <div class="space-y-2">
-                    <label for="date-format" class="text-sm font-medium"
-                        >Date Format</label
-                    >
-                    <select
-                        id="date-format"
-                        value={settings.dateFormat}
-                        onchange={handleDateFormatChange}
-                        class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    >
-                        {#each dateFormats as df}
-                            <option value={df.value}>{df.label}</option>
-                        {/each}
-                    </select>
-                </div>
-
-                <div class="space-y-2">
-                    <label for="fiscal-year" class="text-sm font-medium"
-                        >Fiscal Year Start</label
-                    >
-                    <select
-                        id="fiscal-year"
-                        value={parseInt(
-                            settings.fiscalYearStart.split("-")[0],
-                            10,
-                        )}
-                        onchange={handleFiscalYearChange}
-                        class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    >
-                        {#each months as m, i}
-                            <option value={i + 1}>{m}</option>
-                        {/each}
-                    </select>
+                    <span class="text-sm font-medium">Fiscal Year Start</span>
+                    <Select.Root type="single" value={String(parseInt(settings.fiscalYearStart.split("-")[0], 10))} onValueChange={handleFiscalYearChange}>
+                        <Select.Trigger class="w-full">
+                            {months[parseInt(settings.fiscalYearStart.split("-")[0], 10) - 1] ?? "January"}
+                        </Select.Trigger>
+                        <Select.Content>
+                            {#each months as m, i (i)}
+                                <Select.Item value={String(i + 1)}>{m}</Select.Item>
+                            {/each}
+                        </Select.Content>
+                    </Select.Root>
                 </div>
             </div>
             <p class="text-xs text-muted-foreground">
@@ -884,45 +883,62 @@
     <!-- Currency Asset Types -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Currency Asset Types</Card.Title>
-            <Card.Description
-                >Override the auto-detected asset type for currencies. This affects which rate source is used for exchange rate sync.</Card.Description
-            >
+            <div class="flex items-center justify-between">
+                <div>
+                    <Card.Title>Currency Asset Types</Card.Title>
+                    <Card.Description
+                        >Override the auto-detected asset type for currencies. This affects which rate source is used for exchange rate sync.</Card.Description
+                    >
+                </div>
+                {#if currencies.filter((c) => !c.is_hidden).length > 0}
+                    <Button variant="outline" size="sm" onclick={() => (assetTypesOpen = !assetTypesOpen)}>
+                        {assetTypesOpen ? "Hide" : "Show"} ({currencies.filter((c) => !c.is_hidden).length}){#if assetTypeEdits.size > 0} &middot; {assetTypeEdits.size} modified{/if}
+                    </Button>
+                {/if}
+            </div>
         </Card.Header>
-        <Card.Content>
-            {#if currencies.filter((c) => !c.is_hidden).length === 0}
+        {#if currencies.filter((c) => !c.is_hidden).length === 0}
+            <Card.Content>
                 <p class="text-muted-foreground text-sm">No currencies found. Create currencies first.</p>
-            {:else}
-                <div class="space-y-2">
-                    {#each currencies.filter((c) => !c.is_hidden) as cur (cur.code)}
+            </Card.Content>
+        {:else if assetTypesOpen}
+            <Card.Content class="space-y-3">
+                <ListFilter bind:value={assetTypeSearch} placeholder="Filter currencies..." />
+                <div class="max-h-[400px] overflow-y-auto space-y-2">
+                    {#each visibleCurrencies as cur (cur.code)}
+                        {@const currentType = assetTypeEdits.get(cur.code) ?? cur.asset_type}
                         <div class="flex items-center gap-3">
                             <span class="w-20 font-mono text-sm">{cur.code}</span>
-                            <select
-                                class="border-input bg-background h-8 rounded-md border px-2 text-sm"
-                                value={assetTypeEdits.get(cur.code) ?? cur.asset_type}
-                                onchange={(e) => {
-                                    const val = (e.target as HTMLSelectElement).value as CurrencyAssetType;
-                                    if (val === cur.asset_type) {
-                                        const next = new Map(assetTypeEdits);
-                                        next.delete(cur.code);
-                                        assetTypeEdits = next;
-                                    } else {
-                                        assetTypeEdits = new Map(assetTypeEdits).set(cur.code, val);
-                                    }
-                                }}
-                            >
-                                {#each ASSET_TYPES as at (at.value)}
-                                    <option value={at.value}>{at.label}</option>
-                                {/each}
-                            </select>
+                            <Select.Root type="single" value={currentType} onValueChange={(val) => {
+                                const newType = val as CurrencyAssetType;
+                                if (newType === cur.asset_type) {
+                                    const next = new Map(assetTypeEdits);
+                                    next.delete(cur.code);
+                                    assetTypeEdits = next;
+                                } else {
+                                    assetTypeEdits = new Map(assetTypeEdits).set(cur.code, newType);
+                                }
+                            }}>
+                                <Select.Trigger class="h-8 text-sm">
+                                    {ASSET_TYPES.find((at) => at.value === currentType)?.label ?? "Unclassified"}
+                                </Select.Trigger>
+                                <Select.Content>
+                                    {#each ASSET_TYPES as at (at.value)}
+                                        <Select.Item value={at.value}>{at.label}</Select.Item>
+                                    {/each}
+                                </Select.Content>
+                            </Select.Root>
                             {#if assetTypeEdits.has(cur.code)}
                                 <span class="text-xs text-yellow-500">modified</span>
                             {/if}
                         </div>
                     {/each}
+                    {#if visibleCurrencies.length === 0}
+                        <p class="text-sm text-muted-foreground">No currencies match &ldquo;{assetTypeSearch}&rdquo;.</p>
+                    {/if}
                 </div>
                 {#if assetTypeEdits.size > 0}
-                    <div class="mt-4 flex gap-2">
+                    <div class="flex gap-2">
                         <Button size="sm" onclick={saveAssetTypeOverrides} disabled={savingAssetTypes}>
                             {savingAssetTypes ? "Saving..." : `Save ${assetTypeEdits.size} change${assetTypeEdits.size > 1 ? "s" : ""}`}
                         </Button>
@@ -931,8 +947,8 @@
                         </Button>
                     </div>
                 {/if}
-            {/if}
-        </Card.Content>
+            </Card.Content>
+        {/if}
     </Card.Root>
 
     <!-- External Services -->
@@ -974,30 +990,17 @@
                         {#if isDpriceActive(settings.settings.dpriceMode)}
                             {#if isTauri}
                                 <div class="space-y-2">
-                                    <label
-                                        for="dprice-mode"
-                                        class="text-sm font-medium">Mode</label
-                                    >
-                                    <select
-                                        id="dprice-mode"
-                                        class="flex h-9 w-60 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                        value={settings.settings.dpriceMode}
-                                        onchange={(e) =>
-                                            handleDpriceModeChange(
-                                                (e.target as HTMLSelectElement)
-                                                    .value as DpriceMode,
-                                            )}
-                                    >
-                                        <option value="integrated"
-                                            >Integrated (app-managed DB)</option
-                                        >
-                                        <option value="local"
-                                            >Local (shared CLI DB)</option
-                                        >
-                                        <option value="http"
-                                            >HTTP API (external server)</option
-                                        >
-                                    </select>
+                                    <span class="text-sm font-medium">Mode</span>
+                                    <Select.Root type="single" value={settings.settings.dpriceMode} onValueChange={(val) => handleDpriceModeChange(val as DpriceMode)}>
+                                        <Select.Trigger class="w-60">
+                                            {settings.settings.dpriceMode === "integrated" ? "Integrated (app-managed DB)" : settings.settings.dpriceMode === "local" ? "Local (shared CLI DB)" : "HTTP API (external server)"}
+                                        </Select.Trigger>
+                                        <Select.Content>
+                                            <Select.Item value="integrated">Integrated (app-managed DB)</Select.Item>
+                                            <Select.Item value="local">Local (shared CLI DB)</Select.Item>
+                                            <Select.Item value="http">HTTP API (external server)</Select.Item>
+                                        </Select.Content>
+                                    </Select.Root>
                                     <p class="text-xs text-muted-foreground">
                                         {#if settings.settings.dpriceMode === "integrated"}
                                             Uses a co-located database managed
@@ -1468,16 +1471,16 @@
         <Card.Content>
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <select
-                        bind:value={defaultSet}
-                        class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    >
-                        <option value="minimal">Minimal (~25)</option>
-                        <option value="standard">Standard (~45)</option>
-                        <option value="comprehensive"
-                            >Comprehensive (~65)</option
-                        >
-                    </select>
+                    <Select.Root type="single" bind:value={defaultSet}>
+                        <Select.Trigger>
+                            {defaultSet === "minimal" ? "Minimal (~25)" : defaultSet === "standard" ? "Standard (~45)" : "Comprehensive (~65)"}
+                        </Select.Trigger>
+                        <Select.Content>
+                            <Select.Item value="minimal">Minimal (~25)</Select.Item>
+                            <Select.Item value="standard">Standard (~45)</Select.Item>
+                            <Select.Item value="comprehensive">Comprehensive (~65)</Select.Item>
+                        </Select.Content>
+                    </Select.Root>
                 </div>
                 <Button
                     variant="outline"

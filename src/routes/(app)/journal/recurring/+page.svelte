@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -209,16 +210,17 @@
           </div>
           <div class="space-y-1 w-32">
             <label for="rec-freq" class="text-xs font-medium">Frequency</label>
-            <select
-              id="rec-freq"
-              bind:value={newFrequency}
-              class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-            >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
+            <Select.Root type="single" bind:value={newFrequency}>
+              <Select.Trigger class="w-full">
+                {newFrequency.charAt(0).toUpperCase() + newFrequency.slice(1)}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="daily">Daily</Select.Item>
+                <Select.Item value="weekly">Weekly</Select.Item>
+                <Select.Item value="monthly">Monthly</Select.Item>
+                <Select.Item value="yearly">Yearly</Select.Item>
+              </Select.Content>
+            </Select.Root>
           </div>
           <div class="space-y-1 w-20">
             <label for="rec-interval" class="text-xs font-medium">Every</label>

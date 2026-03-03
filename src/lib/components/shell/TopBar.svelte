@@ -6,6 +6,7 @@
   import TaskQueueIndicator from "./TaskQueueIndicator.svelte";
   import TaskQueueDrawer from "./TaskQueueDrawer.svelte";
   import ReprocessPreviewDialog from "./ReprocessPreviewDialog.svelte";
+  import { getBreadcrumbOverrides } from "$lib/data/breadcrumb.svelte.js";
 
   interface Props {
     showSidebarTrigger?: boolean;
@@ -18,8 +19,9 @@
     const path = page.url?.pathname ?? "/";
     const segments = path.split("/").filter(Boolean);
     if (segments.length === 0) return [{ label: "Dashboard", href: "/" }];
+    const overrides = getBreadcrumbOverrides();
     return segments.map((seg, i) => ({
-      label: seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
+      label: overrides.get(seg) ?? seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
       href: "/" + segments.slice(0, i + 1).join("/"),
     }));
   });

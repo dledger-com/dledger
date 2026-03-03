@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -175,14 +176,15 @@
         </div>
         <div class="space-y-1 w-28">
           <label for="budget-period" class="text-xs font-medium">Period</label>
-          <select
-            id="budget-period"
-            bind:value={newPeriod}
-            class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-          >
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
+          <Select.Root type="single" bind:value={newPeriod}>
+            <Select.Trigger class="w-full">
+              {newPeriod === "monthly" ? "Monthly" : "Yearly"}
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="monthly">Monthly</Select.Item>
+              <Select.Item value="yearly">Yearly</Select.Item>
+            </Select.Content>
+          </Select.Root>
         </div>
         <div class="space-y-1 w-32">
           <label for="budget-amount" class="text-xs font-medium">Amount</label>
@@ -226,13 +228,15 @@
                   <Input bind:value={editPattern} class="h-8" />
                 </Table.Cell>
                 <Table.Cell>
-                  <select
-                    bind:value={editPeriod}
-                    class="flex h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-base shadow-xs outline-none transition-[color,box-shadow] md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
+                  <Select.Root type="single" bind:value={editPeriod}>
+                    <Select.Trigger class="w-full h-8">
+                      {editPeriod === "monthly" ? "Monthly" : "Yearly"}
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="monthly">Monthly</Select.Item>
+                      <Select.Item value="yearly">Yearly</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   <Input type="number" step="0.01" bind:value={editAmount} class="h-8 w-28 ml-auto" />

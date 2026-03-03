@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -20,6 +20,7 @@
   import LinkInput from "$lib/components/LinkInput.svelte";
   import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
 
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
@@ -93,6 +94,11 @@
     if (entryResult) {
       entry = entryResult.entry;
       items = entryResult.items;
+      const desc = entry.description;
+      const label = desc
+        ? desc.length > 40 ? desc.slice(0, 40) + "..." : desc
+        : "Entry " + id.slice(0, 8);
+      setBreadcrumbOverride(id, label);
     }
     metadata = metaResult;
     entryLinks = linksResult;
@@ -120,6 +126,11 @@
       accountStore.load(),
       loadEntry(),
     ]);
+  });
+
+  onDestroy(() => {
+    const id = entryId;
+    if (id) clearBreadcrumbOverride(id);
   });
 </script>
 

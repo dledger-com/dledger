@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -161,15 +162,16 @@
         <div class="flex flex-wrap items-end gap-3">
           <div class="space-y-1">
             <label for="rec-currency" class="text-xs font-medium">Currency</label>
-            <select
-              id="rec-currency"
-              bind:value={currency}
-              class="flex h-9 w-28 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-            >
-              {#each balances as b}
-                <option value={b.currency}>{b.currency}</option>
-              {/each}
-            </select>
+            <Select.Root type="single" bind:value={currency}>
+              <Select.Trigger class="w-28">
+                {currency}
+              </Select.Trigger>
+              <Select.Content>
+                {#each balances as b (b.currency)}
+                  <Select.Item value={b.currency}>{b.currency}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
           </div>
           <div class="space-y-1">
             <label for="rec-date" class="text-xs font-medium">Statement Date</label>

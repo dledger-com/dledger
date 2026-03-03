@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
@@ -204,15 +205,21 @@
         </div>
 
         <div class="space-y-2">
-          <label for="currency" class="text-sm font-medium">Currency</label>
-          <select id="currency" bind:value={currency} class="flex h-9 w-full max-w-[200px] rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-            {#each accountStore.currencies as c}
-              <option value={c.code}>{c.code} - {c.name}</option>
-            {/each}
-            {#if accountStore.currencies.length === 0}
-              <option value="EUR">EUR</option>
-            {/if}
-          </select>
+          <span class="text-sm font-medium">Currency</span>
+          <Select.Root type="single" bind:value={currency}>
+            <Select.Trigger class="w-full max-w-[200px]">
+              {@const cur = accountStore.currencies.find((c) => c.code === currency)}
+              {cur ? `${cur.code} - ${cur.name}` : currency}
+            </Select.Trigger>
+            <Select.Content>
+              {#each accountStore.currencies as c (c.code)}
+                <Select.Item value={c.code}>{c.code} - {c.name}</Select.Item>
+              {/each}
+              {#if accountStore.currencies.length === 0}
+                <Select.Item value="EUR">EUR</Select.Item>
+              {/if}
+            </Select.Content>
+          </Select.Root>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">

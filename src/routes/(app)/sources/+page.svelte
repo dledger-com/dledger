@@ -1,5 +1,6 @@
 <script lang="ts">
     import * as Card from "$lib/components/ui/card/index.js";
+    import * as Select from "$lib/components/ui/select/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
@@ -1683,18 +1684,20 @@
                 <h4 class="text-sm font-medium">Add Exchange Account</h4>
                 <div class="flex flex-wrap gap-2">
                     <div class="w-full sm:w-auto">
-                        <select
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-40"
-                            bind:value={cexNewExchange}
-                        >
-                            <option value="kraken">Kraken</option>
-                            <option value="binance">Binance</option>
-                            <option value="coinbase">Coinbase</option>
-                            <option value="bybit">Bybit</option>
-                            <option value="okx">OKX</option>
-                            <option value="bitstamp">Bitstamp</option>
-                            <option value="cryptocom">Crypto.com</option>
-                        </select>
+                        <Select.Root type="single" bind:value={cexNewExchange}>
+                            <Select.Trigger class="w-full sm:w-40">
+                                {({ kraken: "Kraken", binance: "Binance", coinbase: "Coinbase", bybit: "Bybit", okx: "OKX", bitstamp: "Bitstamp", cryptocom: "Crypto.com" } as Record<string, string>)[cexNewExchange] ?? cexNewExchange}
+                            </Select.Trigger>
+                            <Select.Content>
+                                <Select.Item value="kraken">Kraken</Select.Item>
+                                <Select.Item value="binance">Binance</Select.Item>
+                                <Select.Item value="coinbase">Coinbase</Select.Item>
+                                <Select.Item value="bybit">Bybit</Select.Item>
+                                <Select.Item value="okx">OKX</Select.Item>
+                                <Select.Item value="bitstamp">Bitstamp</Select.Item>
+                                <Select.Item value="cryptocom">Crypto.com</Select.Item>
+                            </Select.Content>
+                        </Select.Root>
                     </div>
                     <Input
                         class="w-full sm:w-40"

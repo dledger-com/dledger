@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -120,17 +121,18 @@
     {/if}
     {#if hasProtocols}
       <div class="space-y-2">
-        <label for="protocol" class="text-sm font-medium">Protocol</label>
-        <select
-          id="protocol"
-          bind:value={filterProtocol}
-          class="flex h-9 w-40 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <option value="">All</option>
-          {#each uniqueProtocols as protocol}
-            <option value={protocol}>{protocol}</option>
-          {/each}
-        </select>
+        <span class="text-sm font-medium">Protocol</span>
+        <Select.Root type="single" bind:value={filterProtocol}>
+          <Select.Trigger class="w-40">
+            {filterProtocol || "All"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="">All</Select.Item>
+            {#each uniqueProtocols as protocol (protocol)}
+              <Select.Item value={protocol}>{protocol}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
       </div>
     {/if}
     <ListFilter bind:value={searchTerm} placeholder="Filter positions..." />

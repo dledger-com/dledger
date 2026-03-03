@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -279,25 +280,22 @@
                 <Table.Cell class="hidden lg:table-cell">
                   {#if !c.is_base}
                     <div class="flex items-center gap-2">
-                      <select
-                        value={rs?.rate_source ?? "auto"}
-                        onchange={(e) => {
-                          const val = (e.target as HTMLSelectElement).value;
-                          handleSourceChange(c.code, val);
-                        }}
-                        disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}
-                        class="flex h-7 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm disabled:opacity-50"
-                      >
-                        <option value="auto">auto-detect</option>
-                        <option value="frankfurter">frankfurter</option>
-                        <option value="defillama">defillama</option>
-                        <option value="coingecko">coingecko</option>
-                        <option value="cryptocompare">cryptocompare</option>
-                        <option value="binance">binance</option>
-                        <option value="finnhub">finnhub</option>
-                        <option value="dprice">dprice</option>
-                        <option value="none">none</option>
-                      </select>
+                      <Select.Root type="single" value={rs?.rate_source ?? "auto"} onValueChange={(val) => handleSourceChange(c.code, val)} disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}>
+                        <Select.Trigger class="h-7" size="sm">
+                          {rs?.rate_source ?? "auto-detect"}
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="auto">auto-detect</Select.Item>
+                          <Select.Item value="frankfurter">frankfurter</Select.Item>
+                          <Select.Item value="defillama">defillama</Select.Item>
+                          <Select.Item value="coingecko">coingecko</Select.Item>
+                          <Select.Item value="cryptocompare">cryptocompare</Select.Item>
+                          <Select.Item value="binance">binance</Select.Item>
+                          <Select.Item value="finnhub">finnhub</Select.Item>
+                          <Select.Item value="dprice">dprice</Select.Item>
+                          <Select.Item value="none">none</Select.Item>
+                        </Select.Content>
+                      </Select.Root>
                       {#if rs?.set_by}
                         <span class="text-xs text-muted-foreground">{rs.set_by}</span>
                       {/if}

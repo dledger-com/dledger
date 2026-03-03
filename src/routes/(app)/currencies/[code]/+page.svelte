@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -310,22 +311,22 @@
             {#if currency.is_base}
               <span class="text-muted-foreground text-sm">N/A (base currency)</span>
             {:else}
-              <select
-                value={rateSource?.rate_source ?? "auto"}
-                onchange={(e) => handleSourceChange((e.target as HTMLSelectElement).value)}
-                disabled={taskQueue.isActive(`rate-refetch:${code}`)}
-                class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-50"
-              >
-                <option value="auto">auto-detect</option>
-                <option value="frankfurter">frankfurter</option>
-                <option value="defillama">defillama</option>
-                <option value="coingecko">coingecko</option>
-                <option value="cryptocompare">cryptocompare</option>
-                <option value="binance">binance</option>
-                <option value="finnhub">finnhub</option>
-                <option value="dprice">dprice</option>
-                <option value="none">none</option>
-              </select>
+              <Select.Root type="single" value={rateSource?.rate_source ?? "auto"} onValueChange={handleSourceChange} disabled={taskQueue.isActive(`rate-refetch:${code}`)}>
+                <Select.Trigger>
+                  {rateSource?.rate_source ?? "auto-detect"}
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="auto">auto-detect</Select.Item>
+                  <Select.Item value="frankfurter">frankfurter</Select.Item>
+                  <Select.Item value="defillama">defillama</Select.Item>
+                  <Select.Item value="coingecko">coingecko</Select.Item>
+                  <Select.Item value="cryptocompare">cryptocompare</Select.Item>
+                  <Select.Item value="binance">binance</Select.Item>
+                  <Select.Item value="finnhub">finnhub</Select.Item>
+                  <Select.Item value="dprice">dprice</Select.Item>
+                  <Select.Item value="none">none</Select.Item>
+                </Select.Content>
+              </Select.Root>
               {#if rateSource?.set_by}
                 <span class="text-xs text-muted-foreground ml-2">{rateSource.set_by}</span>
               {/if}
@@ -343,17 +344,17 @@
           <Card.Description>Historical exchange rates for {code}.</Card.Description>
         </div>
         <div class="flex items-center gap-2">
-          <label for="quote-currency" class="text-xs text-muted-foreground">Quote</label>
-          <select
-            id="quote-currency"
-            bind:value={quoteCurrency}
-            onchange={() => loadChart(code, quoteCurrency)}
-            class="flex h-8 rounded-md border border-input bg-transparent px-2 py-0.5 text-sm"
-          >
-            {#each currencies.filter((c) => c.code !== code) as c}
-              <option value={c.code}>{c.code}</option>
-            {/each}
-          </select>
+          <span class="text-xs text-muted-foreground">Quote</span>
+          <Select.Root type="single" value={quoteCurrency} onValueChange={(val) => { quoteCurrency = val; loadChart(code, val); }}>
+            <Select.Trigger class="h-8" size="sm">
+              {quoteCurrency}
+            </Select.Trigger>
+            <Select.Content>
+              {#each currencies.filter((c) => c.code !== code) as c (c.code)}
+                <Select.Item value={c.code}>{c.code}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
         </div>
       </Card.Header>
       <Card.Content>
