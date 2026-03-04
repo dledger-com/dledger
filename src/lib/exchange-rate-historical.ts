@@ -208,6 +208,7 @@ export async function fetchHistoricalRates(
   backend: Backend,
   requests: HistoricalRateRequest[],
   config: HistoricalFetchConfig,
+  dpriceAssets?: Set<string>,
 ): Promise<HistoricalFetchResult> {
   const result: HistoricalFetchResult = { fetched: 0, skipped: 0, errors: [], failedCurrencies: [] };
   const totalDates = requests.reduce((sum, r) => sum + r.dates.length, 0);
@@ -300,7 +301,7 @@ export async function fetchHistoricalRates(
       // Re-classify without dprice (dpriceAssets = undefined) and group by fallback source
       const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
       for (const req of failedDprice) {
-        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined);
+        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
         if (!fallback || fallback === "dprice") continue;
         if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
         fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
@@ -1222,7 +1223,7 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
 
-  const result = await fetchHistoricalRates(backend, missing, config);
+  const result = await fetchHistoricalRates(backend, missing, config, dpriceAssets);
   return {
     ...result,
     currenciesAnalyzed: filtered.length,
@@ -1264,7 +1265,7 @@ export function enqueueRateBackfill(
           ...config,
           signal: ctx.signal,
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total: total || totalDates }),
-        });
+        }, dpriceAssets);
         return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
       },
     });
