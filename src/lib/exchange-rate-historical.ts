@@ -990,7 +990,7 @@ async function fetchDpriceHistorical(
 
   try {
     // Single batch request for all symbols across the full date range
-    const batch = await client.getPriceRangeBatch([...allSymbols], globalFrom, globalTo);
+    const batch = await client.getPrices([...allSymbols].map(s => ({ symbol: s })), globalFrom, globalTo);
 
     // Build per-symbol lookup maps: date string → price_usd string
     const priceMaps = new Map<string, Map<string, string>>();

@@ -47,12 +47,6 @@ pub struct DpriceRateEntry {
     pub rate: String,
 }
 
-#[derive(Serialize)]
-pub struct DpricePriceEntry {
-    pub date: String,
-    pub price_usd: String,
-}
-
 #[tauri::command]
 pub async fn dprice_health(
     state: State<'_, DpriceState>,
@@ -114,33 +108,18 @@ pub async fn dprice_get_rates(
     .map_err(|e| format!("task join error: {e}"))?
 }
 
-#[tauri::command]
-pub async fn dprice_get_price_range(
-    state: State<'_, DpriceState>,
-    symbol: String,
-    from_date: String,
-    to_date: String,
-) -> Result<Vec<DpricePriceEntry>, String> {
-    let db_path = state.active_db_path();
-    tokio::task::spawn_blocking(move || {
-        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
-        let prices = db
-            .get_price_range(&symbol, &from_date, &to_date, None, None)
-            .map_err(|e| e.to_string())?;
-        Ok(prices
-            .into_iter()
-            .map(|(date, price_usd)| DpricePriceEntry {
-                date,
-                price_usd: price_usd.to_string(),
-            })
-            .collect())
-    })
-    .await
-    .map_err(|e| format!("task join error: {e}"))?
+#[derive(Deserialize)]
+pub struct DpriceAssetFilter {
+    pub id: Option<String>,
+    pub symbol: Option<String>,
+    #[serde(rename = "type")]
+    pub asset_type: Option<String>,
+    pub param: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct DpriceBatchCurrencyPrices {
+    pub id: String,
     pub symbol: String,
     pub prices: Vec<(i32, String)>, // (YYYYMMDD, price_usd)
 }
@@ -153,9 +132,9 @@ pub struct DpriceBatchResult {
 }
 
 #[tauri::command]
-pub async fn dprice_get_price_ranges_batch(
+pub async fn dprice_get_prices(
     state: State<'_, DpriceState>,
-    symbols: Vec<String>,
+    bases: Vec<DpriceAssetFilter>,
     from_date: String,
     to_date: String,
 ) -> Result<DpriceBatchResult, String> {
@@ -164,15 +143,25 @@ pub async fn dprice_get_price_ranges_batch(
     let to_clone = to_date.clone();
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
-        let symbol_refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
-        let batch = db
-            .get_price_ranges_batch(&symbol_refs, &from_clone, &to_clone)
-            .map_err(|e| e.to_string())?;
-        let currencies: Vec<DpriceBatchCurrencyPrices> = batch
+        let filters: Vec<dprice::db::queries::AssetQueryFilter> = bases
             .into_iter()
-            .map(|(symbol, prices)| DpriceBatchCurrencyPrices {
-                symbol,
-                prices: prices.into_iter().map(|(d, p)| (d, p.to_string())).collect(),
+            .map(|f| dprice::db::queries::AssetQueryFilter {
+                id: f.id,
+                symbol: f.symbol,
+                asset_type: f.asset_type.and_then(|s| s.parse().ok()),
+                param: f.param,
+                ..Default::default()
+            })
+            .collect();
+        let entries = db
+            .get_price_ranges(&filters, &from_clone, &to_clone)
+            .map_err(|e| e.to_string())?;
+        let currencies: Vec<DpriceBatchCurrencyPrices> = entries
+            .into_iter()
+            .map(|e| DpriceBatchCurrencyPrices {
+                id: e.asset_id,
+                symbol: e.symbol,
+                prices: e.prices.into_iter().map(|(d, p)| (d, p.to_string())).collect(),
             })
             .collect();
         Ok(DpriceBatchResult {
@@ -491,14 +480,16 @@ mod tests {
     }
 
     #[test]
-    fn test_dprice_get_price_range() {
+    fn test_dprice_get_prices_empty() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         let _db = PriceDb::open(&db_path).unwrap();
 
         let db = PriceDb::open_readonly(&db_path).unwrap();
-        let prices = db.get_price_range("BTC", "2024-01-01", "2024-12-31", None, None).unwrap();
-        assert!(prices.is_empty());
+        let filters = vec![dprice::db::queries::AssetQueryFilter::from_symbol("BTC")];
+        let entries = db.get_price_ranges(&filters, "2024-01-01", "2024-12-31").unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].prices.is_empty());
     }
 
     #[test]
@@ -591,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dprice_get_price_ranges_batch() {
+    fn test_dprice_get_prices_with_data() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         {
@@ -613,14 +604,18 @@ mod tests {
         }
 
         let db = PriceDb::open_readonly(&db_path).unwrap();
-        let symbols = vec!["BTC", "EUR"];
-        let symbol_refs: Vec<&str> = symbols.iter().copied().collect();
-        let batch = db.get_price_ranges_batch(&symbol_refs, "2024-01-01", "2024-12-31").unwrap();
-        assert_eq!(batch.len(), 2);
-        assert_eq!(batch["BTC"].len(), 1);
-        assert_eq!(batch["BTC"][0].0, 20240126);
-        assert!((batch["BTC"][0].1 - 42150.0).abs() < 0.01);
-        assert_eq!(batch["EUR"].len(), 1);
+        let filters = vec![
+            dprice::db::queries::AssetQueryFilter::from_symbol("BTC"),
+            dprice::db::queries::AssetQueryFilter::from_symbol("EUR"),
+        ];
+        let entries = db.get_price_ranges(&filters, "2024-01-01", "2024-12-31").unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].symbol, "BTC");
+        assert_eq!(entries[0].prices.len(), 1);
+        assert_eq!(entries[0].prices[0].0, 20240126);
+        assert!((entries[0].prices[0].1 - 42150.0).abs() < 0.01);
+        assert_eq!(entries[1].symbol, "EUR");
+        assert_eq!(entries[1].prices.len(), 1);
     }
 
     #[test]

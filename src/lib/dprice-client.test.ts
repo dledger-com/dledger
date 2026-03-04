@@ -8,7 +8,7 @@ describe("dprice-client", () => {
     expect(client.health).toBeInstanceOf(Function);
     expect(client.getRate).toBeInstanceOf(Function);
     expect(client.getRates).toBeInstanceOf(Function);
-    expect(client.getPriceRange).toBeInstanceOf(Function);
+    expect(client.getPrices).toBeInstanceOf(Function);
     expect(client.sync).toBeInstanceOf(Function);
     expect(client.syncLatest).toBeInstanceOf(Function);
     expect(client.latestDate).toBeInstanceOf(Function);
@@ -47,8 +47,7 @@ describe("dprice-client", () => {
       health: async () => ({ assets: 0, prices: 0 }),
       getRate: async () => null,
       getRates: async () => [],
-      getPriceRange: async () => [],
-      getPriceRangeBatch: async () => ({ from: "", to: "", currencies: [] }),
+      getPrices: async () => ({ from: "", to: "", currencies: [] }),
       sync: async () => "ok",
       syncLatest: async () => "ok",
       latestDate: async () => null,

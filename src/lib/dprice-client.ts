@@ -11,12 +11,15 @@ export interface DpriceRateEntry {
   rate: string;
 }
 
-export interface DpricePriceEntry {
-  date: string;
-  price_usd: string;
+export interface DpriceAssetFilter {
+  id?: string;
+  symbol?: string;
+  type?: DpriceAssetType;
+  param?: string;
 }
 
 export interface DpriceBatchCurrency {
+  id: string;
   symbol: string;
   prices: [number, string][]; // [YYYYMMDD, price_usd]
 }
@@ -40,14 +43,8 @@ export interface DpriceClient {
     date?: string,
     opts?: { type?: DpriceAssetType },
   ): Promise<DpriceRateEntry[]>;
-  getPriceRange(
-    symbol: string,
-    fromDate: string,
-    toDate: string,
-    opts?: { type?: DpriceAssetType; param?: string },
-  ): Promise<DpricePriceEntry[]>;
-  getPriceRangeBatch(
-    symbols: string[],
+  getPrices(
+    bases: DpriceAssetFilter[],
     fromDate: string,
     toDate: string,
   ): Promise<DpriceBatchResult>;
@@ -101,28 +98,13 @@ class TauriDpriceClient implements DpriceClient {
     });
   }
 
-  async getPriceRange(
-    symbol: string,
-    fromDate: string,
-    toDate: string,
-    opts?: { type?: DpriceAssetType; param?: string },
-  ): Promise<DpricePriceEntry[]> {
-    return this.invoke("dprice_get_price_range", {
-      symbol,
-      fromDate,
-      toDate,
-      assetType: opts?.type,
-      param: opts?.param,
-    });
-  }
-
-  async getPriceRangeBatch(
-    symbols: string[],
+  async getPrices(
+    bases: DpriceAssetFilter[],
     fromDate: string,
     toDate: string,
   ): Promise<DpriceBatchResult> {
-    return this.invoke("dprice_get_price_ranges_batch", {
-      symbols,
+    return this.invoke("dprice_get_prices", {
+      bases,
       fromDate,
       toDate,
     });
@@ -168,6 +150,7 @@ interface PricesApiResponse {
   end_date: string | null;
   quote: string;
   currencies: Array<{
+    id?: string;
     base: string;
     count: number;
     prices: [number, string][]; // [YYYYMMDD, price]
@@ -233,35 +216,29 @@ class HttpDpriceClient implements DpriceClient {
     return entries;
   }
 
-  async getPriceRange(
-    symbol: string,
-    fromDate: string,
-    toDate: string,
-    _opts?: { type?: DpriceAssetType; param?: string },
-  ): Promise<DpricePriceEntry[]> {
-    const params = new URLSearchParams({ symbols: symbol, date: fromDate, end_date: toDate });
-    const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
-    if (resp.currencies.length === 0) return [];
-    return resp.currencies[0].prices.map(
-      ([dateInt, price]) => ({ date: String(dateInt), price_usd: price }),
-    );
-  }
-
-  async getPriceRangeBatch(
-    symbols: string[],
+  async getPrices(
+    bases: DpriceAssetFilter[],
     fromDate: string,
     toDate: string,
   ): Promise<DpriceBatchResult> {
+    const symbols = bases.map((b) => b.symbol ?? b.id ?? "").filter(Boolean);
     const params = new URLSearchParams({
       symbols: symbols.join(","),
       date: fromDate,
       end_date: toDate,
     });
+    // If all filters share the same type/param, add them to the query
+    const types = new Set(bases.map((b) => b.type).filter(Boolean));
+    if (types.size === 1) params.set("type", [...types][0]!);
+    const paramVals = new Set(bases.map((b) => b.param).filter(Boolean));
+    if (paramVals.size === 1) params.set("param", [...paramVals][0]!);
+
     const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
     return {
       from: resp.date,
       to: resp.end_date ?? resp.date,
       currencies: resp.currencies.map((c) => ({
+        id: c.id ?? "",
         symbol: c.base,
         prices: c.prices,
       })),
