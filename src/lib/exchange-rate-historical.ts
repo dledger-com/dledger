@@ -1142,6 +1142,18 @@ export async function autoBackfillRates(
   // Filter out hidden currencies
   const filtered = requirements.filter((r) => !hiddenCurrencies.has(r.currency));
 
+  // Auto-resolve dpriceAssets when dprice is active but caller didn't provide the set
+  if (!dpriceAssets && isDpriceActive(config.dpriceMode)) {
+    try {
+      const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+      const codes = filtered.map((r) => r.currency);
+      const entries = await client.getRates(codes);
+      dpriceAssets = new Set(entries.map((e) => e.from));
+    } catch {
+      // dprice unavailable — proceed without it
+    }
+  }
+
   // Build currency-date pairs
   const today = new Date().toISOString().slice(0, 10);
   const currencyDates: { currency: string; date: string }[] = [];
