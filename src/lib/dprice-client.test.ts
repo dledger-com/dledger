@@ -52,6 +52,7 @@ describe("dprice-client", () => {
       syncLatest: async () => "ok",
       latestDate: async () => null,
       ensurePrices: async () => [],
+      queryAssets: async () => [],
       exportDb: async () => new Uint8Array(),
       importDb: async () => "ok",
     };

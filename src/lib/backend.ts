@@ -66,6 +66,7 @@ export interface CurrencyRateSource {
   asset_type?: string;
   param?: string;
   rate_source: string | null; // null = auto-detect needed
+  rate_source_id: string;     // dprice asset ID (or empty)
   set_by: string;             // "user" | "handler:<id>" | "auto"
   updated_at: string;
 }
@@ -178,7 +179,7 @@ export interface Backend {
 
   // Currency rate source management
   getCurrencyRateSources(): Promise<CurrencyRateSource[]>;
-  setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean>;
+  setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, rateSourceId?: string): Promise<boolean>;
   clearAutoRateSources(): Promise<void>;
   clearNonUserRateSources(): Promise<void>;
 
@@ -513,7 +514,8 @@ class TauriBackend implements Backend {
   async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
     return this.invoke("get_currency_rate_sources");
   }
-  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean> {
+  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, _rateSourceId?: string): Promise<boolean> {
+    // Tauri backend doesn't store rate_source_id (frontend-only field)
     await this.invoke("set_currency_rate_source", { currency, rateSource: rateSource ?? "", setBy });
     return true;
   }

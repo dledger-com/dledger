@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS currency_rate_source (
     asset_type TEXT NOT NULL DEFAULT '',
     param TEXT NOT NULL DEFAULT '',
     rate_source TEXT NOT NULL,
+    rate_source_id TEXT NOT NULL DEFAULT '',
     set_by TEXT NOT NULL DEFAULT 'auto',
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (currency, asset_type, param)
@@ -489,7 +490,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (18)");
+    db.exec("INSERT INTO schema_version (version) VALUES (19)");
     return backend;
   }
 
@@ -541,7 +542,7 @@ export class SqlJsBackend implements Backend {
         PRIMARY KEY (journal_entry_id, link_name)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-      db.exec("INSERT INTO schema_version (version) VALUES (18)");
+      db.exec("INSERT INTO schema_version (version) VALUES (19)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -918,6 +919,12 @@ PRAGMA foreign_keys = ON;
           db.exec("ALTER TABLE account ADD COLUMN opened_at TEXT");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (18)");
+        }
+        if (currentVersion < 19) {
+          // Migrate v18 → v19: add rate_source_id column to currency_rate_source
+          db.exec("ALTER TABLE currency_rate_source ADD COLUMN rate_source_id TEXT NOT NULL DEFAULT ''");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (19)");
         }
       }
     }
@@ -3546,21 +3553,23 @@ PRAGMA foreign_keys = ON;
 
   async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
     return this.query(
-      "SELECT currency, asset_type, param, rate_source, set_by, updated_at FROM currency_rate_source ORDER BY currency",
+      "SELECT currency, asset_type, param, rate_source, rate_source_id, set_by, updated_at FROM currency_rate_source ORDER BY currency",
       [],
       (row) => ({
         currency: row.currency as string,
         asset_type: (row.asset_type as string) ?? "",
         param: (row.param as string) ?? "",
         rate_source: (row.rate_source as string | null) ?? null,
+        rate_source_id: (row.rate_source_id as string) ?? "",
         set_by: row.set_by as string,
         updated_at: row.updated_at as string,
       }),
     );
   }
 
-  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string): Promise<boolean> {
+  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, rateSourceId?: string): Promise<boolean> {
     const today = new Date().toISOString().slice(0, 10);
+    const sourceId = rateSourceId ?? "";
 
     // Check existing row for priority (composite PK: currency, asset_type, param)
     const existing = this.queryOne(
@@ -3582,13 +3591,13 @@ PRAGMA foreign_keys = ON;
         return false; // Skip: existing has higher priority
       }
       this.run(
-        "UPDATE currency_rate_source SET rate_source = ?, set_by = ?, updated_at = ? WHERE currency = ? AND asset_type = '' AND param = ''",
-        [rateSource, setBy, today, currency],
+        "UPDATE currency_rate_source SET rate_source = ?, rate_source_id = ?, set_by = ?, updated_at = ? WHERE currency = ? AND asset_type = '' AND param = ''",
+        [rateSource, sourceId, setBy, today, currency],
       );
     } else {
       this.run(
-        "INSERT INTO currency_rate_source (currency, asset_type, param, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        [currency, "", "", rateSource, setBy, today],
+        "INSERT INTO currency_rate_source (currency, asset_type, param, rate_source, rate_source_id, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [currency, "", "", rateSource, sourceId, setBy, today],
       );
     }
     this.scheduleSave();

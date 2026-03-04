@@ -16,6 +16,20 @@ export interface DpriceAssetFilter {
   symbol?: string;
   type?: DpriceAssetType;
   param?: string;
+  coingecko_id?: string;
+  contract_chain?: string;
+  contract_address?: string;
+}
+
+export interface DpriceAssetInfo {
+  id: string;
+  symbol: string;
+  name: string;
+  type: DpriceAssetType | string;
+  param?: string;
+  coingecko_id?: string;
+  contract_chain?: string;
+  contract_address?: string;
 }
 
 export interface DpriceBatchCurrency {
@@ -55,6 +69,7 @@ export interface DpriceClient {
     requests: Array<{ symbol: string; date: string }>,
     opts?: { type?: DpriceAssetType; param?: string },
   ): Promise<string[]>;
+  queryAssets(filter: DpriceAssetFilter, limit?: number): Promise<DpriceAssetInfo[]>;
   exportDb(): Promise<Uint8Array>;
   importDb(data: Uint8Array): Promise<string>;
 }
@@ -132,6 +147,10 @@ class TauriDpriceClient implements DpriceClient {
       assetType: opts?.type,
       param: opts?.param,
     });
+  }
+
+  async queryAssets(filter: DpriceAssetFilter, limit?: number): Promise<DpriceAssetInfo[]> {
+    return this.invoke("dprice_query_assets", { filter, limit });
   }
 
   async exportDb(): Promise<Uint8Array> {
@@ -291,6 +310,20 @@ class HttpDpriceClient implements DpriceClient {
       }
     }
     return [...missing];
+  }
+
+  async queryAssets(filter: DpriceAssetFilter, limit?: number): Promise<DpriceAssetInfo[]> {
+    const params = new URLSearchParams();
+    if (filter.id) params.set("id", filter.id);
+    if (filter.symbol) params.set("symbol", filter.symbol);
+    if (filter.type) params.set("type", filter.type);
+    if (filter.param) params.set("param", filter.param);
+    if (filter.coingecko_id) params.set("coingecko_id", filter.coingecko_id);
+    if (filter.contract_chain) params.set("contract_chain", filter.contract_chain);
+    if (filter.contract_address) params.set("contract_address", filter.contract_address);
+    if (limit) params.set("limit", limit.toString());
+    const resp = await this.fetchJson<{ results: DpriceAssetInfo[] }>(`/api/v1/assets?${params}`);
+    return resp.results;
   }
 
   async exportDb(): Promise<Uint8Array> {

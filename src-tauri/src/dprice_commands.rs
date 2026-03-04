@@ -115,6 +115,39 @@ pub struct DpriceAssetFilter {
     #[serde(rename = "type")]
     pub asset_type: Option<String>,
     pub param: Option<String>,
+    pub coingecko_id: Option<String>,
+    pub contract_chain: Option<String>,
+    pub contract_address: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct DpriceAssetInfo {
+    pub id: String,
+    pub symbol: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub asset_type: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub param: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coingecko_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_chain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_address: Option<String>,
+}
+
+fn to_asset_query_filter(f: DpriceAssetFilter) -> dprice::db::queries::AssetQueryFilter {
+    dprice::db::queries::AssetQueryFilter {
+        id: f.id,
+        symbol: f.symbol,
+        asset_type: f.asset_type.and_then(|s| s.parse().ok()),
+        param: f.param,
+        coingecko_id: f.coingecko_id,
+        contract_chain: f.contract_chain,
+        contract_address: f.contract_address,
+        ..Default::default()
+    }
 }
 
 #[derive(Serialize)]
@@ -145,13 +178,7 @@ pub async fn dprice_get_prices(
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
         let filters: Vec<dprice::db::queries::AssetQueryFilter> = bases
             .into_iter()
-            .map(|f| dprice::db::queries::AssetQueryFilter {
-                id: f.id,
-                symbol: f.symbol,
-                asset_type: f.asset_type.and_then(|s| s.parse().ok()),
-                param: f.param,
-                ..Default::default()
-            })
+            .map(to_asset_query_filter)
             .collect();
         let entries = db
             .get_price_ranges(&filters, &from_clone, &to_clone)
@@ -427,6 +454,36 @@ pub async fn dprice_vacuum(state: State<'_, DpriceState>) -> Result<String, Stri
 }
 
 #[tauri::command]
+pub async fn dprice_query_assets(
+    state: State<'_, DpriceState>,
+    filter: DpriceAssetFilter,
+    limit: Option<usize>,
+) -> Result<Vec<DpriceAssetInfo>, String> {
+    let db_path = state.active_db_path();
+    let query_filter = to_asset_query_filter(filter);
+    let limit = limit.unwrap_or(10);
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
+        let assets = db.query_assets(&query_filter, limit).map_err(|e| e.to_string())?;
+        Ok(assets
+            .into_iter()
+            .map(|a| DpriceAssetInfo {
+                id: a.id,
+                symbol: a.symbol,
+                name: a.name,
+                asset_type: a.asset_type.as_str().to_string(),
+                param: a.param,
+                coingecko_id: a.coingecko_id,
+                contract_chain: a.contract_chain,
+                contract_address: a.contract_address,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
 pub async fn dprice_local_db_path(
     state: State<'_, DpriceState>,
 ) -> Result<String, String> {
@@ -633,5 +690,39 @@ mod tests {
         assert_eq!(state.active_db_path(), integrated);
         *state.mode.write().unwrap() = DpriceMode::Local;
         assert_eq!(state.active_db_path(), local);
+    }
+
+    #[test]
+    fn test_dprice_query_assets() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        {
+            let db = PriceDb::open(&db_path).unwrap();
+            use dprice::db::models::Asset;
+            db.upsert_asset(&Asset::new_crypto("btc", "BTC", "Bitcoin", Some("BTC"))).unwrap();
+            db.upsert_asset(&Asset::new_fiat("eur", "EUR", "Euro")).unwrap();
+        }
+
+        let db = PriceDb::open_readonly(&db_path).unwrap();
+        // Query by symbol
+        let filter = dprice::db::queries::AssetQueryFilter::from_symbol("BTC");
+        let results = db.query_assets(&filter, 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].symbol, "BTC");
+        assert_eq!(results[0].asset_type.as_str(), "crypto");
+
+        // Query by type
+        let filter = dprice::db::queries::AssetQueryFilter {
+            asset_type: Some(dprice::db::models::AssetType::Fiat),
+            ..Default::default()
+        };
+        let results = db.query_assets(&filter, 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].symbol, "EUR");
+
+        // Query with no results
+        let filter = dprice::db::queries::AssetQueryFilter::from_symbol("NOPE");
+        let results = db.query_assets(&filter, 10).unwrap();
+        assert!(results.is_empty());
     }
 }

@@ -153,6 +153,7 @@ pub fn run() {
             dprice_commands::dprice_local_db_path,
             dprice_commands::dprice_vacuum,
             dprice_commands::dprice_export_parquet,
+            dprice_commands::dprice_query_assets,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

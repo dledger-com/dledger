@@ -59,6 +59,7 @@ export interface HistoricalFetchConfig {
   cryptoCompareApiKey?: string;
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
+  storedSources?: CurrencyRateSource[];
   onProgress?: (fetched: number, total: number) => void;
   signal?: AbortSignal;
 }
@@ -989,8 +990,22 @@ async function fetchDpriceHistorical(
   }
 
   try {
+    // Build filters using stored dprice asset IDs when available
+    const idMap = new Map<string, string>();
+    if (config.storedSources) {
+      for (const src of config.storedSources) {
+        if (src.rate_source === "dprice" && src.rate_source_id) {
+          idMap.set(src.currency, src.rate_source_id);
+        }
+      }
+    }
+    const filters = [...allSymbols].map(s => {
+      const id = idMap.get(s);
+      return id ? { id } : { symbol: s };
+    });
+
     // Single batch request for all symbols across the full date range
-    const batch = await client.getPrices([...allSymbols].map(s => ({ symbol: s })), globalFrom, globalTo);
+    const batch = await client.getPrices(filters, globalFrom, globalTo);
 
     // Build per-symbol lookup maps: date string → price_usd string
     const priceMaps = new Map<string, Map<string, string>>();
@@ -1223,7 +1238,12 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
 
-  const result = await fetchHistoricalRates(backend, missing, config, dpriceAssets);
+  // Ensure storedSources is populated for dprice ID-based lookups
+  const effectiveConfig = config.storedSources
+    ? config
+    : { ...config, storedSources: await backend.getCurrencyRateSources() };
+
+  const result = await fetchHistoricalRates(backend, missing, effectiveConfig, dpriceAssets);
   return {
     ...result,
     currenciesAnalyzed: filtered.length,

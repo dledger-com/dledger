@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource } from "./backend.js";
-import { createDpriceClient } from "./dprice-client.js";
+import { createDpriceClient, type DpriceClient, type DpriceAssetFilter } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 
 // ECB/Frankfurter supported fiat currency codes
@@ -94,6 +94,37 @@ function autoDetectSource(
   return "none";
 }
 
+/**
+ * Resolve a currency against dprice's asset database using all available metadata.
+ * Returns the dprice asset ID on unambiguous match, or "none"/"ambiguous" otherwise.
+ */
+async function resolveDpriceAsset(
+  client: DpriceClient,
+  code: string,
+  assetType: string,
+  tokenAddr?: { chain: string; contract_address: string },
+): Promise<{ id: string; type: string } | "none" | "ambiguous"> {
+  const filter: DpriceAssetFilter = { symbol: code };
+  if (assetType) filter.type = assetType as DpriceAssetFilter["type"];
+  if (tokenAddr) {
+    filter.contract_chain = tokenAddr.chain;
+    filter.contract_address = tokenAddr.contract_address;
+  }
+
+  const results = await client.queryAssets(filter, 5);
+  if (results.length === 0) return "none";
+  if (results.length === 1) return { id: results[0].id, type: String(results[0].type) };
+
+  // Ambiguous: try to narrow — if exactly one matches the assetType, pick it
+  if (assetType) {
+    const typed = results.filter((r) => r.type === assetType);
+    if (typed.length === 1) return { id: typed[0].id, type: String(typed[0].type) };
+  }
+
+  // Can't disambiguate — skip dprice for this currency (future: disambiguation UI)
+  return "ambiguous";
+}
+
 /** Map base currency to Binance quote currency and construct trading pair */
 function toBinancePair(currency: string, baseCurrency: string): string | null {
   const quoteMap: Record<string, string> = { USD: "USDT", EUR: "EUR" };
@@ -163,7 +194,9 @@ export async function syncExchangeRates(
 
   // When dprice is enabled, try it FIRST for all currencies.
   // This dprice-first pass fetches actual rates and records them, avoiding redundant external API calls.
+  // It also resolves dprice asset IDs for new currencies and stores them for future queries.
   let dpriceAssets: Set<string> | undefined;
+  const dpriceResolvedIds = new Map<string, string>(); // code → dprice asset ID
   const dpriceServed = new Set<string>(); // codes successfully served by dprice this run
   if (isDpriceActive(dpriceMode)) {
     try {
@@ -171,6 +204,53 @@ export async function syncExchangeRates(
       // Request cross-rates for all codes (including baseCurrency for completeness)
       const entries = await client.getRates([...codes, baseCurrency]);
       dpriceAssets = new Set(entries.map((e) => e.from));
+
+      // Load existing rate_source_id mappings from stored sources
+      const existingIds = new Map<string, string>();
+      for (const src of storedSources) {
+        if (src.rate_source === "dprice" && src.rate_source_id) {
+          existingIds.set(src.currency, src.rate_source_id);
+        }
+      }
+
+      // Currencies with stored dprice IDs — use directly
+      for (const code of codes) {
+        if (existingIds.has(code) && dpriceAssets.has(code)) {
+          dpriceResolvedIds.set(code, existingIds.get(code)!);
+        }
+      }
+      if (existingIds.has(baseCurrency)) {
+        dpriceResolvedIds.set(baseCurrency, existingIds.get(baseCurrency)!);
+      }
+
+      // Resolve new currencies that are in dpriceAssets but don't have stored IDs
+      const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+      const codesToResolve = codes.filter(
+        (c) => dpriceAssets!.has(c) && !existingIds.has(c),
+      );
+      for (const code of codesToResolve) {
+        try {
+          const assetType = currencyTypeMap.get(code) ?? "";
+          const tokenInfo = tokenAddrMap.get(code);
+          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo);
+          if (resolved !== "none" && resolved !== "ambiguous") {
+            dpriceResolvedIds.set(code, resolved.id);
+          }
+        } catch {
+          // Individual resolution failure — skip, will use symbol-based fallback
+        }
+      }
+      // Also resolve baseCurrency if needed
+      if (dpriceAssets.has(baseCurrency) && !existingIds.has(baseCurrency)) {
+        try {
+          const baseAssetType = currencyTypeMap.get(baseCurrency) ?? "";
+          const baseToken = tokenAddrMap.get(baseCurrency);
+          const baseResolved = await resolveDpriceAsset(client, baseCurrency, baseAssetType, baseToken);
+          if (baseResolved !== "none" && baseResolved !== "ambiguous") {
+            dpriceResolvedIds.set(baseCurrency, baseResolved.id);
+          }
+        } catch { /* ignore */ }
+      }
 
       // Filter entries that give us a direct rate to baseCurrency
       const baseRates = entries.filter((e) => e.to === baseCurrency);
@@ -617,12 +697,16 @@ export async function syncExchangeRates(
   }
 
   // Post-process: Write auto-detection results to DB
-  // Include dprice-served codes that had no prior stored source
+  // Include dprice-served codes that had no prior stored source, and store resolved IDs
   for (const code of dpriceServed) {
     const stored = sourceMap.get(code);
+    const resolvedId = dpriceResolvedIds.get(code) ?? "";
     if (!stored || stored.rate_source === null) {
-      await backend.setCurrencyRateSource(code, "dprice", "auto");
+      await backend.setCurrencyRateSource(code, "dprice", "auto", resolvedId);
       result.newlyDetected.push(code);
+    } else if (resolvedId && stored.rate_source_id !== resolvedId) {
+      // Update existing source with newly resolved ID
+      await backend.setCurrencyRateSource(code, "dprice", stored.set_by, resolvedId);
     }
     allSucceeded.add(code);
   }
