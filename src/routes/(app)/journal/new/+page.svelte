@@ -38,17 +38,19 @@
     accountPath: string;
     debit: string;
     credit: string;
+    _autoDebit: boolean;
+    _autoCredit: boolean;
   }
 
   let lines = $state<FormLine[]>([
-    { key: uuidv7(), accountPath: "", debit: "", credit: "" },
-    { key: uuidv7(), accountPath: "", debit: "", credit: "" },
+    { key: uuidv7(), accountPath: "", debit: "", credit: "", _autoDebit: false, _autoCredit: false },
+    { key: uuidv7(), accountPath: "", debit: "", credit: "", _autoDebit: false, _autoCredit: false },
   ]);
 
   const accountNames = $derived(accountStore.postable.map((a) => a.full_name));
 
   function addLine() {
-    lines = [...lines, { key: uuidv7(), accountPath: "", debit: "", credit: "" }];
+    lines = [...lines, { key: uuidv7(), accountPath: "", debit: "", credit: "", _autoDebit: false, _autoCredit: false }];
   }
 
   async function ensureAccountHierarchy(fullName: string): Promise<string> {
@@ -82,6 +84,40 @@
       parentId = account.id;
     }
     return parentId!;
+  }
+
+  function handleDebitInput(lineIndex: number) {
+    const line = lines[lineIndex];
+    if (line.debit) line.credit = "";
+    line._autoDebit = false;
+    line._autoCredit = false;
+
+    if (lines.length === 2) {
+      const other = lines[1 - lineIndex];
+      if (!other.credit || other._autoCredit) {
+        other.credit = line.debit;
+        other._autoCredit = true;
+        other.debit = "";
+        other._autoDebit = false;
+      }
+    }
+  }
+
+  function handleCreditInput(lineIndex: number) {
+    const line = lines[lineIndex];
+    if (line.credit) line.debit = "";
+    line._autoCredit = false;
+    line._autoDebit = false;
+
+    if (lines.length === 2) {
+      const other = lines[1 - lineIndex];
+      if (!other.debit || other._autoDebit) {
+        other.debit = line.credit;
+        other._autoDebit = true;
+        other.credit = "";
+        other._autoCredit = false;
+      }
+    }
   }
 
   function removeLine(key: string) {
@@ -259,7 +295,7 @@
             <span></span>
           </div>
 
-          {#each lines as line (line.key)}
+          {#each lines as line, i (line.key)}
             <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 items-center">
               <AccountCombobox
                 value={line.accountPath}
@@ -275,7 +311,7 @@
                 placeholder="0.00"
                 bind:value={line.debit}
                 class="text-right font-mono"
-                oninput={() => { if (line.debit) line.credit = ""; }}
+                oninput={() => handleDebitInput(i)}
               />
               <Input
                 type="number"
@@ -284,7 +320,7 @@
                 placeholder="0.00"
                 bind:value={line.credit}
                 class="text-right font-mono"
-                oninput={() => { if (line.credit) line.debit = ""; }}
+                oninput={() => handleCreditInput(i)}
               />
               <Button
                 variant="ghost"
