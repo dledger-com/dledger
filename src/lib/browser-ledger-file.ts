@@ -161,7 +161,13 @@ export async function importLedger(
     date: string,
   ): Promise<string> {
     const existing = existingAccounts.get(fullName);
-    if (existing) return existing.id;
+    if (existing) {
+      if (existing.is_archived) {
+        await backend.unarchiveAccount(existing.id);
+        existing.is_archived = false;
+      }
+      return existing.id;
+    }
 
     const accountType = inferAccountType(fullName);
     const parts = fullName.split(":");
@@ -289,25 +295,11 @@ export async function importLedger(
     return 1;
   }
 
-  async function parseCloseDirective(
-    rest: string,
-    lineNum: number,
-  ): Promise<void> {
-    const accountName = rest.split(/\s+/)[0];
-    if (!accountName)
-      throw new Error(
-        `line ${lineNum}: close directive missing account name`,
-      );
-
-    const acc = existingAccounts.get(accountName);
-    if (acc) {
-      await backend.archiveAccount(acc.id);
-    } else {
-      result.warnings.push(
-        `line ${lineNum}: close directive for unknown account '${accountName}'`,
-      );
-    }
-  }
+  // Deferred close directives — processed after all transactions are imported
+  const deferredCloseDirectives: {
+    accountName: string;
+    lineNum: number;
+  }[] = [];
 
   // Deferred balance assertions — checked after all transactions are imported
   const deferredBalanceAssertions: {
@@ -1185,7 +1177,12 @@ export async function importLedger(
       }
 
       if (rest.startsWith("close ")) {
-        await parseCloseDirective(rest.substring(6).trim(), i + 1);
+        const closeAccountName = rest.substring(6).trim().split(/\s+/)[0];
+        if (closeAccountName) {
+          deferredCloseDirectives.push({ accountName: closeAccountName, lineNum: i + 1 });
+        } else {
+          result.warnings.push(`line ${i + 1}: close directive missing account name`);
+        }
         i++;
         continue;
       }
@@ -1354,6 +1351,18 @@ export async function importLedger(
           `line ${ba.lineNum}: balance assertion failed for ${ba.accountName} ${ba.commodity} ${ba.date} (expected ${ba.amountStr}, actual ${actualAmount.toString()})`,
         );
       }
+    }
+  }
+
+  // Process deferred close directives now that all transactions are imported
+  for (const dc of deferredCloseDirectives) {
+    const acc = existingAccounts.get(dc.accountName);
+    if (acc) {
+      await backend.archiveAccount(acc.id);
+    } else {
+      result.warnings.push(
+        `line ${dc.lineNum}: close directive for unknown account '${dc.accountName}'`,
+      );
     }
   }
 

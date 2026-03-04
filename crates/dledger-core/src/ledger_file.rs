@@ -171,6 +171,7 @@ fn import_ledger_internal(
     let mut i = 0;
     let mut in_block_comment = false;
     let mut default_commodity: Option<String> = None;
+    let mut deferred_closes: Vec<(String, usize)> = Vec::new();
 
     while i < lines.len() {
         let line = lines[i];
@@ -263,7 +264,9 @@ fn import_ledger_internal(
             }
 
             if let Some(stripped) = rest.strip_prefix("close ") {
-                parse_close_directive(engine, stripped.trim(), &mut result, i + 1)?;
+                let account_name = stripped.trim().split_whitespace().next()
+                    .ok_or_else(|| format!("line {}: close directive missing account name", i + 1))?;
+                deferred_closes.push((account_name.to_string(), i + 1));
                 i += 1;
                 continue;
             }
@@ -300,6 +303,22 @@ fn import_ledger_internal(
 
         // Unknown line — skip
         i += 1;
+    }
+
+    // Process deferred close directives now that all transactions are imported
+    for (account_name, line_num) in &deferred_closes {
+        if let Some(acc) = engine
+            .storage()
+            .get_account_by_full_name(account_name)
+            .map_err(|e| e.to_string())?
+        {
+            engine.archive_account(&acc.id).map_err(|e| e.to_string())?;
+        } else {
+            result.warnings.push(format!(
+                "line {}: close directive for unknown account '{}'",
+                line_num, account_name
+            ));
+        }
     }
 
     Ok(result)
@@ -469,6 +488,9 @@ fn ensure_account(
         .get_account_by_full_name(full_name)
         .map_err(|e| e.to_string())?
     {
+        if acc.is_archived {
+            engine.unarchive_account(&acc.id).map_err(|e| e.to_string())?;
+        }
         return Ok(acc.id);
     }
 
@@ -550,30 +572,6 @@ fn parse_open_directive(
     }
 
     ensure_account(engine, account_name, allowed, date, result)?;
-    Ok(())
-}
-
-fn parse_close_directive(
-    engine: &LedgerEngine,
-    rest: &str,
-    result: &mut LedgerImportResult,
-    _line_num: usize,
-) -> Result<(), String> {
-    let account_name = rest.split_whitespace().next()
-        .ok_or_else(|| format!("line {}: close directive missing account name", _line_num))?;
-
-    if let Some(acc) = engine
-        .storage()
-        .get_account_by_full_name(account_name)
-        .map_err(|e| e.to_string())?
-    {
-        engine.archive_account(&acc.id).map_err(|e| e.to_string())?;
-    } else {
-        result.warnings.push(format!(
-            "line {}: close directive for unknown account '{}'",
-            _line_num, account_name
-        ));
-    }
     Ok(())
 }
 
