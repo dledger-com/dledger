@@ -1256,7 +1256,17 @@ export function enqueueRateBackfill(
       key: "rate-backfill:post-import",
       label: `Backfill rates for ${new Set(currencyDates.map(([c]) => c)).size} imported currency(ies)`,
       async run(ctx) {
-        const missing = await findMissingRates(backend, config.baseCurrency, pairs, dpriceAssets);
+        // Auto-resolve dpriceAssets when dprice is active but caller didn't provide the set
+        let resolvedDpriceAssets = dpriceAssets;
+        if (!resolvedDpriceAssets && isDpriceActive(config.dpriceMode)) {
+          try {
+            const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+            const codes = [...new Set(pairs.map((p) => p.currency))];
+            const entries = await client.getRates(codes);
+            resolvedDpriceAssets = new Set(entries.map((e) => e.from));
+          } catch { /* dprice unavailable */ }
+        }
+        const missing = await findMissingRates(backend, config.baseCurrency, pairs, resolvedDpriceAssets);
         if (missing.length === 0) {
           return { summary: "All rates already available" };
         }
@@ -1265,7 +1275,7 @@ export function enqueueRateBackfill(
           ...config,
           signal: ctx.signal,
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total: total || totalDates }),
-        }, dpriceAssets);
+        }, resolvedDpriceAssets);
         return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
       },
     });
