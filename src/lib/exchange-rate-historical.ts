@@ -1003,7 +1003,19 @@ async function fetchDpriceHistorical(
         if (basePriceMap) {
           const baseUsd = basePriceMap.get(date);
           if (baseUsd == null || parseFloat(baseUsd) === 0) {
-            result.skipped++;
+            // Cross-rate unavailable — fall back to storing as X→USD so
+            // the transitive lookup path (X→USD→baseCurrency) can still work
+            if (!currenciesToEnsure.has("USD")) { await ensureCurrency(backend, "USD"); currenciesToEnsure.add("USD"); }
+            successCurrencies.add(req.currency);
+            rateBatch.push({
+              id: uuidv7(),
+              date,
+              from_currency: req.currency,
+              to_currency: "USD",
+              rate: usdPrice,
+              source: "dprice",
+            });
+            result.fetched++;
             onDateDone();
             continue;
           }
@@ -1117,6 +1129,40 @@ export async function autoBackfillRates(
       // Use exact transaction dates
       for (const date of req.dates) {
         currencyDates.push({ currency: req.currency, date });
+      }
+    }
+  }
+
+  // When baseCurrency != "USD", ensure USD→baseCurrency rates are synced from Frankfurter.
+  // Crypto sources (DefiLlama, dprice fallback) store rates as X→USD, so the transitive
+  // lookup path X→USD→baseCurrency needs USD→baseCurrency in the exchange_rate table.
+  if (config.baseCurrency !== "USD" && FRANKFURTER_FIAT.has(config.baseCurrency)) {
+    const hasUsd = currencyDates.some((cd) => cd.currency === "USD");
+    if (!hasUsd) {
+      // Derive date range from non-fiat currency requirements
+      let minDate = "9999-12-31";
+      let maxDate = "0000-01-01";
+      for (const req of filtered) {
+        if (!FRANKFURTER_FIAT.has(req.currency)) {
+          if (req.mode === "range") {
+            if (req.firstDate < minDate) minDate = req.firstDate;
+            const endDate = req.hasBalance && today > req.lastDate ? today : req.lastDate;
+            if (endDate > maxDate) maxDate = endDate;
+          } else {
+            for (const d of req.dates) {
+              if (d < minDate) minDate = d;
+              if (d > maxDate) maxDate = d;
+            }
+          }
+        }
+      }
+      if (minDate <= maxDate) {
+        let current = new Date(minDate);
+        const end = new Date(maxDate);
+        while (current <= end) {
+          currencyDates.push({ currency: "USD", date: current.toISOString().slice(0, 10) });
+          current.setDate(current.getDate() + 1);
+        }
       }
     }
   }

@@ -613,21 +613,87 @@ describe("SqlJsBackend", () => {
       expect(rate).toBe("0.00060");
     });
 
-    it("does not derive transitive rate across different dates", async () => {
+    it("derives transitive rate when legs are on different dates within 7-day window", async () => {
       await backend.createCurrency({ code: "GLD", asset_type: "", param: "", name: "Gold", decimal_places: 4, is_base: false });
-      // EUR→USD on 2024-01-15, GLD→USD on 2024-01-10 (different dates)
+      // EUR→USD on 2024-01-15, GLD→USD on 2024-01-12 (3-day gap, within window)
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
         from_currency: "EUR", to_currency: "USD",
         rate: "1.10", source: "api",
       });
       await backend.recordExchangeRate({
-        id: uuidv7(), date: "2024-01-10",
+        id: uuidv7(), date: "2024-01-12",
+        from_currency: "GLD", to_currency: "USD",
+        rate: "2000", source: "api",
+      });
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).not.toBeNull();
+      expect(parseFloat(rate!)).toBeCloseTo(1.10 / 2000, 8);
+    });
+
+    it("does not derive transitive rate when legs are beyond 7-day window", async () => {
+      await backend.createCurrency({ code: "GLD", asset_type: "", param: "", name: "Gold", decimal_places: 4, is_base: false });
+      // EUR→USD on 2024-01-15, GLD→USD on 2024-01-01 (14-day gap, beyond window)
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-15",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-01",
         from_currency: "GLD", to_currency: "USD",
         rate: "2000", source: "api",
       });
       const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
       expect(rate).toBeNull();
+    });
+
+    it("derives transitive rate using latest available rates for both legs", async () => {
+      await backend.createCurrency({ code: "GLD", asset_type: "", param: "", name: "Gold", decimal_places: 4, is_base: false });
+      // Multiple EUR→USD rates — should pick latest (Jan 14)
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-10",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.05", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-14",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      // Multiple GLD→USD rates — should pick latest (Jan 13)
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-09",
+        from_currency: "GLD", to_currency: "USD",
+        rate: "1900", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-13",
+        from_currency: "GLD", to_currency: "USD",
+        rate: "2000", source: "api",
+      });
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).not.toBeNull();
+      // Should use EUR→USD=1.10 (Jan 14) and GLD→USD=2000 (Jan 13)
+      expect(parseFloat(rate!)).toBeCloseTo(1.10 / 2000, 8);
+    });
+
+    it("derives transitive rate when second leg is before first leg", async () => {
+      await backend.createCurrency({ code: "GLD", asset_type: "", param: "", name: "Gold", decimal_places: 4, is_base: false });
+      // EUR→USD on 2024-01-13, GLD→USD on 2024-01-14 (second leg after first, both within window)
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-13",
+        from_currency: "EUR", to_currency: "USD",
+        rate: "1.10", source: "api",
+      });
+      await backend.recordExchangeRate({
+        id: uuidv7(), date: "2024-01-14",
+        from_currency: "GLD", to_currency: "USD",
+        rate: "2000", source: "api",
+      });
+      const rate = await backend.getExchangeRate("EUR", "GLD", "2024-01-15");
+      expect(rate).not.toBeNull();
+      expect(parseFloat(rate!)).toBeCloseTo(1.10 / 2000, 8);
     });
 
     it("does not derive transitive rate when no path exists", async () => {

@@ -810,22 +810,27 @@ impl Storage for SqliteStorage {
             return Ok(Some(Decimal::ONE / rate));
         }
 
-        // Transitive fallback: A→X→B via single intermediate, same-date only
-        // Collect (currency, rate, date) pairs where from→X exists on or before `date`
-        let mut from_legs: std::collections::HashMap<String, Vec<(Decimal, String)>> =
+        // Transitive fallback: A→X→B via single intermediate
+        // Both legs use "on or before" matching within a 7-day staleness window
+        const TRANSITIVE_MAX_STALENESS_DAYS: i64 = 7;
+        let window_start = date - chrono::Duration::days(TRANSITIVE_MAX_STALENESS_DAYS);
+        let window_start_str = window_start.format("%Y-%m-%d").to_string();
+
+        // Collect latest first-leg rate per intermediate currency (deduplicated)
+        let mut from_legs: std::collections::HashMap<String, (Decimal, String)> =
             std::collections::HashMap::new();
 
-        // Direct: from→X
+        // Direct: from→X (latest within window)
         {
             let mut stmt = conn
                 .prepare(
                     "SELECT to_currency, rate, date FROM exchange_rate
-                     WHERE from_currency = ?1 AND date <= ?2
+                     WHERE from_currency = ?1 AND date <= ?2 AND date >= ?3
                      ORDER BY date DESC",
                 )
                 .map_err(|e| StorageError::Internal(e.to_string()))?;
             let rows = stmt
-                .query_map(params![from, &date_str], |row| {
+                .query_map(params![from, &date_str, &window_start_str], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
@@ -837,21 +842,21 @@ impl Storage for SqliteStorage {
                 let (currency, rate_str, d) =
                     row.map_err(|e| StorageError::Internal(e.to_string()))?;
                 let rate = parse_decimal(&rate_str)?;
-                from_legs.entry(currency).or_default().push((rate, d));
+                from_legs.entry(currency).or_insert((rate, d));
             }
         }
 
-        // Inverse: X→from (so from→X = 1/rate)
+        // Inverse: X→from (so from→X = 1/rate), latest within window
         {
             let mut stmt = conn
                 .prepare(
                     "SELECT from_currency, rate, date FROM exchange_rate
-                     WHERE to_currency = ?1 AND date <= ?2
+                     WHERE to_currency = ?1 AND date <= ?2 AND date >= ?3
                      ORDER BY date DESC",
                 )
                 .map_err(|e| StorageError::Internal(e.to_string()))?;
             let rows = stmt
-                .query_map(params![from, &date_str], |row| {
+                .query_map(params![from, &date_str, &window_start_str], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
@@ -866,50 +871,51 @@ impl Storage for SqliteStorage {
                 if rate.is_zero() {
                     continue;
                 }
-                from_legs
-                    .entry(currency)
-                    .or_default()
-                    .push((Decimal::ONE / rate, d));
+                from_legs.entry(currency).or_insert((Decimal::ONE / rate, d));
             }
         }
 
-        // For each intermediate X, check if X→to (or to→X) exists on the same date
-        for (_x, legs) in &from_legs {
-            for (leg_rate, leg_date) in legs {
-                // Direct: X→to on leg_date
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT rate FROM exchange_rate
-                         WHERE from_currency = ?1 AND to_currency = ?2 AND date = ?3",
-                    )
-                    .map_err(|e| StorageError::Internal(e.to_string()))?;
-                let x_to_direct = stmt
-                    .query_row(params![_x, to, leg_date], |row| row.get::<_, String>(0))
-                    .optional()
-                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+        // For each intermediate X, find latest X→to (or to→X) within staleness window
+        for (_x, (leg_rate, _leg_date)) in &from_legs {
+            // Direct: X→to
+            let mut stmt = conn
+                .prepare(
+                    "SELECT rate FROM exchange_rate
+                     WHERE from_currency = ?1 AND to_currency = ?2 AND date <= ?3 AND date >= ?4
+                     ORDER BY date DESC LIMIT 1",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let x_to_direct = stmt
+                .query_row(params![_x, to, &date_str, &window_start_str], |row| {
+                    row.get::<_, String>(0)
+                })
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
 
-                if let Some(s) = x_to_direct {
-                    let second_rate = parse_decimal(&s)?;
-                    return Ok(Some(*leg_rate * second_rate));
-                }
+            if let Some(s) = x_to_direct {
+                let second_rate = parse_decimal(&s)?;
+                return Ok(Some(*leg_rate * second_rate));
+            }
 
-                // Inverse: to→X on leg_date (so X→to = 1/rate)
-                let mut inv_stmt = conn
-                    .prepare(
-                        "SELECT rate FROM exchange_rate
-                         WHERE from_currency = ?1 AND to_currency = ?2 AND date = ?3",
-                    )
-                    .map_err(|e| StorageError::Internal(e.to_string()))?;
-                let x_to_inverse = inv_stmt
-                    .query_row(params![to, _x, leg_date], |row| row.get::<_, String>(0))
-                    .optional()
-                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+            // Inverse: to→X (so X→to = 1/rate)
+            let mut inv_stmt = conn
+                .prepare(
+                    "SELECT rate FROM exchange_rate
+                     WHERE from_currency = ?1 AND to_currency = ?2 AND date <= ?3 AND date >= ?4
+                     ORDER BY date DESC LIMIT 1",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let x_to_inverse = inv_stmt
+                .query_row(params![to, _x, &date_str, &window_start_str], |row| {
+                    row.get::<_, String>(0)
+                })
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
 
-                if let Some(s) = x_to_inverse {
-                    let inv_rate = parse_decimal(&s)?;
-                    if !inv_rate.is_zero() {
-                        return Ok(Some(*leg_rate * (Decimal::ONE / inv_rate)));
-                    }
+            if let Some(s) = x_to_inverse {
+                let inv_rate = parse_decimal(&s)?;
+                if !inv_rate.is_zero() {
+                    return Ok(Some(*leg_rate * (Decimal::ONE / inv_rate)));
                 }
             }
         }
@@ -3460,13 +3466,13 @@ mod tests {
     }
 
     #[test]
-    fn test_no_transitive_across_different_dates() {
+    fn test_transitive_within_staleness_window() {
         let s = setup();
         s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
         s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
         s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
 
-        // EUR→USD on 2024-01-15, GLD→USD on 2024-01-10
+        // EUR→USD on 2024-01-15, GLD→USD on 2024-01-12 (3-day gap, within 7-day window)
         s.insert_exchange_rate(&ExchangeRate {
             id: Uuid::now_v7(), date: make_date(2024, 1, 15),
             from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
@@ -3474,14 +3480,70 @@ mod tests {
             rate: dec!(1.10), source: "api".into(),
         }).unwrap();
         s.insert_exchange_rate(&ExchangeRate {
-            id: Uuid::now_v7(), date: make_date(2024, 1, 10),
+            id: Uuid::now_v7(), date: make_date(2024, 1, 12),
             from_currency: "GLD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
             to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
             rate: dec!(2000), source: "api".into(),
         }).unwrap();
 
+        // 3 days apart — within 7-day window, should succeed
+        let rate = s.get_exchange_rate("EUR", "GLD", make_date(2024, 1, 15)).unwrap();
+        assert!(rate.is_some());
+        // EUR→USD=1.10, GLD→USD=2000 → EUR→GLD = 1.10/2000
+        assert_eq!(rate.unwrap(), dec!(1.10) / dec!(2000));
+    }
+
+    #[test]
+    fn test_transitive_beyond_staleness_window() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
+
+        // EUR→USD on 2024-01-15, GLD→USD on 2024-01-01 (14-day gap, beyond 7-day window)
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date: make_date(2024, 1, 15),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date: make_date(2024, 1, 1),
+            from_currency: "GLD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
+            rate: dec!(2000), source: "api".into(),
+        }).unwrap();
+
+        // 14 days apart — beyond 7-day window, should fail
         let rate = s.get_exchange_rate("EUR", "GLD", make_date(2024, 1, 15)).unwrap();
         assert_eq!(rate, None);
+    }
+
+    #[test]
+    fn test_transitive_on_or_before_second_leg() {
+        let s = setup();
+        s.create_currency(&make_currency("USD", "US Dollar", 2, true)).unwrap();
+        s.create_currency(&make_currency("EUR", "Euro", 2, false)).unwrap();
+        s.create_currency(&make_currency("GLD", "Gold", 4, false)).unwrap();
+
+        // EUR→USD on 2024-01-13, GLD→USD on 2024-01-14 (second leg a day after first, both within window)
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date: make_date(2024, 1, 13),
+            from_currency: "EUR".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
+            rate: dec!(1.10), source: "api".into(),
+        }).unwrap();
+        s.insert_exchange_rate(&ExchangeRate {
+            id: Uuid::now_v7(), date: make_date(2024, 1, 14),
+            from_currency: "GLD".into(), from_currency_asset_type: String::new(), from_currency_param: String::new(),
+            to_currency: "USD".into(), to_currency_asset_type: String::new(), to_currency_param: String::new(),
+            rate: dec!(2000), source: "api".into(),
+        }).unwrap();
+
+        // Both within 7 days of target date (Jan 15), should succeed
+        let rate = s.get_exchange_rate("EUR", "GLD", make_date(2024, 1, 15)).unwrap();
+        assert!(rate.is_some());
+        assert_eq!(rate.unwrap(), dec!(1.10) / dec!(2000));
     }
 
     #[test]
