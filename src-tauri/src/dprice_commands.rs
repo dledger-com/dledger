@@ -118,6 +118,7 @@ pub struct DpriceAssetFilter {
     pub coingecko_id: Option<String>,
     pub contract_chain: Option<String>,
     pub contract_address: Option<String>,
+    pub coinpaprika_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -135,6 +136,8 @@ pub struct DpriceAssetInfo {
     pub contract_chain: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coinpaprika_id: Option<String>,
 }
 
 fn to_asset_query_filter(f: DpriceAssetFilter) -> dprice::db::queries::AssetQueryFilter {
@@ -146,6 +149,7 @@ fn to_asset_query_filter(f: DpriceAssetFilter) -> dprice::db::queries::AssetQuer
         coingecko_id: f.coingecko_id,
         contract_chain: f.contract_chain,
         contract_address: f.contract_address,
+        coinpaprika_id: f.coinpaprika_id,
         ..Default::default()
     }
 }
@@ -476,6 +480,7 @@ pub async fn dprice_query_assets(
                 coingecko_id: a.coingecko_id,
                 contract_chain: a.contract_chain,
                 contract_address: a.contract_address,
+                coinpaprika_id: a.coinpaprika_id,
             })
             .collect())
     })
