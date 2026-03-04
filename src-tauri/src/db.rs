@@ -1549,6 +1549,8 @@ impl Storage for SqliteStorage {
         let conn = self.conn.borrow();
         conn.execute_batch(
             "PRAGMA foreign_keys=OFF;
+             DELETE FROM reconciliation_line_item;
+             DELETE FROM reconciliation;
              DELETE FROM lot_disposal;
              DELETE FROM lot;
              DELETE FROM line_item;
@@ -1562,7 +1564,10 @@ impl Storage for SqliteStorage {
              DELETE FROM currency;
              DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;
+             DELETE FROM budget;
+             DELETE FROM recurring_template;
              DELETE FROM currency_token_address;
+             DELETE FROM account_metadata;
              UPDATE exchange_account SET last_sync = NULL;
              PRAGMA foreign_keys=ON;",
         )
@@ -1573,7 +1578,9 @@ impl Storage for SqliteStorage {
     fn clear_all_data(&self) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute_batch(
-            "DELETE FROM lot_disposal;
+            "DELETE FROM reconciliation_line_item;
+             DELETE FROM reconciliation;
+             DELETE FROM lot_disposal;
              DELETE FROM lot;
              DELETE FROM line_item;
              DELETE FROM entry_link;
@@ -1587,7 +1594,10 @@ impl Storage for SqliteStorage {
              DELETE FROM currency;
              DELETE FROM currency_rate_source;
              DELETE FROM raw_transaction;
+             DELETE FROM budget;
+             DELETE FROM recurring_template;
              DELETE FROM currency_token_address;
+             DELETE FROM account_metadata;
              DELETE FROM exchange_account;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;

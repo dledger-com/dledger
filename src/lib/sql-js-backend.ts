@@ -504,17 +504,43 @@ export class SqlJsBackend implements Backend {
     if (!saved) {
       db.exec(SCHEMA_SQL);
       db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
+      // Reconciliation tables (v9)
+      db.exec("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0");
+      db.exec(`CREATE TABLE IF NOT EXISTS reconciliation (
+        id TEXT PRIMARY KEY, account_id TEXT NOT NULL, statement_date TEXT NOT NULL,
+        statement_balance TEXT NOT NULL, currency TEXT NOT NULL, reconciled_at TEXT NOT NULL,
+        line_item_count INTEGER NOT NULL DEFAULT 0
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS reconciliation_line_item (
+        reconciliation_id TEXT NOT NULL, line_item_id TEXT NOT NULL,
+        PRIMARY KEY (reconciliation_id, line_item_id)
+      )`);
+      // Recurring templates (v10)
+      db.exec(`CREATE TABLE IF NOT EXISTS recurring_template (
+        id TEXT PRIMARY KEY, description TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
+        interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
+      )`);
+      // Token address mapping (v12, updated v17)
       db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
         currency TEXT NOT NULL, asset_type TEXT NOT NULL DEFAULT '', param TEXT NOT NULL DEFAULT '',
         chain TEXT NOT NULL, contract_address TEXT NOT NULL,
         PRIMARY KEY (currency, asset_type, param, chain)
       )`);
+      // Account metadata (v14)
       db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
         account_id TEXT NOT NULL REFERENCES account(id),
         key TEXT NOT NULL, value TEXT NOT NULL,
         PRIMARY KEY (account_id, key)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
+      // Entry links (v16)
+      db.exec(`CREATE TABLE IF NOT EXISTS entry_link (
+        journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+        link_name TEXT NOT NULL,
+        PRIMARY KEY (journal_entry_id, link_name)
+      )`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
       db.exec("INSERT INTO schema_version (version) VALUES (18)");
     } else {
       // Handle partially-initialized DB from previous failed session
@@ -3861,59 +3887,37 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
+  private deleteFromTables(tables: string[]): void {
+    for (const table of tables) {
+      try { this.db.exec(`DELETE FROM "${table}"`); } catch { /* table may not exist */ }
+    }
+  }
+
   async clearLedgerData(): Promise<void> {
-    this.db.exec(`
-      PRAGMA foreign_keys=OFF;
-      DELETE FROM reconciliation_line_item;
-      DELETE FROM reconciliation;
-      DELETE FROM lot_disposal;
-      DELETE FROM lot;
-      DELETE FROM line_item;
-      DELETE FROM entry_link;
-      DELETE FROM journal_entry_metadata;
-      DELETE FROM balance_assertion;
-      DELETE FROM audit_log;
-      DELETE FROM journal_entry;
-      DELETE FROM raw_transaction;
-      DELETE FROM currency_rate_source;
-      DELETE FROM budget;
-      DELETE FROM recurring_template;
-      DELETE FROM currency_token_address;
-      DELETE FROM account_metadata;
-      DELETE FROM account_closure;
-      DELETE FROM account;
-      DELETE FROM currency;
-      UPDATE exchange_account SET last_sync = NULL;
-      PRAGMA foreign_keys=ON;
-    `);
+    this.db.exec("PRAGMA foreign_keys=OFF");
+    this.deleteFromTables([
+      "reconciliation_line_item", "reconciliation",
+      "lot_disposal", "lot", "line_item", "entry_link",
+      "journal_entry_metadata", "balance_assertion", "audit_log",
+      "journal_entry", "raw_transaction", "currency_rate_source",
+      "budget", "recurring_template", "currency_token_address",
+      "account_metadata", "account_closure", "account", "currency",
+    ]);
+    try { this.db.exec("UPDATE exchange_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }
 
   async clearAllData(): Promise<void> {
-    this.db.exec(`
-      DELETE FROM reconciliation_line_item;
-      DELETE FROM reconciliation;
-      DELETE FROM lot_disposal;
-      DELETE FROM lot;
-      DELETE FROM line_item;
-      DELETE FROM entry_link;
-      DELETE FROM journal_entry_metadata;
-      DELETE FROM balance_assertion;
-      DELETE FROM audit_log;
-      DELETE FROM journal_entry;
-      DELETE FROM exchange_rate;
-      DELETE FROM raw_transaction;
-      DELETE FROM currency_rate_source;
-      DELETE FROM budget;
-      DELETE FROM recurring_template;
-      DELETE FROM currency_token_address;
-      DELETE FROM account_metadata;
-      DELETE FROM account_closure;
-      DELETE FROM account;
-      DELETE FROM exchange_account;
-      DELETE FROM etherscan_account;
-      DELETE FROM currency;
-    `);
+    this.deleteFromTables([
+      "reconciliation_line_item", "reconciliation",
+      "lot_disposal", "lot", "line_item", "entry_link",
+      "journal_entry_metadata", "balance_assertion", "audit_log",
+      "journal_entry", "exchange_rate", "raw_transaction",
+      "currency_rate_source", "budget", "recurring_template",
+      "currency_token_address", "account_metadata", "account_closure",
+      "account", "exchange_account", "etherscan_account", "currency",
+    ]);
     this.scheduleSave();
   }
 }
