@@ -37,6 +37,8 @@ export class AccountStore {
     new Map(this.accounts.map((a) => [a.id, a])),
   );
 
+  readonly archivedCount = $derived(this.accounts.filter((a) => a.is_archived).length);
+
   readonly postable = $derived(this.active.filter((a) => a.is_postable));
 
   readonly baseCurrency = $derived(
@@ -90,6 +92,18 @@ export class AccountStore {
   async archive(id: string): Promise<boolean> {
     try {
       await getBackend().archiveAccount(id);
+      await this.load();
+      invalidate("accounts");
+      return true;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      return false;
+    }
+  }
+
+  async unarchive(id: string): Promise<boolean> {
+    try {
+      await getBackend().unarchiveAccount(id);
       await this.load();
       invalidate("accounts");
       return true;

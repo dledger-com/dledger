@@ -70,6 +70,11 @@ pub fn archive_account(state: State<'_, AppState>, id: Uuid) -> Result<(), Strin
 }
 
 #[tauri::command]
+pub fn unarchive_account(state: State<'_, AppState>, id: Uuid) -> Result<(), String> {
+    state.engine.unarchive_account(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn update_account(
     state: State<'_, AppState>,
     id: Uuid,

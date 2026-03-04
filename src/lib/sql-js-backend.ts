@@ -1400,6 +1400,14 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
+  async unarchiveAccount(id: string): Promise<void> {
+    const account = this.getAccountById(id);
+    if (!account) throw new Error(`account ${id} not found`);
+    this.run("UPDATE account SET is_archived = 0 WHERE id = ?", [id]);
+    this.audit("unarchive", "account", id, account.full_name);
+    this.scheduleSave();
+  }
+
   async updateAccount(id: string, updates: { full_name?: string; is_postable?: boolean; opened_at?: string | null }): Promise<void> {
     const account = this.getAccountById(id);
     if (!account) throw new Error(`account ${id} not found`);

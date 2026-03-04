@@ -44,6 +44,7 @@
   const accountTypes: AccountType[] = ["asset", "liability", "equity", "revenue", "expense"];
 
   let searchTerm = $state("");
+  let showArchived = $state(false);
 
   // Tree view collapse state
   let collapsedIds = $state(new Set<string>());
@@ -72,9 +73,10 @@
   }
 
   // Set of account IDs that have at least one child
-  const parentIds = $derived(
-    new Set(store.active.filter(a => a.parent_id !== null).map(a => a.parent_id!))
-  );
+  const parentIds = $derived.by(() => {
+    const source = showArchived ? store.accounts : store.active;
+    return new Set(source.filter(a => a.parent_id !== null).map(a => a.parent_id!));
+  });
 
   function getDepth(account: Account): number {
     return account.full_name.split(":").length - 1;
@@ -245,7 +247,7 @@
   }
 
   const filteredAccounts = $derived.by(() => {
-    const accounts = store.active;
+    const accounts = showArchived ? store.accounts : store.active;
     const term = searchTerm.trim();
 
     // When searching, find matching accounts + all their ancestors
@@ -349,6 +351,15 @@
     }
   }
 
+  async function handleUnarchive(id: string, name: string) {
+    const ok = await store.unarchive(id);
+    if (ok) {
+      toast.success(`Account "${name}" restored`);
+    } else {
+      toast.error(store.error ?? "Failed to unarchive account");
+    }
+  }
+
   // Default accounts state
   let defaultSet = $state<DefaultAccountSet>("standard");
   let creatingDefaults = $state(false);
@@ -378,6 +389,12 @@
       <p class="text-muted-foreground hidden sm:block">Manage your account structure and hierarchy.</p>
     </div>
     <ListFilter bind:value={searchTerm} placeholder="Filter accounts..." class="order-last sm:order-none" />
+    {#if store.archivedCount > 0}
+      <label class="flex items-center gap-2 text-sm">
+        <Switch checked={showArchived} onCheckedChange={(v) => (showArchived = v)} />
+        Show archived ({store.archivedCount})
+      </label>
+    {/if}
     <Dialog.Root bind:open={dialogOpen}>
       <Dialog.Trigger>
         {#snippet child({ props })}
@@ -452,7 +469,7 @@
         </div>
       </Card.Content>
     </Card.Root>
-  {:else if store.active.length === 0}
+  {:else if store.active.length === 0 && store.archivedCount === 0}
     <Card.Root>
       <Card.Content class="py-8 space-y-4">
         <p class="text-sm text-muted-foreground text-center">
@@ -473,6 +490,14 @@
             {creatingDefaults ? "Creating..." : "Create default accounts"}
           </Button>
         </div>
+      </Card.Content>
+    </Card.Root>
+  {:else if store.active.length === 0 && store.archivedCount > 0 && !showArchived}
+    <Card.Root>
+      <Card.Content class="py-8">
+        <p class="text-sm text-muted-foreground text-center">
+          All accounts are archived. Toggle "Show archived" above to view and restore them.
+        </p>
       </Card.Content>
     </Card.Root>
   {:else if filteredAccounts.length === 0}
@@ -584,7 +609,7 @@
               </Table.Row>
             {:else}
               <Table.Row
-                class={hoveredAncestorIds.has(account.id) ? "bg-muted/30" : ""}
+                class="{hoveredAncestorIds.has(account.id) ? 'bg-muted/30' : ''} {account.is_archived ? 'opacity-50' : ''}"
                 onmouseenter={() => (hoveredId = account.id)}
                 onmouseleave={() => { if (hoveredId === account.id) hoveredId = null; }}
               >
@@ -628,7 +653,11 @@
                       {#if account.parent_id !== null}
                         <DropdownMenu.Item onclick={() => startEdit(account)}>Edit</DropdownMenu.Item>
                       {/if}
-                      <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>Archive</DropdownMenu.Item>
+                      {#if account.is_archived}
+                        <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>Unarchive</DropdownMenu.Item>
+                      {:else}
+                        <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>Archive</DropdownMenu.Item>
+                      {/if}
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
                 </Table.Cell>

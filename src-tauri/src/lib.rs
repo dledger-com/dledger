@@ -68,6 +68,7 @@ pub fn run() {
             commands::get_account,
             commands::create_account,
             commands::archive_account,
+            commands::unarchive_account,
             commands::update_account,
             commands::post_journal_entry,
             commands::post_journal_entry_with_lots,

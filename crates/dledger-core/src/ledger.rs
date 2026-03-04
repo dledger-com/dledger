@@ -94,6 +94,14 @@ impl LedgerEngine {
         Ok(())
     }
 
+    pub fn unarchive_account(&self, id: &Uuid) -> LedgerResult<()> {
+        let account = self.storage.get_account(id)?
+            .ok_or(LedgerError::AccountNotFound { id: *id })?;
+        self.storage.update_account_archived(id, false)?;
+        self.audit("unarchive", "account", *id, &account.full_name)?;
+        Ok(())
+    }
+
     pub fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> LedgerResult<()> {
         self.storage.update_account_opened_at(id, opened_at)?;
         Ok(())
