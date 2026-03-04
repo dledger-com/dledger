@@ -162,6 +162,18 @@ class TauriDpriceClient implements DpriceClient {
   }
 }
 
+/** Shape of the unified `/api/v1/prices` response */
+interface PricesApiResponse {
+  date: string;
+  end_date: string | null;
+  quote: string;
+  currencies: Array<{
+    base: string;
+    count: number;
+    prices: [number, string][]; // [YYYYMMDD, price]
+  }>;
+}
+
 class HttpDpriceClient implements DpriceClient {
   constructor(private baseUrl: string) {}
 
@@ -175,24 +187,20 @@ class HttpDpriceClient implements DpriceClient {
   }
 
   async health(): Promise<DpriceHealthResponse> {
-    return this.fetchJson("/api/v1/health");
+    return this.fetchJson("/api/v1/status");
   }
 
   async getRate(
     from: string,
     to: string,
     date?: string,
-    opts?: { fromType?: DpriceAssetType; toType?: DpriceAssetType; fromParam?: string; toParam?: string },
+    _opts?: { fromType?: DpriceAssetType; toType?: DpriceAssetType; fromParam?: string; toParam?: string },
   ): Promise<string | null> {
-    const params = new URLSearchParams({ from, to });
+    const params = new URLSearchParams({ symbols: from, quote: to });
     if (date) params.set("date", date);
-    if (opts?.fromType) params.set("from_type", opts.fromType);
-    if (opts?.toType) params.set("to_type", opts.toType);
-    if (opts?.fromParam) params.set("from_param", opts.fromParam);
-    if (opts?.toParam) params.set("to_param", opts.toParam);
     try {
-      const resp = await this.fetchJson<{ rate: string }>(`/api/v1/rate?${params}`);
-      return resp.rate;
+      const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+      return resp.currencies[0]?.prices[0]?.[1] ?? null;
     } catch {
       return null;
     }
@@ -201,13 +209,28 @@ class HttpDpriceClient implements DpriceClient {
   async getRates(
     currencies: string[],
     date?: string,
-    opts?: { type?: DpriceAssetType },
+    _opts?: { type?: DpriceAssetType },
   ): Promise<DpriceRateEntry[]> {
-    const params = new URLSearchParams({ currencies: currencies.join(",") });
+    const params = new URLSearchParams({ symbols: currencies.join(",") });
     if (date) params.set("date", date);
-    if (opts?.type) params.set("type", opts.type);
-    const resp = await this.fetchJson<{ rates: DpriceRateEntry[] }>(`/api/v1/rates?${params}`);
-    return resp.rates;
+    // Fetch all prices in USD (default quote), then compute cross-rate matrix
+    const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+    const usdPrices = new Map<string, number>();
+    for (const c of resp.currencies) {
+      if (c.prices.length > 0) {
+        usdPrices.set(c.base, Number(c.prices[0][1]));
+      }
+    }
+    const entries: DpriceRateEntry[] = [];
+    const symbols = [...usdPrices.keys()];
+    for (const a of symbols) {
+      for (const b of symbols) {
+        if (a !== b) {
+          entries.push({ from: a, to: b, rate: (usdPrices.get(a)! / usdPrices.get(b)!).toString() });
+        }
+      }
+    }
+    return entries;
   }
 
   async getPriceRange(
@@ -216,24 +239,11 @@ class HttpDpriceClient implements DpriceClient {
     toDate: string,
     _opts?: { type?: DpriceAssetType; param?: string },
   ): Promise<DpricePriceEntry[]> {
-    // HTTP mode uses GraphQL for price range (REST has no range endpoint)
-    const query = `{ prices(bases: ["${symbol}"], date: "${fromDate}", endDate: "${toDate}") { currencies { prices { date price } } } }`;
-    const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    });
-    if (!resp.ok) {
-      throw new Error(`dprice GraphQL HTTP ${resp.status}`);
-    }
-    const json = await resp.json();
-    if (json.errors?.length) {
-      throw new Error(`dprice GraphQL: ${json.errors[0].message}`);
-    }
-    const currencies = json.data.prices.currencies as Array<{ prices: Array<{ date: number; price: string }> }>;
-    if (currencies.length === 0) return [];
-    return currencies[0].prices.map(
-      (p) => ({ date: String(p.date), price_usd: p.price }),
+    const params = new URLSearchParams({ symbols: symbol, date: fromDate, end_date: toDate });
+    const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+    if (resp.currencies.length === 0) return [];
+    return resp.currencies[0].prices.map(
+      ([dateInt, price]) => ({ date: String(dateInt), price_usd: price }),
     );
   }
 
@@ -244,10 +254,18 @@ class HttpDpriceClient implements DpriceClient {
   ): Promise<DpriceBatchResult> {
     const params = new URLSearchParams({
       symbols: symbols.join(","),
-      from: fromDate,
-      to: toDate,
+      date: fromDate,
+      end_date: toDate,
     });
-    return this.fetchJson(`/api/v1/prices/batch?${params}`);
+    const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+    return {
+      from: resp.date,
+      to: resp.end_date ?? resp.date,
+      currencies: resp.currencies.map((c) => ({
+        symbol: c.base,
+        prices: c.prices,
+      })),
+    };
   }
 
   async sync(): Promise<string> {
@@ -259,17 +277,9 @@ class HttpDpriceClient implements DpriceClient {
   }
 
   async latestDate(): Promise<string | null> {
-    // Use GraphQL to query the global latest date
-    const query = `{ status { latestDate } }`;
     try {
-      const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      if (!resp.ok) return null;
-      const json = await resp.json();
-      return json.data?.status?.latestDate ?? null;
+      const resp = await this.fetchJson<{ latest_date: string | null }>("/api/v1/status");
+      return resp.latest_date ?? null;
     } catch {
       return null;
     }
@@ -279,17 +289,31 @@ class HttpDpriceClient implements DpriceClient {
     requests: Array<{ symbol: string; date: string }>,
     _opts?: { type?: DpriceAssetType; param?: string },
   ): Promise<string[]> {
-    const missing: string[] = [];
+    // Group requests by date for batching
+    const byDate = new Map<string, Set<string>>();
     for (const { symbol, date } of requests) {
-      const params = new URLSearchParams({ symbol, date });
+      let set = byDate.get(date);
+      if (!set) { set = new Set(); byDate.set(date, set); }
+      set.add(symbol);
+    }
+    const missing = new Set<string>();
+    for (const [date, symbols] of byDate) {
+      const params = new URLSearchParams({ symbols: [...symbols].join(","), date });
       try {
-        const resp = await fetch(`${this.baseUrl}/api/v1/price?${params}`);
-        if (!resp.ok) missing.push(symbol);
+        const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+        for (const c of resp.currencies) {
+          if (c.prices.length === 0) missing.add(c.base);
+        }
+        // Symbols not in response at all are also missing
+        const returned = new Set(resp.currencies.map((c) => c.base));
+        for (const s of symbols) {
+          if (!returned.has(s)) missing.add(s);
+        }
       } catch {
-        missing.push(symbol);
+        for (const s of symbols) missing.add(s);
       }
     }
-    return [...new Set(missing)];
+    return [...missing];
   }
 
   async exportDb(): Promise<Uint8Array> {
