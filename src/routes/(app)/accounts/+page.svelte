@@ -16,6 +16,7 @@
   import { onInvalidate } from "$lib/data/invalidation.js";
   import type { Account, AccountType } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
   import { createDefaultAccounts, type DefaultAccountSet } from "$lib/accounts/defaults.js";
@@ -27,6 +28,7 @@
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
 
   const store = new AccountStore();
+  const settingsStore = new SettingsStore();
 
   // Reload when account data changes elsewhere (imports, cross-tab)
   const unsubAccounts = onInvalidate("accounts", () => { store.load(); });
@@ -36,10 +38,12 @@
 
   // Form state
   let formName = $state("");
-  let formFullName = $state("");
   let formType = $state<AccountType>("asset");
   let formParentId = $state<string | null>(null);
   let formIsPostable = $state(true);
+  let formOpenedAt = $state("1970-01-01");
+  let formOpeningBalance = $state("");
+  let formOpeningCurrency = $state("");
 
   const accountTypes: AccountType[] = ["asset", "liability", "equity", "revenue", "expense"];
 
@@ -303,43 +307,112 @@
 
   function resetForm() {
     formName = "";
-    formFullName = "";
     formType = "asset";
     formParentId = null;
     formIsPostable = true;
+    formOpenedAt = "1970-01-01";
+    formOpeningBalance = "";
+    formOpeningCurrency = settingsStore.currency || "";
   }
 
   function startSubAccount(parent: Account) {
     formName = "";
-    formFullName = parent.full_name + ":";
     formType = parent.account_type;
     formParentId = parent.id;
     formIsPostable = true;
+    formOpenedAt = "1970-01-01";
+    formOpeningBalance = "";
+    formOpeningCurrency = settingsStore.currency || "";
     dialogOpen = true;
   }
 
   async function handleCreate() {
     const today = new Date().toISOString().slice(0, 10);
+    const isAssetOrLiability = formType === "asset" || formType === "liability";
+
+    // Compute full_name from parent + name
+    let fullName = formName;
+    if (formParentId) {
+      const parent = store.accounts.find(a => a.id === formParentId);
+      if (parent) fullName = parent.full_name + ":" + formName;
+    }
+
     const account: Account = {
       id: uuidv7(),
       parent_id: formParentId,
       account_type: formType,
       name: formName,
-      full_name: formFullName || formName,
+      full_name: fullName,
       allowed_currencies: [],
       is_postable: formIsPostable,
       is_archived: false,
       created_at: today,
+      opened_at: isAssetOrLiability ? formOpenedAt : null,
     };
 
     const ok = await store.create(account);
-    if (ok) {
-      toast.success(`Account "${account.full_name}" created`);
-      dialogOpen = false;
-      resetForm();
-    } else {
+    if (!ok) {
       toast.error(store.error ?? "Failed to create account");
+      return;
     }
+
+    // Create opening balance entry if specified
+    const balanceNum = parseFloat(formOpeningBalance);
+    const balStr = String(formOpeningBalance);
+    if (isAssetOrLiability && balStr.trim() && !isNaN(balanceNum) && balanceNum !== 0 && formOpeningCurrency.trim()) {
+      try {
+        const backend = getBackend();
+        const allAccounts = await backend.listAccounts();
+        const equityPath = "Equity:Opening-Balances";
+
+        // Ensure Equity:Opening-Balances account exists
+        let counterpartyId = allAccounts.find(ac => ac.full_name === equityPath)?.id;
+        if (!counterpartyId) {
+          const parts = equityPath.split(":");
+          let parentId: string | null = null;
+          for (let depth = 1; depth <= parts.length; depth++) {
+            const path = parts.slice(0, depth).join(":");
+            const existing = allAccounts.find(ac => ac.full_name === path);
+            if (existing) {
+              parentId = existing.id;
+              continue;
+            }
+            const type = path.startsWith("Equity") ? "equity" as const : path.startsWith("Assets") ? "asset" as const : "liability" as const;
+            const newId = uuidv7();
+            await backend.createAccount({
+              id: newId, parent_id: parentId, account_type: type,
+              name: parts[depth - 1], full_name: path, allowed_currencies: [],
+              is_postable: depth === parts.length, is_archived: false, created_at: today,
+            });
+            parentId = newId;
+            if (depth === parts.length) counterpartyId = newId;
+          }
+        }
+
+        // Create system:pad journal entry
+        const entryId = uuidv7();
+        const amountStr = balanceNum.toString();
+        await backend.postJournalEntry(
+          { id: entryId, date: formOpenedAt, description: `Opening balance for ${fullName}`, status: "confirmed", source: "system:pad", voided_by: null, created_at: today },
+          [
+            { id: uuidv7(), journal_entry_id: entryId, account_id: account.id, currency: formOpeningCurrency.trim().toUpperCase(), amount: amountStr, lot_id: null },
+            { id: uuidv7(), journal_entry_id: entryId, account_id: counterpartyId!, currency: formOpeningCurrency.trim().toUpperCase(), amount: (-balanceNum).toString(), lot_id: null },
+          ],
+        );
+
+        const { invalidate } = await import("$lib/data/invalidation.js");
+        invalidate("journal", "accounts", "reports");
+      } catch (e) {
+        toast.error(`Account created but opening balance failed: ${e instanceof Error ? e.message : String(e)}`);
+        dialogOpen = false;
+        resetForm();
+        return;
+      }
+    }
+
+    toast.success(`Account "${fullName}" created`);
+    dialogOpen = false;
+    resetForm();
   }
 
   async function handleArchive(id: string, name: string) {
@@ -410,10 +483,12 @@
           <div class="space-y-2">
             <label for="name" class="text-sm font-medium">Name</label>
             <Input id="name" bind:value={formName} placeholder="e.g. Checking" required />
-          </div>
-          <div class="space-y-2">
-            <label for="fullName" class="text-sm font-medium">Full Name (path)</label>
-            <Input id="fullName" bind:value={formFullName} placeholder="e.g. Assets:Bank:Checking" />
+            {#if formParentId}
+              {@const parent = store.accounts.find(a => a.id === formParentId)}
+              {#if parent}
+                <p class="text-xs text-muted-foreground">Path: {parent.full_name}:{formName || "..."}</p>
+              {/if}
+            {/if}
           </div>
           <div class="space-y-2">
             <span class="text-sm font-medium">Type</span>
@@ -451,6 +526,19 @@
             <Switch id="postable" bind:checked={formIsPostable} />
             <label for="postable" class="text-sm font-medium">Postable (can receive transactions)</label>
           </div>
+          {#if formType === "asset" || formType === "liability"}
+            <div class="space-y-2">
+              <label for="openedAt" class="text-sm font-medium">Opening Date</label>
+              <Input id="openedAt" type="date" bind:value={formOpenedAt} />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Opening Balance</label>
+              <div class="flex gap-2">
+                <Input type="number" step="any" bind:value={formOpeningBalance} placeholder="0.00" class="flex-1" />
+                <Input bind:value={formOpeningCurrency} placeholder="USD" class="w-24 uppercase" />
+              </div>
+            </div>
+          {/if}
           <Dialog.Footer>
             <Button type="submit" disabled={!formName.trim()}>Create</Button>
           </Dialog.Footer>
