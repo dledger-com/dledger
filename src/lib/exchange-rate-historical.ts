@@ -60,6 +60,7 @@ export interface HistoricalFetchConfig {
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
   onProgress?: (fetched: number, total: number) => void;
+  signal?: AbortSignal;
 }
 
 export interface HistoricalFetchResult {
@@ -228,17 +229,17 @@ export async function fetchHistoricalRates(
   const tick = () => { progress++; config.onProgress?.(progress, totalDates); };
 
   // ---- dprice: local price DB historical (FIRST — avoids redundant external API calls) ----
-  if (dpriceReqs.length > 0 && isDpriceActive(config.dpriceMode)) {
+  if (dpriceReqs.length > 0 && isDpriceActive(config.dpriceMode) && !config.signal?.aborted) {
     await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick);
   }
 
   // ---- Frankfurter: full timeseries, multi-symbol ----
-  if (frankfurterReqs.length > 0) {
+  if (frankfurterReqs.length > 0 && !config.signal?.aborted) {
     await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, successCurrencies, tick);
   }
 
   // ---- CoinGecko: market_chart/range per coin ----
-  if (coingeckoReqs.length > 0) {
+  if (coingeckoReqs.length > 0 && !config.signal?.aborted) {
     if (!config.coingeckoApiKey) {
       result.errors.push(`CoinGecko: no API key; skipping ${coingeckoReqs.length} currency(ies)`);
     } else {
@@ -247,7 +248,7 @@ export async function fetchHistoricalRates(
   }
 
   // ---- Finnhub: candle per symbol ----
-  if (finnhubReqs.length > 0) {
+  if (finnhubReqs.length > 0 && !config.signal?.aborted) {
     if (!config.finnhubApiKey) {
       result.errors.push(`Finnhub: no API key; skipping ${finnhubReqs.length} currency(ies)`);
     } else {
@@ -256,7 +257,7 @@ export async function fetchHistoricalRates(
   }
 
   // ---- CryptoCompare: histoday per symbol ----
-  if (cryptocompareReqs.length > 0) {
+  if (cryptocompareReqs.length > 0 && !config.signal?.aborted) {
     if (!config.cryptoCompareApiKey) {
       result.errors.push(`CryptoCompare: no API key; skipping ${cryptocompareReqs.length} currency(ies)`);
     } else {
@@ -265,12 +266,12 @@ export async function fetchHistoricalRates(
   }
 
   // ---- DefiLlama: batch historical ----
-  if (defillamaReqs.length > 0) {
+  if (defillamaReqs.length > 0 && !config.signal?.aborted) {
     await fetchDefiLlamaHistorical(backend, defillamaReqs, config, result, successCurrencies, tick);
   }
 
   // ---- Binance: klines per symbol ----
-  if (binanceReqs.length > 0) {
+  if (binanceReqs.length > 0 && !config.signal?.aborted) {
     await fetchBinanceHistorical(backend, binanceReqs, config, result, successCurrencies, tick);
   }
 
@@ -283,7 +284,7 @@ export async function fetchHistoricalRates(
   }
 
   // Fallback: if dprice failed for some currencies, re-classify without dprice and retry
-  if (failedAfterPrimary.size > 0) {
+  if (failedAfterPrimary.size > 0 && !config.signal?.aborted) {
     // Load data needed for re-classification
     const storedSources = await backend.getCurrencyRateSources();
     const rateSourceMap = new Map<string, CurrencyRateSource>();
@@ -308,6 +309,7 @@ export async function fetchHistoricalRates(
       // Dispatch in priority order: coingecko before defillama
       const sourceOrder: SourceName[] = ["frankfurter", "coingecko", "defillama", "finnhub", "cryptocompare", "binance"];
       for (const source of sourceOrder) {
+        if (config.signal?.aborted) break;
         const reqs = fallbackBySource.get(source);
         if (!reqs) continue;
         if (source === "frankfurter") await fetchFrankfurterHistorical(backend, reqs, config, result, successCurrencies, tick);
@@ -320,7 +322,7 @@ export async function fetchHistoricalRates(
     }
   }
 
-  if (failedAfterPrimary.size > 0 && config.coingeckoApiKey) {
+  if (failedAfterPrimary.size > 0 && config.coingeckoApiKey && !config.signal?.aborted) {
     // Recompute failedAfterPrimary since dprice fallback may have resolved some
     const stillFailed = new Set<string>();
     for (const currency of failedAfterPrimary) {
@@ -386,9 +388,10 @@ async function fetchFrankfurterHistorical(
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
   for (const [chunkStart, chunkEnd] of chunks) {
+    if (config.signal?.aborted) break;
     try {
       const url = `https://api.frankfurter.dev/v1/${chunkStart}..${chunkEnd}?base=${config.baseCurrency}&symbols=${symbols}`;
-      const resp = await fetch(url);
+      const resp = await fetch(url, { signal: config.signal });
       if (!resp.ok) {
         result.errors.push(`Frankfurter HTTP ${resp.status}: ${resp.statusText}`);
         continue;
@@ -418,6 +421,7 @@ async function fetchFrankfurterHistorical(
         }
       }
     } catch (err) {
+      if (config.signal?.aborted) break;
       result.errors.push(`Frankfurter: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -449,9 +453,12 @@ async function fetchCoinGeckoHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const geckoFetch = new RateLimitedFetcher({ maxRequests: 25, intervalMs: 60_000 });
+  const onAbort = () => geckoFetch.dispose();
+  config.signal?.addEventListener("abort", onAbort, { once: true });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
   try {
     for (const req of requests) {
+      if (config.signal?.aborted) break;
       const geckoId = COINGECKO_IDS[req.currency] ?? req.currency.toLowerCase();
       const sortedDates = [...req.dates].sort();
       const neededDates = new Set(sortedDates);
@@ -465,7 +472,7 @@ async function fetchCoinGeckoHistorical(
           ? `https://pro-api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}`
           : `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}&x_cg_demo_api_key=${config.coingeckoApiKey}`;
         const headers: Record<string, string> = config.coingeckoPro ? { "x-cg-pro-api-key": config.coingeckoApiKey } : {};
-        const resp = await geckoFetch.fetch(url, { headers });
+        const resp = await geckoFetch.fetch(url, { headers, signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`CoinGecko HTTP ${resp.status} for ${req.currency}`);
           continue;
@@ -502,10 +509,12 @@ async function fetchCoinGeckoHistorical(
           }
         }
       } catch (err) {
+        if (config.signal?.aborted) break;
         result.errors.push(`CoinGecko ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   } finally {
+    config.signal?.removeEventListener("abort", onAbort);
     geckoFetch.dispose();
   }
 
@@ -538,9 +547,12 @@ async function fetchFinnhubHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const finnhubFetch = new RateLimitedFetcher({ maxRequests: 50, intervalMs: 60_000 });
+  const onAbort = () => finnhubFetch.dispose();
+  config.signal?.addEventListener("abort", onAbort, { once: true });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
   try {
     for (const req of requests) {
+      if (config.signal?.aborted) break;
       const sortedDates = [...req.dates].sort();
       const neededDates = new Set(sortedDates);
 
@@ -549,7 +561,7 @@ async function fetchFinnhubHistorical(
 
       try {
         const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(req.currency)}&resolution=D&from=${fromUnix}&to=${toUnix}&token=${config.finnhubApiKey}`;
-        const resp = await finnhubFetch.fetch(url);
+        const resp = await finnhubFetch.fetch(url, { signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`Finnhub HTTP ${resp.status} for ${req.currency}`);
           continue;
@@ -592,10 +604,12 @@ async function fetchFinnhubHistorical(
           }
         }
       } catch (err) {
+        if (config.signal?.aborted) break;
         result.errors.push(`Finnhub ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   } finally {
+    config.signal?.removeEventListener("abort", onAbort);
     finnhubFetch.dispose();
   }
 
@@ -622,6 +636,8 @@ async function fetchDefiLlamaHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const llamaFetch = new RateLimitedFetcher({ maxRequests: 400, intervalMs: 60_000 });
+  const onAbort = () => llamaFetch.dispose();
+  config.signal?.addEventListener("abort", onAbort, { once: true });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
   // Load token addresses for coin ID resolution
@@ -663,12 +679,13 @@ async function fetchDefiLlamaHistorical(
 
   try {
     for (const [date, coinSet] of [...dateToCoins.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      if (config.signal?.aborted) break;
       const timestamp = Math.floor(new Date(date + "T12:00:00Z").getTime() / 1000);
       const coinList = [...coinSet].join(",");
       const url = `https://coins.llama.fi/prices/historical/${timestamp}/${coinList}?searchWidth=21600`;
 
       try {
-        const resp = await llamaFetch.fetch(url);
+        const resp = await llamaFetch.fetch(url, { signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`DefiLlama HTTP ${resp.status} for date ${date}`);
           for (const _c of coinSet) onDateDone();
@@ -699,11 +716,13 @@ async function fetchDefiLlamaHistorical(
           onDateDone();
         }
       } catch (err) {
+        if (config.signal?.aborted) break;
         result.errors.push(`DefiLlama date ${date}: ${err instanceof Error ? err.message : String(err)}`);
         for (const _c of coinSet) onDateDone();
       }
     }
   } finally {
+    config.signal?.removeEventListener("abort", onAbort);
     llamaFetch.dispose();
   }
 
@@ -729,10 +748,13 @@ async function fetchCryptoCompareHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const ccFetch = new RateLimitedFetcher({ maxRequests: 50, intervalMs: 60_000 });
+  const onAbort = () => ccFetch.dispose();
+  config.signal?.addEventListener("abort", onAbort, { once: true });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
   try {
     for (const req of requests) {
+      if (config.signal?.aborted) break;
       const sortedDates = [...req.dates].sort();
       const neededDates = new Set(sortedDates);
 
@@ -748,7 +770,7 @@ async function fetchCryptoCompareHistorical(
 
       try {
         const url = `https://min-api.cryptocompare.com/data/v2/histoday?fsym=${req.currency}&tsym=${config.baseCurrency}&limit=${limit}&toTs=${toTs}&api_key=${config.cryptoCompareApiKey}`;
-        const resp = await ccFetch.fetch(url);
+        const resp = await ccFetch.fetch(url, { signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`CryptoCompare HTTP ${resp.status} for ${req.currency}`);
           continue;
@@ -791,10 +813,12 @@ async function fetchCryptoCompareHistorical(
           }
         }
       } catch (err) {
+        if (config.signal?.aborted) break;
         result.errors.push(`CryptoCompare ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   } finally {
+    config.signal?.removeEventListener("abort", onAbort);
     ccFetch.dispose();
   }
 
@@ -820,6 +844,8 @@ async function fetchBinanceHistorical(
   onDateDone: () => void,
 ): Promise<void> {
   const binanceFetch = new RateLimitedFetcher({ maxRequests: 200, intervalMs: 60_000 });
+  const onAbort = () => binanceFetch.dispose();
+  config.signal?.addEventListener("abort", onAbort, { once: true });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
   const quoteMap: Record<string, string> = { USD: "USDT", EUR: "EUR" };
@@ -827,6 +853,7 @@ async function fetchBinanceHistorical(
 
   try {
     for (const req of requests) {
+      if (config.signal?.aborted) break;
       const pair = `${req.currency}${quote}`;
       const sortedDates = [...req.dates].sort();
       const neededDates = new Set(sortedDates);
@@ -847,8 +874,9 @@ async function fetchBinanceHistorical(
 
       try {
         for (const [cStart, cEnd] of chunks) {
+          if (config.signal?.aborted) break;
           const url = `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1d&startTime=${cStart}&endTime=${cEnd}&limit=1000`;
-          const resp = await binanceFetch.fetch(url);
+          const resp = await binanceFetch.fetch(url, { signal: config.signal });
           if (!resp.ok) {
             result.errors.push(`Binance HTTP ${resp.status} for ${req.currency} (${pair})`);
             break;
@@ -893,10 +921,12 @@ async function fetchBinanceHistorical(
           }
         }
       } catch (err) {
+        if (config.signal?.aborted) break;
         result.errors.push(`Binance ${req.currency}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   } finally {
+    config.signal?.removeEventListener("abort", onAbort);
     binanceFetch.dispose();
   }
 
@@ -985,6 +1015,7 @@ async function fetchDpriceHistorical(
 
     // Process each request using pre-built maps
     for (const req of requests) {
+      if (config.signal?.aborted) break;
       const sortedDates = [...req.dates].sort();
       if (sortedDates.length === 0) continue;
 
@@ -1218,6 +1249,7 @@ export function enqueueRateBackfill(
         const totalDates = missing.reduce((sum, r) => sum + r.dates.length, 0);
         const result = await fetchHistoricalRates(backend, missing, {
           ...config,
+          signal: ctx.signal,
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total: total || totalDates }),
         });
         return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
@@ -1232,6 +1264,7 @@ export function enqueueRateBackfill(
         setRateHealthSyncing();
         const result = await autoBackfillRates(backend, {
           ...config,
+          signal: ctx.signal,
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total }),
         }, hiddenCurrencies, dpriceAssets);
 
