@@ -217,7 +217,7 @@ class HttpDpriceClient implements DpriceClient {
     _opts?: { type?: DpriceAssetType; param?: string },
   ): Promise<DpricePriceEntry[]> {
     // HTTP mode uses GraphQL for price range (REST has no range endpoint)
-    const query = `{ priceHistory(bases: ["${symbol}"], from: "${fromDate}", to: "${toDate}") { currencies { prices { date price } } } }`;
+    const query = `{ prices(bases: ["${symbol}"], date: "${fromDate}", endDate: "${toDate}") { currencies { prices { date price } } } }`;
     const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -230,7 +230,7 @@ class HttpDpriceClient implements DpriceClient {
     if (json.errors?.length) {
       throw new Error(`dprice GraphQL: ${json.errors[0].message}`);
     }
-    const currencies = json.data.priceHistory.currencies as Array<{ prices: Array<{ date: number; price: string }> }>;
+    const currencies = json.data.prices.currencies as Array<{ prices: Array<{ date: number; price: string }> }>;
     if (currencies.length === 0) return [];
     return currencies[0].prices.map(
       (p) => ({ date: String(p.date), price_usd: p.price }),
