@@ -260,7 +260,7 @@ class HttpDpriceClient implements DpriceClient {
 
   async latestDate(): Promise<string | null> {
     // Use GraphQL to query the global latest date
-    const query = `{ health { latestDate } }`;
+    const query = `{ status { latestDate } }`;
     try {
       const resp = await fetch(`${this.baseUrl}/api/v1/graphql`, {
         method: "POST",
@@ -269,7 +269,7 @@ class HttpDpriceClient implements DpriceClient {
       });
       if (!resp.ok) return null;
       const json = await resp.json();
-      return json.data?.health?.latestDate ?? null;
+      return json.data?.status?.latestDate ?? null;
     } catch {
       return null;
     }
