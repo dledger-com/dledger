@@ -1204,307 +1204,428 @@
                 </Tabs.Content>
 
                 <Tabs.Content value="fiat" class="space-y-4">
-                    <div class="flex items-center gap-2">
-                        <p class="text-sm text-muted-foreground">
-                            Frankfurter — fiat exchange rates (no key required)
-                        </p>
-                        <Button variant="outline" size="sm"
-                            disabled={testResults.frankfurter?.status === 'testing'}
-                            onclick={() => handleTest('frankfurter', testFrankfurter)}>
-                            {testResults.frankfurter?.status === 'testing' ? 'Testing...' : 'Test'}
-                        </Button>
-                        {#if testResults.frankfurter?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.frankfurter.message ?? 'OK'}</span>
-                        {:else if testResults.frankfurter?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.frankfurter.message}</span>
-                        {/if}
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Frankfurter</span>
+                        <div class="flex items-center gap-2">
+                            <Switch checked={settings.settings.frankfurterEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ frankfurterEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
+                        </div>
+                    </div>
+                    <div class:opacity-50={settings.settings.frankfurterEnabled === false}
+                         class:pointer-events-none={settings.settings.frankfurterEnabled === false}>
+                        <div class="flex items-center gap-2">
+                            <p class="text-sm text-muted-foreground">
+                                Fiat exchange rates (no key required)
+                            </p>
+                            <Button variant="outline" size="sm"
+                                disabled={testResults.frankfurter?.status === 'testing'}
+                                onclick={() => handleTest('frankfurter', testFrankfurter)}>
+                                {testResults.frankfurter?.status === 'testing' ? 'Testing...' : 'Test'}
+                            </Button>
+                            {#if testResults.frankfurter?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.frankfurter.message ?? 'OK'}</span>
+                            {:else if testResults.frankfurter?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.frankfurter.message}</span>
+                            {/if}
+                        </div>
                     </div>
                 </Tabs.Content>
 
                 <Tabs.Content value="stock" class="space-y-4">
-                    <div class="space-y-2">
-                        <label for="finnhub-api-key" class="text-sm font-medium"
-                            >Finnhub API Key</label
-                        >
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Finnhub</span>
                         <div class="flex items-center gap-2">
-                            <Input
-                                id="finnhub-api-key"
-                                type="password"
-                                placeholder="Finnhub API key (optional)"
-                                value={settings.finnhubApiKey}
-                                oninput={(e) =>
-                                    settings.update({
-                                        finnhubApiKey: (
-                                            e.target as HTMLInputElement
-                                        ).value,
-                                    })}
-                            />
-                            <Button variant="outline" size="sm"
-                                disabled={testResults.finnhub?.status === 'testing'}
-                                onclick={() => handleTest('finnhub', () => testFinnhub(settings.finnhubApiKey))}>
-                                {testResults.finnhub?.status === 'testing' ? 'Testing...' : 'Test'}
-                            </Button>
+                            <Switch checked={settings.settings.finnhubEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ finnhubEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
                         </div>
-                        {#if testResults.finnhub?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.finnhub.message ?? 'OK'}</span>
-                        {:else if testResults.finnhub?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.finnhub.message}</span>
-                        {/if}
-                        <p class="text-xs text-muted-foreground">
-                            Get a free key at <a
-                                href="https://finnhub.io"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >finnhub.io</a
-                            >. Required for stock prices (AAPL, GOOG, etc.).
-                        </p>
+                    </div>
+                    <div class:opacity-50={settings.settings.finnhubEnabled === false}
+                         class:pointer-events-none={settings.settings.finnhubEnabled === false}>
+                        <div class="space-y-2">
+                            <label for="finnhub-api-key" class="text-sm font-medium"
+                                >Finnhub API Key</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="finnhub-api-key"
+                                    type="password"
+                                    placeholder="Finnhub API key (optional)"
+                                    value={settings.finnhubApiKey}
+                                    oninput={(e) =>
+                                        settings.update({
+                                            finnhubApiKey: (
+                                                e.target as HTMLInputElement
+                                            ).value,
+                                        })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.finnhub?.status === 'testing'}
+                                    onclick={() => handleTest('finnhub', () => testFinnhub(settings.finnhubApiKey))}>
+                                    {testResults.finnhub?.status === 'testing' ? 'Testing...' : 'Test'}
+                                </Button>
+                            </div>
+                            {#if testResults.finnhub?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.finnhub.message ?? 'OK'}</span>
+                            {:else if testResults.finnhub?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.finnhub.message}</span>
+                            {/if}
+                            <p class="text-xs text-muted-foreground">
+                                Get a free key at <a
+                                    href="https://finnhub.io"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >finnhub.io</a
+                                >. Required for stock prices (AAPL, GOOG, etc.).
+                            </p>
+                        </div>
                     </div>
                 </Tabs.Content>
 
                 <Tabs.Content value="crypto" class="space-y-4">
-                    <div class="space-y-2">
-                        <label
-                            for="coingecko-api-key"
-                            class="text-sm font-medium">CoinGecko API Key</label
-                        >
+                    <!-- CoinGecko -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">CoinGecko</span>
                         <div class="flex items-center gap-2">
-                            <Input
-                                id="coingecko-api-key"
-                                type="password"
-                                placeholder={settings.settings.coingeckoPro ? "CoinGecko Pro API key" : "CoinGecko demo API key (optional)"}
-                                value={settings.coingeckoApiKey}
-                                oninput={(e) =>
-                                    settings.update({
-                                        coingeckoApiKey: (
-                                            e.target as HTMLInputElement
-                                        ).value,
-                                    })}
-                            />
-                            <Button variant="outline" size="sm"
-                                disabled={testResults.coingecko?.status === 'testing'}
-                                onclick={() => handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey, settings.settings.coingeckoPro))}>
-                                {testResults.coingecko?.status === 'testing' ? 'Testing...' : 'Test'}
-                            </Button>
+                            <Switch checked={settings.settings.coingeckoEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ coingeckoEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <Switch
-                                id="coingecko-pro"
-                                checked={settings.settings.coingeckoPro ?? false}
-                                onCheckedChange={(checked) => settings.update({ coingeckoPro: checked })}
-                            />
-                            <label for="coingecko-pro" class="text-sm">Pro API</label>
-                        </div>
-                        {#if testResults.coingecko?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.coingecko.message ?? 'OK'}</span>
-                        {:else if testResults.coingecko?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.coingecko.message}</span>
-                        {/if}
-                        <p class="text-xs text-muted-foreground">
-                            {#if settings.settings.coingeckoPro}
-                                Using Pro endpoint (<a
-                                    href="https://www.coingecko.com/en/api/pricing"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >pro-api.coingecko.com</a
-                                >). 500 req/min.
-                            {:else}
-                                Get a free demo key at <a
-                                    href="https://www.coingecko.com/en/api"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >coingecko.com</a
-                                >. Required for crypto rates. Fiat rates work
-                                without a key.
+                    </div>
+                    <div class:opacity-50={settings.settings.coingeckoEnabled === false}
+                         class:pointer-events-none={settings.settings.coingeckoEnabled === false}>
+                        <div class="space-y-2">
+                            <label
+                                for="coingecko-api-key"
+                                class="text-sm font-medium">CoinGecko API Key</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="coingecko-api-key"
+                                    type="password"
+                                    placeholder={settings.settings.coingeckoPro ? "CoinGecko Pro API key" : "CoinGecko demo API key (optional)"}
+                                    value={settings.coingeckoApiKey}
+                                    oninput={(e) =>
+                                        settings.update({
+                                            coingeckoApiKey: (
+                                                e.target as HTMLInputElement
+                                            ).value,
+                                        })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.coingecko?.status === 'testing'}
+                                    onclick={() => handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey, settings.settings.coingeckoPro))}>
+                                    {testResults.coingecko?.status === 'testing' ? 'Testing...' : 'Test'}
+                                </Button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Switch
+                                    id="coingecko-pro"
+                                    checked={settings.settings.coingeckoPro ?? false}
+                                    onCheckedChange={(checked) => settings.update({ coingeckoPro: checked })}
+                                />
+                                <label for="coingecko-pro" class="text-sm">Pro API</label>
+                            </div>
+                            {#if testResults.coingecko?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.coingecko.message ?? 'OK'}</span>
+                            {:else if testResults.coingecko?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.coingecko.message}</span>
                             {/if}
-                        </p>
-                    </div>
-                    <div class="space-y-2">
-                        <label
-                            for="cryptocompare-api-key"
-                            class="text-sm font-medium"
-                            >CryptoCompare API Key</label
-                        >
-                        <div class="flex items-center gap-2">
-                            <Input
-                                id="cryptocompare-api-key"
-                                type="password"
-                                placeholder="CryptoCompare API key (optional)"
-                                value={settings.cryptoCompareApiKey}
-                                oninput={(e) =>
-                                    settings.update({
-                                        cryptoCompareApiKey: (
-                                            e.target as HTMLInputElement
-                                        ).value,
-                                    })}
-                            />
-                            <Button variant="outline" size="sm"
-                                disabled={testResults.cryptocompare?.status === 'testing'}
-                                onclick={() => handleTest('cryptocompare', () => testCryptoCompare(settings.cryptoCompareApiKey))}>
-                                {testResults.cryptocompare?.status === 'testing' ? 'Testing...' : 'Test'}
-                            </Button>
+                            <p class="text-xs text-muted-foreground">
+                                {#if settings.settings.coingeckoPro}
+                                    Using Pro endpoint (<a
+                                        href="https://www.coingecko.com/en/api/pricing"
+                                        target="_blank"
+                                        class="underline hover:text-foreground"
+                                        >pro-api.coingecko.com</a
+                                    >). 500 req/min.
+                                {:else}
+                                    Get a free demo key at <a
+                                        href="https://www.coingecko.com/en/api"
+                                        target="_blank"
+                                        class="underline hover:text-foreground"
+                                        >coingecko.com</a
+                                    >. Required for crypto rates. Fiat rates work
+                                    without a key.
+                                {/if}
+                            </p>
                         </div>
-                        {#if testResults.cryptocompare?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.cryptocompare.message ?? 'OK'}</span>
-                        {:else if testResults.cryptocompare?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.cryptocompare.message}</span>
-                        {/if}
-                        <p class="text-xs text-muted-foreground">
-                            Get a free key at <a
-                                href="https://www.cryptocompare.com/cryptopian/api-keys"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >cryptocompare.com</a
-                            >. Optional fallback for crypto historical rates.
-                        </p>
                     </div>
 
-                    <div class="flex items-center gap-2">
-                        <p class="text-sm text-muted-foreground">
-                            DefiLlama — default crypto rate source (no key required)
-                        </p>
-                        <Button variant="outline" size="sm"
-                            disabled={testResults.defillama?.status === 'testing'}
-                            onclick={() => handleTest('defillama', testDefiLlama)}>
-                            {testResults.defillama?.status === 'testing' ? 'Testing...' : 'Test'}
-                        </Button>
-                        {#if testResults.defillama?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.defillama.message ?? 'OK'}</span>
-                        {:else if testResults.defillama?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.defillama.message}</span>
-                        {/if}
+                    <Separator />
+
+                    <!-- CryptoCompare -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">CryptoCompare</span>
+                        <div class="flex items-center gap-2">
+                            <Switch checked={settings.settings.cryptoCompareEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ cryptoCompareEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
+                        </div>
+                    </div>
+                    <div class:opacity-50={settings.settings.cryptoCompareEnabled === false}
+                         class:pointer-events-none={settings.settings.cryptoCompareEnabled === false}>
+                        <div class="space-y-2">
+                            <label
+                                for="cryptocompare-api-key"
+                                class="text-sm font-medium"
+                                >CryptoCompare API Key</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="cryptocompare-api-key"
+                                    type="password"
+                                    placeholder="CryptoCompare API key (optional)"
+                                    value={settings.cryptoCompareApiKey}
+                                    oninput={(e) =>
+                                        settings.update({
+                                            cryptoCompareApiKey: (
+                                                e.target as HTMLInputElement
+                                            ).value,
+                                        })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.cryptocompare?.status === 'testing'}
+                                    onclick={() => handleTest('cryptocompare', () => testCryptoCompare(settings.cryptoCompareApiKey))}>
+                                    {testResults.cryptocompare?.status === 'testing' ? 'Testing...' : 'Test'}
+                                </Button>
+                            </div>
+                            {#if testResults.cryptocompare?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.cryptocompare.message ?? 'OK'}</span>
+                            {:else if testResults.cryptocompare?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.cryptocompare.message}</span>
+                            {/if}
+                            <p class="text-xs text-muted-foreground">
+                                Get a free key at <a
+                                    href="https://www.cryptocompare.com/cryptopian/api-keys"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >cryptocompare.com</a
+                                >. Optional fallback for crypto historical rates.
+                            </p>
+                        </div>
                     </div>
 
-                    <div class="flex items-center gap-2">
-                        <p class="text-sm text-muted-foreground">
-                            Binance — crypto rates via public API (no key required)
-                        </p>
-                        <Button variant="outline" size="sm"
-                            disabled={testResults.binance?.status === 'testing'}
-                            onclick={() => handleTest('binance', testBinance)}>
-                            {testResults.binance?.status === 'testing' ? 'Testing...' : 'Test'}
-                        </Button>
-                        {#if testResults.binance?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.binance.message ?? 'OK'}</span>
-                        {:else if testResults.binance?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.binance.message}</span>
-                        {/if}
+                    <Separator />
+
+                    <!-- DefiLlama -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">DefiLlama</span>
+                        <div class="flex items-center gap-2">
+                            <Switch checked={settings.settings.defillamaEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ defillamaEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
+                        </div>
+                    </div>
+                    <div class:opacity-50={settings.settings.defillamaEnabled === false}
+                         class:pointer-events-none={settings.settings.defillamaEnabled === false}>
+                        <div class="flex items-center gap-2">
+                            <p class="text-sm text-muted-foreground">
+                                Default crypto rate source (no key required)
+                            </p>
+                            <Button variant="outline" size="sm"
+                                disabled={testResults.defillama?.status === 'testing'}
+                                onclick={() => handleTest('defillama', testDefiLlama)}>
+                                {testResults.defillama?.status === 'testing' ? 'Testing...' : 'Test'}
+                            </Button>
+                            {#if testResults.defillama?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.defillama.message ?? 'OK'}</span>
+                            {:else if testResults.defillama?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.defillama.message}</span>
+                            {/if}
+                        </div>
                     </div>
 
-                    <div class="space-y-2">
-                        <label
-                            for="etherscan-api-key"
-                            class="text-sm font-medium">Etherscan API Key</label
-                        >
+                    <Separator />
+
+                    <!-- Binance -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Binance</span>
                         <div class="flex items-center gap-2">
-                            <Input
-                                id="etherscan-api-key"
-                                type="password"
-                                placeholder="Etherscan API key"
-                                value={settings.etherscanApiKey}
-                                oninput={(e) =>
-                                    settings.update({
-                                        etherscanApiKey: (
-                                            e.target as HTMLInputElement
-                                        ).value,
-                                    })}
-                            />
-                            <Button variant="outline" size="sm"
-                                disabled={testResults.etherscan?.status === 'testing'}
-                                onclick={() => handleTest('etherscan', () => testEtherscan(settings.etherscanApiKey))}>
-                                {testResults.etherscan?.status === 'testing' ? 'Testing...' : 'Test'}
-                            </Button>
+                            <Switch checked={settings.settings.binanceRatesEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ binanceRatesEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
                         </div>
-                        {#if testResults.etherscan?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.etherscan.message ?? 'OK'}</span>
-                        {:else if testResults.etherscan?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.etherscan.message}</span>
-                        {/if}
-                        <p class="text-xs text-muted-foreground">
-                            Get a free API key at <a
-                                href="https://etherscan.io/apis"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >etherscan.io</a
-                            >. One key works for most EVM chains.
-                        </p>
                     </div>
-                    <div class="space-y-2">
-                        <label
-                            for="routescan-api-key"
-                            class="text-sm font-medium"
-                            >Routescan API Key (optional)</label
-                        >
+                    <div class:opacity-50={settings.settings.binanceRatesEnabled === false}
+                         class:pointer-events-none={settings.settings.binanceRatesEnabled === false}>
                         <div class="flex items-center gap-2">
-                            <Input
-                                id="routescan-api-key"
-                                type="password"
-                                placeholder="Routescan API key"
-                                value={settings.settings.routescanApiKey}
-                                oninput={(e) =>
-                                    settings.update({
-                                        routescanApiKey: (
-                                            e.target as HTMLInputElement
-                                        ).value,
-                                    })}
-                            />
+                            <p class="text-sm text-muted-foreground">
+                                Crypto rates via public API (no key required)
+                            </p>
                             <Button variant="outline" size="sm"
-                                disabled={testResults.routescan?.status === 'testing'}
-                                onclick={() => handleTest('routescan', () => testRoutescan(settings.settings.routescanApiKey || undefined))}>
-                                {testResults.routescan?.status === 'testing' ? 'Testing...' : 'Test'}
+                                disabled={testResults.binance?.status === 'testing'}
+                                onclick={() => handleTest('binance', testBinance)}>
+                                {testResults.binance?.status === 'testing' ? 'Testing...' : 'Test'}
                             </Button>
+                            {#if testResults.binance?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.binance.message ?? 'OK'}</span>
+                            {:else if testResults.binance?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.binance.message}</span>
+                            {/if}
                         </div>
-                        {#if testResults.routescan?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.routescan.message ?? 'OK'}</span>
-                        {:else if testResults.routescan?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.routescan.message}</span>
-                        {/if}
-                        <p class="text-xs text-muted-foreground">
-                            Used for BSC, Base, Optimism, and Avalanche (free at <a
-                                href="https://routescan.io"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >routescan.io</a
-                            >). Leave blank for keyless access (slower rate
-                            limit).
-                        </p>
                     </div>
-                    <div class="space-y-2">
-                        <label
-                            for="thegraph-api-key"
-                            class="text-sm font-medium">The Graph API Key</label
-                        >
+
+                    <Separator />
+
+                    <!-- Etherscan -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Etherscan</span>
                         <div class="flex items-center gap-2">
-                            <Input
-                                id="thegraph-api-key"
-                                type="password"
-                                placeholder="The Graph API key (optional)"
-                                value={settings.theGraphApiKey}
-                                oninput={(e) =>
-                                    settings.update({
-                                        theGraphApiKey: (
-                                            e.target as HTMLInputElement
-                                        ).value,
-                                    })}
-                            />
-                            <Button variant="outline" size="sm"
-                                disabled={testResults.thegraph?.status === 'testing'}
-                                onclick={() => handleTest('thegraph', () => testTheGraph(settings.theGraphApiKey))}>
-                                {testResults.thegraph?.status === 'testing' ? 'Testing...' : 'Test'}
-                            </Button>
+                            <Switch checked={settings.settings.etherscanEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ etherscanEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
                         </div>
-                        {#if testResults.thegraph?.status === 'success'}
-                            <span class="text-xs text-green-600 dark:text-green-400">{testResults.thegraph.message ?? 'OK'}</span>
-                        {:else if testResults.thegraph?.status === 'error'}
-                            <span class="text-xs text-destructive">{testResults.thegraph.message}</span>
-                        {/if}
-                        <p class="text-xs text-muted-foreground">
-                            Get a free key at <a
-                                href="https://thegraph.com/studio/apikeys/"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >thegraph.com/studio</a
-                            >. Required for Uniswap pool enrichment.
-                        </p>
+                    </div>
+                    <div class:opacity-50={settings.settings.etherscanEnabled === false}
+                         class:pointer-events-none={settings.settings.etherscanEnabled === false}>
+                        <div class="space-y-2">
+                            <label
+                                for="etherscan-api-key"
+                                class="text-sm font-medium">Etherscan API Key</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="etherscan-api-key"
+                                    type="password"
+                                    placeholder="Etherscan API key"
+                                    value={settings.etherscanApiKey}
+                                    oninput={(e) =>
+                                        settings.update({
+                                            etherscanApiKey: (
+                                                e.target as HTMLInputElement
+                                            ).value,
+                                        })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.etherscan?.status === 'testing'}
+                                    onclick={() => handleTest('etherscan', () => testEtherscan(settings.etherscanApiKey))}>
+                                    {testResults.etherscan?.status === 'testing' ? 'Testing...' : 'Test'}
+                                </Button>
+                            </div>
+                            {#if testResults.etherscan?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.etherscan.message ?? 'OK'}</span>
+                            {:else if testResults.etherscan?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.etherscan.message}</span>
+                            {/if}
+                            <p class="text-xs text-muted-foreground">
+                                Get a free API key at <a
+                                    href="https://etherscan.io/apis"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >etherscan.io</a
+                                >. One key works for most EVM chains.
+                            </p>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <!-- Routescan -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Routescan</span>
+                        <div class="flex items-center gap-2">
+                            <Switch checked={settings.settings.routescanEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ routescanEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
+                        </div>
+                    </div>
+                    <div class:opacity-50={settings.settings.routescanEnabled === false}
+                         class:pointer-events-none={settings.settings.routescanEnabled === false}>
+                        <div class="space-y-2">
+                            <label
+                                for="routescan-api-key"
+                                class="text-sm font-medium"
+                                >Routescan API Key (optional)</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="routescan-api-key"
+                                    type="password"
+                                    placeholder="Routescan API key"
+                                    value={settings.settings.routescanApiKey}
+                                    oninput={(e) =>
+                                        settings.update({
+                                            routescanApiKey: (
+                                                e.target as HTMLInputElement
+                                            ).value,
+                                        })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.routescan?.status === 'testing'}
+                                    onclick={() => handleTest('routescan', () => testRoutescan(settings.settings.routescanApiKey || undefined))}>
+                                    {testResults.routescan?.status === 'testing' ? 'Testing...' : 'Test'}
+                                </Button>
+                            </div>
+                            {#if testResults.routescan?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.routescan.message ?? 'OK'}</span>
+                            {:else if testResults.routescan?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.routescan.message}</span>
+                            {/if}
+                            <p class="text-xs text-muted-foreground">
+                                Used for BSC, Base, Optimism, and Avalanche (free at <a
+                                    href="https://routescan.io"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >routescan.io</a
+                                >). Leave blank for keyless access (slower rate
+                                limit).
+                            </p>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <!-- The Graph -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">The Graph</span>
+                        <div class="flex items-center gap-2">
+                            <Switch checked={settings.settings.theGraphEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ theGraphEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">Enabled</label>
+                        </div>
+                    </div>
+                    <div class:opacity-50={settings.settings.theGraphEnabled === false}
+                         class:pointer-events-none={settings.settings.theGraphEnabled === false}>
+                        <div class="space-y-2">
+                            <label
+                                for="thegraph-api-key"
+                                class="text-sm font-medium">The Graph API Key</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="thegraph-api-key"
+                                    type="password"
+                                    placeholder="The Graph API key (optional)"
+                                    value={settings.theGraphApiKey}
+                                    oninput={(e) =>
+                                        settings.update({
+                                            theGraphApiKey: (
+                                                e.target as HTMLInputElement
+                                            ).value,
+                                        })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.thegraph?.status === 'testing'}
+                                    onclick={() => handleTest('thegraph', () => testTheGraph(settings.theGraphApiKey))}>
+                                    {testResults.thegraph?.status === 'testing' ? 'Testing...' : 'Test'}
+                                </Button>
+                            </div>
+                            {#if testResults.thegraph?.status === 'success'}
+                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.thegraph.message ?? 'OK'}</span>
+                            {:else if testResults.thegraph?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.thegraph.message}</span>
+                            {/if}
+                            <p class="text-xs text-muted-foreground">
+                                Get a free key at <a
+                                    href="https://thegraph.com/studio/apikeys/"
+                                    target="_blank"
+                                    class="underline hover:text-foreground"
+                                    >thegraph.com/studio</a
+                                >. Required for Uniswap pool enrichment.
+                            </p>
+                        </div>
                     </div>
                 </Tabs.Content>
             </Tabs.Root>

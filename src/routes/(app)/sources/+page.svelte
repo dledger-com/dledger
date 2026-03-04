@@ -465,6 +465,10 @@
     }
 
     function syncEthAccount(account: EtherscanAccount) {
+        if (settings.settings.etherscanEnabled === false) {
+            toast.error("Etherscan is disabled in Settings");
+            return;
+        }
         const apiKey = settings.etherscanApiKey;
         if (!apiKey) {
             toast.error("Etherscan API key is required");

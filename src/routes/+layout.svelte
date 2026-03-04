@@ -95,15 +95,25 @@
         }
 
         // --- Unified auto-sync (replaces old daily syncExchangeRates) ---
-        const buildConfig = (): HistoricalFetchConfig => ({
-          baseCurrency: settings.currency,
-          coingeckoApiKey: settings.coingeckoApiKey,
-          coingeckoPro: settings.settings.coingeckoPro,
-          finnhubApiKey: settings.finnhubApiKey,
-          cryptoCompareApiKey: settings.cryptoCompareApiKey,
-          dpriceMode: settings.settings.dpriceMode,
-          dpriceUrl: settings.settings.dpriceUrl,
-        });
+        const buildConfig = (): HistoricalFetchConfig => {
+          const disabled = new Set<string>();
+          if (settings.settings.frankfurterEnabled === false) disabled.add("frankfurter");
+          if (settings.settings.coingeckoEnabled === false) disabled.add("coingecko");
+          if (settings.settings.cryptoCompareEnabled === false) disabled.add("cryptocompare");
+          if (settings.settings.defillamaEnabled === false) disabled.add("defillama");
+          if (settings.settings.binanceRatesEnabled === false) disabled.add("binance");
+          if (settings.settings.finnhubEnabled === false) disabled.add("finnhub");
+          return {
+            baseCurrency: settings.currency,
+            coingeckoApiKey: settings.coingeckoApiKey,
+            coingeckoPro: settings.settings.coingeckoPro,
+            finnhubApiKey: settings.finnhubApiKey,
+            cryptoCompareApiKey: settings.cryptoCompareApiKey,
+            dpriceMode: settings.settings.dpriceMode,
+            dpriceUrl: settings.settings.dpriceUrl,
+            disabledSources: disabled.size > 0 ? disabled : undefined,
+          };
+        };
 
         // Startup auto-sync — findMissingRates is idempotent, no daily guard needed
         enqueueRateBackfill(taskQueue, backend, buildConfig(), getHiddenCurrencySet());

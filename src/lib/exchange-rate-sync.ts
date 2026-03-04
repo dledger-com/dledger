@@ -79,18 +79,35 @@ function autoDetectSource(
   baseCurrency: string,
   hasTokenAddress: boolean,
   dpriceAssets?: Set<string>,
+  disabledSources?: Set<string>,
 ): SourceName | "none" {
   // When dprice is enabled and the asset is available locally, prefer it
   if (dpriceAssets && dpriceAssets.has(code)) return "dprice";
   // Asset-type based routing (when classified)
-  if (assetType === "fiat" && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
-  if (assetType === "crypto") return hasTokenAddress ? "defillama" : (COINGECKO_IDS[code] ? "defillama" : "none");
+  if (assetType === "fiat" && FRANKFURTER_FIAT.has(baseCurrency)) {
+    return disabledSources?.has("frankfurter") ? "none" : "frankfurter";
+  }
+  if (assetType === "crypto") {
+    if (hasTokenAddress || COINGECKO_IDS[code]) {
+      if (!disabledSources?.has("defillama")) return "defillama";
+      if (!disabledSources?.has("coingecko")) return "coingecko";
+      if (!disabledSources?.has("binance")) return "binance";
+      return "none";
+    }
+    return "none";
+  }
   if (assetType === "stock") return "none"; // finnhub requires API key; dprice handles stocks
   if (assetType === "commodity" || assetType === "index" || assetType === "bond") return "none";
   // Unclassified fallback: existing heuristics
-  if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
-  if (hasTokenAddress) return "defillama";
-  if (COINGECKO_IDS[code]) return "defillama";
+  if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
+    return disabledSources?.has("frankfurter") ? "none" : "frankfurter";
+  }
+  if (hasTokenAddress || COINGECKO_IDS[code]) {
+    if (!disabledSources?.has("defillama")) return "defillama";
+    if (!disabledSources?.has("coingecko")) return "coingecko";
+    if (!disabledSources?.has("binance")) return "binance";
+    return "none";
+  }
   return "none";
 }
 
@@ -151,6 +168,7 @@ export async function syncExchangeRates(
   dpriceMode?: DpriceMode,
   dpriceUrl?: string,
   coingeckoPro?: boolean,
+  disabledSources?: Set<string>,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -319,7 +337,7 @@ export async function syncExchangeRates(
       else if (stored.rate_source === "dprice") dpriceCodes.push(code);
     } else {
       // No stored source → auto-detect
-      const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets);
+      const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets, disabledSources);
       if (detected === "none") continue; // No known pricing path — skip
       if (detected === "frankfurter") frankfurterCodes.push(code);
       else if (detected === "coingecko") coingeckoCodes.push(code);
@@ -332,10 +350,20 @@ export async function syncExchangeRates(
     }
   }
 
+  // Clear arrays for disabled sources — codes routed to disabled sources are silently skipped
+  if (disabledSources) {
+    if (disabledSources.has("frankfurter")) frankfurterCodes.length = 0;
+    if (disabledSources.has("coingecko")) coingeckoCodes.length = 0;
+    if (disabledSources.has("finnhub")) finnhubCodes.length = 0;
+    if (disabledSources.has("defillama")) defillamaCodes.length = 0;
+    if (disabledSources.has("cryptocompare")) cryptocompareCodes.length = 0;
+    if (disabledSources.has("binance")) binanceCodes.length = 0;
+  }
+
   // If dprice-first pass failed entirely (dpriceAssets still undefined), re-route dpriceCodes to fallback sources
   if (dpriceCodes.length > 0 && dpriceAssets === undefined) {
     for (const code of dpriceCodes) {
-      const fallback = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), undefined);
+      const fallback = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), undefined, disabledSources);
       if (fallback === "none" || fallback === "dprice") continue;
       if (fallback === "frankfurter") frankfurterCodes.push(code);
       else if (fallback === "coingecko") coingeckoCodes.push(code);

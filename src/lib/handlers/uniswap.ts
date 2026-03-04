@@ -240,7 +240,7 @@ export const uniswapHandler: TransactionHandler = {
     };
 
     // Enrichment: fetch pool info from The Graph (opt-in)
-    if (ctx.enrichment && action === "SWAP") {
+    if (ctx.enrichment && action === "SWAP" && ctx.settings.theGraphEnabled !== false) {
       try {
         const enrichment = await fetchUniswapEnrichment(flows, ctx.settings.theGraphApiKey);
         if (enrichment) {

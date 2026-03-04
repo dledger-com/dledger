@@ -62,6 +62,7 @@ export interface HistoricalFetchConfig {
   storedSources?: CurrencyRateSource[];
   onProgress?: (fetched: number, total: number) => void;
   signal?: AbortSignal;
+  disabledSources?: Set<string>;
 }
 
 export interface HistoricalFetchResult {
@@ -80,6 +81,7 @@ function classifySource(
   rateSourceMap: Map<string, CurrencyRateSource>,
   tokenAddressCurrencies?: Set<string>,
   dpriceAssets?: Set<string>,
+  disabledSources?: Set<string>,
 ): SourceName | null {
   // 1. When dprice is active and asset is available, prefer it (unless user override)
   if (dpriceAssets?.has(currency)) {
@@ -88,24 +90,38 @@ function classifySource(
       return "dprice";
     }
   }
-  // 2. DB-stored source
+  // 2. DB-stored source (respect disabled flag for explicitly stored sources)
   const stored = rateSourceMap.get(currency);
   if (stored?.rate_source === "none") return null;
   if (stored?.rate_source) {
-    return stored.rate_source as SourceName;
+    const src = stored.rate_source as SourceName;
+    return disabledSources?.has(src) ? null : src;
   }
+  // Helper: pick first enabled crypto source
+  const pickCryptoSource = (hasCoinId: boolean): SourceName | null => {
+    if (!disabledSources?.has("defillama")) return "defillama";
+    if (hasCoinId && !disabledSources?.has("coingecko")) return "coingecko";
+    if (!disabledSources?.has("binance")) return "binance";
+    return null;
+  };
   // 3. Asset-type based routing (when classified)
-  if (assetType === "fiat" && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
+  if (assetType === "fiat" && FRANKFURTER_FIAT.has(baseCurrency)) {
+    return disabledSources?.has("frankfurter") ? null : "frankfurter";
+  }
   if (assetType === "crypto") {
-    if (tokenAddressCurrencies?.has(currency)) return "defillama";
-    if (COINGECKO_IDS[currency]) return "defillama";
+    if (tokenAddressCurrencies?.has(currency) || COINGECKO_IDS[currency]) {
+      return pickCryptoSource(!!COINGECKO_IDS[currency]);
+    }
     return null;
   }
   if (assetType === "stock" || assetType === "commodity" || assetType === "index" || assetType === "bond") return null;
   // 4. Unclassified fallback: existing heuristics
-  if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) return "frankfurter";
-  if (tokenAddressCurrencies?.has(currency)) return "defillama";
-  if (COINGECKO_IDS[currency]) return "defillama";
+  if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) {
+    return disabledSources?.has("frankfurter") ? null : "frankfurter";
+  }
+  if (tokenAddressCurrencies?.has(currency) || COINGECKO_IDS[currency]) {
+    return pickCryptoSource(!!COINGECKO_IDS[currency]);
+  }
   return null; // No known pricing path — skip
 }
 
@@ -117,6 +133,7 @@ export async function findMissingRates(
   currencyDates: { currency: string; date: string }[],
   dpriceAssets?: Set<string>,
   options?: { exactDateMatch?: boolean },
+  disabledSources?: Set<string>,
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -159,7 +176,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
       if (!source) continue;
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -173,7 +190,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -186,7 +203,7 @@ export async function findMissingRates(
       const rate = await backend.getExchangeRate(currency, baseCurrency, date);
       if (rate !== null) continue;
 
-      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
       if (!source) continue;  // rate_source = "none" → skip
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
@@ -236,12 +253,12 @@ export async function fetchHistoricalRates(
   }
 
   // ---- Frankfurter: full timeseries, multi-symbol ----
-  if (frankfurterReqs.length > 0 && !config.signal?.aborted) {
+  if (frankfurterReqs.length > 0 && !config.disabledSources?.has("frankfurter") && !config.signal?.aborted) {
     await fetchFrankfurterHistorical(backend, frankfurterReqs, config, result, successCurrencies, tick);
   }
 
   // ---- CoinGecko: market_chart/range per coin ----
-  if (coingeckoReqs.length > 0 && !config.signal?.aborted) {
+  if (coingeckoReqs.length > 0 && !config.disabledSources?.has("coingecko") && !config.signal?.aborted) {
     if (!config.coingeckoApiKey) {
       result.errors.push(`CoinGecko: no API key; skipping ${coingeckoReqs.length} currency(ies)`);
     } else {
@@ -250,7 +267,7 @@ export async function fetchHistoricalRates(
   }
 
   // ---- Finnhub: candle per symbol ----
-  if (finnhubReqs.length > 0 && !config.signal?.aborted) {
+  if (finnhubReqs.length > 0 && !config.disabledSources?.has("finnhub") && !config.signal?.aborted) {
     if (!config.finnhubApiKey) {
       result.errors.push(`Finnhub: no API key; skipping ${finnhubReqs.length} currency(ies)`);
     } else {
@@ -259,7 +276,7 @@ export async function fetchHistoricalRates(
   }
 
   // ---- CryptoCompare: histoday per symbol ----
-  if (cryptocompareReqs.length > 0 && !config.signal?.aborted) {
+  if (cryptocompareReqs.length > 0 && !config.disabledSources?.has("cryptocompare") && !config.signal?.aborted) {
     if (!config.cryptoCompareApiKey) {
       result.errors.push(`CryptoCompare: no API key; skipping ${cryptocompareReqs.length} currency(ies)`);
     } else {
@@ -268,12 +285,12 @@ export async function fetchHistoricalRates(
   }
 
   // ---- DefiLlama: batch historical ----
-  if (defillamaReqs.length > 0 && !config.signal?.aborted) {
+  if (defillamaReqs.length > 0 && !config.disabledSources?.has("defillama") && !config.signal?.aborted) {
     await fetchDefiLlamaHistorical(backend, defillamaReqs, config, result, successCurrencies, tick);
   }
 
   // ---- Binance: klines per symbol ----
-  if (binanceReqs.length > 0 && !config.signal?.aborted) {
+  if (binanceReqs.length > 0 && !config.disabledSources?.has("binance") && !config.signal?.aborted) {
     await fetchBinanceHistorical(backend, binanceReqs, config, result, successCurrencies, tick);
   }
 
@@ -302,7 +319,7 @@ export async function fetchHistoricalRates(
       // Re-classify without dprice (dpriceAssets = undefined) and group by fallback source
       const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
       for (const req of failedDprice) {
-        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets);
+        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, config.disabledSources);
         if (!fallback || fallback === "dprice") continue;
         if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
         fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
@@ -1126,7 +1143,7 @@ export async function ensurePeriodicRates(
     }
   }
 
-  const missing = await findMissingRates(backend, config.baseCurrency, targets);
+  const missing = await findMissingRates(backend, config.baseCurrency, targets, undefined, undefined, config.disabledSources);
   if (missing.length === 0) return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [] };
 
   return fetchHistoricalRates(backend, missing, config);
@@ -1233,7 +1250,7 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
   }
 
-  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true });
+  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources);
   if (missing.length === 0) {
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
@@ -1286,7 +1303,7 @@ export function enqueueRateBackfill(
             resolvedDpriceAssets = new Set(entries.map((e) => e.from));
           } catch { /* dprice unavailable */ }
         }
-        const missing = await findMissingRates(backend, config.baseCurrency, pairs, resolvedDpriceAssets);
+        const missing = await findMissingRates(backend, config.baseCurrency, pairs, resolvedDpriceAssets, undefined, config.disabledSources);
         if (missing.length === 0) {
           return { summary: "All rates already available" };
         }

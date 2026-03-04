@@ -503,7 +503,7 @@ export const aaveHandler: TransactionHandler = {
     }
 
     // Enrichment: fetch historical data from Aave protocol subgraphs (opt-in)
-    if (ctx.enrichment && protocol.actions.length > 0) {
+    if (ctx.enrichment && protocol.actions.length > 0 && ctx.settings.theGraphEnabled !== false) {
       try {
         const subgraphData = await fetchAaveSubgraphData(
           ctx.settings.theGraphApiKey, ctx.chainId, group.hash, isV2,

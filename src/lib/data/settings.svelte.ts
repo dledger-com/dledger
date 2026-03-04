@@ -35,6 +35,16 @@ export interface AppSettings {
   dpriceUrl?: string;
   spamCleanupDone?: boolean;
   rateConfigHash?: string;
+  // Per-service enable/disable (undefined = enabled for backward compat)
+  frankfurterEnabled?: boolean;
+  coingeckoEnabled?: boolean;
+  cryptoCompareEnabled?: boolean;
+  defillamaEnabled?: boolean;
+  binanceRatesEnabled?: boolean;  // "binanceRates" to avoid confusion with Binance CEX adapter
+  finnhubEnabled?: boolean;
+  etherscanEnabled?: boolean;
+  routescanEnabled?: boolean;
+  theGraphEnabled?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -58,6 +68,11 @@ const DEFAULT_SETTINGS: AppSettings = {
  * Compute a hash of rate-relevant config. When this changes, auto-detected
  * "none" entries should be cleared so currencies get retried.
  */
+/** Check if a service is enabled (undefined = enabled for backward compat) */
+export function isServiceEnabled(flag: boolean | undefined): boolean {
+  return flag !== false;
+}
+
 export function computeRateConfigHash(s: AppSettings): string {
   const parts = [
     s.dpriceMode ?? "off",
@@ -65,6 +80,12 @@ export function computeRateConfigHash(s: AppSettings): string {
     s.finnhubApiKey ? "set" : "",
     s.cryptoCompareApiKey ? "set" : "",
     s.coingeckoPro ? "pro" : "",
+    s.frankfurterEnabled === false ? "frank:off" : "",
+    s.coingeckoEnabled === false ? "cg:off" : "",
+    s.cryptoCompareEnabled === false ? "cc:off" : "",
+    s.defillamaEnabled === false ? "dl:off" : "",
+    s.binanceRatesEnabled === false ? "bin:off" : "",
+    s.finnhubEnabled === false ? "fh:off" : "",
   ];
   return parts.join("|");
 }
