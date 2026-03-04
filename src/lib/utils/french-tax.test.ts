@@ -586,4 +586,141 @@ describe("computeFrenchTaxReport", () => {
     expect(report.finalAcquisitionCost).toBe("10000.00");
     expect(report.acquisitions).toHaveLength(1);
   });
+
+  it("hidden currencies, rate_source=none, and invalid codes do not generate warnings", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Create spam/hidden/none-source currencies
+    await backend.createCurrency({ code: "SPAM1", asset_type: "", param: "", name: "Spam", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "NONESRC", asset_type: "", param: "", name: "NoneSource", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "EUR;", asset_type: "", param: "", name: "Invalid", decimal_places: 2, is_base: false });
+
+    // Mark SPAM1 as hidden, NONESRC as rate_source="none"
+    await backend.setCurrencyHidden("SPAM1", true);
+    await backend.setCurrencyRateSource("NONESRC", "none", "user");
+
+    // Create equity accounts for these currencies
+    const equityId = (await backend.listAccounts()).find(a => a.full_name === "Equity")!.id;
+    const tradingSPAM = await createPostable(backend, equityId, "equity", "Trading:SPAM1", "Equity:Trading:SPAM1");
+    const tradingNONE = await createPostable(backend, equityId, "equity", "Trading:NONESRC", "Equity:Trading:NONESRC");
+    const tradingINV = await createPostable(backend, equityId, "equity", "Trading:EUR;", "Equity:Trading:EUR;");
+
+    // Give the crypto account positive balances of all three via opening balances
+    const open1 = makeEntry({ date: "2024-01-01", description: "Open SPAM1" });
+    await backend.postJournalEntry(open1, [
+      makeLineItem(open1.id, accounts.crypto.id, "SPAM1", "1000"),
+      makeLineItem(open1.id, tradingSPAM.id, "SPAM1", "-1000"),
+    ]);
+    const open2 = makeEntry({ date: "2024-01-01", description: "Open NONESRC" });
+    await backend.postJournalEntry(open2, [
+      makeLineItem(open2.id, accounts.crypto.id, "NONESRC", "500"),
+      makeLineItem(open2.id, tradingNONE.id, "NONESRC", "-500"),
+    ]);
+    const open3 = makeEntry({ date: "2024-01-01", description: "Open EUR;" });
+    await backend.postJournalEntry(open3, [
+      makeLineItem(open3.id, accounts.crypto.id, "EUR;", "100"),
+      makeLineItem(open3.id, tradingINV.id, "EUR;", "-100"),
+    ]);
+
+    // Buy + sell BTC to trigger portfolio valuation
+    const buy = makeEntry({ date: "2024-03-01", description: "Buy BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-10000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "10000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    const sell = makeEntry({ date: "2024-06-01", description: "Sell BTC" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-50000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "50000"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    // None of the noisy currencies should appear in warnings
+    const allWarnings = report.warnings.join("\n");
+    expect(allWarnings).not.toContain("SPAM1");
+    expect(allWarnings).not.toContain("NONESRC");
+    expect(allWarnings).not.toContain("EUR;");
+
+    // missingCurrencyDates should also not contain them
+    const missingCurrencies = report.missingCurrencyDates.map(m => m.currency);
+    expect(missingCurrencies).not.toContain("SPAM1");
+    expect(missingCurrencies).not.toContain("NONESRC");
+    expect(missingCurrencies).not.toContain("EUR;");
+  });
+
+  it("deduplicates warnings and missingCurrencyDates across multiple dispositions", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Create a currency that will have no rate (to trigger missing warnings)
+    await backend.createCurrency({ code: "DOGE", asset_type: "", param: "", name: "Dogecoin", decimal_places: 8, is_base: false });
+    const equityId = (await backend.listAccounts()).find(a => a.full_name === "Equity")!.id;
+    const tradingDOGE = await createPostable(backend, equityId, "equity", "Trading:DOGE", "Equity:Trading:DOGE");
+
+    // Give DOGE balance (will be in portfolio at both sale dates)
+    const openDoge = makeEntry({ date: "2024-01-01", description: "Open DOGE" });
+    await backend.postJournalEntry(openDoge, [
+      makeLineItem(openDoge.id, accounts.crypto.id, "DOGE", "10000"),
+      makeLineItem(openDoge.id, tradingDOGE.id, "DOGE", "-10000"),
+    ]);
+
+    // Buy + sell BTC twice on same date → two dispositions → two portfolio valuations
+    const buy = makeEntry({ date: "2024-02-01", description: "Buy BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-40000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "40000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-2"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "2"),
+    ]);
+
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    const sell1 = makeEntry({ date: "2024-06-01", description: "Sell BTC #1", created_at: "2024-06-01T10:00:00" });
+    await backend.postJournalEntry(sell1, [
+      makeLineItem(sell1.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell1.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell1.id, accounts.tradingEUR.id, "EUR", "-50000"),
+      makeLineItem(sell1.id, accounts.bank.id, "EUR", "50000"),
+    ]);
+
+    const sell2 = makeEntry({ date: "2024-06-01", description: "Sell BTC #2", created_at: "2024-06-01T11:00:00" });
+    await backend.postJournalEntry(sell2, [
+      makeLineItem(sell2.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell2.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell2.id, accounts.tradingEUR.id, "EUR", "-50000"),
+      makeLineItem(sell2.id, accounts.bank.id, "EUR", "50000"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    // DOGE/EUR is missing on 2024-06-01 for both dispositions + year-end,
+    // but warnings + missingCurrencyDates should be deduplicated
+    const dogeWarnings = report.warnings.filter(w => w.includes("DOGE"));
+    expect(dogeWarnings.length).toBeLessThanOrEqual(2); // at most sale-date + year-end
+
+    const dogeMissing = report.missingCurrencyDates.filter(m => m.currency === "DOGE");
+    // Should have at most 2 unique entries: 2024-06-01 and 2024-12-31
+    expect(dogeMissing.length).toBeLessThanOrEqual(2);
+    const uniqueDates = new Set(dogeMissing.map(m => m.date));
+    expect(uniqueDates.size).toBe(dogeMissing.length); // all entries are unique
+  });
 });

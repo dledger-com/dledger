@@ -15,6 +15,7 @@ import Decimal from "decimal.js-light";
 import type { Backend } from "$lib/backend.js";
 import type { Account, JournalEntry, LineItem, TrialBalance } from "$lib/types/index.js";
 import { ExchangeRateCache } from "./exchange-rate-cache.js";
+import { isValidCurrencyCode } from "$lib/currency-validation.js";
 
 // ---------- Default fiat currencies ----------
 
@@ -182,6 +183,7 @@ export async function computePortfolioValueEUR(
   rateCache: ExchangeRateCache,
   date: string,
   baseCurrency: string,
+  skipCurrencies?: Set<string>,
 ): Promise<{ value: Decimal; missingRates: string[]; missingCurrencyDates: { currency: string; date: string }[] }> {
   let value = new Decimal(0);
   const missingRates: string[] = [];
@@ -200,6 +202,10 @@ export async function computePortfolioValueEUR(
         value = value.plus(amount);
         continue;
       }
+
+      // Skip invalid codes and currencies that can never have rates
+      if (!isValidCurrencyCode(bal.currency)) continue;
+      if (skipCurrencies?.has(bal.currency)) continue;
 
       const rateStr = await rateCache.get(bal.currency, baseCurrency, date);
       if (rateStr) {
@@ -226,6 +232,14 @@ export async function computeFrenchTaxReport(
     : new Set(DEFAULT_FIAT_CURRENCIES);
   const warnings: string[] = [];
   const missingCurrencyDates: { currency: string; date: string }[] = [];
+
+  // Build skip set: hidden currencies + rate_source="none" — these can never have rates
+  const hiddenCodes = await backend.listHiddenCurrencies();
+  const rateSources = await backend.getCurrencyRateSources();
+  const skipCurrencies = new Set<string>([
+    ...hiddenCodes,
+    ...rateSources.filter(s => s.rate_source === "none").map(s => s.currency),
+  ]);
 
   // 1. Load all accounts into a map
   const accounts = await backend.listAccounts();
@@ -314,7 +328,7 @@ export async function computeFrenchTaxReport(
       // Get portfolio value V at moment of sale
       const tb = await getTrialBalance(entry.date);
       const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
-        tb, fiatSet, rateCache, entry.date, baseCurrency,
+        tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
       );
       for (const mr of missingRates) {
         warnings.push(`Missing rate: ${mr}`);
@@ -375,14 +389,25 @@ export async function computeFrenchTaxReport(
   const yearEndDate = `${opts.taxYear + 1}-01-01`; // trial balance as-of is exclusive
   const yearEndTb = await getTrialBalance(yearEndDate);
   const { value: yearEndV, missingRates: yearEndMissing, missingCurrencyDates: yearEndMissingCd } = await computePortfolioValueEUR(
-    yearEndTb, fiatSet, rateCache, yearEnd, baseCurrency,
+    yearEndTb, fiatSet, rateCache, yearEnd, baseCurrency, skipCurrencies,
   );
   for (const mr of yearEndMissing) {
     warnings.push(`Missing rate for year-end portfolio: ${mr}`);
   }
   missingCurrencyDates.push(...yearEndMissingCd);
 
-  // 6. Build report
+  // 6. Deduplicate warnings and missing currency dates
+  const uniqueWarnings = [...new Set(warnings)];
+
+  const seenMissing = new Set<string>();
+  const uniqueMissingCurrencyDates = missingCurrencyDates.filter(m => {
+    const key = `${m.currency}:${m.date}`;
+    if (seenMissing.has(key)) return false;
+    seenMissing.add(key);
+    return true;
+  });
+
+  // 7. Build report
   const isPositive = totalPlusValue.gte(0);
   const totalDispositions = totalFiatReceived;
   const isExempt = totalDispositions.lte(305);
@@ -404,8 +429,8 @@ export async function computeFrenchTaxReport(
     taxDuePFU314: isPositive && !isExempt
       ? totalPlusValue.times(new Decimal("0.314")).toFixed(2)
       : "0.00",
-    warnings,
-    missingCurrencyDates,
+    warnings: uniqueWarnings,
+    missingCurrencyDates: uniqueMissingCurrencyDates,
   };
 }
 
