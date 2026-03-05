@@ -323,13 +323,84 @@
         return { isTrade: false, debits: debitsByCurrency(nonEquityItems) };
     }
 
-    function formatEntryAmount(items: LineItem[]): string {
+    type AmountDirection = 'income' | 'expense' | 'default';
+
+    type AmountPart = { text: string; direction: AmountDirection };
+
+    function amountColorClass(dir: AmountDirection): string {
+        if (dir === 'income') return 'text-green-600 dark:text-green-400';
+        if (dir === 'expense') return 'text-red-600 dark:text-red-400';
+        return '';
+    }
+
+    function entryAmountDisplay(items: LineItem[]): AmountPart[] {
         const { isTrade, debits } = entryAmountParts(items);
+
+        // Trade: single default part with arrow
         if (isTrade && debits.length === 2) {
-            return `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`;
+            return [{
+                text: `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`,
+                direction: 'default'
+            }];
         }
-        if (debits.length === 0) return formatCurrency(0, settings.currency);
-        return debits.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
+
+        // Classify which account types are present
+        let hasIncome = false, hasExpense = false, hasEquity = false;
+        for (const item of items) {
+            const name = accountIdToName.get(item.account_id) ?? '';
+            if (name.startsWith('Equity:') || name === 'Equity') hasEquity = true;
+            else if (name.startsWith('Income:') || name === 'Income') hasIncome = true;
+            else if (name.startsWith('Expenses:') || name === 'Expenses') hasExpense = true;
+        }
+
+        // Single-direction: one part, whole amount colored
+        const isMixed = (hasEquity || hasIncome) && hasExpense;
+        if (!isMixed) {
+            const dir: AmountDirection =
+                hasIncome ? 'income' : hasExpense ? 'expense' : 'default';
+            const text = debits.length === 0
+                ? formatCurrency(0, settings.currency)
+                : debits.map(b => formatCurrency(b.amount, b.currency)).join(', ');
+            return [{ text, direction: dir }];
+        }
+
+        // Mixed: split expense debits from the rest
+        const expenseByCode = new Map<string, number>();
+        for (const item of items) {
+            const name = accountIdToName.get(item.account_id) ?? '';
+            if (name.startsWith('Expenses:') || name === 'Expenses') {
+                const n = parseFloat(item.amount);
+                if (n > 0) expenseByCode.set(item.currency, (expenseByCode.get(item.currency) ?? 0) + n);
+            }
+        }
+
+        // Main = total debits minus expense debits, per currency
+        const mainByCode = new Map<string, number>();
+        for (const d of debits) {
+            const total = parseFloat(d.amount);
+            const exp = expenseByCode.get(d.currency) ?? 0;
+            const remainder = total - exp;
+            if (remainder > 0.005) mainByCode.set(d.currency, remainder);
+        }
+
+        const parts: AmountPart[] = [];
+        const mainDir: AmountDirection = hasIncome ? 'income' : 'default';
+
+        if (mainByCode.size > 0) {
+            parts.push({
+                text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(', '),
+                direction: mainDir
+            });
+        }
+        if (expenseByCode.size > 0) {
+            parts.push({
+                text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(', '),
+                direction: 'expense'
+            });
+        }
+
+        return parts.length > 0 ? parts
+            : [{ text: formatCurrency(0, settings.currency), direction: 'default' }];
     }
 
     // Metadata state — declared before displayEntries to avoid TDZ
@@ -1275,8 +1346,11 @@
                                     <td class="p-2 align-middle" colspan={multiSelectMode ? undefined : visibleColCount}>
                                         <div class="flex justify-between items-baseline gap-2">
                                             <span class="text-muted-foreground text-xs">{entry.date}</span>
-                                            <span class="font-mono text-sm text-right shrink-0">
-                                                {convertedTotals.get(entry.id) ?? formatEntryAmount(items)}
+                                            <span class="font-mono text-sm text-right shrink-0" title={convertedTotals.get(entry.id) ?? ''}>
+                                                {#each entryAmountDisplay(items) as part, i}
+                                                    {#if i > 0}<span class="text-muted-foreground"> + </span>{/if}
+                                                    <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                                {/each}
                                             </span>
                                         </div>
                                         <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5">
@@ -1360,9 +1434,11 @@
                                                 </div>
                                             </Table.Cell>
                                         {:else if cell.column.id === "amount"}
-                                            <Table.Cell class="text-right font-mono p-2">
-                                                {convertedTotals.get(entry.id) ??
-                                                    formatEntryAmount(items)}
+                                            <Table.Cell class="text-right font-mono p-2" title={convertedTotals.get(entry.id) ?? ''}>
+                                                {#each entryAmountDisplay(items) as part, i}
+                                                    {#if i > 0}<span class="text-muted-foreground"> + </span>{/if}
+                                                    <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                                {/each}
                                             </Table.Cell>
                                         {/if}
                                     {/each}
@@ -1578,10 +1654,12 @@
                                     >
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span class="font-mono text-xs"
-                                        >{convertedTotals.get(entry.id) ??
-                                            formatEntryAmount(items)}</span
-                                    >
+                                    <span class="font-mono text-xs" title={convertedTotals.get(entry.id) ?? ''}>
+                                        {#each entryAmountDisplay(items) as part, i}
+                                            {#if i > 0}<span class="text-muted-foreground"> + </span>{/if}
+                                            <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                        {/each}
+                                    </span>
                                     <Badge variant="outline" class="text-xs"
                                         >{entry.status}</Badge
                                     >

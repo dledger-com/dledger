@@ -1,6 +1,7 @@
 import type { Backend } from "$lib/backend.js";
 import type { JournalEntry, LineItem } from "$lib/types/index.js";
 import type { CsvRecord } from "./types.js";
+import { crossSourceAliases, cexSourceFromCsvPreset } from "./cross-source.js";
 
 export interface DedupIndex {
   sources: Set<string>;
@@ -86,9 +87,12 @@ export async function buildDedupIndex(
     // Skip voided entries
     if (entry.voided_by !== null) continue;
 
-    // Add source for source-based matching
+    // Add source for source-based matching (+ cross-source aliases)
     if (entry.source) {
       sources.add(entry.source);
+      for (const alias of crossSourceAliases(entry.source)) {
+        sources.add(alias);
+      }
     }
 
     // Add fingerprint for fingerprint-based matching
@@ -114,6 +118,9 @@ export function isDuplicate(
   if (rec.sourceKey && presetId) {
     const source = `csv-import:${presetId}:${rec.sourceKey}`;
     if (index.sources.has(source)) return true;
+    // Cross-source: also check CEX format directly (belt-and-suspenders)
+    const cexSource = cexSourceFromCsvPreset(presetId, rec.sourceKey);
+    if (cexSource && index.sources.has(cexSource)) return true;
   }
 
   // Fingerprint-based check (universal)
