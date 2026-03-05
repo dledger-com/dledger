@@ -28,6 +28,7 @@
         type DpriceMode,
     } from "$lib/data/settings.svelte.js";
     import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+    import { mode, setMode } from "mode-watcher";
     import * as Select from "$lib/components/ui/select/index.js";
     import ListFilter from "$lib/components/ListFilter.svelte";
     import { invalidate } from "$lib/data/invalidation.js";
@@ -714,10 +715,14 @@
             <Card.Description>Theme and display preferences.</Card.Description>
         </Card.Header>
         <Card.Content class="space-y-4">
-            <p class="text-sm text-muted-foreground">
-                Use the theme toggle in the top bar to switch between light and
-                dark mode.
-            </p>
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">Dark mode</p>
+                    <p class="text-sm text-muted-foreground">Switch between light and dark theme.</p>
+                </div>
+                <Switch checked={mode.current === "dark"}
+                    onCheckedChange={(v) => setMode(v ? "dark" : "light")} />
+            </div>
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium">Journal amount bars</p>
