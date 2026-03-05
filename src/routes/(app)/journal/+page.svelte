@@ -94,6 +94,9 @@
                 .filter((a: Account) => !a.is_archived)
                 .map((a: Account) => ({ value: a.id, label: a.full_name }))
                 .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label));
+            const map = new Map<string, string>();
+            for (const a of accounts) map.set(a.id, a.full_name);
+            accountIdToName = map;
         });
         backend.getAllTagValues().then((tags) => {
             tagOptions = tags.map((t) => ({ value: t, label: t }));
@@ -113,6 +116,7 @@
     let selectedTags = $state<Set<string>>(new Set());
     let selectedLinks = $state<Set<string>>(new Set());
     let accountOptions = $state<{ value: string; label: string }[]>([]);
+    let accountIdToName = $state(new Map<string, string>());
     let tagOptions = $state<{ value: string; label: string }[]>([]);
     let linkOptions = $state<{ value: string; label: string }[]>([]);
     const hasFacetedFilters = $derived(selectedAccounts.size > 0 || selectedTags.size > 0 || selectedLinks.size > 0);
@@ -291,6 +295,41 @@
         return byCode
             .map((b) => formatCurrency(b.amount, b.currency))
             .join(", ");
+    }
+
+    function isEquityTrading(item: LineItem): boolean {
+        const name = accountIdToName.get(item.account_id) ?? "";
+        return name === "Equity:Trading" || name.startsWith("Equity:Trading:");
+    }
+
+    function entryAmountParts(items: LineItem[]): { isTrade: boolean; debits: CurrencyBalance[] } {
+        const equityItems = items.filter(isEquityTrading);
+        const nonEquityItems = items.filter((i) => !isEquityTrading(i));
+
+        if (equityItems.length >= 2) {
+            const spent = equityItems.find((e) => parseFloat(e.amount) > 0);
+            const received = equityItems.find((e) => parseFloat(e.amount) < 0);
+            if (spent && received && spent.currency !== received.currency) {
+                return {
+                    isTrade: true,
+                    debits: [
+                        { currency: spent.currency, amount: spent.amount },
+                        { currency: received.currency, amount: String(Math.abs(parseFloat(received.amount))) },
+                    ],
+                };
+            }
+        }
+
+        return { isTrade: false, debits: debitsByCurrency(nonEquityItems) };
+    }
+
+    function formatEntryAmount(items: LineItem[]): string {
+        const { isTrade, debits } = entryAmountParts(items);
+        if (isTrade && debits.length === 2) {
+            return `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`;
+        }
+        if (debits.length === 0) return formatCurrency(0, settings.currency);
+        return debits.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
     }
 
     // Metadata state — declared before displayEntries to avoid TDZ
@@ -782,29 +821,33 @@
 
             const cache = new ExchangeRateCache(getBackend());
             const results = new Map(convertedTotals);
-            const asyncEntries: [string, CurrencyBalance[], string][] = [];
+            const asyncEntries: [string, boolean, CurrencyBalance[], string][] = [];
 
             for (const id of needed) {
                 const pair = sortedEntries.find(([e]) => e.id === id);
                 if (!pair) continue;
                 const [entry, items] = pair;
-                const debits = debitsByCurrency(items);
+                const { isTrade, debits } = entryAmountParts(items);
                 if (debits.length === 0) {
                     results.set(entry.id, formatCurrency(0, baseCurrency));
                 } else if (debits.every((b) => b.currency === baseCurrency)) {
-                    const total = debits.reduce(
-                        (s, b) => s + parseFloat(b.amount),
-                        0,
-                    );
-                    results.set(entry.id, formatCurrency(total, baseCurrency));
+                    if (isTrade && debits.length === 2) {
+                        results.set(entry.id, `${formatCurrency(debits[0].amount, baseCurrency)} → ${formatCurrency(debits[1].amount, baseCurrency)}`);
+                    } else {
+                        const total = debits.reduce(
+                            (s, b) => s + parseFloat(b.amount),
+                            0,
+                        );
+                        results.set(entry.id, formatCurrency(total, baseCurrency));
+                    }
                 } else {
-                    asyncEntries.push([entry.id, debits, entry.date]);
+                    asyncEntries.push([entry.id, isTrade, debits, entry.date]);
                 }
             }
             if (gen !== conversionGen) return;
             convertedTotals = new Map(results);
 
-            for (const [id, debits, date] of asyncEntries) {
+            for (const [id, isTrade, debits, date] of asyncEntries) {
                 if (gen !== conversionGen) return;
                 const summary = await convertBalances(
                     debits,
@@ -815,7 +858,29 @@
                 if (gen !== conversionGen) return;
 
                 let formatted: string;
-                if (summary.unconverted.length === 0) {
+                if (isTrade && debits.length === 2) {
+                    // For trades, convert each leg separately and show arrow
+                    const spentConverted = await convertBalances(
+                        [debits[0]],
+                        baseCurrency,
+                        date,
+                        cache,
+                    );
+                    const rcvConverted = await convertBalances(
+                        [debits[1]],
+                        baseCurrency,
+                        date,
+                        cache,
+                    );
+                    if (gen !== conversionGen) return;
+                    const spentStr = spentConverted.unconverted.length === 0
+                        ? formatCurrency(spentConverted.total, baseCurrency)
+                        : formatCurrency(debits[0].amount, debits[0].currency);
+                    const rcvStr = rcvConverted.unconverted.length === 0
+                        ? formatCurrency(rcvConverted.total, baseCurrency)
+                        : formatCurrency(debits[1].amount, debits[1].currency);
+                    formatted = `${spentStr} → ${rcvStr}`;
+                } else if (summary.unconverted.length === 0) {
                     formatted = formatCurrency(summary.total, baseCurrency);
                 } else {
                     const parts: string[] = [];
@@ -1211,7 +1276,7 @@
                                         <div class="flex justify-between items-baseline gap-2">
                                             <span class="text-muted-foreground text-xs">{entry.date}</span>
                                             <span class="font-mono text-sm text-right shrink-0">
-                                                {convertedTotals.get(entry.id) ?? formatDebitTotal(items)}
+                                                {convertedTotals.get(entry.id) ?? formatEntryAmount(items)}
                                             </span>
                                         </div>
                                         <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5">
@@ -1297,7 +1362,7 @@
                                         {:else if cell.column.id === "amount"}
                                             <Table.Cell class="text-right font-mono p-2">
                                                 {convertedTotals.get(entry.id) ??
-                                                    formatDebitTotal(items)}
+                                                    formatEntryAmount(items)}
                                             </Table.Cell>
                                         {/if}
                                     {/each}
@@ -1515,7 +1580,7 @@
                                 <div class="flex items-center gap-2">
                                     <span class="font-mono text-xs"
                                         >{convertedTotals.get(entry.id) ??
-                                            formatDebitTotal(items)}</span
+                                            formatEntryAmount(items)}</span
                                     >
                                     <Badge variant="outline" class="text-xs"
                                         >{entry.status}</Badge
