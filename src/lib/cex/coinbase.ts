@@ -7,6 +7,15 @@ const COINBASE_API = "https://api.coinbase.com";
 const COINBASE_HOST = "api.coinbase.com";
 const RATE_LIMIT_MS = 100;
 
+// ---------------------------------------------------------------------------
+// Key type detection
+// ---------------------------------------------------------------------------
+
+/** CDP keys start with "organizations/"; everything else is a legacy key. */
+export function isCdpKey(apiKey: string): boolean {
+  return apiKey.startsWith("organizations/");
+}
+
 async function coinbaseFetch(
   url: string,
   init?: RequestInit,
@@ -20,34 +29,105 @@ async function coinbaseFetch(
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a PEM-encoded private key (PKCS8 format) and import it as a CryptoKey.
+ * DER-encode a length value (short form < 128, long form with 0x81/0x82 prefix).
+ */
+function derEncodeLength(len: number): Uint8Array {
+  if (len < 128) return new Uint8Array([len]);
+  if (len < 256) return new Uint8Array([0x81, len]);
+  return new Uint8Array([0x82, (len >> 8) & 0xff, len & 0xff]);
+}
+
+/**
+ * Wrap a SEC1 EC private key (RFC 5915) in a PKCS8 envelope for P-256.
  *
- * Supports "-----BEGIN PRIVATE KEY-----" (PKCS8) format directly.
- * SEC1 "-----BEGIN EC PRIVATE KEY-----" format is NOT supported; users should
- * convert with: `openssl pkcs8 -topk8 -nocrypt -in ec.pem -out pkcs8.pem`
+ * PKCS8 structure:
+ *   SEQUENCE {
+ *     INTEGER 0                           -- version
+ *     SEQUENCE {                          -- AlgorithmIdentifier
+ *       OID 1.2.840.10045.2.1            -- ecPublicKey
+ *       OID 1.2.840.10045.3.1.7          -- prime256v1 (P-256)
+ *     }
+ *     OCTET STRING { <SEC1 DER bytes> }  -- privateKey
+ *   }
+ */
+function wrapSec1AsPkcs8(sec1Der: Uint8Array): Uint8Array {
+  // version INTEGER 0
+  const version = new Uint8Array([0x02, 0x01, 0x00]);
+  // AlgorithmIdentifier: ecPublicKey + prime256v1
+  const algId = new Uint8Array([
+    0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06,
+    0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07,
+  ]);
+  // OCTET STRING wrapping sec1Der
+  const octetTag = new Uint8Array([0x04]);
+  const octetLen = derEncodeLength(sec1Der.length);
+  // Outer SEQUENCE
+  const innerLen =
+    version.length + algId.length + octetTag.length + octetLen.length + sec1Der.length;
+  const seqTag = new Uint8Array([0x30]);
+  const seqLen = derEncodeLength(innerLen);
+
+  const result = new Uint8Array(
+    seqTag.length + seqLen.length + innerLen,
+  );
+  let offset = 0;
+  for (const part of [seqTag, seqLen, version, algId, octetTag, octetLen, sec1Der]) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+  return result;
+}
+
+/**
+ * Parse a PEM-encoded private key and return PKCS8 DER bytes.
+ *
+ * Accepts both PKCS8 ("-----BEGIN PRIVATE KEY-----") and
+ * SEC1 ("-----BEGIN EC PRIVATE KEY-----") formats. SEC1 keys are
+ * automatically wrapped in a PKCS8 envelope for P-256.
  */
 function parsePemPrivateKey(pem: string): ArrayBuffer {
-  const stripped = pem
+  const normalized = pem.replace(/\\n/g, "\n"); // literal \n → real newline
+  const isSec1 = normalized.includes("EC PRIVATE KEY");
+  const stripped = normalized
     .replace(/-----BEGIN (?:EC )?PRIVATE KEY-----/g, "")
     .replace(/-----END (?:EC )?PRIVATE KEY-----/g, "")
     .replace(/\s+/g, "");
-  const binary = atob(stripped);
+  let binary: string;
+  try {
+    binary = atob(stripped);
+  } catch {
+    throw new Error(
+      "Failed to decode PEM private key — the API secret does not appear to be a valid PEM/base64 string. " +
+        "If you are using a legacy Coinbase API key, it is not compatible with the Advanced Trade (JWT) endpoint.",
+    );
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
+  }
+  if (isSec1) {
+    return wrapSec1AsPkcs8(bytes).buffer;
   }
   return bytes.buffer;
 }
 
 async function importEcPrivateKey(pem: string): Promise<CryptoKey> {
   const keyData = parsePemPrivateKey(pem);
-  return crypto.subtle.importKey(
-    "pkcs8",
-    keyData,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
-  );
+  try {
+    return await crypto.subtle.importKey(
+      "pkcs8",
+      keyData,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign"],
+    );
+  } catch {
+    throw new Error(
+      "Failed to import EC private key — ensure the API secret is a valid " +
+        "P-256 key in PKCS8 (-----BEGIN PRIVATE KEY-----) or " +
+        "SEC1 (-----BEGIN EC PRIVATE KEY-----) format.",
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +242,36 @@ export async function coinbaseHmacSign(
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// ---------------------------------------------------------------------------
+// V2 auth header builder (CDP → JWT, legacy → HMAC)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build auth headers for Coinbase V2 API requests.
+ *
+ * CDP keys use JWT auth (same ES256 signing as Advanced Trade).
+ * Legacy keys use HMAC-SHA256 with CB-ACCESS-* headers.
+ */
+export async function buildV2AuthHeaders(
+  apiKey: string,
+  apiSecret: string,
+  method: string,
+  path: string,
+): Promise<Record<string, string>> {
+  if (isCdpKey(apiKey)) {
+    const jwt = await coinbaseSign(apiKey, apiSecret, method, path);
+    return { Authorization: `Bearer ${jwt}` };
+  }
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const hmacSig = await coinbaseHmacSign(apiSecret, timestamp, method, path);
+  return {
+    "CB-ACCESS-KEY": apiKey,
+    "CB-ACCESS-SIGN": hmacSig,
+    "CB-ACCESS-TIMESTAMP": timestamp,
+    "CB-VERSION": "2023-01-01",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -280,13 +390,18 @@ export class CoinbaseAdapter implements CexAdapter {
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
 
-    // 1. Fetch trade fills via Advanced Trade API (JWT auth)
-    const tradeRecords = await this.fetchTradeFills(apiKey, apiSecret, since, signal);
-    records.push(...tradeRecords);
+    if (isCdpKey(apiKey)) {
+      // CDP key: JWT auth for Advanced Trade fills + HMAC V2 for deposits/withdrawals
+      const tradeRecords = await this.fetchTradeFills(apiKey, apiSecret, since, signal);
+      records.push(...tradeRecords);
 
-    // 2. Fetch deposits/withdrawals via V2 API (HMAC auth)
-    const txRecords = await this.fetchV2Transactions(apiKey, apiSecret, since, signal);
-    records.push(...txRecords);
+      const txRecords = await this.fetchV2Transactions(apiKey, apiSecret, since, signal, true);
+      records.push(...txRecords);
+    } else {
+      // Legacy key: HMAC-only V2 API for everything (trades included)
+      const txRecords = await this.fetchV2Transactions(apiKey, apiSecret, since, signal, false);
+      records.push(...txRecords);
+    }
 
     return records;
   }
@@ -397,6 +512,7 @@ export class CoinbaseAdapter implements CexAdapter {
     apiSecret: string,
     since: number | undefined,
     signal: AbortSignal | undefined,
+    skipTrades: boolean = true,
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
 
@@ -411,20 +527,11 @@ export class CoinbaseAdapter implements CexAdapter {
       while (nextUri) {
         if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-        const timestamp = String(Math.floor(Date.now() / 1000));
-        const hmacSig = await coinbaseHmacSign(apiSecret, timestamp, "GET", nextUri);
+        const headers = await buildV2AuthHeaders(apiKey, apiSecret, "GET", nextUri);
 
         const result = await coinbaseFetch(
           `${COINBASE_API}${nextUri}`,
-          {
-            method: "GET",
-            headers: {
-              "CB-ACCESS-KEY": apiKey,
-              "CB-ACCESS-SIGN": hmacSig,
-              "CB-ACCESS-TIMESTAMP": timestamp,
-              "CB-VERSION": "2023-01-01",
-            },
-          },
+          { method: "GET", headers },
           signal,
         );
 
@@ -441,9 +548,9 @@ export class CoinbaseAdapter implements CexAdapter {
           // Skip transactions before `since`
           if (since && txTimestamp < since) continue;
 
-          // Skip trade types — they're covered by the Advanced Trade fills endpoint
           const txType = mapCoinbaseTransactionType(tx.type, tx.amount.amount);
-          if (txType === "trade") continue;
+          // When using CDP keys, trades come from the Advanced Trade fills endpoint
+          if (skipTrades && txType === "trade") continue;
 
           const txid = tx.network?.hash ? normalizeTxid(tx.network.hash) : null;
 
@@ -491,20 +598,11 @@ export class CoinbaseAdapter implements CexAdapter {
     while (nextUri) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-      const timestamp = String(Math.floor(Date.now() / 1000));
-      const hmacSig = await coinbaseHmacSign(apiSecret, timestamp, "GET", nextUri);
+      const headers = await buildV2AuthHeaders(apiKey, apiSecret, "GET", nextUri);
 
       const result = await coinbaseFetch(
         `${COINBASE_API}${nextUri}`,
-        {
-          method: "GET",
-          headers: {
-            "CB-ACCESS-KEY": apiKey,
-            "CB-ACCESS-SIGN": hmacSig,
-            "CB-ACCESS-TIMESTAMP": timestamp,
-            "CB-VERSION": "2023-01-01",
-          },
-        },
+        { method: "GET", headers },
         signal,
       );
 
