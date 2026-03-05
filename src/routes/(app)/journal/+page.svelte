@@ -434,12 +434,12 @@
         return entryBarSegments(items).reduce((s, seg) => s + seg.amount, 0);
     }
 
-    function barStyle(items: LineItem[], maxAmount: number): string {
+    function barGradient(items: LineItem[], maxAmount: number): string {
         if (maxAmount <= 0) return "";
         const segments = entryBarSegments(items);
         if (segments.length === 0) return "";
 
-        // Single segment: simple gradient (common case)
+        // Single segment: solid color bar
         if (segments.length === 1) {
             const pct = Math.min(
                 (segments[0].amount / maxAmount) * 66.67,
@@ -447,28 +447,39 @@
             );
             if (pct <= 0) return "";
             const color = barBgColor(segments[0].direction);
-            return `background-image: linear-gradient(to left, ${color} 0%, ${color} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%); background-size: 100% 20%; background-position: bottom; background-repeat: no-repeat`;
+            return `--bar-bg: ${color}; --bar-width: ${pct.toFixed(1)}%`;
         }
 
-        // Multiple segments: place side-by-side from right edge, smallest rightmost
+        // Multiple segments: sized bar with internal gradient (no transparent)
         const sorted = [...segments].sort((a, b) => a.amount - b.amount);
-        const stops: string[] = [];
+        const colorStops: string[] = [];
         let cursor = 0;
+        let totalPct = 0;
         for (const seg of sorted) {
             const pct = Math.min(
                 (seg.amount / maxAmount) * 66.67,
-                66.67 - cursor,
+                66.67 - totalPct,
+            );
+            if (pct <= 0) continue;
+            totalPct += pct;
+        }
+        if (totalPct <= 0) return "";
+        // Build gradient with stops normalized to 0-100% within the bar
+        let pos = 0;
+        for (const seg of sorted) {
+            const pct = Math.min(
+                (seg.amount / maxAmount) * 66.67,
+                66.67 - pos,
             );
             if (pct <= 0) continue;
             const color = barBgColor(seg.direction);
-            stops.push(
-                `${color} ${cursor.toFixed(1)}% ${(cursor + pct).toFixed(1)}%`,
-            );
-            cursor += pct;
+            const startNorm = ((pos / totalPct) * 100).toFixed(1);
+            const endNorm = (((pos + pct) / totalPct) * 100).toFixed(1);
+            colorStops.push(`${color} ${startNorm}% ${endNorm}%`);
+            pos += pct;
         }
-        if (stops.length === 0) return "";
-        stops.push(`transparent ${cursor.toFixed(1)}%`);
-        return `background-image: linear-gradient(to left, ${stops.join(", ")}); background-size: 100% 20%; background-position: bottom; background-repeat: no-repeat`;
+        const gradient = `linear-gradient(to right, ${colorStops.join(", ")})`;
+        return `--bar-bg: ${gradient}; --bar-width: ${totalPct.toFixed(1)}%`;
     }
 
     function entryAmountDisplay(items: LineItem[]): AmountPart[] {
@@ -1520,7 +1531,7 @@
                     bind:this={scrollEl}
                     class="overflow-y-auto flex-1 min-h-0 [&_[data-slot=table-container]]:overflow-visible"
                 >
-                    <Table.Root>
+                    <Table.Root class="border-separate border-spacing-0 [&_tr]:border-0 [&_td]:border-b [&_th]:border-b">
                         <Table.Header class="sticky top-0 z-10 bg-background">
                             {#if isMobileLayout}
                                 <Table.Row>
@@ -1634,7 +1645,7 @@
                                             data-state={row.getIsSelected()
                                                 ? "selected"
                                                 : undefined}
-                                            style={barStyle(
+                                            style={barGradient(
                                                 items,
                                                 maxEntryAmount,
                                             )}
@@ -1744,7 +1755,7 @@
                                             data-state={row.getIsSelected()
                                                 ? "selected"
                                                 : undefined}
-                                            style={barStyle(
+                                            style={barGradient(
                                                 items,
                                                 maxEntryAmount,
                                             )}
@@ -2132,3 +2143,21 @@
         {/if}
     </Dialog.Content>
 </Dialog.Root>
+
+<style>
+    :global(tr[style*="--bar-width"]) {
+        position: relative;
+    }
+    :global(tr[style*="--bar-width"]::after) {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: var(--bar-width);
+        height: 20%;
+        background: var(--bar-bg);
+        border-radius: 9999px 0 0 9999px;
+        pointer-events: none;
+    }
+</style>
+
