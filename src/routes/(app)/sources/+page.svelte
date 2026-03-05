@@ -279,6 +279,7 @@
     const EXCHANGE_NAMES: Record<ExchangeId, string> = {
         kraken: "Kraken", binance: "Binance", coinbase: "Coinbase",
         bybit: "Bybit", okx: "OKX", bitstamp: "Bitstamp", cryptocom: "Crypto.com",
+        volet: "Volet",
     };
 
     function startAddCex(exchangeId: ExchangeId) {
@@ -946,6 +947,8 @@
                             type="password"
                             placeholder={addSourceExchangeId === "coinbase"
                                 ? "API Key Name"
+                                : addSourceExchangeId === "volet"
+                                ? "API Name"
                                 : "API Key"}
                             bind:value={cexNewApiKey}
                         />
@@ -954,6 +957,8 @@
                             type="password"
                             placeholder={addSourceExchangeId === "coinbase"
                                 ? "EC Private Key (PEM)"
+                                : addSourceExchangeId === "volet"
+                                ? "Security Word"
                                 : "API Secret"}
                             bind:value={cexNewApiSecret}
                         />
@@ -962,7 +967,7 @@
                         <Input
                             class="w-full sm:w-64"
                             type="password"
-                            placeholder="API Passphrase"
+                            placeholder={addSourceExchangeId === "volet" ? "Account Email" : "API Passphrase"}
                             bind:value={cexNewPassphrase}
                         />
                     {/if}

@@ -1,4 +1,4 @@
-export type ExchangeId = "kraken" | "binance" | "coinbase" | "bybit" | "okx" | "bitstamp" | "cryptocom";
+export type ExchangeId = "kraken" | "binance" | "coinbase" | "bybit" | "okx" | "bitstamp" | "cryptocom" | "volet";
 
 export interface ExchangeAccount {
   id: string;

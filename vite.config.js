@@ -75,6 +75,11 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/cryptocom/, ''),
       },
+      '/api/volet': {
+        target: 'https://account.volet.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/volet/, ''),
+      },
     },
   },
 }));

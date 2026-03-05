@@ -27,6 +27,7 @@
     { id: "cryptocom", name: "Crypto.com" },
     { id: "kraken", name: "Kraken" },
     { id: "okx", name: "OKX" },
+    { id: "volet", name: "Volet" },
   ];
 
   const chainKeywords = SUPPORTED_CHAINS.map((c) => c.name.toLowerCase());
