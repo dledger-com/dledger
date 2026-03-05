@@ -333,6 +333,86 @@
         return '';
     }
 
+    function barBgColor(dir: AmountDirection): string {
+        if (dir === 'income') return 'rgba(34, 197, 94, 0.07)';
+        if (dir === 'expense') return 'rgba(239, 68, 68, 0.07)';
+        return 'rgba(156, 163, 175, 0.05)';
+    }
+
+    type BarSegment = { direction: AmountDirection; amount: number };
+
+    function entryBarSegments(items: LineItem[]): BarSegment[] {
+        const { isTrade, debits } = entryAmountParts(items);
+
+        if (isTrade) {
+            const total = debits.reduce((s, d) => s + Math.abs(Number(d.amount)), 0);
+            return [{ direction: 'default', amount: total }];
+        }
+
+        let hasIncome = false, hasExpense = false, hasEquity = false;
+        for (const item of items) {
+            const name = accountIdToName.get(item.account_id) ?? '';
+            if (name.startsWith('Equity:') || name === 'Equity') hasEquity = true;
+            else if (name.startsWith('Income:') || name === 'Income') hasIncome = true;
+            else if (name.startsWith('Expenses:') || name === 'Expenses') hasExpense = true;
+        }
+
+        const isMixed = (hasEquity || hasIncome) && hasExpense;
+        if (!isMixed) {
+            const dir: AmountDirection = hasIncome ? 'income' : hasExpense ? 'expense' : 'default';
+            const total = debits.reduce((s, d) => s + Math.abs(Number(d.amount)), 0);
+            return [{ direction: dir, amount: total }];
+        }
+
+        // Mixed: split expense amounts from the rest
+        const expenseByCode = new Map<string, number>();
+        for (const item of items) {
+            const name = accountIdToName.get(item.account_id) ?? '';
+            if (name.startsWith('Expenses:') || name === 'Expenses') {
+                const n = parseFloat(item.amount);
+                if (n > 0) expenseByCode.set(item.currency, (expenseByCode.get(item.currency) ?? 0) + n);
+            }
+        }
+        let expenseTotal = 0;
+        for (const v of expenseByCode.values()) expenseTotal += v;
+
+        let mainTotal = 0;
+        for (const d of debits) {
+            const total = Math.abs(Number(d.amount));
+            const exp = expenseByCode.get(d.currency) ?? 0;
+            mainTotal += total - exp;
+        }
+
+        const segments: BarSegment[] = [];
+        const mainDir: AmountDirection = hasIncome ? 'income' : 'default';
+        if (mainTotal > 0) segments.push({ direction: mainDir, amount: mainTotal });
+        if (expenseTotal > 0) segments.push({ direction: 'expense', amount: expenseTotal });
+        return segments;
+    }
+
+    function entryBarAmount(items: LineItem[]): number {
+        return entryBarSegments(items).reduce((s, seg) => s + seg.amount, 0);
+    }
+
+    function barStyle(items: LineItem[], maxAmount: number): string {
+        if (maxAmount <= 0) return '';
+        const segments = entryBarSegments(items);
+        if (segments.length === 0) return '';
+
+        // Sort descending by amount so largest is listed last (painted behind)
+        const sorted = [...segments].sort((a, b) => b.amount - a.amount);
+
+        const gradients = sorted.map(seg => {
+            const pct = Math.min((seg.amount / maxAmount) * 66.67, 66.67);
+            if (pct <= 0) return null;
+            const color = barBgColor(seg.direction);
+            return `linear-gradient(to left, ${color} 0%, ${color} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%)`;
+        }).filter(Boolean);
+
+        if (gradients.length === 0) return '';
+        return `background-image: ${gradients.join(', ')}`;
+    }
+
     function entryAmountDisplay(items: LineItem[]): AmountPart[] {
         const { isTrade, debits } = entryAmountParts(items);
 
@@ -453,6 +533,15 @@
                 return true;
             });
         });
+    });
+
+    let maxEntryAmount = $derived.by(() => {
+        let max = 0;
+        for (const [, items] of displayEntries) {
+            const a = entryBarAmount(items);
+            if (a > max) max = a;
+        }
+        return max;
     });
 
     // Sorted entries — needed in script block for virtualizer count
@@ -1327,6 +1416,7 @@
                                 <tr
                                     class="border-b touch-manipulation select-none {entry.status === 'voided' ? 'line-through opacity-50' : ''} {row.getIsSelected() ? 'bg-muted' : ''}"
                                     data-state={row.getIsSelected() ? "selected" : undefined}
+                                    style={barStyle(items, maxEntryAmount)}
                                     onpointerdown={handlers.onpointerdown}
                                     onpointermove={handlers.onpointermove}
                                     onpointerup={handlers.onpointerup}
@@ -1387,6 +1477,7 @@
                                 <Table.Row
                                     class={entry.status === 'voided' ? 'line-through opacity-50' : ''}
                                     data-state={row.getIsSelected() ? "selected" : undefined}
+                                    style={barStyle(items, maxEntryAmount)}
                                 >
                                     {#each row.getVisibleCells() as cell}
                                         {#if cell.column.id === "select"}
