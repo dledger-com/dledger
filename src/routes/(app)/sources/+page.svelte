@@ -27,6 +27,7 @@
     import { readFileAsText } from "$lib/utils/read-file-text.js";
     import { unzipSync, strFromU8 } from "fflate";
     import { filterLedgerFiles, resolveIncludes } from "$lib/ledger-include.js";
+    import { detectImportTarget } from "$lib/import-detect.js";
     import {
         enqueueRateBackfill,
     } from "$lib/exchange-rate-historical.js";
@@ -58,28 +59,24 @@
     let csvDialogOpen = $state(false);
     let csvInitialContent = $state("");
     let csvInitialFileName = $state("");
-    let dragCounter = $state(0);
-    let draggingCsv = $derived(dragCounter > 0);
 
     let ofxDialogOpen = $state(false);
     let ofxInitialContent = $state("");
     let ofxInitialFileName = $state("");
-    let ofxDragCounter = $state(0);
-    let draggingOfx = $derived(ofxDragCounter > 0);
 
     let pdfDialogOpen = $state(false);
     let pdfInitialFile = $state<File | null>(null);
     let pdfInitialFileName = $state("");
-    let pdfDragCounter = $state(0);
-    let draggingPdf = $derived(pdfDragCounter > 0);
 
     let ledgerDialogOpen = $state(false);
     let ledgerInitialContent = $state("");
     let ledgerInitialFileName = $state("");
-    let ledgerDragCounter = $state(0);
-    let draggingLedger = $derived(ledgerDragCounter > 0);
 
-    // Clear initial content when dialog closes
+    let importDragCounter = $state(0);
+    let dragging = $derived(importDragCounter > 0);
+    let fileInputEl = $state<HTMLInputElement | null>(null);
+
+    // Clear initial content when dialogs close
     $effect(() => {
         if (!ledgerDialogOpen) {
             ledgerInitialContent = "";
@@ -108,70 +105,81 @@
         }
     });
 
-    async function handleCsvDrop(e: DragEvent) {
-        e.preventDefault();
-        dragCounter = 0;
-        const file = e.dataTransfer?.files[0];
-        if (!file) return;
-        csvInitialContent = await readFileAsText(file);
-        csvInitialFileName = file.name;
-        csvDialogOpen = true;
-    }
-
-    async function handleOfxDrop(e: DragEvent) {
-        e.preventDefault();
-        ofxDragCounter = 0;
-        const file = e.dataTransfer?.files[0];
-        if (!file) return;
-        ofxInitialContent = await readFileAsText(file);
-        ofxInitialFileName = file.name;
-        ofxDialogOpen = true;
-    }
-
-    function handlePdfDrop(e: DragEvent) {
-        e.preventDefault();
-        pdfDragCounter = 0;
-        const file = e.dataTransfer?.files[0];
-        if (!file) return;
-        pdfInitialFile = file;
-        pdfInitialFileName = file.name;
-        pdfDialogOpen = true;
-    }
-
-    async function handleLedgerDrop(e: DragEvent) {
-        e.preventDefault();
-        ledgerDragCounter = 0;
-        const file = e.dataTransfer?.files[0];
-        if (!file) return;
-
-        if (file.name.toLowerCase().endsWith(".zip")) {
-            try {
-                const buf = new Uint8Array(await file.arrayBuffer());
-                const entries = unzipSync(buf);
-                const fileMap = new Map<string, string>();
-                for (const [name, data] of Object.entries(entries)) {
-                    fileMap.set(name, strFromU8(data));
-                }
-                const ledgerFiles = filterLedgerFiles(fileMap);
-                if (ledgerFiles.length === 0) {
-                    toast.error("No ledger files found in archive");
-                    return;
-                }
-                const parts: string[] = [];
-                for (const [name, content] of ledgerFiles) {
-                    parts.push(resolveIncludes(content, fileMap));
-                }
-                ledgerInitialContent = parts.join("\n\n");
-            } catch (err) {
-                toast.error(`Failed to read zip: ${err}`);
-                return;
-            }
-        } else {
-            ledgerInitialContent = await readFileAsText(file);
+    async function routeFile(file: File) {
+        const result = await detectImportTarget(file);
+        if (!result) {
+            toast.error("Unsupported file format");
+            return;
         }
 
-        ledgerInitialFileName = file.name;
-        ledgerDialogOpen = true;
+        switch (result.target) {
+            case "csv":
+                csvInitialContent = result.text ?? await readFileAsText(file);
+                csvInitialFileName = file.name;
+                csvDialogOpen = true;
+                break;
+            case "ofx":
+                ofxInitialContent = result.text ?? await readFileAsText(file);
+                ofxInitialFileName = file.name;
+                ofxDialogOpen = true;
+                break;
+            case "pdf":
+                pdfInitialFile = file;
+                pdfInitialFileName = file.name;
+                pdfDialogOpen = true;
+                break;
+            case "ledger":
+                if (result.bytes && file.name.toLowerCase().endsWith(".zip")) {
+                    try {
+                        const entries = unzipSync(result.bytes);
+                        const fileMap = new Map<string, string>();
+                        for (const [name, data] of Object.entries(entries)) {
+                            fileMap.set(name, strFromU8(data));
+                        }
+                        const ledgerFiles = filterLedgerFiles(fileMap);
+                        if (ledgerFiles.length === 0) {
+                            toast.error("No ledger files found in archive");
+                            return;
+                        }
+                        const parts: string[] = [];
+                        for (const [, content] of ledgerFiles) {
+                            parts.push(resolveIncludes(content, fileMap));
+                        }
+                        ledgerInitialContent = parts.join("\n\n");
+                    } catch (err) {
+                        toast.error(`Failed to read zip: ${err}`);
+                        return;
+                    }
+                } else {
+                    ledgerInitialContent = result.text ?? await readFileAsText(file);
+                }
+                ledgerInitialFileName = file.name;
+                ledgerDialogOpen = true;
+                break;
+        }
+    }
+
+    function handleImportClick() {
+        fileInputEl?.click();
+    }
+
+    async function handleFileInputChange(e: Event) {
+        const input = e.target as HTMLInputElement;
+        const file = input.files?.[0];
+        if (file) await routeFile(file);
+        input.value = "";
+    }
+
+    async function handleFileDrop(e: DragEvent) {
+        e.preventDefault();
+        importDragCounter = 0;
+        const files = e.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+        if (files.length > 1) {
+            toast.error("Please drop only one file at a time");
+            return;
+        }
+        await routeFile(files[0]);
     }
 
     const handlerRegistry = getDefaultRegistry();
@@ -781,47 +789,67 @@
         </p>
     </div>
 
-    <!-- Plain-Text Accounting Import -->
+    <!-- Import Files -->
     <Card.Root
-        class={draggingLedger
+        class={dragging
             ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors"
             : "transition-colors"}
         ondragenter={(e: DragEvent) => {
             e.preventDefault();
-            ledgerDragCounter++;
+            importDragCounter++;
         }}
         ondragover={(e: DragEvent) => {
             e.preventDefault();
         }}
         ondragleave={() => {
-            ledgerDragCounter--;
+            importDragCounter--;
         }}
-        ondrop={handleLedgerDrop}
+        ondrop={handleFileDrop}
     >
         <Card.Header>
-            <Card.Title>Plain-Text Accounting Import</Card.Title>
+            <Card.Title>Import Files</Card.Title>
             <Card.Description>
-                Import from ledger files, a zip archive, or paste content
-                directly.
-                <span class="mt-1.5 flex flex-wrap gap-1">
-                    {#each ["Beancount", "hledger", "ledger"] as name}
-                        <Badge variant="outline">{name}</Badge>
-                    {/each}
+                Import transactions from files. Drop a file or click to choose.
+                <span class="mt-2 flex flex-col gap-1.5">
+                    <span class="flex flex-wrap items-center gap-1">
+                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">CSV</span>
+                        {#each ["Binance", "Bisq", "Bitfinex", "Bitstamp", "Bittrex", "Bybit", "Coinbase", "CoinList", "Crypto.com", "Gate.io", "Kraken", "La Banque Postale", "N26", "Nexo", "Poloniex", "Revolut", "Yield App"] as name}
+                            <Badge variant="outline">{name}</Badge>
+                        {/each}
+                    </span>
+                    <span class="flex flex-wrap items-center gap-1">
+                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">OFX / QFX / QBO</span>
+                    </span>
+                    <span class="flex flex-wrap items-center gap-1">
+                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">PDF</span>
+                        {#each ["Deblock", "La Banque Postale", "N26", "Nuri/Bitwala"] as name}
+                            <Badge variant="outline">{name}</Badge>
+                        {/each}
+                    </span>
+                    <span class="flex flex-wrap items-center gap-1">
+                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">Plain-Text</span>
+                        {#each ["Beancount", "hledger", "ledger"] as name}
+                            <Badge variant="outline">{name}</Badge>
+                        {/each}
+                    </span>
                 </span>
             </Card.Description>
         </Card.Header>
         <Card.Content>
             <div class="flex items-center gap-3">
-                <Button
-                    onclick={() => {
-                        ledgerDialogOpen = true;
-                    }}
-                >
-                    <Upload class="mr-2 h-4 w-4" /> Import Plain-Text
+                <Button onclick={handleImportClick}>
+                    <Upload class="mr-2 h-4 w-4" /> Import File
                 </Button>
-                {#if draggingLedger}
+                <input
+                    bind:this={fileInputEl}
+                    type="file"
+                    accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo,.pdf,.ledger,.beancount,.journal,.hledger,.dat,.zip"
+                    class="hidden"
+                    onchange={handleFileInputChange}
+                />
+                {#if dragging}
                     <p class="text-sm text-muted-foreground">
-                        Drop ledger file to import...
+                        Drop file to import...
                     </p>
                 {/if}
             </div>
@@ -833,153 +861,16 @@
         initialContent={ledgerInitialContent}
         initialFileName={ledgerInitialFileName}
     />
-
-    <!-- CSV Import -->
-    <Card.Root
-        class={draggingCsv
-            ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors"
-            : "transition-colors"}
-        ondragenter={(e: DragEvent) => {
-            e.preventDefault();
-            dragCounter++;
-        }}
-        ondragover={(e: DragEvent) => {
-            e.preventDefault();
-        }}
-        ondragleave={() => {
-            dragCounter--;
-        }}
-        ondrop={handleCsvDrop}
-    >
-        <Card.Header>
-            <Card.Title>CSV Import</Card.Title>
-            <Card.Description>
-                Import transactions from CSV files.
-                <span class="mt-1.5 flex flex-wrap gap-1">
-                    {#each ["Binance", "Bisq", "Bitfinex", "Bitstamp", "Bittrex", "Bybit", "Coinbase", "CoinList", "Crypto.com", "Gate.io", "Kraken", "La Banque Postale", "N26", "Nexo", "Poloniex", "Revolut", "Yield App"] as name}
-                        <Badge variant="outline">{name}</Badge>
-                    {/each}
-                </span>
-            </Card.Description>
-        </Card.Header>
-        <Card.Content>
-            <div class="flex items-center gap-3">
-                <Button
-                    onclick={() => {
-                        csvDialogOpen = true;
-                    }}
-                >
-                    <Upload class="mr-2 h-4 w-4" /> Import CSV
-                </Button>
-                {#if draggingCsv}
-                    <p class="text-sm text-muted-foreground">
-                        Drop CSV file to import...
-                    </p>
-                {/if}
-            </div>
-        </Card.Content>
-    </Card.Root>
-
     <CsvImportDialog
         bind:open={csvDialogOpen}
         initialContent={csvInitialContent}
         initialFileName={csvInitialFileName}
     />
-
-    <!-- OFX Import -->
-    <Card.Root
-        class={draggingOfx
-            ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors"
-            : "transition-colors"}
-        ondragenter={(e: DragEvent) => {
-            e.preventDefault();
-            ofxDragCounter++;
-        }}
-        ondragover={(e: DragEvent) => {
-            e.preventDefault();
-        }}
-        ondragleave={() => {
-            ofxDragCounter--;
-        }}
-        ondrop={handleOfxDrop}
-    >
-        <Card.Header>
-            <Card.Title>OFX Import</Card.Title>
-            <Card.Description
-                >Import transactions from OFX/QFX/QBO files — supported by most
-                banks.</Card.Description
-            >
-        </Card.Header>
-        <Card.Content>
-            <div class="flex items-center gap-3">
-                <Button
-                    onclick={() => {
-                        ofxDialogOpen = true;
-                    }}
-                >
-                    <Upload class="mr-2 h-4 w-4" /> Import OFX
-                </Button>
-                {#if draggingOfx}
-                    <p class="text-sm text-muted-foreground">
-                        Drop OFX file to import...
-                    </p>
-                {/if}
-            </div>
-        </Card.Content>
-    </Card.Root>
-
     <OfxImportDialog
         bind:open={ofxDialogOpen}
         initialContent={ofxInitialContent}
         initialFileName={ofxInitialFileName}
     />
-
-    <!-- PDF Import -->
-    <Card.Root
-        class={draggingPdf
-            ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors"
-            : "transition-colors"}
-        ondragenter={(e: DragEvent) => {
-            e.preventDefault();
-            pdfDragCounter++;
-        }}
-        ondragover={(e: DragEvent) => {
-            e.preventDefault();
-        }}
-        ondragleave={() => {
-            pdfDragCounter--;
-        }}
-        ondrop={handlePdfDrop}
-    >
-        <Card.Header>
-            <Card.Title>PDF Import</Card.Title>
-            <Card.Description>
-                Import transactions from PDF bank statements.
-                <span class="mt-1.5 flex flex-wrap gap-1">
-                    {#each ["Deblock", "La Banque Postale", "N26", "Nuri/Bitwala"] as name}
-                        <Badge variant="outline">{name}</Badge>
-                    {/each}
-                </span>
-            </Card.Description>
-        </Card.Header>
-        <Card.Content>
-            <div class="flex items-center gap-3">
-                <Button
-                    onclick={() => {
-                        pdfDialogOpen = true;
-                    }}
-                >
-                    <Upload class="mr-2 h-4 w-4" /> Import PDF
-                </Button>
-                {#if draggingPdf}
-                    <p class="text-sm text-muted-foreground">
-                        Drop PDF file to import...
-                    </p>
-                {/if}
-            </div>
-        </Card.Content>
-    </Card.Root>
-
     <PdfImportDialog
         bind:open={pdfDialogOpen}
         initialFile={pdfInitialFile}
