@@ -293,6 +293,211 @@ describe("SqlJsBackend", () => {
         expect(parseFloat(balance[0].amount)).toBe(0);
       }
     });
+
+    describe("editJournalEntry", () => {
+      it("voids original and posts replacement", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const newEntry = makeEntry({ description: "Edited", source: "system:edit" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "200"),
+          makeLineItem(newEntry.id, equityId, "USD", "-200"),
+        ];
+        const result = await backend.editJournalEntry(entry.id, newEntry, newItems);
+
+        expect(result.reversalId).toBeTruthy();
+        expect(result.newEntryId).toBe(newEntry.id);
+
+        // Original should be voided
+        const original = await backend.getJournalEntry(entry.id);
+        expect(original![0].status).toBe("voided");
+        expect(original![0].voided_by).toBe(result.reversalId);
+
+        // Replacement should exist
+        const replacement = await backend.getJournalEntry(result.newEntryId);
+        expect(replacement).not.toBeNull();
+        expect(replacement![0].description).toBe("Edited");
+      });
+
+      it("replacement has edit:original_id metadata", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "50"),
+          makeLineItem(entry.id, equityId, "USD", "-50"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const newEntry = makeEntry({ description: "Edited", source: "system:edit" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "75"),
+          makeLineItem(newEntry.id, equityId, "USD", "-75"),
+        ];
+        const result = await backend.editJournalEntry(entry.id, newEntry, newItems);
+
+        const meta = await backend.getMetadata(result.newEntryId);
+        expect(meta["edit:original_id"]).toBe(entry.id);
+        expect(meta["edit:edited_at"]).toBeTruthy();
+      });
+
+      it("copies metadata from original, overlaid with new values", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        await backend.setMetadata(entry.id, { category: "rent", note: "old note" });
+
+        const newEntry = makeEntry({ description: "Edited", source: "system:edit" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "100"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        const result = await backend.editJournalEntry(entry.id, newEntry, newItems, { note: "new note" });
+
+        const meta = await backend.getMetadata(result.newEntryId);
+        expect(meta["category"]).toBe("rent"); // copied from original
+        expect(meta["note"]).toBe("new note"); // overridden by new value
+        expect(meta["edit:original_id"]).toBe(entry.id);
+      });
+
+      it("copies links from original when no explicit links given", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        await backend.setEntryLinks(entry.id, ["invoice-001", "ref-abc"]);
+
+        const newEntry = makeEntry({ description: "Edited", source: "system:edit" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "100"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        const result = await backend.editJournalEntry(entry.id, newEntry, newItems);
+
+        const links = await backend.getEntryLinks(result.newEntryId);
+        expect(links).toContain("invoice-001");
+        expect(links).toContain("ref-abc");
+      });
+
+      it("uses explicit links when provided", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        await backend.setEntryLinks(entry.id, ["invoice-001"]);
+
+        const newEntry = makeEntry({ description: "Edited", source: "system:edit" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "100"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        const result = await backend.editJournalEntry(entry.id, newEntry, newItems, undefined, ["new-link"]);
+
+        const links = await backend.getEntryLinks(result.newEntryId);
+        expect(links).toContain("new-link");
+        expect(links).not.toContain("invoice-001");
+      });
+
+      it("throws for already-voided entry", async () => {
+        const entry = makeEntry({ description: "Will void" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        await backend.voidJournalEntry(entry.id);
+
+        const newEntry = makeEntry({ description: "Edited" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "100"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        await expect(backend.editJournalEntry(entry.id, newEntry, newItems))
+          .rejects.toThrow("already voided");
+      });
+
+      it("throws for reconciled line items", async () => {
+        const entry = makeEntry({ description: "Reconciled" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        // Mark a line item as reconciled via raw SQL
+        const fetched = await backend.getJournalEntry(entry.id);
+        const lineItemId = fetched![1][0].id;
+        (backend as any).run("UPDATE line_item SET is_reconciled = 1 WHERE id = ?", [lineItemId]);
+
+        const newEntry = makeEntry({ description: "Edited" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "100"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        await expect(backend.editJournalEntry(entry.id, newEntry, newItems))
+          .rejects.toThrow("reconciled");
+      });
+
+      it("throws for unbalanced new entry", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const newEntry = makeEntry({ description: "Unbalanced" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "200"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        await expect(backend.editJournalEntry(entry.id, newEntry, newItems))
+          .rejects.toThrow("does not balance");
+      });
+
+      it("rolls back on failure — original unchanged", async () => {
+        const entry = makeEntry({ description: "Original" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        // Try to edit with unbalanced entry (should fail)
+        const newEntry = makeEntry({ description: "Bad" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "200"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        await expect(backend.editJournalEntry(entry.id, newEntry, newItems))
+          .rejects.toThrow();
+
+        // Original should be unchanged
+        const original = await backend.getJournalEntry(entry.id);
+        expect(original![0].status).toBe("confirmed");
+        expect(original![0].voided_by).toBeNull();
+      });
+
+      it("throws for nonexistent entry", async () => {
+        const newEntry = makeEntry({ description: "Edited" });
+        const newItems = [
+          makeLineItem(newEntry.id, bankId, "USD", "100"),
+          makeLineItem(newEntry.id, equityId, "USD", "-100"),
+        ];
+        await expect(backend.editJournalEntry(uuidv7(), newEntry, newItems))
+          .rejects.toThrow("not found");
+      });
+    });
   });
 
   // ---- Queries ----

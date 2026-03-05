@@ -1967,6 +1967,128 @@ PRAGMA foreign_keys = ON;
     return reversal;
   }
 
+  async editJournalEntry(
+    originalId: string,
+    newEntry: JournalEntry,
+    newItems: LineItem[],
+    newMetadata?: Record<string, string>,
+    newLinks?: string[],
+  ): Promise<{ reversalId: string; newEntryId: string }> {
+    // 1. Validate original exists and is not voided
+    const original = this.queryOne(
+      "SELECT id, date, description, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+      [originalId],
+      mapJournalEntry,
+    );
+    if (!original) throw new Error(`journal entry ${originalId} not found`);
+    if (original.status === "voided")
+      throw new Error(`journal entry ${originalId} is already voided`);
+
+    // 2. Check no line items are reconciled
+    const reconciledCount = this.queryOne(
+      "SELECT COUNT(*) as cnt FROM line_item WHERE journal_entry_id = ? AND is_reconciled = 1",
+      [originalId],
+      (row) => row.cnt as number,
+    );
+    if (reconciledCount && reconciledCount > 0) {
+      throw new Error(`cannot edit entry ${originalId}: has reconciled line items`);
+    }
+
+    // 3. Validate new entry balances
+    this.validateJournalEntry(newItems);
+
+    // 4. Wrap in transaction
+    const wasInTransaction = this.inTransaction;
+    if (!wasInTransaction) this.beginTransaction();
+    try {
+      // 5. Inline void logic (same as voidJournalEntry but within the transaction)
+      const originalItems = this.fetchLineItemsForEntry(originalId);
+      const reversalId = uuidv7();
+      const today = this.today();
+
+      const reversal: JournalEntry = {
+        id: reversalId,
+        date: today,
+        description: `Reversal of: ${original.description}`,
+        status: "confirmed",
+        source: "system:void",
+        voided_by: null,
+        created_at: today,
+      };
+
+      this.run(
+        "INSERT INTO journal_entry (id, date, description, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [reversal.id, reversal.date, reversal.description, reversal.status, reversal.source, null, reversal.created_at],
+      );
+
+      for (const item of originalItems) {
+        const negAmount = new Decimal(item.amount).neg().toString();
+        this.run(
+          "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [uuidv7(), reversalId, item.account_id, item.currency, item.currency_asset_type ?? "", item.currency_param ?? "", negAmount, null],
+        );
+      }
+
+      this.run(
+        "UPDATE journal_entry SET status = 'voided', voided_by = ? WHERE id = ?",
+        [reversalId, originalId],
+      );
+
+      // 6. Post the new entry
+      this.run(
+        "INSERT INTO journal_entry (id, date, description, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [newEntry.id, newEntry.date, newEntry.description, newEntry.status, newEntry.source, newEntry.voided_by, newEntry.created_at],
+      );
+
+      for (const item of newItems) {
+        this.run(
+          "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [item.id, item.journal_entry_id, item.account_id, item.currency, item.currency_asset_type ?? "", item.currency_param ?? "", item.amount, item.lot_id],
+        );
+      }
+
+      // 7. Transfer metadata: copy original's, overlay with newMetadata, add edit provenance
+      const originalMeta = await this.getMetadata(originalId);
+      const mergedMeta: Record<string, string> = {
+        ...originalMeta,
+        ...(newMetadata ?? {}),
+        "edit:original_id": originalId,
+        "edit:edited_at": today,
+      };
+      for (const [key, value] of Object.entries(mergedMeta)) {
+        this.run(
+          "INSERT OR REPLACE INTO journal_entry_metadata (journal_entry_id, key, value) VALUES (?, ?, ?)",
+          [newEntry.id, key, value],
+        );
+      }
+
+      // 8. Transfer links: use newLinks if provided, else copy original's
+      const linksToSet = newLinks ?? await this.getEntryLinks(originalId);
+      if (linksToSet.length > 0) {
+        for (const link of linksToSet) {
+          const normalized = link.trim().toLowerCase();
+          if (normalized) {
+            this.run(
+              "INSERT OR IGNORE INTO entry_link (journal_entry_id, link_name) VALUES (?, ?)",
+              [newEntry.id, normalized],
+            );
+          }
+        }
+      }
+
+      // 9. Audit both operations
+      this.audit("void", "journal_entry", originalId, `reversed by ${reversalId} (edit)`);
+      this.audit("post", "journal_entry", newEntry.id, `edit of ${originalId}: ${newEntry.description}`);
+
+      if (!wasInTransaction) this.commitTransaction();
+      this.scheduleSave();
+      return { reversalId, newEntryId: newEntry.id };
+    } catch (e) {
+      if (!wasInTransaction) this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   async getJournalEntry(
     id: string,
   ): Promise<[JournalEntry, LineItem[]] | null> {

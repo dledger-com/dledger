@@ -557,6 +557,18 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
+    fn has_reconciled_items(&self, entry_id: &Uuid) -> StorageResult<bool> {
+        let conn = self.conn.borrow();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM line_item WHERE journal_entry_id = ?1 AND is_reconciled = 1",
+                params![entry_id.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(count > 0)
+    }
+
     // -- Lots --
 
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {

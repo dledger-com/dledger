@@ -97,6 +97,13 @@ export interface Backend {
   // Journal entries
   postJournalEntry(entry: JournalEntry, items: LineItem[]): Promise<void>;
   voidJournalEntry(id: string): Promise<JournalEntry>;
+  editJournalEntry(
+    originalId: string,
+    newEntry: JournalEntry,
+    newItems: LineItem[],
+    newMetadata?: Record<string, string>,
+    newLinks?: string[],
+  ): Promise<{ reversalId: string; newEntryId: string }>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
   queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]>;
   countJournalEntries(filter: TransactionFilter): Promise<number>;
@@ -296,6 +303,21 @@ class TauriBackend implements Backend {
   }
   async voidJournalEntry(id: string): Promise<JournalEntry> {
     return this.invoke("void_journal_entry", { id });
+  }
+  async editJournalEntry(
+    originalId: string,
+    newEntry: JournalEntry,
+    newItems: LineItem[],
+    newMetadata?: Record<string, string>,
+    newLinks?: string[],
+  ): Promise<{ reversalId: string; newEntryId: string }> {
+    return this.invoke("edit_journal_entry", {
+      originalId,
+      newEntry,
+      newItems,
+      newMetadata: newMetadata ?? {},
+      newLinks: newLinks ?? null,
+    });
   }
   async getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null> {
     return this.invoke("get_journal_entry", { id });

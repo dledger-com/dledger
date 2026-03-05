@@ -29,6 +29,9 @@ pub enum LedgerError {
     #[error("journal entry {id} is already voided")]
     AlreadyVoided { id: Uuid },
 
+    #[error("cannot edit entry {id}: has reconciled line items")]
+    HasReconciledItems { id: Uuid },
+
     #[error("account {id} not found")]
     AccountNotFound { id: Uuid },
 }
@@ -255,6 +258,101 @@ impl LedgerEngine {
 
         self.audit("void", "journal_entry", *id, &format!("reversed by {}", reversal_id))?;
         Ok(reversal)
+    }
+
+    /// Edit a journal entry by atomically voiding the original and posting a replacement.
+    pub fn edit_journal_entry(
+        &self,
+        original_id: &Uuid,
+        new_entry: &JournalEntry,
+        new_items: &[LineItem],
+        metadata: &std::collections::HashMap<String, String>,
+        links: Option<&[String]>,
+    ) -> LedgerResult<(Uuid, Uuid)> {
+        // 1. Validate original exists and is not voided
+        let (original, items) = self.storage.get_journal_entry(original_id)?
+            .ok_or(LedgerError::EntryNotFound { id: *original_id })?;
+
+        if original.status == JournalEntryStatus::Voided {
+            return Err(LedgerError::AlreadyVoided { id: *original_id });
+        }
+
+        // 2. Check no line items are reconciled
+        if self.storage.has_reconciled_items(original_id)? {
+            return Err(LedgerError::HasReconciledItems { id: *original_id });
+        }
+
+        // 3. Validate new entry
+        validation::validate_journal_entry(new_items, &*self.storage)?;
+
+        // 4. Create reversal (same as void_journal_entry)
+        let reversal_id = Uuid::now_v7();
+        let today = chrono::Utc::now().date_naive();
+        let reversal = JournalEntry {
+            id: reversal_id,
+            date: today,
+            description: format!("Reversal of: {}", original.description),
+            status: JournalEntryStatus::Confirmed,
+            source: "system:void".to_string(),
+            voided_by: None,
+            created_at: today,
+        };
+
+        let reversal_items: Vec<LineItem> = items
+            .iter()
+            .map(|item| LineItem {
+                id: Uuid::now_v7(),
+                journal_entry_id: reversal_id,
+                account_id: item.account_id,
+                currency: item.currency.clone(),
+                currency_asset_type: String::new(),
+                currency_param: String::new(),
+                amount: -item.amount,
+                lot_id: None,
+            })
+            .collect();
+
+        self.storage.insert_journal_entry(&reversal, &reversal_items)?;
+        self.storage.update_journal_entry_status(
+            original_id,
+            JournalEntryStatus::Voided,
+            Some(reversal_id),
+        )?;
+
+        // 5. Post replacement entry
+        self.storage.insert_journal_entry(new_entry, new_items)?;
+
+        // 6. Transfer metadata: copy original's, overlay with provided, add edit provenance
+        let original_meta = self.storage.get_metadata(original_id)?;
+        for m in &original_meta {
+            if !metadata.contains_key(&m.key) && !m.key.starts_with("edit:") {
+                self.storage.insert_metadata(&new_entry.id, &m.key, &m.value)?;
+            }
+        }
+        for (key, value) in metadata {
+            self.storage.insert_metadata(&new_entry.id, key, value)?;
+        }
+        self.storage.insert_metadata(&new_entry.id, "edit:original_id", &original_id.to_string())?;
+        self.storage.insert_metadata(&new_entry.id, "edit:edited_at", &today.to_string())?;
+
+        // 7. Transfer links: use provided links or copy from original
+        match links {
+            Some(link_list) => {
+                self.storage.set_entry_links(&new_entry.id, link_list)?;
+            }
+            None => {
+                let original_links = self.storage.get_entry_links(original_id)?;
+                if !original_links.is_empty() {
+                    self.storage.set_entry_links(&new_entry.id, &original_links)?;
+                }
+            }
+        }
+
+        // 8. Audit
+        self.audit("void", "journal_entry", *original_id, &format!("reversed by {} (edit)", reversal_id))?;
+        self.audit("post", "journal_entry", new_entry.id, &format!("edit of {}: {}", original_id, new_entry.description))?;
+
+        Ok((reversal_id, new_entry.id))
     }
 
     pub fn get_journal_entry(

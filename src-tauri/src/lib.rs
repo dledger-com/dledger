@@ -73,6 +73,7 @@ pub fn run() {
             commands::post_journal_entry,
             commands::post_journal_entry_with_lots,
             commands::void_journal_entry,
+            commands::edit_journal_entry,
             commands::get_journal_entry,
             commands::query_journal_entries,
             commands::get_account_balance,

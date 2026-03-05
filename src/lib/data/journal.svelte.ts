@@ -66,6 +66,24 @@ export class JournalStore {
     }
   }
 
+  async edit(
+    originalId: string,
+    newEntry: JournalEntry,
+    newItems: LineItem[],
+    newMetadata?: Record<string, string>,
+    newLinks?: string[],
+  ): Promise<{ reversalId: string; newEntryId: string } | null> {
+    try {
+      const result = await getBackend().editJournalEntry(originalId, newEntry, newItems, newMetadata, newLinks);
+      await this.load(this.currentFilter);
+      invalidate("journal", "accounts", "reports");
+      return result;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      return null;
+    }
+  }
+
   async get(id: string): Promise<{ entry: JournalEntry; items: LineItem[] } | null> {
     try {
       const result = await getBackend().getJournalEntry(id);

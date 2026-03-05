@@ -65,6 +65,9 @@ pub trait Storage: Send + Sync {
         voided_by: Option<Uuid>,
     ) -> StorageResult<()>;
 
+    /// Check if any line items for an entry are reconciled.
+    fn has_reconciled_items(&self, entry_id: &Uuid) -> StorageResult<bool>;
+
     // -- Lots --
 
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()>;

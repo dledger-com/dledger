@@ -137,6 +137,33 @@ pub fn void_journal_entry(
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditJournalEntryResult {
+    pub reversal_id: Uuid,
+    pub new_entry_id: Uuid,
+}
+
+#[tauri::command]
+pub fn edit_journal_entry(
+    state: State<'_, AppState>,
+    original_id: Uuid,
+    new_entry: JournalEntry,
+    new_items: Vec<LineItem>,
+    new_metadata: std::collections::HashMap<String, String>,
+    new_links: Option<Vec<String>>,
+) -> Result<EditJournalEntryResult, String> {
+    let links_ref = new_links.as_deref();
+    let (reversal_id, new_entry_id) = state
+        .engine
+        .edit_journal_entry(&original_id, &new_entry, &new_items, &new_metadata, links_ref)
+        .map_err(|e| e.to_string())?;
+    Ok(EditJournalEntryResult {
+        reversal_id,
+        new_entry_id,
+    })
+}
+
 #[tauri::command]
 pub fn get_journal_entry(
     state: State<'_, AppState>,

@@ -151,6 +151,7 @@
           toast.success("Recurring template created");
           goto("/journal/recurring");
         }}>Make Recurring</Button>
+        <Button variant="outline" href="/journal/new?edit={entryId}">Edit Entry</Button>
         <Button variant="destructive" onclick={handleVoid}>Void Entry</Button>
       {/if}
     </div>
@@ -204,6 +205,18 @@
             <dt class="text-muted-foreground">Created</dt>
             <dd class="font-medium">{entry.created_at}</dd>
           </div>
+          {#if metadata["edit:original_id"]}
+            <div>
+              <dt class="text-muted-foreground">Edit of</dt>
+              <dd><a href="/journal/{metadata['edit:original_id']}" class="text-blue-600 hover:underline dark:text-blue-400">Original entry</a></dd>
+            </div>
+          {/if}
+          {#if entry.voided_by}
+            <div>
+              <dt class="text-muted-foreground">Voided by</dt>
+              <dd><a href="/journal/{entry.voided_by}" class="text-blue-600 hover:underline dark:text-blue-400">Reversal entry</a></dd>
+            </div>
+          {/if}
         </dl>
       </Card.Content>
     </Card.Root>

@@ -473,6 +473,11 @@ impl Storage for TestStorage {
         Ok(())
     }
 
+    fn has_reconciled_items(&self, _entry_id: &Uuid) -> StorageResult<bool> {
+        // Test storage doesn't track reconciliation
+        Ok(false)
+    }
+
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(
