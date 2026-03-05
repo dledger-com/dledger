@@ -60,7 +60,12 @@
     import FacetedFilter from "$lib/components/FacetedFilter.svelte";
     import { Checkbox } from "$lib/components/ui/checkbox/index.js";
     import { createSvelteTable } from "$lib/components/ui/data-table/data-table.svelte.js";
-    import { type ColumnDef, getCoreRowModel, type RowSelectionState, type VisibilityState } from "@tanstack/table-core";
+    import {
+        type ColumnDef,
+        getCoreRowModel,
+        type RowSelectionState,
+        type VisibilityState,
+    } from "@tanstack/table-core";
     import { invalidate } from "$lib/data/invalidation.js";
 
     const store = new JournalStore();
@@ -93,7 +98,9 @@
             accountOptions = accounts
                 .filter((a: Account) => !a.is_archived)
                 .map((a: Account) => ({ value: a.id, label: a.full_name }))
-                .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label));
+                .sort((a: { label: string }, b: { label: string }) =>
+                    a.label.localeCompare(b.label),
+                );
             const map = new Map<string, string>();
             for (const a of accounts) map.set(a.id, a.full_name);
             accountIdToName = map;
@@ -119,7 +126,11 @@
     let accountIdToName = $state(new Map<string, string>());
     let tagOptions = $state<{ value: string; label: string }[]>([]);
     let linkOptions = $state<{ value: string; label: string }[]>([]);
-    const hasFacetedFilters = $derived(selectedAccounts.size > 0 || selectedTags.size > 0 || selectedLinks.size > 0);
+    const hasFacetedFilters = $derived(
+        selectedAccounts.size > 0 ||
+            selectedTags.size > 0 ||
+            selectedLinks.size > 0,
+    );
 
     // TanStack Table state
     type JournalRow = [JournalEntry, LineItem[]];
@@ -302,7 +313,10 @@
         return name === "Equity:Trading" || name.startsWith("Equity:Trading:");
     }
 
-    function entryAmountParts(items: LineItem[]): { isTrade: boolean; debits: CurrencyBalance[] } {
+    function entryAmountParts(items: LineItem[]): {
+        isTrade: boolean;
+        debits: CurrencyBalance[];
+    } {
         const equityItems = items.filter(isEquityTrading);
         const nonEquityItems = items.filter((i) => !isEquityTrading(i));
 
@@ -314,7 +328,12 @@
                     isTrade: true,
                     debits: [
                         { currency: spent.currency, amount: spent.amount },
-                        { currency: received.currency, amount: String(Math.abs(parseFloat(received.amount))) },
+                        {
+                            currency: received.currency,
+                            amount: String(
+                                Math.abs(parseFloat(received.amount)),
+                            ),
+                        },
                     ],
                 };
             }
@@ -323,20 +342,20 @@
         return { isTrade: false, debits: debitsByCurrency(nonEquityItems) };
     }
 
-    type AmountDirection = 'income' | 'expense' | 'default';
+    type AmountDirection = "income" | "expense" | "default";
 
     type AmountPart = { text: string; direction: AmountDirection };
 
     function amountColorClass(dir: AmountDirection): string {
-        if (dir === 'income') return 'text-green-600 dark:text-green-400';
-        if (dir === 'expense') return 'text-red-600 dark:text-red-400';
-        return '';
+        if (dir === "income") return "text-green-600 dark:text-green-400";
+        if (dir === "expense") return "text-red-600 dark:text-red-400";
+        return "";
     }
 
     function barBgColor(dir: AmountDirection): string {
-        if (dir === 'income') return 'rgba(34, 197, 94, 0.07)';
-        if (dir === 'expense') return 'rgba(239, 68, 68, 0.07)';
-        return 'rgba(156, 163, 175, 0.05)';
+        if (dir === "income") return "rgba(34, 197, 94, 0.15)";
+        if (dir === "expense") return "rgba(239, 68, 68, 0.15)";
+        return "rgba(156, 163, 175, 0.12)";
     }
 
     type BarSegment = { direction: AmountDirection; amount: number };
@@ -345,32 +364,51 @@
         const { isTrade, debits } = entryAmountParts(items);
 
         if (isTrade) {
-            const total = debits.reduce((s, d) => s + Math.abs(Number(d.amount)), 0);
-            return [{ direction: 'default', amount: total }];
+            const total = debits.reduce(
+                (s, d) => s + Math.abs(Number(d.amount)),
+                0,
+            );
+            return [{ direction: "default", amount: total }];
         }
 
-        let hasIncome = false, hasExpense = false, hasEquity = false;
+        let hasIncome = false,
+            hasExpense = false,
+            hasEquity = false;
         for (const item of items) {
-            const name = accountIdToName.get(item.account_id) ?? '';
-            if (name.startsWith('Equity:') || name === 'Equity') hasEquity = true;
-            else if (name.startsWith('Income:') || name === 'Income') hasIncome = true;
-            else if (name.startsWith('Expenses:') || name === 'Expenses') hasExpense = true;
+            const name = accountIdToName.get(item.account_id) ?? "";
+            if (name.startsWith("Equity:") || name === "Equity")
+                hasEquity = true;
+            else if (name.startsWith("Income:") || name === "Income")
+                hasIncome = true;
+            else if (name.startsWith("Expenses:") || name === "Expenses")
+                hasExpense = true;
         }
 
         const isMixed = (hasEquity || hasIncome) && hasExpense;
         if (!isMixed) {
-            const dir: AmountDirection = hasIncome ? 'income' : hasExpense ? 'expense' : 'default';
-            const total = debits.reduce((s, d) => s + Math.abs(Number(d.amount)), 0);
+            const dir: AmountDirection = hasIncome
+                ? "income"
+                : hasExpense
+                  ? "expense"
+                  : "default";
+            const total = debits.reduce(
+                (s, d) => s + Math.abs(Number(d.amount)),
+                0,
+            );
             return [{ direction: dir, amount: total }];
         }
 
         // Mixed: split expense amounts from the rest
         const expenseByCode = new Map<string, number>();
         for (const item of items) {
-            const name = accountIdToName.get(item.account_id) ?? '';
-            if (name.startsWith('Expenses:') || name === 'Expenses') {
+            const name = accountIdToName.get(item.account_id) ?? "";
+            if (name.startsWith("Expenses:") || name === "Expenses") {
                 const n = parseFloat(item.amount);
-                if (n > 0) expenseByCode.set(item.currency, (expenseByCode.get(item.currency) ?? 0) + n);
+                if (n > 0)
+                    expenseByCode.set(
+                        item.currency,
+                        (expenseByCode.get(item.currency) ?? 0) + n,
+                    );
             }
         }
         let expenseTotal = 0;
@@ -384,9 +422,11 @@
         }
 
         const segments: BarSegment[] = [];
-        const mainDir: AmountDirection = hasIncome ? 'income' : 'default';
-        if (mainTotal > 0) segments.push({ direction: mainDir, amount: mainTotal });
-        if (expenseTotal > 0) segments.push({ direction: 'expense', amount: expenseTotal });
+        const mainDir: AmountDirection = hasIncome ? "income" : "default";
+        if (mainTotal > 0)
+            segments.push({ direction: mainDir, amount: mainTotal });
+        if (expenseTotal > 0)
+            segments.push({ direction: "expense", amount: expenseTotal });
         return segments;
     }
 
@@ -395,16 +435,19 @@
     }
 
     function barStyle(items: LineItem[], maxAmount: number): string {
-        if (maxAmount <= 0) return '';
+        if (maxAmount <= 0) return "";
         const segments = entryBarSegments(items);
-        if (segments.length === 0) return '';
+        if (segments.length === 0) return "";
 
         // Single segment: simple gradient (common case)
         if (segments.length === 1) {
-            const pct = Math.min((segments[0].amount / maxAmount) * 66.67, 66.67);
-            if (pct <= 0) return '';
+            const pct = Math.min(
+                (segments[0].amount / maxAmount) * 66.67,
+                66.67,
+            );
+            if (pct <= 0) return "";
             const color = barBgColor(segments[0].direction);
-            return `background-image: linear-gradient(to left, ${color} 0%, ${color} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%)`;
+            return `background-image: linear-gradient(to left, ${color} 0%, ${color} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%); background-size: 100% 20%; background-position: bottom; background-repeat: no-repeat`;
         }
 
         // Multiple segments: place side-by-side from right edge, smallest rightmost
@@ -412,15 +455,20 @@
         const stops: string[] = [];
         let cursor = 0;
         for (const seg of sorted) {
-            const pct = Math.min((seg.amount / maxAmount) * 66.67, 66.67 - cursor);
+            const pct = Math.min(
+                (seg.amount / maxAmount) * 66.67,
+                66.67 - cursor,
+            );
             if (pct <= 0) continue;
             const color = barBgColor(seg.direction);
-            stops.push(`${color} ${cursor.toFixed(1)}% ${(cursor + pct).toFixed(1)}%`);
+            stops.push(
+                `${color} ${cursor.toFixed(1)}% ${(cursor + pct).toFixed(1)}%`,
+            );
             cursor += pct;
         }
-        if (stops.length === 0) return '';
+        if (stops.length === 0) return "";
         stops.push(`transparent ${cursor.toFixed(1)}%`);
-        return `background-image: linear-gradient(to left, ${stops.join(', ')})`;
+        return `background-image: linear-gradient(to left, ${stops.join(", ")}); background-size: 100% 20%; background-position: bottom; background-repeat: no-repeat`;
     }
 
     function entryAmountDisplay(items: LineItem[]): AmountPart[] {
@@ -428,39 +476,56 @@
 
         // Trade: single default part with arrow
         if (isTrade && debits.length === 2) {
-            return [{
-                text: `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`,
-                direction: 'default'
-            }];
+            return [
+                {
+                    text: `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`,
+                    direction: "default",
+                },
+            ];
         }
 
         // Classify which account types are present
-        let hasIncome = false, hasExpense = false, hasEquity = false;
+        let hasIncome = false,
+            hasExpense = false,
+            hasEquity = false;
         for (const item of items) {
-            const name = accountIdToName.get(item.account_id) ?? '';
-            if (name.startsWith('Equity:') || name === 'Equity') hasEquity = true;
-            else if (name.startsWith('Income:') || name === 'Income') hasIncome = true;
-            else if (name.startsWith('Expenses:') || name === 'Expenses') hasExpense = true;
+            const name = accountIdToName.get(item.account_id) ?? "";
+            if (name.startsWith("Equity:") || name === "Equity")
+                hasEquity = true;
+            else if (name.startsWith("Income:") || name === "Income")
+                hasIncome = true;
+            else if (name.startsWith("Expenses:") || name === "Expenses")
+                hasExpense = true;
         }
 
         // Single-direction: one part, whole amount colored
         const isMixed = (hasEquity || hasIncome) && hasExpense;
         if (!isMixed) {
-            const dir: AmountDirection =
-                hasIncome ? 'income' : hasExpense ? 'expense' : 'default';
-            const text = debits.length === 0
-                ? formatCurrency(0, settings.currency)
-                : debits.map(b => formatCurrency(b.amount, b.currency)).join(', ');
+            const dir: AmountDirection = hasIncome
+                ? "income"
+                : hasExpense
+                  ? "expense"
+                  : "default";
+            const text =
+                debits.length === 0
+                    ? formatCurrency(0, settings.currency)
+                    : debits
+                          .map((b) => formatCurrency(b.amount, b.currency))
+                          .join(", ");
             return [{ text, direction: dir }];
         }
 
         // Mixed: split expense debits from the rest
         const expenseByCode = new Map<string, number>();
         for (const item of items) {
-            const name = accountIdToName.get(item.account_id) ?? '';
-            if (name.startsWith('Expenses:') || name === 'Expenses') {
+            const name = accountIdToName.get(item.account_id) ?? "";
+            if (name.startsWith("Expenses:") || name === "Expenses") {
                 const n = parseFloat(item.amount);
-                if (n > 0) expenseByCode.set(item.currency, (expenseByCode.get(item.currency) ?? 0) + n);
+                if (n > 0)
+                    expenseByCode.set(
+                        item.currency,
+                        (expenseByCode.get(item.currency) ?? 0) + n,
+                    );
             }
         }
 
@@ -473,31 +538,48 @@
             if (remainder > 0.005) mainByCode.set(d.currency, remainder);
         }
 
-        const parts: { text: string; direction: AmountDirection; total: number }[] = [];
-        const mainDir: AmountDirection = hasIncome ? 'income' : 'default';
+        const parts: {
+            text: string;
+            direction: AmountDirection;
+            total: number;
+        }[] = [];
+        const mainDir: AmountDirection = hasIncome ? "income" : "default";
 
         if (mainByCode.size > 0) {
             const total = [...mainByCode.values()].reduce((s, a) => s + a, 0);
             parts.push({
-                text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(', '),
+                text: [...mainByCode]
+                    .map(([c, a]) => formatCurrency(String(a), c))
+                    .join(", "),
                 direction: mainDir,
-                total
+                total,
             });
         }
         if (expenseByCode.size > 0) {
-            const total = [...expenseByCode.values()].reduce((s, a) => s + a, 0);
+            const total = [...expenseByCode.values()].reduce(
+                (s, a) => s + a,
+                0,
+            );
             parts.push({
-                text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(', '),
-                direction: 'expense',
-                total
+                text: [...expenseByCode]
+                    .map(([c, a]) => formatCurrency(String(a), c))
+                    .join(", "),
+                direction: "expense",
+                total,
             });
         }
 
         // Largest amount first (left to right)
         parts.sort((a, b) => b.total - a.total);
 
-        return parts.length > 0 ? parts
-            : [{ text: formatCurrency(0, settings.currency), direction: 'default' }];
+        return parts.length > 0
+            ? parts
+            : [
+                  {
+                      text: formatCurrency(0, settings.currency),
+                      direction: "default",
+                  },
+              ];
     }
 
     // Metadata state — declared before displayEntries to avoid TDZ
@@ -575,31 +657,49 @@
 
     // TanStack Table instance
     const table = createSvelteTable({
-        get data() { return sortedEntries; },
+        get data() {
+            return sortedEntries;
+        },
         columns,
         getCoreRowModel: getCoreRowModel(),
         getRowId: (row) => row[0].id,
         state: {
-            get rowSelection() { return rowSelection; },
-            get columnVisibility() { return columnVisibility; },
+            get rowSelection() {
+                return rowSelection;
+            },
+            get columnVisibility() {
+                return columnVisibility;
+            },
         },
         onRowSelectionChange: (updater) => {
-            rowSelection = typeof updater === "function" ? updater(rowSelection) : updater;
+            rowSelection =
+                typeof updater === "function" ? updater(rowSelection) : updater;
         },
         onColumnVisibilityChange: (updater) => {
-            columnVisibility = typeof updater === "function" ? updater(columnVisibility) : updater;
+            columnVisibility =
+                typeof updater === "function"
+                    ? updater(columnVisibility)
+                    : updater;
         },
         enableRowSelection: (row) => row.original[0].status !== "voided",
     });
 
     const visibleColCount = $derived(table.getVisibleLeafColumns().length);
-    const selectedCount = $derived(table.getFilteredSelectedRowModel().rows.length);
-    function clearSelection() { rowSelection = {}; }
+    const selectedCount = $derived(
+        table.getFilteredSelectedRowModel().rows.length,
+    );
+    function clearSelection() {
+        rowSelection = {};
+    }
 
     // Clear selection when filters/sort change
     $effect(() => {
-        void searchTerm; void selectedAccounts; void selectedTags; void selectedLinks;
-        void sort.key; void sort.direction;
+        void searchTerm;
+        void selectedAccounts;
+        void selectedTags;
+        void selectedLinks;
+        void sort.key;
+        void sort.direction;
         rowSelection = {};
     });
 
@@ -616,8 +716,12 @@
     let batchLinkBusy = $state(false);
 
     // Reset batch arrays when popovers close
-    $effect(() => { if (!batchTagOpen) batchTags = []; });
-    $effect(() => { if (!batchLinkOpen) batchLinks = []; });
+    $effect(() => {
+        if (!batchTagOpen) batchTags = [];
+    });
+    $effect(() => {
+        if (!batchLinkOpen) batchLinks = [];
+    });
 
     async function handleBatchVoid() {
         batchVoiding = true;
@@ -641,7 +745,9 @@
             await store.load();
             invalidate("journal", "reports");
             if (failed === 0) {
-                toast.success(`${success} ${success === 1 ? "entry" : "entries"} voided`);
+                toast.success(
+                    `${success} ${success === 1 ? "entry" : "entries"} voided`,
+                );
             } else {
                 toast.warning(`${success} voided, ${failed} failed`);
             }
@@ -672,11 +778,16 @@
                         modified = true;
                     } else if (batchTagMode === "remove" && has) {
                         const idx = existing.indexOf(tag);
-                        if (idx >= 0) { existing.splice(idx, 1); modified = true; }
+                        if (idx >= 0) {
+                            existing.splice(idx, 1);
+                            modified = true;
+                        }
                     }
                 }
                 if (modified) {
-                    await backend.setMetadata(id, { [TAGS_META_KEY]: serializeTags(existing) });
+                    await backend.setMetadata(id, {
+                        [TAGS_META_KEY]: serializeTags(existing),
+                    });
                     changed++;
                 }
             }
@@ -687,8 +798,13 @@
             });
             entryTags = new Map();
             const verb = batchTagMode === "add" ? "added to" : "removed from";
-            const label = batchTags.length === 1 ? `"${batchTags[0]}"` : `${batchTags.length} tags`;
-            toast.success(`${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`);
+            const label =
+                batchTags.length === 1
+                    ? `"${batchTags[0]}"`
+                    : `${batchTags.length} tags`;
+            toast.success(
+                `${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`,
+            );
             batchTags = [];
             batchTagOpen = false;
         } catch (err) {
@@ -716,7 +832,10 @@
                         modified = true;
                     } else if (batchLinkMode === "remove" && has) {
                         const idx = existing.indexOf(link);
-                        if (idx >= 0) { existing.splice(idx, 1); modified = true; }
+                        if (idx >= 0) {
+                            existing.splice(idx, 1);
+                            modified = true;
+                        }
                     }
                 }
                 if (modified) {
@@ -731,8 +850,13 @@
             });
             entryLinks = new Map();
             const verb = batchLinkMode === "add" ? "added to" : "removed from";
-            const label = batchLinks.length === 1 ? `"${batchLinks[0]}"` : `${batchLinks.length} links`;
-            toast.success(`${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`);
+            const label =
+                batchLinks.length === 1
+                    ? `"${batchLinks[0]}"`
+                    : `${batchLinks.length} links`;
+            toast.success(
+                `${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`,
+            );
             batchLinks = [];
             batchLinkOpen = false;
         } catch (err) {
@@ -747,7 +871,9 @@
     $effect(() => {
         const mq = window.matchMedia("(max-width: 639px)");
         isMobileLayout = mq.matches;
-        const handler = (e: MediaQueryListEvent) => { isMobileLayout = e.matches; };
+        const handler = (e: MediaQueryListEvent) => {
+            isMobileLayout = e.matches;
+        };
         mq.addEventListener("change", handler);
         return () => mq.removeEventListener("change", handler);
     });
@@ -755,11 +881,18 @@
     let multiSelectMode = $state(false);
 
     // Exit multi-select when all rows deselected
-    $effect(() => { if (selectedCount === 0 && multiSelectMode) multiSelectMode = false; });
+    $effect(() => {
+        if (selectedCount === 0 && multiSelectMode) multiSelectMode = false;
+    });
     // Exit multi-select when switching to desktop
-    $effect(() => { if (!isMobileLayout) multiSelectMode = false; });
+    $effect(() => {
+        if (!isMobileLayout) multiSelectMode = false;
+    });
 
-    function createLongPressHandlers(entryId: string, row: ReturnType<typeof table.getRowModel>["rows"][number]) {
+    function createLongPressHandlers(
+        entryId: string,
+        row: ReturnType<typeof table.getRowModel>["rows"][number],
+    ) {
         let timer: ReturnType<typeof setTimeout> | null = null;
         let startX = 0;
         let startY = 0;
@@ -782,7 +915,8 @@
                 if (!timer) return;
                 const dx = e.clientX - startX;
                 const dy = e.clientY - startY;
-                if (dx * dx + dy * dy > 100) { // >10px movement
+                if (dx * dx + dy * dy > 100) {
+                    // >10px movement
                     clearTimeout(timer);
                     timer = null;
                 }
@@ -801,7 +935,10 @@
                 }
             },
             onpointercancel() {
-                if (timer) { clearTimeout(timer); timer = null; }
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
             },
         };
     }
@@ -812,12 +949,15 @@
     const virtualizer = createVirtualizer(() => ({
         count: sortedEntries.length,
         getScrollElement: () => scrollEl,
-        estimateSize: () => isMobileLayout ? 56 : 44,
+        estimateSize: () => (isMobileLayout ? 56 : 44),
         overscan: 10,
     }));
 
     // Remeasure when multiSelectMode toggles (checkbox column changes row width)
-    $effect(() => { void multiSelectMode; virtualizer.measure(); });
+    $effect(() => {
+        void multiSelectMode;
+        virtualizer.measure();
+    });
 
     const virtualItems = $derived(
         virtualizer
@@ -998,7 +1138,8 @@
 
             const cache = new ExchangeRateCache(getBackend());
             const results = new Map(convertedTotals);
-            const asyncEntries: [string, boolean, CurrencyBalance[], string][] = [];
+            const asyncEntries: [string, boolean, CurrencyBalance[], string][] =
+                [];
 
             for (const id of needed) {
                 const pair = sortedEntries.find(([e]) => e.id === id);
@@ -1009,13 +1150,19 @@
                     results.set(entry.id, formatCurrency(0, baseCurrency));
                 } else if (debits.every((b) => b.currency === baseCurrency)) {
                     if (isTrade && debits.length === 2) {
-                        results.set(entry.id, `${formatCurrency(debits[0].amount, baseCurrency)} → ${formatCurrency(debits[1].amount, baseCurrency)}`);
+                        results.set(
+                            entry.id,
+                            `${formatCurrency(debits[0].amount, baseCurrency)} → ${formatCurrency(debits[1].amount, baseCurrency)}`,
+                        );
                     } else {
                         const total = debits.reduce(
                             (s, b) => s + parseFloat(b.amount),
                             0,
                         );
-                        results.set(entry.id, formatCurrency(total, baseCurrency));
+                        results.set(
+                            entry.id,
+                            formatCurrency(total, baseCurrency),
+                        );
                     }
                 } else {
                     asyncEntries.push([entry.id, isTrade, debits, entry.date]);
@@ -1050,12 +1197,20 @@
                         cache,
                     );
                     if (gen !== conversionGen) return;
-                    const spentStr = spentConverted.unconverted.length === 0
-                        ? formatCurrency(spentConverted.total, baseCurrency)
-                        : formatCurrency(debits[0].amount, debits[0].currency);
-                    const rcvStr = rcvConverted.unconverted.length === 0
-                        ? formatCurrency(rcvConverted.total, baseCurrency)
-                        : formatCurrency(debits[1].amount, debits[1].currency);
+                    const spentStr =
+                        spentConverted.unconverted.length === 0
+                            ? formatCurrency(spentConverted.total, baseCurrency)
+                            : formatCurrency(
+                                  debits[0].amount,
+                                  debits[0].currency,
+                              );
+                    const rcvStr =
+                        rcvConverted.unconverted.length === 0
+                            ? formatCurrency(rcvConverted.total, baseCurrency)
+                            : formatCurrency(
+                                  debits[1].amount,
+                                  debits[1].currency,
+                              );
                     formatted = `${spentStr} → ${rcvStr}`;
                 } else if (summary.unconverted.length === 0) {
                     formatted = formatCurrency(summary.total, baseCurrency);
@@ -1268,20 +1423,34 @@
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                     {#snippet child({ props })}
-                        <Button variant="outline" size="sm" class="h-8" {...props}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8"
+                            {...props}
+                        >
                             <SlidersHorizontal class="size-4" />
                             View
                         </Button>
                     {/snippet}
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end" class="w-[150px]">
-                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Toggle columns</DropdownMenu.Item>
+                    <DropdownMenu.Item
+                        disabled
+                        class="text-xs font-medium opacity-70"
+                        >Toggle columns</DropdownMenu.Item
+                    >
                     <DropdownMenu.Separator />
-                    {#each table.getAllColumns().filter((col) => col.getCanHide()) as column}
+                    {#each table
+                        .getAllColumns()
+                        .filter((col) => col.getCanHide()) as column}
                         <DropdownMenu.CheckboxItem
                             checked={column.getIsVisible()}
-                            onCheckedChange={(v) => column.toggleVisibility(!!v)}
-                        >{column.columnDef.header}</DropdownMenu.CheckboxItem>
+                            onCheckedChange={(v) =>
+                                column.toggleVisibility(!!v)}
+                            >{column.columnDef
+                                .header}</DropdownMenu.CheckboxItem
+                        >
                     {/each}
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
@@ -1343,7 +1512,9 @@
             </Card.Content>
         </Card.Root>
     {:else}
-        <Card.Root class="border-x-0 rounded-none shadow-none py-0 flex-1 min-h-0 flex flex-col">
+        <Card.Root
+            class="border-x-0 rounded-none shadow-none py-0 flex-1 min-h-0 flex flex-col"
+        >
             <div class="relative flex-1 min-h-0 flex flex-col">
                 <div
                     bind:this={scrollEl}
@@ -1352,65 +1523,84 @@
                     <Table.Root>
                         <Table.Header class="sticky top-0 z-10 bg-background">
                             {#if isMobileLayout}
-                            <Table.Row>
-                                {#if multiSelectMode}
-                                    <Table.Head class="w-10">
-                                        <Checkbox
-                                            checked={table.getIsAllPageRowsSelected()}
-                                            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
-                                            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
-                                            aria-label="Select all"
-                                        />
-                                    </Table.Head>
-                                {/if}
-                                <SortableHeader
-                                    active={sort.key === "description"}
-                                    direction={sort.direction}
-                                    onclick={() => sort.toggle("description")}
-                                    colspan={multiSelectMode ? undefined : visibleColCount}
-                                    >Description</SortableHeader
-                                >
-                            </Table.Row>
-                            {:else}
-                            {#each table.getHeaderGroups() as headerGroup}
-                            <Table.Row>
-                                {#each headerGroup.headers as header}
-                                    {#if header.column.id === "select"}
-                                        <Table.Head class="w-12">
+                                <Table.Row>
+                                    {#if multiSelectMode}
+                                        <Table.Head class="w-10">
                                             <Checkbox
                                                 checked={table.getIsAllPageRowsSelected()}
-                                                indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
-                                                onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+                                                indeterminate={table.getIsSomePageRowsSelected() &&
+                                                    !table.getIsAllPageRowsSelected()}
+                                                onCheckedChange={(v) =>
+                                                    table.toggleAllPageRowsSelected(
+                                                        !!v,
+                                                    )}
                                                 aria-label="Select all"
                                             />
                                         </Table.Head>
-                                    {:else if header.column.id === "date"}
-                                        <SortableHeader
-                                            active={sort.key === "date"}
-                                            direction={sort.direction}
-                                            onclick={() => sort.toggle("date")}
-                                            class="w-28"
-                                            >Date</SortableHeader
-                                        >
-                                    {:else if header.column.id === "description"}
-                                        <SortableHeader
-                                            active={sort.key === "description"}
-                                            direction={sort.direction}
-                                            onclick={() => sort.toggle("description")}
-                                            class="w-full"
-                                            >Description</SortableHeader
-                                        >
-                                    {:else if header.column.id === "amount"}
-                                        <SortableHeader
-                                            active={sort.key === "amount"}
-                                            direction={sort.direction}
-                                            onclick={() => sort.toggle("amount")}
-                                            class="text-right">Amount</SortableHeader
-                                        >
                                     {/if}
+                                    <SortableHeader
+                                        active={sort.key === "description"}
+                                        direction={sort.direction}
+                                        onclick={() =>
+                                            sort.toggle("description")}
+                                        colspan={multiSelectMode
+                                            ? undefined
+                                            : visibleColCount}
+                                        >Description</SortableHeader
+                                    >
+                                </Table.Row>
+                            {:else}
+                                {#each table.getHeaderGroups() as headerGroup}
+                                    <Table.Row>
+                                        {#each headerGroup.headers as header}
+                                            {#if header.column.id === "select"}
+                                                <Table.Head class="w-12">
+                                                    <Checkbox
+                                                        checked={table.getIsAllPageRowsSelected()}
+                                                        indeterminate={table.getIsSomePageRowsSelected() &&
+                                                            !table.getIsAllPageRowsSelected()}
+                                                        onCheckedChange={(v) =>
+                                                            table.toggleAllPageRowsSelected(
+                                                                !!v,
+                                                            )}
+                                                        aria-label="Select all"
+                                                    />
+                                                </Table.Head>
+                                            {:else if header.column.id === "date"}
+                                                <SortableHeader
+                                                    active={sort.key === "date"}
+                                                    direction={sort.direction}
+                                                    onclick={() =>
+                                                        sort.toggle("date")}
+                                                    class="w-28"
+                                                    >Date</SortableHeader
+                                                >
+                                            {:else if header.column.id === "description"}
+                                                <SortableHeader
+                                                    active={sort.key ===
+                                                        "description"}
+                                                    direction={sort.direction}
+                                                    onclick={() =>
+                                                        sort.toggle(
+                                                            "description",
+                                                        )}
+                                                    class="w-full"
+                                                    >Description</SortableHeader
+                                                >
+                                            {:else if header.column.id === "amount"}
+                                                <SortableHeader
+                                                    active={sort.key ===
+                                                        "amount"}
+                                                    direction={sort.direction}
+                                                    onclick={() =>
+                                                        sort.toggle("amount")}
+                                                    class="text-right"
+                                                    >Amount</SortableHeader
+                                                >
+                                            {/if}
+                                        {/each}
+                                    </Table.Row>
                                 {/each}
-                            </Table.Row>
-                            {/each}
                             {/if}
                         </Table.Header>
                         <Table.Body>
@@ -1426,132 +1616,216 @@
                             {#each virtualItems as vItem (vItem.key)}
                                 {@const row = rows[vItem.index]}
                                 {#if row}
-                                {@const [entry, items] = row.original}
-                                {#if isMobileLayout}
-                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                                {@const handlers = createLongPressHandlers(entry.id, row)}
-                                <tr
-                                    class="border-b touch-manipulation select-none {entry.status === 'voided' ? 'line-through opacity-50' : ''} {row.getIsSelected() ? 'bg-muted' : ''}"
-                                    data-state={row.getIsSelected() ? "selected" : undefined}
-                                    style={barStyle(items, maxEntryAmount)}
-                                    onpointerdown={handlers.onpointerdown}
-                                    onpointermove={handlers.onpointermove}
-                                    onpointerup={handlers.onpointerup}
-                                    onpointercancel={handlers.onpointercancel}
-                                    oncontextmenu={(e) => e.preventDefault()}
-                                >
-                                    {#if multiSelectMode}
-                                    <td class="w-10 p-2 align-middle">
-                                        <Checkbox
-                                            checked={row.getIsSelected()}
-                                            disabled={!row.getCanSelect()}
-                                            onCheckedChange={(v) => row.toggleSelected(!!v)}
-                                            aria-label="Select row"
-                                        />
-                                    </td>
-                                    {/if}
-                                    <td class="p-2 align-middle" colspan={multiSelectMode ? undefined : visibleColCount}>
-                                        <div class="flex justify-between items-baseline gap-2">
-                                            <span class="text-muted-foreground text-xs">{entry.date}</span>
-                                            <span class="font-mono text-sm text-right shrink-0" title={convertedTotals.get(entry.id) ?? ''}>
-                                                {#each entryAmountDisplay(items) as part, i}
-                                                    {#if i > 0}{' '}<span class="text-muted-foreground">+</span>{' '}{/if}
-                                                    <span class={amountColorClass(part.direction)}>{part.text}</span>
-                                                {/each}
-                                            </span>
-                                        </div>
-                                        <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5">
-                                            <span
-                                                class="font-medium truncate"
-                                                title={entry.description}
-                                            >{entry.description}</span>
-                                            {#if entryLinks.get(entry.id)?.length}
-                                                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                                                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                                <span onclick={(e) => e.stopPropagation()}>
-                                                    <LinkDisplay
-                                                        links={entryLinks.get(entry.id)!}
-                                                        class="shrink-0"
-                                                        onclick={addLinkFilter}
-                                                    />
-                                                </span>
-                                            {/if}
-                                            {#if entryTags.get(entry.id)?.length}
-                                                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                                                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                                <span onclick={(e) => e.stopPropagation()}>
-                                                    <TagDisplay
-                                                        tags={entryTags.get(entry.id)!}
-                                                        class="shrink-0"
-                                                        onclick={addTagFilter}
-                                                    />
-                                                </span>
-                                            {/if}
-                                        </div>
-                                    </td>
-                                </tr>
-                                {:else}
-                                <Table.Row
-                                    class={entry.status === 'voided' ? 'line-through opacity-50' : ''}
-                                    data-state={row.getIsSelected() ? "selected" : undefined}
-                                    style={barStyle(items, maxEntryAmount)}
-                                >
-                                    {#each row.getVisibleCells() as cell}
-                                        {#if cell.column.id === "select"}
-                                            <Table.Cell class="py-2 px-2 w-12">
-                                                <Checkbox
-                                                    checked={row.getIsSelected()}
-                                                    disabled={!row.getCanSelect()}
-                                                    onCheckedChange={(v) => row.toggleSelected(!!v)}
-                                                    aria-label="Select row"
-                                                />
-                                            </Table.Cell>
-                                        {:else if cell.column.id === "date"}
-                                            <Table.Cell class="text-muted-foreground text-sm p-2"
-                                                >{entry.date}</Table.Cell
-                                            >
-                                        {:else if cell.column.id === "description"}
-                                            <Table.Cell class="p-2">
-                                                <div
-                                                    class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
+                                    {@const [entry, items] = row.original}
+                                    {#if isMobileLayout}
+                                        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                        {@const handlers =
+                                            createLongPressHandlers(
+                                                entry.id,
+                                                row,
+                                            )}
+                                        <tr
+                                            class="border-b touch-manipulation select-none {entry.status ===
+                                            'voided'
+                                                ? 'line-through opacity-50'
+                                                : ''} {row.getIsSelected()
+                                                ? 'bg-muted'
+                                                : ''}"
+                                            data-state={row.getIsSelected()
+                                                ? "selected"
+                                                : undefined}
+                                            style={barStyle(
+                                                items,
+                                                maxEntryAmount,
+                                            )}
+                                            onpointerdown={handlers.onpointerdown}
+                                            onpointermove={handlers.onpointermove}
+                                            onpointerup={handlers.onpointerup}
+                                            onpointercancel={handlers.onpointercancel}
+                                            oncontextmenu={(e) =>
+                                                e.preventDefault()}
+                                        >
+                                            {#if multiSelectMode}
+                                                <td
+                                                    class="w-10 p-2 align-middle"
                                                 >
-                                                    <a
-                                                        href="/journal/{entry.id}"
-                                                        class="font-medium hover:underline truncate"
-                                                        title={entry.description}
-                                                        >{entry.description}</a
+                                                    <Checkbox
+                                                        checked={row.getIsSelected()}
+                                                        disabled={!row.getCanSelect()}
+                                                        onCheckedChange={(v) =>
+                                                            row.toggleSelected(
+                                                                !!v,
+                                                            )}
+                                                        aria-label="Select row"
+                                                    />
+                                                </td>
+                                            {/if}
+                                            <td
+                                                class="p-2 align-middle"
+                                                colspan={multiSelectMode
+                                                    ? undefined
+                                                    : visibleColCount}
+                                            >
+                                                <div
+                                                    class="flex justify-between items-baseline gap-2"
+                                                >
+                                                    <span
+                                                        class="text-muted-foreground text-xs"
+                                                        >{entry.date}</span
                                                     >
-                                                    {#if entryTags.get(entry.id)?.length}
-                                                        <TagDisplay
-                                                            tags={entryTags.get(
-                                                                entry.id,
-                                                            )!}
-                                                            class="shrink-0"
-                                                            onclick={addTagFilter}
-                                                        />
-                                                    {/if}
+                                                    <span
+                                                        class="font-mono text-sm text-right shrink-0"
+                                                        title={convertedTotals.get(
+                                                            entry.id,
+                                                        ) ?? ""}
+                                                    >
+                                                        {#each entryAmountDisplay(items) as part, i}
+                                                            {#if i > 0}{" "}<span
+                                                                    class="text-muted-foreground"
+                                                                    >+</span
+                                                                >{" "}{/if}
+                                                            <span
+                                                                class={amountColorClass(
+                                                                    part.direction,
+                                                                )}
+                                                                >{part.text}</span
+                                                            >
+                                                        {/each}
+                                                    </span>
+                                                </div>
+                                                <div
+                                                    class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5"
+                                                >
+                                                    <span
+                                                        class="font-medium truncate"
+                                                        title={entry.description}
+                                                        >{entry.description}</span
+                                                    >
                                                     {#if entryLinks.get(entry.id)?.length}
-                                                        <LinkDisplay
-                                                            links={entryLinks.get(
-                                                                entry.id,
-                                                            )!}
-                                                            class="shrink-0"
-                                                            onclick={addLinkFilter}
-                                                        />
+                                                        <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                        <span
+                                                            onclick={(e) =>
+                                                                e.stopPropagation()}
+                                                        >
+                                                            <LinkDisplay
+                                                                links={entryLinks.get(
+                                                                    entry.id,
+                                                                )!}
+                                                                class="shrink-0"
+                                                                onclick={addLinkFilter}
+                                                            />
+                                                        </span>
+                                                    {/if}
+                                                    {#if entryTags.get(entry.id)?.length}
+                                                        <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                        <span
+                                                            onclick={(e) =>
+                                                                e.stopPropagation()}
+                                                        >
+                                                            <TagDisplay
+                                                                tags={entryTags.get(
+                                                                    entry.id,
+                                                                )!}
+                                                                class="shrink-0"
+                                                                onclick={addTagFilter}
+                                                            />
+                                                        </span>
                                                     {/if}
                                                 </div>
-                                            </Table.Cell>
-                                        {:else if cell.column.id === "amount"}
-                                            <Table.Cell class="text-right font-mono p-2" title={convertedTotals.get(entry.id) ?? ''}>
-                                                {#each entryAmountDisplay(items) as part, i}
-                                                    {#if i > 0}{' '}<span class="text-muted-foreground">+</span>{' '}{/if}
-                                                    <span class={amountColorClass(part.direction)}>{part.text}</span>
-                                                {/each}
-                                            </Table.Cell>
-                                        {/if}
-                                    {/each}
-                                </Table.Row>
-                                {/if}
+                                            </td>
+                                        </tr>
+                                    {:else}
+                                        <Table.Row
+                                            class={entry.status === "voided"
+                                                ? "line-through opacity-50"
+                                                : ""}
+                                            data-state={row.getIsSelected()
+                                                ? "selected"
+                                                : undefined}
+                                            style={barStyle(
+                                                items,
+                                                maxEntryAmount,
+                                            )}
+                                        >
+                                            {#each row.getVisibleCells() as cell}
+                                                {#if cell.column.id === "select"}
+                                                    <Table.Cell
+                                                        class="py-2 px-2 w-12"
+                                                    >
+                                                        <Checkbox
+                                                            checked={row.getIsSelected()}
+                                                            disabled={!row.getCanSelect()}
+                                                            onCheckedChange={(
+                                                                v,
+                                                            ) =>
+                                                                row.toggleSelected(
+                                                                    !!v,
+                                                                )}
+                                                            aria-label="Select row"
+                                                        />
+                                                    </Table.Cell>
+                                                {:else if cell.column.id === "date"}
+                                                    <Table.Cell
+                                                        class="text-muted-foreground text-sm p-2"
+                                                        >{entry.date}</Table.Cell
+                                                    >
+                                                {:else if cell.column.id === "description"}
+                                                    <Table.Cell class="p-2">
+                                                        <div
+                                                            class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
+                                                        >
+                                                            <a
+                                                                href="/journal/{entry.id}"
+                                                                class="font-medium hover:underline truncate"
+                                                                title={entry.description}
+                                                                >{entry.description}</a
+                                                            >
+                                                            {#if entryTags.get(entry.id)?.length}
+                                                                <TagDisplay
+                                                                    tags={entryTags.get(
+                                                                        entry.id,
+                                                                    )!}
+                                                                    class="shrink-0"
+                                                                    onclick={addTagFilter}
+                                                                />
+                                                            {/if}
+                                                            {#if entryLinks.get(entry.id)?.length}
+                                                                <LinkDisplay
+                                                                    links={entryLinks.get(
+                                                                        entry.id,
+                                                                    )!}
+                                                                    class="shrink-0"
+                                                                    onclick={addLinkFilter}
+                                                                />
+                                                            {/if}
+                                                        </div>
+                                                    </Table.Cell>
+                                                {:else if cell.column.id === "amount"}
+                                                    <Table.Cell
+                                                        class="text-right font-mono p-2"
+                                                        title={convertedTotals.get(
+                                                            entry.id,
+                                                        ) ?? ""}
+                                                    >
+                                                        {#each entryAmountDisplay(items) as part, i}
+                                                            {#if i > 0}{" "}<span
+                                                                    class="text-muted-foreground"
+                                                                    >+</span
+                                                                >{" "}{/if}
+                                                            <span
+                                                                class={amountColorClass(
+                                                                    part.direction,
+                                                                )}
+                                                                >{part.text}</span
+                                                            >
+                                                        {/each}
+                                                    </Table.Cell>
+                                                {/if}
+                                            {/each}
+                                        </Table.Row>
+                                    {/if}
                                 {/if}
                             {/each}
                             {#if paddingBottom > 0}
@@ -1596,11 +1870,14 @@
         </Card.Root>
 
         {#if selectedCount > 0}
-            <div class="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-50
+            <div
+                class="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-50
                         flex items-center gap-3 rounded-lg border bg-background/95
-                        px-4 py-2.5 shadow-lg backdrop-blur-sm">
+                        px-4 py-2.5 shadow-lg backdrop-blur-sm"
+            >
                 <span class="text-sm text-muted-foreground whitespace-nowrap">
-                    {selectedCount} {selectedCount === 1 ? "entry" : "entries"} selected
+                    {selectedCount}
+                    {selectedCount === 1 ? "entry" : "entries"} selected
                 </span>
                 <div class="h-4 w-px bg-border"></div>
                 <Popover.Root bind:open={batchTagOpen}>
@@ -1615,28 +1892,47 @@
                         <div class="space-y-3">
                             <ButtonGroup.Root class="w-full">
                                 <Button
-                                    variant={batchTagMode === "add" ? "default" : "outline"}
-                                    size="sm" class="flex-1"
-                                    onclick={() => { batchTagMode = "add"; }}
-                                >Add</Button>
+                                    variant={batchTagMode === "add"
+                                        ? "default"
+                                        : "outline"}
+                                    size="sm"
+                                    class="flex-1"
+                                    onclick={() => {
+                                        batchTagMode = "add";
+                                    }}>Add</Button
+                                >
                                 <Button
-                                    variant={batchTagMode === "remove" ? "default" : "outline"}
-                                    size="sm" class="flex-1"
-                                    onclick={() => { batchTagMode = "remove"; }}
-                                >Remove</Button>
+                                    variant={batchTagMode === "remove"
+                                        ? "default"
+                                        : "outline"}
+                                    size="sm"
+                                    class="flex-1"
+                                    onclick={() => {
+                                        batchTagMode = "remove";
+                                    }}>Remove</Button
+                                >
                             </ButtonGroup.Root>
                             <TagInput
                                 tags={batchTags}
-                                onchange={(t) => { batchTags = t; }}
+                                onchange={(t) => {
+                                    batchTags = t;
+                                }}
                                 suggestions={tagOptions.map((o) => o.value)}
                             />
                             <Button
-                                size="sm" class="w-full"
-                                disabled={batchTagBusy || batchTags.length === 0}
+                                size="sm"
+                                class="w-full"
+                                disabled={batchTagBusy ||
+                                    batchTags.length === 0}
                                 onclick={handleBatchTag}
                             >
-                                {#if batchTagBusy}<Loader class="size-3 mr-1 animate-spin" />{/if}
-                                {batchTagMode === "add" ? "Add" : "Remove"} {batchTags.length} tag{batchTags.length !== 1 ? "s" : ""}
+                                {#if batchTagBusy}<Loader
+                                        class="size-3 mr-1 animate-spin"
+                                    />{/if}
+                                {batchTagMode === "add" ? "Add" : "Remove"}
+                                {batchTags.length} tag{batchTags.length !== 1
+                                    ? "s"
+                                    : ""}
                             </Button>
                         </div>
                     </Popover.Content>
@@ -1653,35 +1949,60 @@
                         <div class="space-y-3">
                             <ButtonGroup.Root class="w-full">
                                 <Button
-                                    variant={batchLinkMode === "add" ? "default" : "outline"}
-                                    size="sm" class="flex-1"
-                                    onclick={() => { batchLinkMode = "add"; }}
-                                >Add</Button>
+                                    variant={batchLinkMode === "add"
+                                        ? "default"
+                                        : "outline"}
+                                    size="sm"
+                                    class="flex-1"
+                                    onclick={() => {
+                                        batchLinkMode = "add";
+                                    }}>Add</Button
+                                >
                                 <Button
-                                    variant={batchLinkMode === "remove" ? "default" : "outline"}
-                                    size="sm" class="flex-1"
-                                    onclick={() => { batchLinkMode = "remove"; }}
-                                >Remove</Button>
+                                    variant={batchLinkMode === "remove"
+                                        ? "default"
+                                        : "outline"}
+                                    size="sm"
+                                    class="flex-1"
+                                    onclick={() => {
+                                        batchLinkMode = "remove";
+                                    }}>Remove</Button
+                                >
                             </ButtonGroup.Root>
                             <LinkInput
                                 links={batchLinks}
-                                onchange={(l) => { batchLinks = l; }}
+                                onchange={(l) => {
+                                    batchLinks = l;
+                                }}
                                 suggestions={linkOptions.map((o) => o.value)}
                             />
                             <Button
-                                size="sm" class="w-full"
-                                disabled={batchLinkBusy || batchLinks.length === 0}
+                                size="sm"
+                                class="w-full"
+                                disabled={batchLinkBusy ||
+                                    batchLinks.length === 0}
                                 onclick={handleBatchLink}
                             >
-                                {#if batchLinkBusy}<Loader class="size-3 mr-1 animate-spin" />{/if}
-                                {batchLinkMode === "add" ? "Add" : "Remove"} {batchLinks.length} link{batchLinks.length !== 1 ? "s" : ""}
+                                {#if batchLinkBusy}<Loader
+                                        class="size-3 mr-1 animate-spin"
+                                    />{/if}
+                                {batchLinkMode === "add" ? "Add" : "Remove"}
+                                {batchLinks.length} link{batchLinks.length !== 1
+                                    ? "s"
+                                    : ""}
                             </Button>
                         </div>
                     </Popover.Content>
                 </Popover.Root>
-                <Button variant="destructive" size="sm" disabled={batchVoiding}
-                    onclick={handleBatchVoid}>
-                    {#if batchVoiding}<Loader class="size-3.5 mr-1 animate-spin" />Voiding...{:else}Void Selected{/if}
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={batchVoiding}
+                    onclick={handleBatchVoid}
+                >
+                    {#if batchVoiding}<Loader
+                            class="size-3.5 mr-1 animate-spin"
+                        />Voiding...{:else}Void Selected{/if}
                 </Button>
                 <Button variant="ghost" size="sm" onclick={clearSelection}>
                     <X class="size-4" />
@@ -1762,10 +2083,21 @@
                                     >
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span class="font-mono text-xs" title={convertedTotals.get(entry.id) ?? ''}>
+                                    <span
+                                        class="font-mono text-xs"
+                                        title={convertedTotals.get(entry.id) ??
+                                            ""}
+                                    >
                                         {#each entryAmountDisplay(items) as part, i}
-                                            {#if i > 0}{' '}<span class="text-muted-foreground">+</span>{' '}{/if}
-                                            <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                            {#if i > 0}{" "}<span
+                                                    class="text-muted-foreground"
+                                                    >+</span
+                                                >{" "}{/if}
+                                            <span
+                                                class={amountColorClass(
+                                                    part.direction,
+                                                )}>{part.text}</span
+                                            >
                                         {/each}
                                     </span>
                                     <Badge variant="outline" class="text-xs"
