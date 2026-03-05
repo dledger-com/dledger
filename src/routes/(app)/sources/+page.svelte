@@ -1,6 +1,5 @@
 <script lang="ts">
     import * as Card from "$lib/components/ui/card/index.js";
-    import * as Select from "$lib/components/ui/select/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
@@ -55,6 +54,8 @@
     import LedgerImportDialog from "$lib/components/LedgerImportDialog.svelte";
     import SortableHeader from "$lib/components/SortableHeader.svelte";
     import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
+    import AddSourceInput from "$lib/components/AddSourceInput.svelte";
+    import type { ExchangeId } from "$lib/cex/types.js";
 
     let csvDialogOpen = $state(false);
     let csvInitialContent = $state("");
@@ -264,8 +265,9 @@
         lastSync: (a) => a.last_sync || "",
     };
 
-    let cexNewExchange =
-        $state<import("$lib/cex/types.js").ExchangeId>("kraken");
+    type AddSourceMode = "idle" | "cex" | "blockchain";
+    let addSourceMode = $state<AddSourceMode>("idle");
+    let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
     let cexNewApiKey = $state("");
     let cexNewApiSecret = $state("");
@@ -273,6 +275,34 @@
     let cexAdding = $state(false);
     const cexBusy = $derived(taskQueue.isActive("cex-sync"));
     const cexConsolidating = $derived(taskQueue.isActive("cex-consolidate"));
+
+    const EXCHANGE_NAMES: Record<ExchangeId, string> = {
+        kraken: "Kraken", binance: "Binance", coinbase: "Coinbase",
+        bybit: "Bybit", okx: "OKX", bitstamp: "Bitstamp", cryptocom: "Crypto.com",
+    };
+
+    function startAddCex(exchangeId: ExchangeId) {
+        addSourceMode = "cex";
+        addSourceExchangeId = exchangeId;
+    }
+
+    function startAddBlockchain(prefillAddress?: string) {
+        addSourceMode = "blockchain";
+        if (prefillAddress) newAddress = prefillAddress;
+    }
+
+    function cancelAdd() {
+        addSourceMode = "idle";
+        cexNewLabel = "";
+        cexNewApiKey = "";
+        cexNewApiSecret = "";
+        cexNewPassphrase = "";
+        newAddress = "";
+        newLabel = "";
+        selectedChainIds = new Set([1]);
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy);
 
     async function loadCexAccounts() {
         try {
@@ -291,7 +321,7 @@
         try {
             const account: ExchangeAccount = {
                 id: uuidv7(),
-                exchange: cexNewExchange,
+                exchange: addSourceExchangeId,
                 label: cexNewLabel,
                 api_key: cexNewApiKey,
                 api_secret: cexNewApiSecret,
@@ -300,10 +330,7 @@
                 created_at: new Date().toISOString(),
             };
             await getBackend().addExchangeAccount(account);
-            cexNewLabel = "";
-            cexNewApiKey = "";
-            cexNewApiSecret = "";
-            cexNewPassphrase = "";
+            cancelAdd();
             await loadCexAccounts();
             toast.success("Exchange account added");
         } catch (err) {
@@ -448,8 +475,7 @@
             for (const chainId of selectedChainIds) {
                 await getBackend().addEtherscanAccount(addr, chainId, label);
             }
-            newAddress = "";
-            newLabel = "";
+            cancelAdd();
             await loadEthAccounts();
             toast.success(`Address added to ${selectedChainIds.size} chain(s)`);
         } catch (err) {
@@ -535,6 +561,13 @@
         }
         for (const account of ethAccounts) {
             syncEthAccount(account);
+        }
+    }
+
+    function syncAll() {
+        for (const account of cexAccounts) syncCex(account);
+        if (settings.etherscanApiKey && ethAccounts.length > 0) {
+            for (const account of ethAccounts) syncEthAccount(account);
         }
     }
 
@@ -877,599 +910,446 @@
         initialFileName={pdfInitialFileName}
     />
 
-    <!-- Blockchain Sync -->
+    <!-- Online Sources -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Etherscan (Ethereum and derivatives)</Card.Title>
-            <Card.Description
-                >Sync transactions and token transfers from tracked addresses
-                across multiple chains.</Card.Description
-            >
+            <Card.Title>Online Sources</Card.Title>
+            <Card.Description>Sync data from exchanges and blockchains.</Card.Description>
         </Card.Header>
-        <Card.Content class="space-y-4">
-            <p class="text-sm text-muted-foreground">
-                API keys are configured in <a href="/settings" class="underline hover:text-foreground">Settings</a> under External Services.
-                {#if !settings.etherscanApiKey}
-                    <span class="text-amber-600 dark:text-amber-400 ml-1">No Etherscan API key set.</span>
-                {/if}
-            </p>
+        <Card.Content class="space-y-6">
+            <!-- Smart input / Add forms -->
+            {#if addSourceMode === "idle"}
+                <AddSourceInput
+                    onSelectCex={startAddCex}
+                    onSelectBlockchain={startAddBlockchain}
+                    disabled={anyBusy}
+                />
+            {:else if addSourceMode === "cex"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <Badge variant="secondary">{EXCHANGE_NAMES[addSourceExchangeId]}</Badge>
+                            <span class="text-sm font-medium">Add Exchange Account</span>
+                        </div>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <Input
+                        class="w-full sm:w-60"
+                        placeholder="Label (e.g., Main)"
+                        bind:value={cexNewLabel}
+                    />
+                    <div class="flex flex-wrap gap-2">
+                        <Input
+                            class="w-full sm:flex-1"
+                            type="password"
+                            placeholder={addSourceExchangeId === "coinbase"
+                                ? "API Key Name"
+                                : "API Key"}
+                            bind:value={cexNewApiKey}
+                        />
+                        <Input
+                            class="w-full sm:flex-1"
+                            type="password"
+                            placeholder={addSourceExchangeId === "coinbase"
+                                ? "EC Private Key (PEM)"
+                                : "API Secret"}
+                            bind:value={cexNewApiSecret}
+                        />
+                    </div>
+                    {#if getCexAdapter(addSourceExchangeId).requiresPassphrase}
+                        <Input
+                            class="w-full sm:w-64"
+                            type="password"
+                            placeholder="API Passphrase"
+                            bind:value={cexNewPassphrase}
+                        />
+                    {/if}
+                    <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
+                        <Plus class="mr-1 h-4 w-4" />
+                        Add Account
+                    </Button>
+                </div>
+            {:else if addSourceMode === "blockchain"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add EVM Address</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-eth-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-eth-address"
+                                placeholder="0x..."
+                                bind:value={newAddress}
+                            />
+                        </div>
+                        <div class="flex-1 space-y-1">
+                            <label for="new-eth-label" class="text-xs font-medium">Label</label>
+                            <Input
+                                id="new-eth-label"
+                                placeholder="My Wallet"
+                                bind:value={newLabel}
+                            />
+                        </div>
+                        <Button
+                            onclick={handleAddEthAccount}
+                            disabled={addingAccount ||
+                                !newAddress.trim() ||
+                                !newLabel.trim() ||
+                                selectedChainIds.size === 0}
+                        >
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
 
-            <!-- Tracked Addresses Table -->
-            {#if groupedAddresses.length > 0}
-                <Table.Root>
-                    <Table.Header>
-                        <Table.Row>
-                            <Table.Head>Address</Table.Head>
-                            <Table.Head>Label</Table.Head>
-                            <Table.Head>Chains</Table.Head>
-                            <Table.Head class="text-right">Actions</Table.Head>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {#each groupedAddresses as group}
-                            {#if editingAddress === group.address}
-                                <!-- Edit mode -->
-                                <Table.Row>
-                                    <Table.Cell colspan={4}>
-                                        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                                        <div
-                                            class="space-y-3 py-2"
-                                            role="form"
-                                            onkeydown={(e: KeyboardEvent) => {
-                                                if (e.key === "Escape")
-                                                    cancelEdit();
-                                            }}
-                                        >
-                                            <div
-                                                class="flex items-center gap-3"
-                                            >
-                                                <span
-                                                    class="font-mono text-sm text-muted-foreground"
-                                                    >{formatAddress(
-                                                        group.address,
-                                                    )}</span
+                    <!-- Chain selector -->
+                    <div class="space-y-2">
+                        <span class="text-xs font-medium">Chains</span>
+                        <Popover.Root bind:open={chainPopoverOpen}>
+                            <Popover.Trigger>
+                                <Button
+                                    variant="outline"
+                                    class="w-[300px] justify-between"
+                                >
+                                    {#if selectedChainIds.size === 0}
+                                        Select chains...
+                                    {:else}
+                                        {selectedChainIds.size} chain{selectedChainIds.size === 1 ? "" : "s"} selected
+                                    {/if}
+                                    <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </Popover.Trigger>
+                            <Popover.Content class="w-[300px] p-0">
+                                <Command.Root>
+                                    <Command.Input placeholder="Search chains..." />
+                                    <Command.List>
+                                        <Command.Empty>No chain found.</Command.Empty>
+                                        <Command.Group>
+                                            {#each SUPPORTED_CHAINS as chain}
+                                                <Command.Item
+                                                    value={chain.name}
+                                                    onSelect={() => toggleChain(chain.chain_id)}
                                                 >
-                                                <div class="flex-1">
-                                                    <Input
-                                                        placeholder="Label"
-                                                        bind:value={editLabel}
+                                                    <Check
+                                                        class={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            selectedChainIds.has(chain.chain_id)
+                                                                ? "opacity-100"
+                                                                : "opacity-0",
+                                                        )}
                                                     />
+                                                    {chain.name} ({chain.native_currency})
+                                                </Command.Item>
+                                            {/each}
+                                        </Command.Group>
+                                    </Command.List>
+                                </Command.Root>
+                            </Popover.Content>
+                        </Popover.Root>
+
+                        {#if selectedChainIds.size > 0}
+                            <div class="flex flex-wrap gap-1">
+                                {#each SUPPORTED_CHAINS.filter((c) => selectedChainIds.has(c.chain_id)) as chain}
+                                    <Badge variant="secondary" class="gap-1">
+                                        {chain.name}
+                                        <button
+                                            onclick={() => toggleChain(chain.chain_id)}
+                                            class="ml-0.5 rounded-full outline-none hover:bg-muted"
+                                        >
+                                            <X class="h-3 w-3" />
+                                        </button>
+                                    </Badge>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
+            <!-- Exchanges sub-section -->
+            {#if cexAccounts.length > 0}
+                <div class="space-y-2">
+                    <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Exchanges</h4>
+                    <Table.Root>
+                        <Table.Header>
+                            <Table.Row>
+                                <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>Exchange</SortableHeader>
+                                <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>Label</SortableHeader>
+                                <SortableHeader active={sortCex.key === "lastSync"} direction={sortCex.direction} onclick={() => sortCex.toggle("lastSync")} class="hidden sm:table-cell">Last Sync</SortableHeader>
+                                <Table.Head class="text-right">Actions</Table.Head>
+                            </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                            {@const sortedCexAccounts = sortCex.key && sortCex.direction ? sortItems(cexAccounts, cexAccessors[sortCex.key], sortCex.direction) : cexAccounts}
+                            {#each sortedCexAccounts as account}
+                                <Table.Row>
+                                    <Table.Cell>
+                                        <Badge variant="secondary">{account.exchange}</Badge>
+                                    </Table.Cell>
+                                    <Table.Cell class="font-medium">{account.label}</Table.Cell>
+                                    <Table.Cell class="hidden sm:table-cell">
+                                        {#if account.last_sync}
+                                            <span class="text-xs text-muted-foreground">{new Date(account.last_sync).toLocaleDateString()}</span>
+                                        {:else}
+                                            <span class="text-xs text-muted-foreground">Never</span>
+                                        {/if}
+                                    </Table.Cell>
+                                    <Table.Cell class="text-right">
+                                        <div class="flex items-center justify-end gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={cexBusy}
+                                                onclick={() => syncCex(account)}
+                                            >
+                                                <RefreshCw
+                                                    class="h-4 w-4 {taskQueue.queue.some(
+                                                        (t) =>
+                                                            t.key === `cex-sync:${account.id}` &&
+                                                            t.status === 'running',
+                                                    )
+                                                        ? 'animate-spin'
+                                                        : ''}"
+                                                />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onclick={() => removeCexAccount(account.id)}
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </Table.Cell>
+                                </Table.Row>
+                            {/each}
+                        </Table.Body>
+                    </Table.Root>
+                </div>
+            {/if}
+
+            <!-- Blockchain Addresses sub-section -->
+            {#if groupedAddresses.length > 0}
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Blockchain Addresses</h4>
+                        <span class="text-xs text-muted-foreground">
+                            API keys: <a href="/settings" class="underline hover:text-foreground">Settings</a>
+                            {#if !settings.etherscanApiKey}
+                                <span class="text-amber-600 dark:text-amber-400 ml-1">(not set)</span>
+                            {/if}
+                        </span>
+                    </div>
+                    <Table.Root>
+                        <Table.Header>
+                            <Table.Row>
+                                <Table.Head>Address</Table.Head>
+                                <Table.Head>Label</Table.Head>
+                                <Table.Head>Chains</Table.Head>
+                                <Table.Head class="text-right">Actions</Table.Head>
+                            </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                            {#each groupedAddresses as group}
+                                {#if editingAddress === group.address}
+                                    <!-- Edit mode -->
+                                    <Table.Row>
+                                        <Table.Cell colspan={4}>
+                                            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                            <div
+                                                class="space-y-3 py-2"
+                                                role="form"
+                                                onkeydown={(e: KeyboardEvent) => {
+                                                    if (e.key === "Escape") cancelEdit();
+                                                }}
+                                            >
+                                                <div class="flex items-center gap-3">
+                                                    <span class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</span>
+                                                    <div class="flex-1">
+                                                        <Input placeholder="Label" bind:value={editLabel} />
+                                                    </div>
+                                                </div>
+
+                                                <!-- Chain multi-select -->
+                                                <div class="space-y-2">
+                                                    <span class="text-xs font-medium">Chains</span>
+                                                    <Popover.Root bind:open={editChainPopoverOpen}>
+                                                        <Popover.Trigger>
+                                                            <Button variant="outline" class="w-[300px] justify-between">
+                                                                {#if editChainIds.size === 0}
+                                                                    Select chains...
+                                                                {:else}
+                                                                    {editChainIds.size} chain{editChainIds.size === 1 ? "" : "s"} selected
+                                                                {/if}
+                                                                <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                            </Button>
+                                                        </Popover.Trigger>
+                                                        <Popover.Content class="w-[300px] p-0">
+                                                            <Command.Root>
+                                                                <Command.Input placeholder="Search chains..." />
+                                                                <Command.List>
+                                                                    <Command.Empty>No chain found.</Command.Empty>
+                                                                    <Command.Group>
+                                                                        {#each SUPPORTED_CHAINS as chain}
+                                                                            <Command.Item
+                                                                                value={chain.name}
+                                                                                onSelect={() => toggleEditChain(chain.chain_id)}
+                                                                            >
+                                                                                <Check
+                                                                                    class={cn(
+                                                                                        "mr-2 h-4 w-4",
+                                                                                        editChainIds.has(chain.chain_id)
+                                                                                            ? "opacity-100"
+                                                                                            : "opacity-0",
+                                                                                    )}
+                                                                                />
+                                                                                {chain.name} ({chain.native_currency})
+                                                                            </Command.Item>
+                                                                        {/each}
+                                                                    </Command.Group>
+                                                                </Command.List>
+                                                            </Command.Root>
+                                                        </Popover.Content>
+                                                    </Popover.Root>
+
+                                                    {#if editChainIds.size > 0}
+                                                        <div class="flex flex-wrap gap-1">
+                                                            {#each SUPPORTED_CHAINS.filter((c) => editChainIds.has(c.chain_id)) as chain}
+                                                                <Badge variant="secondary" class="gap-1">
+                                                                    {chain.name}
+                                                                    <button
+                                                                        onclick={() => toggleEditChain(chain.chain_id)}
+                                                                        class="ml-0.5 rounded-full outline-none hover:bg-muted"
+                                                                    >
+                                                                        <X class="h-3 w-3" />
+                                                                    </button>
+                                                                </Badge>
+                                                            {/each}
+                                                        </div>
+                                                    {/if}
+                                                </div>
+
+                                                {#if editError}
+                                                    <p class="text-sm text-destructive">{editError}</p>
+                                                {/if}
+
+                                                <div class="flex gap-2">
+                                                    <Button size="sm" onclick={saveEdit} disabled={savingEdit}>
+                                                        {savingEdit ? "Saving..." : "Save"}
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" onclick={cancelEdit} disabled={savingEdit}>
+                                                        Cancel
+                                                    </Button>
                                                 </div>
                                             </div>
-
-                                            <!-- Chain multi-select -->
-                                            <div class="space-y-2">
-                                                <span
-                                                    class="text-xs font-medium"
-                                                    >Chains</span
-                                                >
-                                                <Popover.Root
-                                                    bind:open={
-                                                        editChainPopoverOpen
-                                                    }
-                                                >
-                                                    <Popover.Trigger>
-                                                        <Button
-                                                            variant="outline"
-                                                            class="w-[300px] justify-between"
-                                                        >
-                                                            {#if editChainIds.size === 0}
-                                                                Select chains...
-                                                            {:else}
-                                                                {editChainIds.size}
-                                                                chain{editChainIds.size ===
-                                                                1
-                                                                    ? ""
-                                                                    : "s"} selected
-                                                            {/if}
-                                                            <ChevronsUpDown
-                                                                class="ml-2 h-4 w-4 shrink-0 opacity-50"
-                                                            />
-                                                        </Button>
-                                                    </Popover.Trigger>
-                                                    <Popover.Content
-                                                        class="w-[300px] p-0"
-                                                    >
-                                                        <Command.Root>
-                                                            <Command.Input
-                                                                placeholder="Search chains..."
-                                                            />
-                                                            <Command.List>
-                                                                <Command.Empty
-                                                                    >No chain
-                                                                    found.</Command.Empty
-                                                                >
-                                                                <Command.Group>
-                                                                    {#each SUPPORTED_CHAINS as chain}
-                                                                        <Command.Item
-                                                                            value={chain.name}
-                                                                            onSelect={() =>
-                                                                                toggleEditChain(
-                                                                                    chain.chain_id,
-                                                                                )}
-                                                                        >
-                                                                            <Check
-                                                                                class={cn(
-                                                                                    "mr-2 h-4 w-4",
-                                                                                    editChainIds.has(
-                                                                                        chain.chain_id,
-                                                                                    )
-                                                                                        ? "opacity-100"
-                                                                                        : "opacity-0",
-                                                                                )}
-                                                                            />
-                                                                            {chain.name}
-                                                                            ({chain.native_currency})
-                                                                        </Command.Item>
-                                                                    {/each}
-                                                                </Command.Group>
-                                                            </Command.List>
-                                                        </Command.Root>
-                                                    </Popover.Content>
-                                                </Popover.Root>
-
-                                                {#if editChainIds.size > 0}
-                                                    <div
-                                                        class="flex flex-wrap gap-1"
-                                                    >
-                                                        {#each SUPPORTED_CHAINS.filter( (c) => editChainIds.has(c.chain_id), ) as chain}
-                                                            <Badge
-                                                                variant="secondary"
-                                                                class="gap-1"
-                                                            >
-                                                                {chain.name}
-                                                                <button
-                                                                    onclick={() =>
-                                                                        toggleEditChain(
-                                                                            chain.chain_id,
-                                                                        )}
-                                                                    class="ml-0.5 rounded-full outline-none hover:bg-muted"
-                                                                >
-                                                                    <X
-                                                                        class="h-3 w-3"
-                                                                    />
-                                                                </button>
-                                                            </Badge>
-                                                        {/each}
-                                                    </div>
-                                                {/if}
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else}
+                                    <!-- Display mode -->
+                                    {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">{formatAddress(group.address)}</Table.Cell>
+                                        <Table.Cell>{group.label}</Table.Cell>
+                                        <Table.Cell>
+                                            <div class="flex flex-wrap gap-1">
+                                                {#each group.chainIds as chainId}
+                                                    <Badge variant="secondary">{getChainName(chainId)}</Badge>
+                                                {/each}
                                             </div>
-
-                                            {#if editError}
-                                                <p
-                                                    class="text-sm text-destructive"
-                                                >
-                                                    {editError}
-                                                </p>
-                                            {/if}
-
-                                            <div class="flex gap-2">
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
                                                 <Button
+                                                    variant="outline"
                                                     size="sm"
-                                                    onclick={saveEdit}
-                                                    disabled={savingEdit}
+                                                    onclick={() => handleSyncGroup(group)}
+                                                    disabled={ethBusy || reprocessing || applyingReprocess}
                                                 >
-                                                    {savingEdit
-                                                        ? "Saving..."
-                                                        : "Save"}
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isSyncingGroup ? "Syncing..." : "Sync"}
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onclick={cancelEdit}
-                                                    disabled={savingEdit}
+                                                    onclick={() => handleReprocessGroup(group)}
+                                                    disabled={ethBusy || reprocessing || applyingReprocess}
                                                 >
-                                                    Cancel
+                                                    <RotateCw class="mr-1 h-3 w-3" />
+                                                    Reprocess
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => startEditAddress(group)}
+                                                    disabled={ethBusy || reprocessing || applyingReprocess}
+                                                >
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveGroup(group)}
+                                                    disabled={ethBusy || reprocessing || applyingReprocess}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
                                                 </Button>
                                             </div>
-                                        </div>
-                                    </Table.Cell>
-                                </Table.Row>
-                            {:else}
-                                <!-- Display mode -->
-                                {@const isSyncingGroup = taskQueue.isActive(
-                                    `etherscan-sync:${group.address}`,
-                                )}
-                                <Table.Row>
-                                    <Table.Cell class="font-mono text-sm"
-                                        >{formatAddress(
-                                            group.address,
-                                        )}</Table.Cell
-                                    >
-                                    <Table.Cell>{group.label}</Table.Cell>
-                                    <Table.Cell>
-                                        <div class="flex flex-wrap gap-1">
-                                            {#each group.chainIds as chainId}
-                                                <Badge variant="secondary"
-                                                    >{getChainName(
-                                                        chainId,
-                                                    )}</Badge
-                                                >
-                                            {/each}
-                                        </div>
-                                    </Table.Cell>
-                                    <Table.Cell class="text-right">
-                                        <div class="flex justify-end gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onclick={() =>
-                                                    handleSyncGroup(group)}
-                                                disabled={ethBusy ||
-                                                    reprocessing ||
-                                                    applyingReprocess}
-                                            >
-                                                <RefreshCw
-                                                    class="mr-1 h-3 w-3"
-                                                />
-                                                {isSyncingGroup
-                                                    ? "Syncing..."
-                                                    : "Sync"}
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onclick={() =>
-                                                    handleReprocessGroup(group)}
-                                                disabled={ethBusy ||
-                                                    reprocessing ||
-                                                    applyingReprocess}
-                                            >
-                                                <RotateCw
-                                                    class="mr-1 h-3 w-3"
-                                                />
-                                                Reprocess
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onclick={() =>
-                                                    startEditAddress(group)}
-                                                disabled={ethBusy ||
-                                                    reprocessing ||
-                                                    applyingReprocess}
-                                            >
-                                                <Pencil class="h-3 w-3" />
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onclick={() =>
-                                                    handleRemoveGroup(group)}
-                                                disabled={ethBusy ||
-                                                    reprocessing ||
-                                                    applyingReprocess}
-                                            >
-                                                <Trash2 class="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                    </Table.Cell>
-                                </Table.Row>
-                            {/if}
-                        {/each}
-                    </Table.Body>
-                </Table.Root>
-            {:else}
-                <p class="text-sm text-muted-foreground">
-                    No tracked addresses yet. Add one below.
-                </p>
-            {/if}
-
-            <!-- Add Address Form -->
-            <div class="space-y-3">
-                <div class="flex items-end gap-2">
-                    <div class="flex-1 space-y-1">
-                        <label for="new-eth-address" class="text-xs font-medium"
-                            >Address</label
-                        >
-                        <Input
-                            id="new-eth-address"
-                            placeholder="0x..."
-                            bind:value={newAddress}
-                        />
-                    </div>
-                    <div class="flex-1 space-y-1">
-                        <label for="new-eth-label" class="text-xs font-medium"
-                            >Label</label
-                        >
-                        <Input
-                            id="new-eth-label"
-                            placeholder="My Wallet"
-                            bind:value={newLabel}
-                        />
-                    </div>
-                    <Button
-                        onclick={handleAddEthAccount}
-                        disabled={addingAccount ||
-                            !newAddress.trim() ||
-                            !newLabel.trim() ||
-                            selectedChainIds.size === 0}
-                    >
-                        <Plus class="mr-1 h-4 w-4" />
-                        Add
-                    </Button>
-                </div>
-
-                <!-- Chain selector -->
-                <div class="space-y-2">
-                    <span class="text-xs font-medium">Chains</span>
-                    <Popover.Root bind:open={chainPopoverOpen}>
-                        <Popover.Trigger>
-                            <Button
-                                variant="outline"
-                                class="w-[300px] justify-between"
-                            >
-                                {#if selectedChainIds.size === 0}
-                                    Select chains...
-                                {:else}
-                                    {selectedChainIds.size} chain{selectedChainIds.size ===
-                                    1
-                                        ? ""
-                                        : "s"} selected
+                                        </Table.Cell>
+                                    </Table.Row>
                                 {/if}
-                                <ChevronsUpDown
-                                    class="ml-2 h-4 w-4 shrink-0 opacity-50"
-                                />
-                            </Button>
-                        </Popover.Trigger>
-                        <Popover.Content class="w-[300px] p-0">
-                            <Command.Root>
-                                <Command.Input placeholder="Search chains..." />
-                                <Command.List>
-                                    <Command.Empty
-                                        >No chain found.</Command.Empty
-                                    >
-                                    <Command.Group>
-                                        {#each SUPPORTED_CHAINS as chain}
-                                            <Command.Item
-                                                value={chain.name}
-                                                onSelect={() =>
-                                                    toggleChain(chain.chain_id)}
-                                            >
-                                                <Check
-                                                    class={cn(
-                                                        "mr-2 h-4 w-4",
-                                                        selectedChainIds.has(
-                                                            chain.chain_id,
-                                                        )
-                                                            ? "opacity-100"
-                                                            : "opacity-0",
-                                                    )}
-                                                />
-                                                {chain.name} ({chain.native_currency})
-                                            </Command.Item>
-                                        {/each}
-                                    </Command.Group>
-                                </Command.List>
-                            </Command.Root>
-                        </Popover.Content>
-                    </Popover.Root>
-
-                    {#if selectedChainIds.size > 0}
-                        <div class="flex flex-wrap gap-1">
-                            {#each SUPPORTED_CHAINS.filter( (c) => selectedChainIds.has(c.chain_id), ) as chain}
-                                <Badge variant="secondary" class="gap-1">
-                                    {chain.name}
-                                    <button
-                                        onclick={() =>
-                                            toggleChain(chain.chain_id)}
-                                        class="ml-0.5 rounded-full outline-none hover:bg-muted"
-                                    >
-                                        <X class="h-3 w-3" />
-                                    </button>
-                                </Badge>
                             {/each}
-                        </div>
-                    {/if}
+                        </Table.Body>
+                    </Table.Root>
                 </div>
-            </div>
-        </Card.Content>
-        <Card.Footer class="flex justify-between">
-            <Button variant="outline" href="/journal">Back</Button>
-            <div class="flex gap-2">
-                <Button
-                    variant="outline"
-                    onclick={handleReprocessAll}
-                    disabled={ethBusy ||
-                        reprocessing ||
-                        applyingReprocess ||
-                        ethAccounts.length === 0}
-                >
-                    <RotateCw class="mr-1 h-4 w-4" />
-                    {taskQueue.isActive("reprocess-dryrun:all")
-                        ? "Scanning..."
-                        : "Reprocess All"}
-                </Button>
-                <Button
-                    onclick={handleSyncAll}
-                    disabled={ethBusy ||
-                        reprocessing ||
-                        applyingReprocess ||
-                        ethAccounts.length === 0 ||
-                        !settings.etherscanApiKey}
-                >
-                    <RefreshCw class="mr-1 h-4 w-4" />
-                    {ethBusy ? "Syncing All..." : "Sync All"}
-                </Button>
-            </div>
-        </Card.Footer>
-    </Card.Root>
-
-    <!-- Centralized Exchanges -->
-    <Card.Root>
-        <Card.Header>
-            <Card.Title>Centralized Exchanges</Card.Title>
-            <Card.Description
-                >Import trade history, deposits, and withdrawals from
-                centralized exchanges.</Card.Description
-            >
-        </Card.Header>
-        <Card.Content class="space-y-4">
-            {#if cexAccounts.length > 0}
-                <Table.Root>
-                    <Table.Header>
-                        <Table.Row>
-                            <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>Exchange</SortableHeader>
-                            <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>Label</SortableHeader>
-                            <SortableHeader active={sortCex.key === "lastSync"} direction={sortCex.direction} onclick={() => sortCex.toggle("lastSync")} class="hidden sm:table-cell">Last Sync</SortableHeader>
-                            <Table.Head class="text-right">Actions</Table.Head>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {@const sortedCexAccounts = sortCex.key && sortCex.direction ? sortItems(cexAccounts, cexAccessors[sortCex.key], sortCex.direction) : cexAccounts}
-                        {#each sortedCexAccounts as account}
-                            <Table.Row>
-                                <Table.Cell>
-                                    <Badge variant="secondary"
-                                        >{account.exchange}</Badge
-                                    >
-                                </Table.Cell>
-                                <Table.Cell class="font-medium"
-                                    >{account.label}</Table.Cell
-                                >
-                                <Table.Cell class="hidden sm:table-cell">
-                                    {#if account.last_sync}
-                                        <span
-                                            class="text-xs text-muted-foreground"
-                                            >{new Date(
-                                                account.last_sync,
-                                            ).toLocaleDateString()}</span
-                                        >
-                                    {:else}
-                                        <span
-                                            class="text-xs text-muted-foreground"
-                                            >Never</span
-                                        >
-                                    {/if}
-                                </Table.Cell>
-                                <Table.Cell class="text-right">
-                                    <div
-                                        class="flex items-center justify-end gap-1"
-                                    >
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={cexBusy}
-                                            onclick={() => syncCex(account)}
-                                        >
-                                            <RefreshCw
-                                                class="h-4 w-4 {taskQueue.queue.some(
-                                                    (t) =>
-                                                        t.key ===
-                                                            `cex-sync:${account.id}` &&
-                                                        t.status === 'running',
-                                                )
-                                                    ? 'animate-spin'
-                                                    : ''}"
-                                            />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onclick={() =>
-                                                removeCexAccount(account.id)}
-                                        >
-                                            <Trash2 class="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </Table.Cell>
-                            </Table.Row>
-                        {/each}
-                    </Table.Body>
-                </Table.Root>
             {/if}
 
-            <!-- Add exchange form -->
-            <div class="space-y-3 rounded-lg border p-4">
-                <h4 class="text-sm font-medium">Add Exchange Account</h4>
-                <div class="flex flex-wrap gap-2">
-                    <div class="w-full sm:w-auto">
-                        <Select.Root type="single" bind:value={cexNewExchange}>
-                            <Select.Trigger class="w-full sm:w-40">
-                                {({ kraken: "Kraken", binance: "Binance", coinbase: "Coinbase", bybit: "Bybit", okx: "OKX", bitstamp: "Bitstamp", cryptocom: "Crypto.com" } as Record<string, string>)[cexNewExchange] ?? cexNewExchange}
-                            </Select.Trigger>
-                            <Select.Content>
-                                <Select.Item value="kraken">Kraken</Select.Item>
-                                <Select.Item value="binance">Binance</Select.Item>
-                                <Select.Item value="coinbase">Coinbase</Select.Item>
-                                <Select.Item value="bybit">Bybit</Select.Item>
-                                <Select.Item value="okx">OKX</Select.Item>
-                                <Select.Item value="bitstamp">Bitstamp</Select.Item>
-                                <Select.Item value="cryptocom">Crypto.com</Select.Item>
-                            </Select.Content>
-                        </Select.Root>
-                    </div>
-                    <Input
-                        class="w-full sm:w-40"
-                        placeholder="Label (e.g., Main)"
-                        bind:value={cexNewLabel}
-                    />
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <Input
-                        class="w-full sm:flex-1"
-                        type="password"
-                        placeholder={cexNewExchange === "coinbase"
-                            ? "API Key Name"
-                            : "API Key"}
-                        bind:value={cexNewApiKey}
-                    />
-                    <Input
-                        class="w-full sm:flex-1"
-                        type="password"
-                        placeholder={cexNewExchange === "coinbase"
-                            ? "EC Private Key (PEM)"
-                            : "API Secret"}
-                        bind:value={cexNewApiSecret}
-                    />
-                </div>
-                {#if getCexAdapter(cexNewExchange).requiresPassphrase}
-                    <Input
-                        class="w-full sm:w-64"
-                        type="password"
-                        placeholder="API Passphrase"
-                        bind:value={cexNewPassphrase}
-                    />
+            <!-- Empty state -->
+            {#if cexAccounts.length === 0 && groupedAddresses.length === 0 && addSourceMode === "idle"}
+                <p class="text-sm text-muted-foreground">No online sources configured yet.</p>
+            {/if}
+        </Card.Content>
+
+        <!-- Footer with unified actions -->
+        {#if cexAccounts.length > 0 || ethAccounts.length > 0}
+            <Card.Footer class="flex justify-end gap-2">
+                {#if ethAccounts.length > 0 && cexAccounts.length > 0}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={cexBusy || cexConsolidating}
+                        onclick={handleConsolidateCex}
+                    >
+                        <Link2 class="mr-1 h-4 w-4" />
+                        {cexConsolidating ? "Consolidating..." : "Consolidate"}
+                    </Button>
                 {/if}
-                <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
-                    <Plus class="mr-1 h-4 w-4" />
-                    Add Account
+                {#if ethAccounts.length > 0}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={handleReprocessAll}
+                        disabled={ethBusy || reprocessing || applyingReprocess || ethAccounts.length === 0}
+                    >
+                        <RotateCw class="mr-1 h-4 w-4" />
+                        {taskQueue.isActive("reprocess-dryrun:all") ? "Scanning..." : "Reprocess All"}
+                    </Button>
+                {/if}
+                <Button
+                    size="sm"
+                    onclick={syncAll}
+                    disabled={anyBusy || reprocessing || applyingReprocess}
+                >
+                    <RefreshCw class="mr-1 h-4 w-4 {anyBusy ? 'animate-spin' : ''}" />
+                    {anyBusy ? "Syncing..." : "Sync All"}
                 </Button>
-            </div>
-
-            {#if cexAccounts.length > 0}
-                <div class="flex justify-end gap-2">
-                    {#if ethAccounts.length > 0}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={cexBusy || cexConsolidating}
-                            onclick={handleConsolidateCex}
-                        >
-                            <Link2 class="mr-1 h-4 w-4" />
-                            {cexConsolidating
-                                ? "Consolidating..."
-                                : "Consolidate"}
-                        </Button>
-                    {/if}
-                    {#if cexAccounts.length > 1}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={cexBusy}
-                            onclick={syncAllCex}
-                        >
-                            <RefreshCw
-                                class="mr-1 h-4 w-4 {cexBusy
-                                    ? 'animate-spin'
-                                    : ''}"
-                            />
-                            Sync All
-                        </Button>
-                    {/if}
-                </div>
-            {/if}
-        </Card.Content>
+            </Card.Footer>
+        {/if}
     </Card.Root>
 
     <!-- Transaction Handlers -->
