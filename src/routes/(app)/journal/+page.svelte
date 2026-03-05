@@ -473,21 +473,28 @@
             if (remainder > 0.005) mainByCode.set(d.currency, remainder);
         }
 
-        const parts: AmountPart[] = [];
+        const parts: { text: string; direction: AmountDirection; total: number }[] = [];
         const mainDir: AmountDirection = hasIncome ? 'income' : 'default';
 
         if (mainByCode.size > 0) {
+            const total = [...mainByCode.values()].reduce((s, a) => s + a, 0);
             parts.push({
                 text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(', '),
-                direction: mainDir
+                direction: mainDir,
+                total
             });
         }
         if (expenseByCode.size > 0) {
+            const total = [...expenseByCode.values()].reduce((s, a) => s + a, 0);
             parts.push({
                 text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(', '),
-                direction: 'expense'
+                direction: 'expense',
+                total
             });
         }
+
+        // Largest amount first (left to right)
+        parts.sort((a, b) => b.total - a.total);
 
         return parts.length > 0 ? parts
             : [{ text: formatCurrency(0, settings.currency), direction: 'default' }];
