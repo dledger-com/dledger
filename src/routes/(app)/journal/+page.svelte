@@ -1002,6 +1002,90 @@
         ),
     );
 
+    // --- Daily income/expense bar chart ---
+    // Lazy-load chart dependencies
+    let BarChart_imported = $state<
+        typeof import("layerchart").BarChart | null
+    >(null);
+    let Rule_imported = $state<typeof import("layerchart").Rule | null>(null);
+
+    $effect(() => {
+        import("layerchart").then((lc) => {
+            BarChart_imported = lc.BarChart;
+            Rule_imported = lc.Rule;
+        });
+    });
+
+    // Aggregate daily income/expense from displayEntries
+    const chartData = $derived.by(() => {
+        const map = new Map<
+            string,
+            { date: Date; income: number; expense: number }
+        >();
+        for (const [entry, items] of displayEntries) {
+            const dateKey = entry.date;
+            let rec = map.get(dateKey);
+            if (!rec) {
+                rec = { date: new Date(dateKey + "T00:00:00"), income: 0, expense: 0 };
+                map.set(dateKey, rec);
+            }
+            for (const item of items) {
+                const name = accountIdToName.get(item.account_id) ?? "";
+                const amt = Math.abs(parseFloat(item.amount));
+                if (name.startsWith("Income:") || name === "Income") {
+                    rec.income += amt;
+                } else if (
+                    name.startsWith("Expenses:") ||
+                    name === "Expenses"
+                ) {
+                    rec.expense += amt;
+                }
+            }
+        }
+        return [...map.values()].sort(
+            (a, b) => a.date.getTime() - b.date.getTime(),
+        );
+    });
+
+    // Current scroll date (for chart cursor)
+    const currentChartDate = $derived(
+        sortedEntries[virtualItems[0]?.index]?.[0]?.date ?? "",
+    );
+
+    // Scroll journal to a given date
+    function scrollToDate(target: Date) {
+        // Find closest date in sortedEntries
+        let bestIdx = 0;
+        let bestDiff = Infinity;
+        for (let i = 0; i < sortedEntries.length; i++) {
+            const d = sortedEntries[i][0].date;
+            const diff = Math.abs(
+                new Date(d + "T00:00:00").getTime() - target.getTime(),
+            );
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                bestIdx = i;
+            }
+        }
+        virtualizer.scrollToIndex(bestIdx, { align: "start" });
+    }
+
+    // Chart drag-to-scroll state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let chartContext = $state<any>(null);
+    let isDragging = $state(false);
+
+    function handleChartPointer(e: PointerEvent) {
+        if (!chartContext || !isDragging) return;
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const x = e.clientX - rect.left - (chartContext.padding?.left ?? 0);
+        const xScale = chartContext.xScale;
+        if (xScale && typeof xScale.invert === "function") {
+            const date = xScale.invert(x);
+            scrollToDate(date);
+        }
+    }
+
     let showPill = $state(false);
     let pillTimer: ReturnType<typeof setTimeout>;
     $effect(() => {
@@ -1468,6 +1552,64 @@
             </DropdownMenu.Root>
         </div>
     </div>
+
+    {#if !store.loading && chartData.length > 1 && BarChart_imported}
+        {@const BarChartComp = BarChart_imported}
+        <!-- svelte-ignore binding_property_non_reactive -->
+        <div
+            class="h-24 px-2 cursor-crosshair select-none touch-none"
+            onpointerdown={(e) => {
+                isDragging = true;
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                handleChartPointer(e);
+            }}
+            onpointermove={handleChartPointer}
+            onpointerup={(e) => {
+                isDragging = false;
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }}
+            onpointercancel={() => (isDragging = false)}
+        >
+            <BarChartComp
+                data={chartData}
+                x="date"
+                axis="x"
+                grid={false}
+                rule={false}
+                series={[
+                    {
+                        key: "expense",
+                        label: "Expenses",
+                        color: "var(--color-red-500)",
+                    },
+                    {
+                        key: "income",
+                        label: "Income",
+                        color: "var(--color-green-500)",
+                    },
+                ]}
+                seriesLayout="stack"
+                bandPadding={0.15}
+                tooltip={false}
+                bind:context={chartContext}
+                props={{
+                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" },
+                }}
+            >
+                {#snippet aboveMarks()}
+                    {#if Rule_imported && currentChartDate}
+                        {@const RuleComp = Rule_imported}
+                        <RuleComp
+                            x={new Date(currentChartDate + "T00:00:00")}
+                            class="stroke-foreground/50"
+                            stroke-dasharray="4 3"
+                            stroke-width={1.5}
+                        />
+                    {/if}
+                {/snippet}
+            </BarChartComp>
+        </div>
+    {/if}
 
     {#if store.loading}
         <Card.Root class="border-x-0 rounded-none shadow-none">
