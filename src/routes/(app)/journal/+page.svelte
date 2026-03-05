@@ -1348,7 +1348,7 @@
                                             <span class="text-muted-foreground text-xs">{entry.date}</span>
                                             <span class="font-mono text-sm text-right shrink-0" title={convertedTotals.get(entry.id) ?? ''}>
                                                 {#each entryAmountDisplay(items) as part, i}
-                                                    {#if i > 0}<span class="text-muted-foreground"> + </span>{/if}
+                                                    {#if i > 0}{' '}<span class="text-muted-foreground">+</span>{' '}{/if}
                                                     <span class={amountColorClass(part.direction)}>{part.text}</span>
                                                 {/each}
                                             </span>
@@ -1436,7 +1436,7 @@
                                         {:else if cell.column.id === "amount"}
                                             <Table.Cell class="text-right font-mono p-2" title={convertedTotals.get(entry.id) ?? ''}>
                                                 {#each entryAmountDisplay(items) as part, i}
-                                                    {#if i > 0}<span class="text-muted-foreground"> + </span>{/if}
+                                                    {#if i > 0}{' '}<span class="text-muted-foreground">+</span>{' '}{/if}
                                                     <span class={amountColorClass(part.direction)}>{part.text}</span>
                                                 {/each}
                                             </Table.Cell>
@@ -1656,7 +1656,7 @@
                                 <div class="flex items-center gap-2">
                                     <span class="font-mono text-xs" title={convertedTotals.get(entry.id) ?? ''}>
                                         {#each entryAmountDisplay(items) as part, i}
-                                            {#if i > 0}<span class="text-muted-foreground"> + </span>{/if}
+                                            {#if i > 0}{' '}<span class="text-muted-foreground">+</span>{' '}{/if}
                                             <span class={amountColorClass(part.direction)}>{part.text}</span>
                                         {/each}
                                     </span>
