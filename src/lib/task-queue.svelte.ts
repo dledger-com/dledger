@@ -204,7 +204,10 @@ class TaskQueueStore {
         next.status = "cancelled";
       } else {
         next.status = "failed";
-        next.error = err instanceof Error ? err.message : String(err);
+        next.error =
+          err instanceof Error
+            ? err.message || err.name || "Unknown error"
+            : String(err) || "Unknown error";
       }
     } finally {
       next.finishedAt = Date.now();

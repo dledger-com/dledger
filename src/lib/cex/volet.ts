@@ -30,7 +30,7 @@ async function voletSoap(
 ): Promise<Document> {
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:wsm="http://wsm.advcash.com/">
+                  xmlns:wsm="http://api.volet.com/">
   <soapenv:Body>
     <wsm:${action}>
       <arg0>
@@ -161,7 +161,7 @@ export class VoletAdapter implements CexAdapter {
         const direction = getText(tx, "direction");
         const txName = getText(tx, "transactionName");
         const fee = getText(tx, "fullCommission");
-        const timestamp = getText(tx, "sci_timestamp") || getText(tx, "startTime");
+        const timestamp = getText(tx, "startTime");
         const senderEmail = getText(tx, "senderEmail");
         const receiverEmail = getText(tx, "receiverEmail");
         const comment = getText(tx, "comment");
@@ -170,11 +170,14 @@ export class VoletAdapter implements CexAdapter {
         const isOutgoing = direction === "OUTGOING";
         const signedAmount = isOutgoing ? `-${amount}` : amount;
 
-        // Parse timestamp — Volet returns "YYYY-MM-DD HH:mm:ss" in UTC
+        // Parse timestamp — Volet returns xs:dateTime (ISO 8601)
         let ts: number;
         if (timestamp) {
-          ts = new Date(timestamp.replace(" ", "T") + "Z").getTime() / 1000;
+          ts = new Date(timestamp).getTime() / 1000;
         } else {
+          ts = Date.now() / 1000;
+        }
+        if (isNaN(ts)) {
           ts = Date.now() / 1000;
         }
 
