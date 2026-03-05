@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS line_item (
     currency_param TEXT NOT NULL DEFAULT '',
     amount TEXT NOT NULL,
     lot_id TEXT REFERENCES lot(id),
+    is_reconciled INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
 );
 CREATE INDEX IF NOT EXISTS idx_line_item_entry ON line_item(journal_entry_id);
@@ -453,8 +454,7 @@ export class SqlJsBackend implements Backend {
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(SCHEMA_SQL);
     db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
-    // Reconciliation tables (v9)
-    db.exec("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0");
+    // Reconciliation tables (v9) — is_reconciled already in base SCHEMA_SQL
     db.exec(`CREATE TABLE IF NOT EXISTS reconciliation (
       id TEXT PRIMARY KEY, account_id TEXT NOT NULL, statement_date TEXT NOT NULL,
       statement_balance TEXT NOT NULL, currency TEXT NOT NULL, reconciled_at TEXT NOT NULL,
@@ -505,8 +505,7 @@ export class SqlJsBackend implements Backend {
     if (!saved) {
       db.exec(SCHEMA_SQL);
       db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
-      // Reconciliation tables (v9)
-      db.exec("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0");
+      // Reconciliation tables (v9) — is_reconciled already in base SCHEMA_SQL
       db.exec(`CREATE TABLE IF NOT EXISTS reconciliation (
         id TEXT PRIMARY KEY, account_id TEXT NOT NULL, statement_date TEXT NOT NULL,
         statement_balance TEXT NOT NULL, currency TEXT NOT NULL, reconciled_at TEXT NOT NULL,
@@ -928,6 +927,8 @@ PRAGMA foreign_keys = ON;
         }
       }
     }
+    // Idempotent cleanup: ensure is_reconciled exists on line_item
+    try { db.exec("ALTER TABLE line_item ADD COLUMN is_reconciled INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
     // Idempotent cleanup: handle DBs that had old v18 (opening_balance table)
     // but lack the new v18 column (opened_at).
     try { db.exec("ALTER TABLE account ADD COLUMN opened_at TEXT"); } catch { /* already exists */ }
