@@ -10,22 +10,13 @@
   const isDesktop = new MediaQuery("(min-width: 768px)");
 </script>
 
-{#if isDesktop.current}
-  <Sidebar.Provider>
-    <AppSidebar />
-    <Sidebar.Inset>
-      <TopBar showSidebarTrigger={true} />
-      <main class="flex-1 flex flex-col overflow-auto p-4">
-        {@render children?.()}
-      </main>
-    </Sidebar.Inset>
-  </Sidebar.Provider>
-{:else}
-  <div class="flex h-screen flex-col">
-    <TopBar showSidebarTrigger={false} />
-    <main class="flex-1 flex flex-col overflow-auto p-4 pb-20">
+<Sidebar.Provider>
+  <AppSidebar />
+  <Sidebar.Inset>
+    <TopBar showSidebarTrigger={isDesktop.current} />
+    <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4">
       {@render children?.()}
     </main>
-    <BottomTabBar />
-  </div>
-{/if}
+  </Sidebar.Inset>
+  <BottomTabBar />
+</Sidebar.Provider>
