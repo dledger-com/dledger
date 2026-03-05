@@ -399,18 +399,28 @@
         const segments = entryBarSegments(items);
         if (segments.length === 0) return '';
 
-        // Sort descending by amount so largest is listed last (painted behind)
-        const sorted = [...segments].sort((a, b) => b.amount - a.amount);
+        // Single segment: simple gradient (common case)
+        if (segments.length === 1) {
+            const pct = Math.min((segments[0].amount / maxAmount) * 66.67, 66.67);
+            if (pct <= 0) return '';
+            const color = barBgColor(segments[0].direction);
+            return `background-image: linear-gradient(to left, ${color} 0%, ${color} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%)`;
+        }
 
-        const gradients = sorted.map(seg => {
-            const pct = Math.min((seg.amount / maxAmount) * 66.67, 66.67);
-            if (pct <= 0) return null;
+        // Multiple segments: place side-by-side from right edge, smallest rightmost
+        const sorted = [...segments].sort((a, b) => a.amount - b.amount);
+        const stops: string[] = [];
+        let cursor = 0;
+        for (const seg of sorted) {
+            const pct = Math.min((seg.amount / maxAmount) * 66.67, 66.67 - cursor);
+            if (pct <= 0) continue;
             const color = barBgColor(seg.direction);
-            return `linear-gradient(to left, ${color} 0%, ${color} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%)`;
-        }).filter(Boolean);
-
-        if (gradients.length === 0) return '';
-        return `background-image: ${gradients.join(', ')}`;
+            stops.push(`${color} ${cursor.toFixed(1)}% ${(cursor + pct).toFixed(1)}%`);
+            cursor += pct;
+        }
+        if (stops.length === 0) return '';
+        stops.push(`transparent ${cursor.toFixed(1)}%`);
+        return `background-image: linear-gradient(to left, ${stops.join(', ')})`;
     }
 
     function entryAmountDisplay(items: LineItem[]): AmountPart[] {
