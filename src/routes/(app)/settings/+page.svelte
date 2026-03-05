@@ -713,11 +713,19 @@
             <Card.Title>Appearance</Card.Title>
             <Card.Description>Theme and display preferences.</Card.Description>
         </Card.Header>
-        <Card.Content>
+        <Card.Content class="space-y-4">
             <p class="text-sm text-muted-foreground">
                 Use the theme toggle in the top bar to switch between light and
                 dark mode.
             </p>
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">Journal amount bars</p>
+                    <p class="text-sm text-muted-foreground">Show colored bars indicating relative transaction amounts.</p>
+                </div>
+                <Switch checked={settings.settings.journalAmountBars !== false}
+                    onCheckedChange={(v) => settings.update({ journalAmountBars: v })} />
+            </div>
         </Card.Content>
     </Card.Root>
 

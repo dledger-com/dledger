@@ -45,6 +45,7 @@ export interface AppSettings {
   etherscanEnabled?: boolean;
   routescanEnabled?: boolean;
   theGraphEnabled?: boolean;
+  journalAmountBars?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

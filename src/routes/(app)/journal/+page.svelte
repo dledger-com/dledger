@@ -435,6 +435,7 @@
     }
 
     function barGradient(items: LineItem[], maxAmount: number): string {
+        if (settings.settings.journalAmountBars === false) return "";
         if (maxAmount <= 0) return "";
         const segments = entryBarSegments(items);
         if (segments.length === 0) return "";
