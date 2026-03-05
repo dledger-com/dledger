@@ -19,6 +19,7 @@ import {
   yieldAppPreset,
   laBanquePostalePreset,
   n26Preset,
+  voletPreset,
 } from "./presets/index.js";
 
 export { CsvPresetRegistry } from "./registry.js";
@@ -56,6 +57,7 @@ export function getDefaultPresetRegistry(): CsvPresetRegistry {
   reg.register(yieldAppPreset);
   reg.register(laBanquePostalePreset);
   reg.register(n26Preset);
+  reg.register(voletPreset);
   reg.register(revolutPreset);
   reg.register(bankStatementPreset); // lowest priority (score 40-60)
   _defaultRegistry = reg;
