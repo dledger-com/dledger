@@ -13,6 +13,7 @@ import type { TaskProgress } from "../task-queue.svelte.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
 import { exchangeAssetsCurrency, exchangeFees, exchangeExternal, exchangeStaking, tradingAccount } from "../accounts/paths.js";
+import { crossSourceAliases } from "../csv-presets/cross-source.js";
 
 
 /**
@@ -85,6 +86,9 @@ export async function syncCexAccount(
   for (const [entry] of allEntries) {
     if (!entry.voided_by) {
       existingSources.add(entry.source);
+      for (const alias of crossSourceAliases(entry.source)) {
+        existingSources.add(alias);
+      }
     }
   }
 
@@ -277,7 +281,10 @@ export async function syncCexAccount(
 
     const date = new Date(group[0].timestamp * 1000).toISOString().slice(0, 10);
     const items: Array<{ account: string; currency: string; amount: Decimal }> = [];
-    const parts: string[] = [];
+    let spentAsset = "";
+    let spentAmount = "";
+    let receivedAsset = "";
+    let receivedAmount = "";
 
     for (const record of group) {
       const amount = new Decimal(record.amount);
@@ -311,14 +318,13 @@ export async function syncCexAccount(
         });
       }
 
-      if (amount.gt(0)) {
-        parts.push(`+${amount.toFixed()} ${record.asset}`);
-      } else {
-        parts.push(`${amount.toFixed()} ${record.asset}`);
-      }
+      if (amount.lt(0)) { spentAsset = record.asset; spentAmount = amount.abs().toFixed(); }
+      else if (amount.gt(0)) { receivedAsset = record.asset; receivedAmount = amount.toFixed(); }
     }
 
-    const description = `${exchangeName} trade: ${parts.join(" / ")}`;
+    const description = spentAsset && receivedAsset
+      ? `${exchangeName} trade: ${spentAmount} ${spentAsset} → ${receivedAmount} ${receivedAsset}`
+      : `${exchangeName} trade: ${group.map(r => `${r.amount} ${r.asset}`).join(" / ")}`;
     const groupMeta: Record<string, string> = {};
     for (const record of group) {
       if (record.metadata) Object.assign(groupMeta, record.metadata);

@@ -52,7 +52,7 @@ describe("voletPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2026-03-05");
-      expect(r.description).toBe("Volet deposit: EUR");
+      expect(r.description).toBe("Volet deposit: 106.32 EUR");
       expect(r.sourceKey).toBe("8fba9cff-0e6e-4d74-b981-b90f200d0ca7");
 
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Volet", "EUR") && parseFloat(l.amount) === 106.32)).toBe(true);
@@ -69,7 +69,7 @@ describe("voletPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2026-03-02");
-      expect(r.description).toBe("Volet withdrawal: EUR");
+      expect(r.description).toBe("Volet withdrawal: 0.87 EUR");
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Volet", "EUR") && parseFloat(l.amount) === -0.87)).toBe(true);
     });
 

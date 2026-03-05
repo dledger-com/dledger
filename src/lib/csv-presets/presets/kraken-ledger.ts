@@ -110,7 +110,11 @@ export const krakenLedgerPreset: CsvPreset = {
           }
         }
 
-        description = `Kraken trade: ${assets.join("/")}`;
+        const spent = entries.find(e => e.amount < 0);
+        const received = entries.find(e => e.amount > 0);
+        description = spent && received
+          ? `Kraken trade: ${Math.abs(spent.amount)} ${spent.asset} → ${received.amount} ${received.asset}`
+          : `Kraken trade: ${assets.join("/")}`;
 
         // Add Equity:Trading legs to balance
         // Group by currency and sum
@@ -166,7 +170,7 @@ export const krakenLedgerPreset: CsvPreset = {
 
           records.push({
             date,
-            description: `Kraken ${type}: ${e.asset}`,
+            description: `Kraken ${type}: ${Math.abs(e.amount)} ${e.asset}`,
             lines,
             sourceKey: refid,
           });
@@ -176,7 +180,7 @@ export const krakenLedgerPreset: CsvPreset = {
           if (e.amount <= 0) continue;
           records.push({
             date,
-            description: `Kraken staking reward: ${e.asset}`,
+            description: `Kraken staking reward: ${e.amount} ${e.asset}`,
             lines: [
               {
                 account: exchangeAssetsCurrency("Kraken", e.asset),
@@ -197,7 +201,7 @@ export const krakenLedgerPreset: CsvPreset = {
         for (const e of entries) {
           records.push({
             date,
-            description: `Kraken ${type}: ${e.asset}`,
+            description: `Kraken ${type}: ${Math.abs(e.amount)} ${e.asset}`,
             lines: [
               {
                 account: exchangeAssetsCurrency("Kraken", e.asset),
