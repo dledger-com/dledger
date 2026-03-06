@@ -961,6 +961,13 @@
         };
     }
 
+    function percentile95(values: number[]): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.floor(sorted.length * 0.95);
+        return sorted[Math.min(idx, sorted.length - 1)];
+    }
+
     // Virtual scrolling
     let scrollEl = $state<HTMLDivElement | null>(null);
 
@@ -983,7 +990,7 @@
             .filter((row) => row.index < sortedEntries.length),
     );
     let maxEntryAmount = $derived.by(() => {
-        let max = 0;
+        const amounts: number[] = [];
         for (const vi of virtualItems) {
             const entry = sortedEntries[vi.index];
             if (!entry) continue;
@@ -991,9 +998,9 @@
             const a = segments
                 ? segments.reduce((s, seg) => s + seg.amount, 0)
                 : entryBarAmount(entry[1]);
-            if (a > max) max = a;
+            amounts.push(a);
         }
-        return max;
+        return percentile95(amounts);
     });
     const totalSize = $derived(virtualizer.getTotalSize());
     const paddingTop = $derived(
@@ -1070,6 +1077,10 @@
     const rawChartData = $derived.by(() => buildRawChartData(displayEntries));
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
+    const chartYMax = $derived.by(() => {
+        const totals = chartData.map(d => d.income + d.expense + d.other);
+        return percentile95(totals);
+    });
 
     let chartConversionGen = 0;
     $effect(() => {
@@ -1693,6 +1704,8 @@
                 axis="x"
                 grid={false}
                 rule={false}
+                yDomain={chartYMax > 0 ? [0, chartYMax] : undefined}
+                clip={true}
                 series={[
                     {
                         key: "other",
