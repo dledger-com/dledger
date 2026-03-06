@@ -1079,7 +1079,7 @@
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
     const chartYMax = $derived.by(() => {
-        const totals = chartData.map(d => Math.max(d.income + d.expense, d.other));
+        const totals = chartData.map(d => d.income + d.expense);
         return percentile95(totals);
     });
 
@@ -1685,7 +1685,7 @@
         {@const BarChartComp = BarChart_imported}
         <!-- svelte-ignore binding_property_non_reactive -->
         <div
-            class="h-24 px-2 cursor-crosshair select-none touch-none"
+            class="h-36 px-2 cursor-crosshair select-none touch-none"
             bind:clientWidth={chartContainerWidth}
             onpointerdown={(e) => {
                 isDragging = true;
@@ -1744,7 +1744,7 @@
                                     x={chartContext.xScale(d.date)}
                                     y={chartContext.yScale(d.other)}
                                     width={chartContext.xScale.bandwidth()}
-                                    height={chartContext.yScale(0) - chartContext.yScale(d.other)}
+                                    height={Math.max(1, chartContext.yScale(0) - chartContext.yScale(d.other))}
                                     fill="var(--color-gray-200)"
                                 />
                             {/if}
