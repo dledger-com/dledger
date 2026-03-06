@@ -1854,7 +1854,7 @@
                                     y={chartContext.yScale(d.other)}
                                     width={chartContext.xScale.bandwidth()}
                                     height={Math.max(1, chartContext.yScale(0) - chartContext.yScale(d.other))}
-                                    fill="var(--color-gray-200)"
+                                    fill="var(--color-muted)"
                                 />
                             {/if}
                         {/each}
