@@ -113,6 +113,7 @@
         });
     });
 
+    let showChart = $state(true);
     let exporting = $state(false);
     let detectingDuplicates = $state(false);
     let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
@@ -1509,6 +1510,73 @@
         </div>
     </div>
 
+    {#if showChart && !store.loading && chartData.length > 1 && BarChart_imported}
+        {@const BarChartComp = BarChart_imported}
+        <!-- svelte-ignore binding_property_non_reactive -->
+        <div
+            class="h-24 px-2 cursor-crosshair select-none touch-none"
+            bind:clientWidth={chartContainerWidth}
+            onpointerdown={(e) => {
+                isDragging = true;
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                handleChartPointer(e);
+            }}
+            onpointermove={handleChartPointer}
+            onpointerup={(e) => {
+                isDragging = false;
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }}
+            onpointercancel={() => (isDragging = false)}
+        >
+            <BarChartComp
+                data={chartData}
+                x="date"
+                axis="x"
+                grid={false}
+                rule={false}
+                series={[
+                    {
+                        key: "expense",
+                        label: "Expenses",
+                        color: "var(--color-red-500)",
+                    },
+                    {
+                        key: "income",
+                        label: "Income",
+                        color: "var(--color-green-500)",
+                    },
+                ]}
+                seriesLayout="stack"
+                bandPadding={BAND_PADDING}
+                xRange={computedXRange}
+                bind:context={chartContext}
+                props={{
+                    bars: { strokeWidth: 0 },
+                    tooltip: {
+                        header: {
+                            format: (d: unknown) => d instanceof Date
+                                ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                : String(d)
+                        }
+                    },
+                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" },
+                }}
+            >
+                {#snippet aboveMarks()}
+                    {#if Rule_imported && currentChartDate}
+                        {@const RuleComp = Rule_imported}
+                        <RuleComp
+                            x={new Date(currentChartDate + "T00:00:00")}
+                            class="stroke-foreground/50"
+                            stroke-dasharray="4 3"
+                            stroke-width={1.5}
+                        />
+                    {/if}
+                {/snippet}
+            </BarChartComp>
+        </div>
+    {/if}
+
     <!-- Filter toolbar -->
     <div class="flex flex-wrap items-center gap-2">
         <ListFilter
@@ -1579,77 +1647,17 @@
                                 .header}</DropdownMenu.CheckboxItem
                         >
                     {/each}
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Charts</DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.CheckboxItem
+                        checked={showChart}
+                        onCheckedChange={(v) => showChart = !!v}
+                    >Expenses & Income</DropdownMenu.CheckboxItem>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
     </div>
-
-    {#if !store.loading && chartData.length > 1 && BarChart_imported}
-        {@const BarChartComp = BarChart_imported}
-        <!-- svelte-ignore binding_property_non_reactive -->
-        <div
-            class="h-24 px-2 cursor-crosshair select-none touch-none"
-            bind:clientWidth={chartContainerWidth}
-            onpointerdown={(e) => {
-                isDragging = true;
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                handleChartPointer(e);
-            }}
-            onpointermove={handleChartPointer}
-            onpointerup={(e) => {
-                isDragging = false;
-                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }}
-            onpointercancel={() => (isDragging = false)}
-        >
-            <BarChartComp
-                data={chartData}
-                x="date"
-                axis="x"
-                grid={false}
-                rule={false}
-                series={[
-                    {
-                        key: "expense",
-                        label: "Expenses",
-                        color: "var(--color-red-500)",
-                    },
-                    {
-                        key: "income",
-                        label: "Income",
-                        color: "var(--color-green-500)",
-                    },
-                ]}
-                seriesLayout="stack"
-                bandPadding={BAND_PADDING}
-                xRange={computedXRange}
-                bind:context={chartContext}
-                props={{
-                    bars: { strokeWidth: 0 },
-                    tooltip: {
-                        header: {
-                            format: (d: unknown) => d instanceof Date
-                                ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                                : String(d)
-                        }
-                    },
-                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" },
-                }}
-            >
-                {#snippet aboveMarks()}
-                    {#if Rule_imported && currentChartDate}
-                        {@const RuleComp = Rule_imported}
-                        <RuleComp
-                            x={new Date(currentChartDate + "T00:00:00")}
-                            class="stroke-foreground/50"
-                            stroke-dasharray="4 3"
-                            stroke-width={1.5}
-                        />
-                    {/if}
-                {/snippet}
-            </BarChartComp>
-        </div>
-    {/if}
 
     {#if store.loading}
         <Card.Root class="border-x-0 rounded-none shadow-none">
