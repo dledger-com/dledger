@@ -29,6 +29,15 @@
         type JournalSortKey,
     } from "$lib/utils/scroll-position.js";
     import { scaleSqrt } from "d3-scale";
+    import {
+        chooseGranularity,
+        bucketKey,
+        bucketStartDate,
+        dateToBucketDate,
+        formatXAxisLabel,
+        formatTooltipHeader,
+        type ChartGranularity,
+    } from "$lib/utils/chart-granularity.js";
 
     import MatchDialog from "$lib/components/MatchDialog.svelte";
     import { extractAllCandidates } from "$lib/matching/extract.js";
@@ -1043,17 +1052,29 @@
         });
     });
 
-    // Aggregate daily income/expense from displayEntries
+    // Aggregate income/expense from displayEntries, bucketed by adaptive granularity
     type ChartDatum = { date: Date; income: number; expense: number; other: number };
 
-    function buildRawChartData(entries: [JournalEntry, LineItem[]][]): ChartDatum[] {
+    const chartGranularity: ChartGranularity = $derived.by(() => {
+        const entries = displayEntries;
+        if (entries.length === 0) return "day";
+        const dates = new Set<string>();
+        for (const [e] of entries) dates.add(e.date);
+        const sorted = [...dates].sort();
+        const first = new Date(sorted[0] + "T00:00:00");
+        const last = new Date(sorted[sorted.length - 1] + "T00:00:00");
+        const spanDays = Math.max(1, Math.round((last.getTime() - first.getTime()) / 86400000));
+        return chooseGranularity(spanDays, dates.size);
+    });
+
+    function buildRawChartData(entries: [JournalEntry, LineItem[]][], granularity: ChartGranularity): ChartDatum[] {
         const map = new Map<string, ChartDatum>();
         for (const [entry, items] of entries) {
-            const dateKey = entry.date;
-            let rec = map.get(dateKey);
+            const key = bucketKey(entry.date, granularity);
+            let rec = map.get(key);
             if (!rec) {
-                rec = { date: new Date(dateKey + "T00:00:00"), income: 0, expense: 0, other: 0 };
-                map.set(dateKey, rec);
+                rec = { date: bucketStartDate(key, granularity), income: 0, expense: 0, other: 0 };
+                map.set(key, rec);
             }
             for (const item of items) {
                 const name = accountIdToName.get(item.account_id) ?? "";
@@ -1075,7 +1096,7 @@
         );
     }
 
-    const rawChartData = $derived.by(() => buildRawChartData(displayEntries));
+    const rawChartData = $derived.by(() => buildRawChartData(displayEntries, chartGranularity));
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
     const chartYMax = $derived.by(() => {
@@ -1087,6 +1108,7 @@
     $effect(() => {
         const entries = displayEntries;
         const baseCurrency = settings.currency;
+        const granularity = chartGranularity;
         convertedChartData = null;
         if (!baseCurrency || entries.length === 0) return;
         const gen = ++chartConversionGen;
@@ -1095,11 +1117,11 @@
             const map = new Map<string, ChartDatum>();
             for (const [entry, items] of entries) {
                 if (gen !== chartConversionGen) return;
-                const dateKey = entry.date;
-                let rec = map.get(dateKey);
+                const key = bucketKey(entry.date, granularity);
+                let rec = map.get(key);
                 if (!rec) {
-                    rec = { date: new Date(dateKey + "T00:00:00"), income: 0, expense: 0, other: 0 };
-                    map.set(dateKey, rec);
+                    rec = { date: bucketStartDate(key, granularity), income: 0, expense: 0, other: 0 };
+                    map.set(key, rec);
                 }
                 for (const item of items) {
                     const name = accountIdToName.get(item.account_id) ?? "";
@@ -1108,7 +1130,7 @@
                     if (item.currency === baseCurrency) {
                         amt = rawAmt;
                     } else {
-                        const rate = await cache.get(item.currency, baseCurrency, dateKey);
+                        const rate = await cache.get(item.currency, baseCurrency, entry.date);
                         if (gen !== chartConversionGen) return;
                         amt = rate ? rawAmt * Number(rate) : 0;
                     }
@@ -1128,23 +1150,24 @@
         })();
     });
 
-    // Current scroll date (for chart cursor)
-    const currentChartDate = $derived(
-        sortedEntries[virtualItems[0]?.index]?.[0]?.date ?? "",
-    );
+    // Current scroll date bucketed (for chart highlight band start)
+    const currentChartBucketDate = $derived.by(() => {
+        const dateStr = sortedEntries[virtualItems[0]?.index]?.[0]?.date;
+        return dateStr ? dateToBucketDate(dateStr, chartGranularity) : null;
+    });
 
-    // Last visible date in the virtual table (for chart highlight band)
-    const lastChartDate = $derived(
-        sortedEntries[virtualItems[virtualItems.length - 1]?.index]?.[0]
-            ?.date ?? "",
-    );
+    // Last visible date bucketed (for chart highlight band end)
+    const lastChartBucketDate = $derived.by(() => {
+        const dateStr = sortedEntries[virtualItems[virtualItems.length - 1]?.index]?.[0]?.date;
+        return dateStr ? dateToBucketDate(dateStr, chartGranularity) : null;
+    });
 
-    // Middle visible date (for chart cursor)
-    const middleChartDate = $derived.by(() => {
-        if (virtualItems.length === 0) return "";
-        const midIdx =
-            virtualItems[Math.floor(virtualItems.length / 2)]?.index;
-        return sortedEntries[midIdx]?.[0]?.date ?? "";
+    // Middle visible date bucketed (for chart cursor rule)
+    const middleChartBucketDate = $derived.by(() => {
+        if (virtualItems.length === 0) return null;
+        const midIdx = virtualItems[Math.floor(virtualItems.length / 2)]?.index;
+        const dateStr = sortedEntries[midIdx]?.[0]?.date;
+        return dateStr ? dateToBucketDate(dateStr, chartGranularity) : null;
     });
 
     // Scroll journal to a given date
@@ -1729,11 +1752,11 @@
                     tooltip: {
                         header: {
                             format: (d: unknown) => d instanceof Date
-                                ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                ? formatTooltipHeader(d, chartGranularity)
                                 : String(d)
                         }
                     },
-                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" },
+                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? formatXAxisLabel(d, chartGranularity) : "" },
                 }}
             >
                 {#snippet belowMarks()}
@@ -1752,13 +1775,11 @@
                     {/if}
                 {/snippet}
                 {#snippet aboveMarks()}
-                    {#if chartContext?.xScale && currentChartDate && lastChartDate}
+                    {#if chartContext?.xScale && currentChartBucketDate && lastChartBucketDate}
                         {@const xScale = chartContext.xScale}
                         {@const step = xScale.step?.() ?? 0}
-                        {@const firstDate = new Date(currentChartDate + "T00:00:00")}
-                        {@const lastDate = new Date(lastChartDate + "T00:00:00")}
-                        {@const p1 = xScale(firstDate) ?? 0}
-                        {@const p2 = xScale(lastDate) ?? 0}
+                        {@const p1 = xScale(currentChartBucketDate) ?? 0}
+                        {@const p2 = xScale(lastChartBucketDate) ?? 0}
                         {@const left = Math.min(p1, p2)}
                         {@const right = Math.max(p1, p2) + step}
                         <rect
@@ -1770,10 +1791,10 @@
                             opacity={0.06}
                         />
                     {/if}
-                    {#if Rule_imported && middleChartDate}
+                    {#if Rule_imported && middleChartBucketDate}
                         {@const RuleComp = Rule_imported}
                         <RuleComp
-                            x={new Date(middleChartDate + "T00:00:00")}
+                            x={middleChartBucketDate}
                             class="stroke-foreground/50"
                             stroke-dasharray="4 3"
                             stroke-width={1.5}
