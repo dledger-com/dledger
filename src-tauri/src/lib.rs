@@ -10,7 +10,7 @@ use tauri::Manager;
 
 use commands::AppState;
 use db::{apply_migrations, SqliteStorage};
-use dledger_core::LedgerEngine;
+use dledger_core::{LedgerEngine, Storage};
 use dprice_commands::{DpriceMode, DpriceState};
 use etherscan::EtherscanState;
 
@@ -31,6 +31,11 @@ pub fn run() {
                 SqliteStorage::new(db_path_str).map_err(|e| e.to_string())?;
 
             apply_migrations(&storage).map_err(|e| e.to_string())?;
+
+            let repairs = storage.repair_database().map_err(|e| e.to_string())?;
+            if !repairs.is_empty() {
+                eprintln!("Database repairs: {:?}", repairs);
+            }
 
             let engine = Arc::new(LedgerEngine::new(Box::new(storage)));
 

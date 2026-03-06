@@ -455,11 +455,7 @@ export class SqlJsBackend implements Backend {
     this.sql = sql;
   }
 
-  static async createInMemory(): Promise<SqlJsBackend> {
-    const SQL = await initSqlJs();
-    const db = new SQL.Database();
-    const backend = new SqlJsBackend(db, SQL);
-    db.exec("PRAGMA foreign_keys=ON");
+  private static initFreshSchema(db: Database): void {
     db.exec(SCHEMA_SQL);
     db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
     // Reconciliation tables (v9) — is_reconciled already in base SCHEMA_SQL
@@ -499,6 +495,14 @@ export class SqlJsBackend implements Backend {
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
     db.exec("INSERT INTO schema_version (version) VALUES (20)");
+  }
+
+  static async createInMemory(): Promise<SqlJsBackend> {
+    const SQL = await initSqlJs();
+    const db = new SQL.Database();
+    const backend = new SqlJsBackend(db, SQL);
+    db.exec("PRAGMA foreign_keys=ON");
+    SqlJsBackend.initFreshSchema(db);
     return backend;
   }
 
@@ -511,45 +515,7 @@ export class SqlJsBackend implements Backend {
     const backend = new SqlJsBackend(db, SQL);
     db.exec("PRAGMA foreign_keys=ON");
     if (!saved) {
-      db.exec(SCHEMA_SQL);
-      db.exec("CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value)");
-      // Reconciliation tables (v9) — is_reconciled already in base SCHEMA_SQL
-      db.exec(`CREATE TABLE IF NOT EXISTS reconciliation (
-        id TEXT PRIMARY KEY, account_id TEXT NOT NULL, statement_date TEXT NOT NULL,
-        statement_balance TEXT NOT NULL, currency TEXT NOT NULL, reconciled_at TEXT NOT NULL,
-        line_item_count INTEGER NOT NULL DEFAULT 0
-      )`);
-      db.exec(`CREATE TABLE IF NOT EXISTS reconciliation_line_item (
-        reconciliation_id TEXT NOT NULL, line_item_id TEXT NOT NULL,
-        PRIMARY KEY (reconciliation_id, line_item_id)
-      )`);
-      // Recurring templates (v10)
-      db.exec(`CREATE TABLE IF NOT EXISTS recurring_template (
-        id TEXT PRIMARY KEY, description TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
-        interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
-        is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
-      )`);
-      // Token address mapping (v12, updated v17)
-      db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
-        currency TEXT NOT NULL, asset_type TEXT NOT NULL DEFAULT '', param TEXT NOT NULL DEFAULT '',
-        chain TEXT NOT NULL, contract_address TEXT NOT NULL,
-        PRIMARY KEY (currency, asset_type, param, chain)
-      )`);
-      // Account metadata (v14)
-      db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
-        account_id TEXT NOT NULL REFERENCES account(id),
-        key TEXT NOT NULL, value TEXT NOT NULL,
-        PRIMARY KEY (account_id, key)
-      )`);
-      db.exec("CREATE INDEX IF NOT EXISTS idx_account_metadata_key_value ON account_metadata(key, value)");
-      // Entry links (v16)
-      db.exec(`CREATE TABLE IF NOT EXISTS entry_link (
-        journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
-        link_name TEXT NOT NULL,
-        PRIMARY KEY (journal_entry_id, link_name)
-      )`);
-      db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-      db.exec("INSERT INTO schema_version (version) VALUES (20)");
+      SqlJsBackend.initFreshSchema(db);
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -957,6 +923,19 @@ PRAGMA foreign_keys = ON;
       db.exec("CREATE TABLE IF NOT EXISTS raw_transaction (source TEXT PRIMARY KEY, data TEXT NOT NULL)");
     } catch {
       // ignore if already exists
+    }
+    // Repair broken french_tax_report table (may lack NOT NULL columns from failed migration)
+    try {
+      db.exec("SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report LIMIT 0");
+    } catch {
+      db.exec("DROP TABLE IF EXISTS french_tax_report");
+      db.exec(`CREATE TABLE IF NOT EXISTS french_tax_report (
+        tax_year INTEGER PRIMARY KEY NOT NULL,
+        generated_at TEXT NOT NULL,
+        final_acquisition_cost TEXT NOT NULL,
+        report_json TEXT NOT NULL
+      )`);
+      backend.scheduleSave();
     }
     return backend;
   }
@@ -4061,7 +4040,7 @@ PRAGMA foreign_keys = ON;
 
   // French tax reports
   async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void> {
-    this.db.run(
+    this.run(
       "INSERT OR REPLACE INTO french_tax_report (tax_year, generated_at, final_acquisition_cost, report_json) VALUES (?, ?, ?, ?)",
       [taxYear, new Date().toISOString(), report.finalAcquisitionCost, JSON.stringify(report)]
     );
@@ -4085,7 +4064,7 @@ PRAGMA foreign_keys = ON;
   }
 
   async deleteFrenchTaxReport(taxYear: number): Promise<void> {
-    this.db.run("DELETE FROM french_tax_report WHERE tax_year = ?", [taxYear]);
+    this.run("DELETE FROM french_tax_report WHERE tax_year = ?", [taxYear]);
     this.scheduleSave();
   }
 
@@ -4108,15 +4087,10 @@ PRAGMA foreign_keys = ON;
   }
 
   async clearAllData(): Promise<void> {
-    this.deleteFromTables([
-      "reconciliation_line_item", "reconciliation",
-      "lot_disposal", "lot", "line_item", "entry_link",
-      "journal_entry_metadata", "balance_assertion", "audit_log",
-      "journal_entry", "exchange_rate", "raw_transaction",
-      "currency_rate_source", "budget", "recurring_template", "french_tax_report",
-      "currency_token_address", "account_metadata", "account_closure",
-      "account", "exchange_account", "etherscan_account", "currency",
-    ]);
+    this.db.close();
+    this.db = new this.sql.Database();
+    this.db.exec("PRAGMA foreign_keys=ON");
+    SqlJsBackend.initFreshSchema(this.db);
     this.scheduleSave();
   }
 }

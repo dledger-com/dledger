@@ -1603,32 +1603,35 @@ impl Storage for SqliteStorage {
     }
 
     fn clear_all_data(&self) -> StorageResult<()> {
-        let conn = self.conn.borrow();
-        conn.execute_batch(
-            "DELETE FROM reconciliation_line_item;
-             DELETE FROM reconciliation;
-             DELETE FROM lot_disposal;
-             DELETE FROM lot;
-             DELETE FROM line_item;
-             DELETE FROM entry_link;
-             DELETE FROM journal_entry_metadata;
-             DELETE FROM balance_assertion;
-             DELETE FROM audit_log;
-             DELETE FROM journal_entry;
-             DELETE FROM exchange_rate;
-             DELETE FROM account_closure;
-             DELETE FROM account;
-             DELETE FROM currency;
-             DELETE FROM currency_rate_source;
-             DELETE FROM raw_transaction;
-             DELETE FROM budget;
-             DELETE FROM recurring_template;
-             DELETE FROM currency_token_address;
-             DELETE FROM account_metadata;
-             DELETE FROM french_tax_report;
-             DELETE FROM exchange_account;",
-        )
-        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        // Collect all user table names
+        let tables: Vec<String> = {
+            let conn = self.conn.borrow();
+            let mut stmt = conn.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).map_err(|e| StorageError::Internal(e.to_string()))?;
+            let rows: Vec<String> = stmt.query_map([], |row| row.get(0))
+                .map_err(|e| StorageError::Internal(e.to_string()))?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+        };
+
+        // Drop all tables
+        {
+            let conn = self.conn.borrow();
+            conn.execute_batch("PRAGMA foreign_keys=OFF")
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            for table in &tables {
+                conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{}\"", table))
+                    .map_err(|e| StorageError::Internal(e.to_string()))?;
+            }
+            conn.execute_batch("PRAGMA foreign_keys=ON")
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+        }
+
+        // Re-create fresh schema via the migration path
+        self.execute_sql("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);")?;
+        apply_migrations(self)?;
         Ok(())
     }
 
