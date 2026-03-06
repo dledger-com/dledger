@@ -151,6 +151,7 @@
         { id: "select", enableSorting: false, enableHiding: false },
         { id: "date", header: "Date", enableHiding: true },
         { id: "description", header: "Description", enableHiding: true },
+        { id: "account", header: "Account", enableHiding: true },
         { id: "amount", header: "Amount", enableHiding: true },
     ];
 
@@ -361,6 +362,48 @@
         }
 
         return { isTrade: false, debits: debitsByCurrency(nonEquityItems) };
+    }
+
+    function accountTail(fullPath: string): string {
+        const parts = fullPath.split(":");
+        return parts.length >= 2 ? parts.slice(-2).join(":") : fullPath;
+    }
+
+    function accountLeaf(fullPath: string): string {
+        return fullPath.split(":").pop() ?? fullPath;
+    }
+
+    function mainCounterpartyShort(items: LineItem[]): string {
+        const meaningful = items.filter((i) => {
+            const name = accountIdToName.get(i.account_id) ?? "";
+            return name !== "Equity:Trading" && !name.startsWith("Equity:Trading:");
+        });
+        const unique = [...new Set(meaningful.map((i) => accountIdToName.get(i.account_id) ?? ""))];
+        if (unique.length === 0) return "";
+        if (unique.length === 1) return accountLeaf(unique[0]);
+        const categories = unique.filter((a) => a.startsWith("Expenses:") || a.startsWith("Income:"));
+        if (categories.length === 1) return accountLeaf(categories[0]);
+        if (categories.length > 1) return "Split";
+        return accountLeaf(unique[0]);
+    }
+
+    function mainCounterparty(items: LineItem[]): string {
+        // Filter out Equity:Trading (balancing entries)
+        const meaningful = items.filter((i) => {
+            const name = accountIdToName.get(i.account_id) ?? "";
+            return name !== "Equity:Trading" && !name.startsWith("Equity:Trading:");
+        });
+        // Collect unique account names
+        const unique = [...new Set(meaningful.map((i) => accountIdToName.get(i.account_id) ?? ""))];
+        if (unique.length === 0) return "";
+        if (unique.length === 1) return accountTail(unique[0]);
+        // Prefer Expense/Income accounts (they describe the "what")
+        const categories = unique.filter((a) => a.startsWith("Expenses:") || a.startsWith("Income:"));
+        if (categories.length === 1) return accountTail(categories[0]);
+        if (categories.length > 1)
+            return categories.map((a) => a.split(":").pop() ?? "").join(" | ");
+        // All asset/liability/equity — show tail of first
+        return accountTail(unique[0]);
     }
 
     type AmountDirection = "income" | "expense" | "default";
@@ -2069,9 +2112,11 @@
                                                         sort.toggle(
                                                             "description",
                                                         )}
-                                                    class="w-full"
+                                                    class=""
                                                     >Description</SortableHeader
                                                 >
+                                            {:else if header.column.id === "account"}
+                                                <Table.Head class="hidden lg:table-cell">Account</Table.Head>
                                             {:else if header.column.id === "amount"}
                                                 <SortableHeader
                                                     active={sort.key ===
@@ -2286,6 +2331,11 @@
                                                                 />
                                                             {/if}
                                                         </div>
+                                                    </Table.Cell>
+                                                {:else if cell.column.id === "account"}
+                                                    <Table.Cell class="text-muted-foreground text-sm p-2 hidden lg:table-cell">
+                                                        <span class="hidden xl:inline">{mainCounterparty(items)}</span>
+                                                        <span class="xl:hidden">{mainCounterpartyShort(items)}</span>
                                                     </Table.Cell>
                                                 {:else if cell.column.id === "amount"}
                                                     <Table.Cell
