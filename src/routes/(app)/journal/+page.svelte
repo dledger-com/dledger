@@ -1078,7 +1078,7 @@
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
     const chartYMax = $derived.by(() => {
-        const totals = chartData.map(d => d.income + d.expense + d.other);
+        const totals = chartData.map(d => d.income + d.expense);
         return percentile95(totals);
     });
 
