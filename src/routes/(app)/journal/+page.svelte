@@ -1032,13 +1032,13 @@
     const chartData = $derived.by(() => {
         const map = new Map<
             string,
-            { date: Date; income: number; expense: number }
+            { date: Date; income: number; expense: number; other: number }
         >();
         for (const [entry, items] of displayEntries) {
             const dateKey = entry.date;
             let rec = map.get(dateKey);
             if (!rec) {
-                rec = { date: new Date(dateKey + "T00:00:00"), income: 0, expense: 0 };
+                rec = { date: new Date(dateKey + "T00:00:00"), income: 0, expense: 0, other: 0 };
                 map.set(dateKey, rec);
             }
             for (const item of items) {
@@ -1051,6 +1051,8 @@
                     name === "Expenses"
                 ) {
                     rec.expense += amt;
+                } else {
+                    rec.other += amt;
                 }
             }
         }
@@ -1526,6 +1528,11 @@
                 grid={false}
                 rule={false}
                 series={[
+                    {
+                        key: "other",
+                        label: "Other",
+                        color: "var(--color-gray-300)",
+                    },
                     {
                         key: "expense",
                         label: "Expenses",
