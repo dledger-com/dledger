@@ -28,6 +28,7 @@
         derivePositionLabel,
         type JournalSortKey,
     } from "$lib/utils/scroll-position.js";
+    import { scaleSqrt } from "d3-scale";
 
     import MatchDialog from "$lib/components/MatchDialog.svelte";
     import { extractAllCandidates } from "$lib/matching/extract.js";
@@ -1705,6 +1706,7 @@
                 grid={false}
                 rule={false}
                 yDomain={chartYMax > 0 ? [0, chartYMax] : undefined}
+                yScale={scaleSqrt()}
                 series={[
                     {
                         key: "expense",
