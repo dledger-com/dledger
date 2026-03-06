@@ -1,23 +1,39 @@
 /**
  * Adaptive chart granularity — picks day/week/month/quarter/year
- * based on data span and density to keep bars readable.
+ * based on data span, density, and available chart width to keep bars readable.
  */
 
 export type ChartGranularity = "day" | "week" | "month" | "quarter" | "year";
 
+const GRANULARITIES: ChartGranularity[] = ["day", "week", "month", "quarter", "year"];
+
 /**
- * Choose the finest granularity that keeps bar count manageable.
- * If data is sparse (≤80 unique dates) we always use daily even for long spans.
+ * Estimate how many bars a granularity would produce for a given date span.
+ */
+export function estimateBucketCount(spanDays: number, granularity: ChartGranularity): number {
+    switch (granularity) {
+        case "day": return spanDays;
+        case "week": return Math.ceil(spanDays / 7);
+        case "month": return Math.ceil(spanDays / 30.44);
+        case "quarter": return Math.ceil(spanDays / 91.3);
+        case "year": return Math.ceil(spanDays / 365.25);
+    }
+}
+
+/**
+ * Choose the finest granularity whose estimated bucket count fits within maxBars.
+ * The actual bar count can't exceed uniqueDateCount, so sparse data naturally
+ * stays at fine granularity.
  */
 export function chooseGranularity(
     dateSpanDays: number,
     uniqueDateCount: number,
+    maxBars: number,
 ): ChartGranularity {
-    if (uniqueDateCount <= 80) return "day";
-    if (dateSpanDays <= 120) return "day";
-    if (dateSpanDays <= 730) return "week";
-    if (dateSpanDays <= 2555) return "month";
-    if (dateSpanDays <= 7300) return "quarter";
+    for (const g of GRANULARITIES) {
+        const estimated = Math.min(estimateBucketCount(dateSpanDays, g), uniqueDateCount);
+        if (estimated <= maxBars) return g;
+    }
     return "year";
 }
 

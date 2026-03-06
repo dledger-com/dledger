@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     chooseGranularity,
+    estimateBucketCount,
     bucketKey,
     bucketStartDate,
     dateToBucketDate,
@@ -9,35 +10,88 @@ import {
     type ChartGranularity,
 } from "./chart-granularity.js";
 
+describe("estimateBucketCount", () => {
+    it("day: returns spanDays", () => {
+        expect(estimateBucketCount(365, "day")).toBe(365);
+    });
+
+    it("week: ~52 for a year", () => {
+        expect(estimateBucketCount(365, "week")).toBe(53);
+    });
+
+    it("month: ~12 for a year", () => {
+        expect(estimateBucketCount(365, "month")).toBe(12);
+    });
+
+    it("quarter: ~4 for a year", () => {
+        expect(estimateBucketCount(365, "quarter")).toBe(4);
+    });
+
+    it("year: 1 for a year", () => {
+        expect(estimateBucketCount(365, "year")).toBe(1);
+    });
+
+    it("40 years → ~480 months, ~160 quarters, ~40 years", () => {
+        const span = 40 * 365;
+        expect(estimateBucketCount(span, "month")).toBe(480);
+        expect(estimateBucketCount(span, "quarter")).toBe(160);
+        expect(estimateBucketCount(span, "year")).toBe(40);
+    });
+});
+
 describe("chooseGranularity", () => {
-    it("picks day for small span", () => {
-        expect(chooseGranularity(30, 30)).toBe("day");
-        expect(chooseGranularity(120, 100)).toBe("day");
+    it("picks day for small span with enough room", () => {
+        expect(chooseGranularity(30, 30, 200)).toBe("day");
+        expect(chooseGranularity(120, 100, 200)).toBe("day");
     });
 
     it("picks day for sparse long span", () => {
-        // 5 years but only 50 unique dates
-        expect(chooseGranularity(1825, 50)).toBe("day");
+        // 5 years but only 50 unique dates — sparse data fits in day
+        expect(chooseGranularity(1825, 50, 200)).toBe("day");
     });
 
-    it("picks week for ~1 year dense data", () => {
-        expect(chooseGranularity(365, 300)).toBe("week");
-        expect(chooseGranularity(730, 500)).toBe("week");
+    it("wide container + 40yr span → picks month (not year)", () => {
+        // 40yr ≈ 14600 days, 100 unique dates, wide container (maxBars=200)
+        // day: min(14600, 100) = 100 ≤ 200 → day! (sparse data)
+        expect(chooseGranularity(14600, 100, 200)).toBe("day");
+        // But with dense data (5000 unique dates):
+        // day: min(14600, 5000) = 5000 > 200
+        // week: min(2086, 5000) = 2086 > 200
+        // month: min(480, 5000) = 480 > 200
+        // quarter: min(160, 5000) = 160 ≤ 200 → quarter
+        expect(chooseGranularity(14600, 5000, 200)).toBe("quarter");
     });
 
-    it("picks month for ~5 year span", () => {
-        expect(chooseGranularity(1825, 1000)).toBe("month");
-        expect(chooseGranularity(2555, 2000)).toBe("month");
+    it("narrow container + 40yr span → picks year", () => {
+        // maxBars=30 with dense data
+        // day/week/month/quarter all exceed 30 for 14600 days
+        // year: min(40, 5000) = 40 > 30 → falls through to year
+        expect(chooseGranularity(14600, 5000, 30)).toBe("year");
     });
 
-    it("picks quarter for ~10-20 year span", () => {
-        expect(chooseGranularity(3650, 3000)).toBe("quarter");
-        expect(chooseGranularity(7300, 5000)).toBe("quarter");
+    it("wide container allows finer granularity", () => {
+        // 5yr dense data, maxBars=500
+        // day: min(1825, 1000) = 1000 > 500
+        // week: min(261, 1000) = 261 ≤ 500 → week
+        expect(chooseGranularity(1825, 1000, 500)).toBe("week");
     });
 
-    it("picks year for very long span", () => {
-        expect(chooseGranularity(7301, 5000)).toBe("year");
-        expect(chooseGranularity(10000, 8000)).toBe("year");
+    it("narrow container forces coarser granularity", () => {
+        // 1yr dense data, maxBars=20
+        // day: min(365, 300) = 300 > 20
+        // week: min(53, 300) = 53 > 20
+        // month: min(12, 300) = 12 ≤ 20 → month
+        expect(chooseGranularity(365, 300, 20)).toBe("month");
+    });
+
+    it("falls back to year when nothing fits", () => {
+        // Very narrow, very long span
+        expect(chooseGranularity(20000, 10000, 5)).toBe("year");
+    });
+
+    it("sparse data stays at day regardless of span", () => {
+        // 10 unique dates across 20 years — day: min(7300, 10) = 10 ≤ 200
+        expect(chooseGranularity(7300, 10, 200)).toBe("day");
     });
 });
 

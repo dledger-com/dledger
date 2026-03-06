@@ -1055,6 +1055,8 @@
     // Aggregate income/expense from displayEntries, bucketed by adaptive granularity
     type ChartDatum = { date: Date; income: number; expense: number; other: number };
 
+    const MIN_BAR_STEP = 6;
+
     const chartGranularity: ChartGranularity = $derived.by(() => {
         const entries = displayEntries;
         if (entries.length === 0) return "day";
@@ -1064,7 +1066,8 @@
         const first = new Date(sorted[0] + "T00:00:00");
         const last = new Date(sorted[sorted.length - 1] + "T00:00:00");
         const spanDays = Math.max(1, Math.round((last.getTime() - first.getTime()) / 86400000));
-        return chooseGranularity(spanDays, dates.size);
+        const maxBars = chartContainerWidth > 0 ? Math.floor(chartContainerWidth / MIN_BAR_STEP) : 200;
+        return chooseGranularity(spanDays, dates.size, maxBars);
     });
 
     function buildRawChartData(entries: [JournalEntry, LineItem[]][], granularity: ChartGranularity): ChartDatum[] {
@@ -1194,16 +1197,9 @@
     let isDragging = $state(false);
     let chartContainerWidth = $state(0);
 
-    const MAX_BAR_WIDTH = 20;
     const BAND_PADDING = 0.15;
 
-    const computedXRange = $derived.by(() => {
-        const n = chartData.length;
-        if (n === 0 || chartContainerWidth === 0) return [0, chartContainerWidth];
-        const desiredStep = MAX_BAR_WIDTH / (1 - BAND_PADDING);
-        const desiredWidth = n * desiredStep;
-        return [0, Math.min(chartContainerWidth, desiredWidth)];
-    });
+    const computedXRange: [number, number] = $derived([0, chartContainerWidth]);
 
     function handleChartPointer(e: PointerEvent) {
         if (!chartContext || !isDragging) return;
