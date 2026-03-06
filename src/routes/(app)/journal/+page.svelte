@@ -1805,14 +1805,19 @@
                         {@const p2 = xScale(lastChartBucketDate) ?? 0}
                         {@const left = Math.min(p1, p2)}
                         {@const right = Math.max(p1, p2) + step}
+                        {@const h = chartContext.height ?? 0}
                         <rect
                             x={left}
                             y={0}
                             width={right - left}
-                            height={chartContext.height ?? 0}
+                            height={h}
                             fill="currentColor"
                             opacity={0.06}
                         />
+                        <line x1={left} y1={0} x2={left} y2={h} stroke="currentColor" opacity={0.15} stroke-width={2} />
+                        <line x1={right} y1={0} x2={right} y2={h} stroke="currentColor" opacity={0.15} stroke-width={2} />
+                        <rect x={left} y={0} width={right - left} height={2} fill="currentColor" opacity={0.15} />
+                        <rect x={left} y={h - 2} width={right - left} height={2} fill="currentColor" opacity={0.15} />
                     {/if}
                     {#if Rule_imported && middleChartBucketDate}
                         {@const RuleComp = Rule_imported}
