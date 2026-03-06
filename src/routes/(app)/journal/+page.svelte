@@ -1101,10 +1101,20 @@
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const x = e.clientX - rect.left - (chartContext.padding?.left ?? 0);
         const xScale = chartContext.xScale;
-        if (xScale && typeof xScale.invert === "function") {
-            const date = xScale.invert(x);
-            scrollToDate(date);
+        if (!xScale || typeof xScale.domain !== "function") return;
+        const domain = xScale.domain() as Date[];
+        const step = xScale.step?.() ?? 0;
+        let closest: Date | null = null;
+        let bestDist = Infinity;
+        for (const d of domain) {
+            const bandCenter = (xScale(d) ?? 0) + step / 2;
+            const dist = Math.abs(x - bandCenter);
+            if (dist < bestDist) {
+                bestDist = dist;
+                closest = d;
+            }
         }
+        if (closest) scrollToDate(closest);
     }
 
     let showPill = $state(false);
