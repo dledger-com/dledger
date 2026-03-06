@@ -1177,6 +1177,15 @@
         return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
+    // Chart date pill label derived from visible bucket dates
+    const chartDateLabel = $derived.by(() => {
+        if (!currentChartBucketDate || !lastChartBucketDate) return null;
+        const g = effectiveGranularity;
+        const start = formatTooltipHeader(lastChartBucketDate, g);
+        const end = formatTooltipHeader(currentChartBucketDate, g);
+        return start === end ? start : `${start} – ${end}`;
+    });
+
     // Scroll journal to a given date
     function scrollToDate(target: Date) {
         // Find closest date in sortedEntries
@@ -1707,6 +1716,11 @@
     {#if showChart && !store.loading && chartData.length > 1 && BarChart_imported}
         {@const BarChartComp = BarChart_imported}
         <div class="relative">
+        {#if chartDateLabel}
+            <div class="absolute top-0 left-2 z-10 rounded-full border bg-background/95 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm pointer-events-none">
+                {chartDateLabel}
+            </div>
+        {/if}
         <div class="absolute top-0 right-2 z-10">
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
