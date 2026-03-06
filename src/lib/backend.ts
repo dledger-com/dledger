@@ -21,6 +21,7 @@ import type {
 } from "./types/index.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
+import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
 
 export interface Reconciliation {
   id: string;
@@ -232,6 +233,15 @@ export interface Backend {
   // Account rename / merge
   renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }>;
   mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }>;
+
+  // French tax reports
+  saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void>;
+  getFrenchTaxReport(taxYear: number): Promise<PersistedFrenchTaxReport | null>;
+  listFrenchTaxReportYears(): Promise<number[]>;
+  deleteFrenchTaxReport(taxYear: number): Promise<void>;
+
+  // Database repair
+  repairDatabase(): Promise<string[]>;
 
   // Data management
   clearExchangeRates(): Promise<void>;
@@ -598,6 +608,32 @@ class TauriBackend implements Backend {
   }
   async mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }> {
     return this.invoke("merge_accounts", { sourceId, targetId });
+  }
+
+  // French tax reports
+  async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void> {
+    return this.invoke("save_french_tax_report", {
+      taxYear,
+      reportJson: JSON.stringify(report),
+      finalAcquisitionCost: report.finalAcquisitionCost,
+    });
+  }
+  async getFrenchTaxReport(taxYear: number): Promise<PersistedFrenchTaxReport | null> {
+    const result = await this.invoke<[string, string, string] | null>("get_french_tax_report", { taxYear });
+    if (!result) return null;
+    const [generatedAt, finalAcquisitionCost, reportJson] = result;
+    return { generatedAt, finalAcquisitionCost, report: JSON.parse(reportJson) };
+  }
+  async listFrenchTaxReportYears(): Promise<number[]> {
+    return this.invoke("list_french_tax_report_years");
+  }
+  async deleteFrenchTaxReport(taxYear: number): Promise<void> {
+    return this.invoke("delete_french_tax_report", { taxYear });
+  }
+
+  // Database repair
+  async repairDatabase(): Promise<string[]> {
+    return this.invoke("repair_database", {});
   }
 
   // Data management

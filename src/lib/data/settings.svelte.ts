@@ -25,8 +25,8 @@ export interface AppSettings {
   holdingPeriodDays: number;
   handlers: Record<string, { enabled: boolean; enrichment?: boolean }>;
   frenchTax?: {
-    priorAcquisitionCost?: string;  // EUR, default "0"
-    fiatCurrencies?: string[];       // override defaults
+    initialAcquisitionCost?: string;  // EUR, default "0"
+    fiatCurrencies?: string[];        // override defaults
   };
   csvCategorizationRules?: CsvCategorizationRule[];
   mlClassificationEnabled?: boolean;
@@ -115,6 +115,11 @@ function loadFromStorage(): AppSettings {
       if ("dpriceEnabled" in parsed && !("dpriceMode" in parsed)) {
         parsed.dpriceMode = parsed.dpriceEnabled ? "integrated" : "off";
         delete parsed.dpriceEnabled;
+      }
+      // Migrate frenchTax.priorAcquisitionCost → initialAcquisitionCost
+      if (parsed.frenchTax?.priorAcquisitionCost !== undefined && parsed.frenchTax?.initialAcquisitionCost === undefined) {
+        parsed.frenchTax.initialAcquisitionCost = parsed.frenchTax.priorAcquisitionCost;
+        delete parsed.frenchTax.priorAcquisitionCost;
       }
       return { ...DEFAULT_SETTINGS, ...parsed };
     }

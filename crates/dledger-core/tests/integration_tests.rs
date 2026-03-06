@@ -1076,6 +1076,13 @@ impl Storage for TestStorage {
     fn set_currency_token_address(&self, _currency: &str, _chain: &str, _contract_address: &str) -> StorageResult<()> { Ok(()) }
     fn get_currency_token_addresses(&self) -> StorageResult<Vec<(String, String, String)>> { Ok(vec![]) }
     fn get_currency_token_address(&self, _currency: &str) -> StorageResult<Option<(String, String)>> { Ok(None) }
+
+    // -- French tax reports (stub) --
+    fn save_french_tax_report(&self, _tax_year: i32, _generated_at: &str, _final_acquisition_cost: &str, _report_json: &str) -> StorageResult<()> { Ok(()) }
+    fn get_french_tax_report(&self, _tax_year: i32) -> StorageResult<Option<(String, String, String)>> { Ok(None) }
+    fn list_french_tax_report_years(&self) -> StorageResult<Vec<i32>> { Ok(vec![]) }
+    fn delete_french_tax_report(&self, _tax_year: i32) -> StorageResult<()> { Ok(()) }
+    fn repair_database(&self) -> StorageResult<Vec<String>> { Ok(vec![]) }
 }
 
 // ============================================================================

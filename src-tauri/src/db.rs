@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, MIGRATION_V18, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, MIGRATION_V18, MIGRATION_V19, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -1594,6 +1594,7 @@ impl Storage for SqliteStorage {
              DELETE FROM recurring_template;
              DELETE FROM currency_token_address;
              DELETE FROM account_metadata;
+             DELETE FROM french_tax_report;
              UPDATE exchange_account SET last_sync = NULL;
              PRAGMA foreign_keys=ON;",
         )
@@ -1624,6 +1625,7 @@ impl Storage for SqliteStorage {
              DELETE FROM recurring_template;
              DELETE FROM currency_token_address;
              DELETE FROM account_metadata;
+             DELETE FROM french_tax_report;
              DELETE FROM exchange_account;",
         )
         .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1955,6 +1957,70 @@ impl Storage for SqliteStorage {
             return Err(StorageError::NotFound(format!("recurring_template {id}")));
         }
         Ok(())
+    }
+
+    // -- French tax reports --
+
+    fn save_french_tax_report(&self, tax_year: i32, generated_at: &str, final_acquisition_cost: &str, report_json: &str) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "INSERT OR REPLACE INTO french_tax_report (tax_year, generated_at, final_acquisition_cost, report_json) VALUES (?1, ?2, ?3, ?4)",
+            params![tax_year, generated_at, final_acquisition_cost, report_json],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn get_french_tax_report(&self, tax_year: i32) -> StorageResult<Option<(String, String, String)>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report WHERE tax_year = ?1")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let result = stmt
+            .query_row(params![tax_year], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(result)
+    }
+
+    fn list_french_tax_report_years(&self) -> StorageResult<Vec<i32>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare("SELECT tax_year FROM french_tax_report ORDER BY tax_year")
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let years = stmt
+            .query_map([], |row| row.get::<_, i32>(0))
+            .map_err(|e| StorageError::Internal(e.to_string()))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(years)
+    }
+
+    fn delete_french_tax_report(&self, tax_year: i32) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute("DELETE FROM french_tax_report WHERE tax_year = ?1", params![tax_year])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    fn repair_database(&self) -> StorageResult<Vec<String>> {
+        let conn = self.conn.borrow();
+        let mut repairs = Vec::new();
+        // Repair french_tax_report schema
+        if conn.execute_batch("SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report LIMIT 0").is_err() {
+            conn.execute_batch("DROP TABLE IF EXISTS french_tax_report")
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            conn.execute_batch(MIGRATION_V19)
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            repairs.push("Recreated french_tax_report table (missing columns)".to_string());
+        }
+        Ok(repairs)
     }
 
     // -- Pagination --
@@ -2346,6 +2412,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 18 {
             let _ = storage.execute_sql(MIGRATION_V18);
             storage.set_schema_version(18)?;
+        }
+        if current < 19 {
+            let _ = storage.execute_sql(MIGRATION_V19);
+            storage.set_schema_version(19)?;
         }
     }
     Ok(())

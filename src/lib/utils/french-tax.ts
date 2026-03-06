@@ -89,6 +89,28 @@ export interface FrenchTaxReport {
   missingCurrencyDates: { currency: string; date: string }[];
 }
 
+export interface PersistedFrenchTaxReport {
+  generatedAt: string;
+  finalAcquisitionCost: string;
+  report: FrenchTaxReport;
+}
+
+export function resolvePriorAcquisitionCost(
+  taxYear: number,
+  initialCost: string,
+  persistedYears: Map<number, string>,
+): { value: string; source: 'chained' | 'initial' | 'none'; sourceYear?: number } {
+  const prevYear = taxYear - 1;
+  const chained = persistedYears.get(prevYear);
+  if (chained !== undefined) {
+    return { value: chained, source: 'chained', sourceYear: prevYear };
+  }
+  if (initialCost && initialCost !== '0') {
+    return { value: initialCost, source: 'initial' };
+  }
+  return { value: '0', source: 'none' };
+}
+
 // ---------- Internal types ----------
 
 interface EntryEvent {

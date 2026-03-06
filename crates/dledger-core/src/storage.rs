@@ -246,6 +246,17 @@ pub trait Storage: Send + Sync {
     fn update_recurring_template(&self, template: &RecurringTemplate) -> StorageResult<()>;
     fn delete_recurring_template(&self, id: &Uuid) -> StorageResult<()>;
 
+    // -- French tax reports --
+
+    fn save_french_tax_report(&self, tax_year: i32, generated_at: &str, final_acquisition_cost: &str, report_json: &str) -> StorageResult<()>;
+    fn get_french_tax_report(&self, tax_year: i32) -> StorageResult<Option<(String, String, String)>>;
+    fn list_french_tax_report_years(&self) -> StorageResult<Vec<i32>>;
+    fn delete_french_tax_report(&self, tax_year: i32) -> StorageResult<()>;
+
+    // -- Database repair --
+
+    fn repair_database(&self) -> StorageResult<Vec<String>>;
+
     // -- Pagination --
 
     fn count_journal_entries(&self, filter: &TransactionFilter) -> StorageResult<u64>;

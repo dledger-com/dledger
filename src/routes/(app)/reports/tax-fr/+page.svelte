@@ -9,7 +9,12 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend } from "$lib/backend.js";
   import { formatCurrency } from "$lib/utils/format.js";
-  import { computeFrenchTaxReport, type FrenchTaxReport } from "$lib/utils/french-tax.js";
+  import {
+    computeFrenchTaxReport,
+    resolvePriorAcquisitionCost,
+    type FrenchTaxReport,
+    type PersistedFrenchTaxReport,
+  } from "$lib/utils/french-tax.js";
   import { exportFrenchTaxCsv } from "$lib/utils/csv-export.js";
   import {
     findMissingRates,
@@ -20,22 +25,54 @@
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
   import Info from "lucide-svelte/icons/info";
+  import Trash2 from "lucide-svelte/icons/trash-2";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import { onMount } from "svelte";
 
   const settings = new SettingsStore();
 
-  let taxYear = $state(new Date().getFullYear() - 1);
-  let priorAcquisitionCost = $state(settings.settings.frenchTax?.priorAcquisitionCost ?? "0");
+  // Year chips: 2019 to current year - 1
+  const currentYear = new Date().getFullYear();
+  const availableYears = Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - 1 - i);
+
+  let taxYear = $state(currentYear - 1);
   let loading = $state(false);
   let report = $state<FrenchTaxReport | null>(null);
   let error = $state<string | null>(null);
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
 
+  // Chain data: persisted years → final acquisition cost
+  let chainData = $state<Map<number, string>>(new Map());
+  let savedReport = $state<PersistedFrenchTaxReport | null>(null);
+  let initialAcquisitionCost = $state(settings.settings.frenchTax?.initialAcquisitionCost ?? "0");
+  let overridePriorCost = $state(false);
+  let overrideValue = $state("");
+  let staleWarning = $state<string | null>(null);
+
+  // Resolved prior cost for current year
+  const resolved = $derived(resolvePriorAcquisitionCost(taxYear, initialAcquisitionCost, chainData));
+  const effectivePriorCost = $derived(overridePriorCost ? overrideValue : resolved.value);
+
+  const hasSavedReport = $derived(chainData.has(taxYear));
+
   const totalPV = $derived(report ? parseFloat(report.totalPlusValue) : 0);
   const totalFiat = $derived(report ? parseFloat(report.totalFiatReceived) : 0);
   const finalA = $derived(report ? parseFloat(report.finalAcquisitionCost) : 0);
   const yearEndV = $derived(report ? parseFloat(report.yearEndPortfolioValue) : 0);
+
+  // Chain visualization
+  const chainSummary = $derived.by(() => {
+    const years = [...chainData.keys()].sort((a, b) => a - b);
+    const parts: string[] = [];
+    if (initialAcquisitionCost && initialAcquisitionCost !== "0") {
+      parts.push(`Initial: ${formatCurrency(initialAcquisitionCost, "EUR")}`);
+    }
+    for (const y of years) {
+      parts.push(`${y}: ${formatCurrency(chainData.get(y)!, "EUR")}`);
+    }
+    return parts;
+  });
 
   type DispSortKey = "date" | "description" | "crypto" | "fiat" | "portfolio" | "acqCost" | "costFraction" | "plusValue";
   const sortDisp = createSortState<DispSortKey>();
@@ -59,26 +96,71 @@
     fiatSpent: (a) => parseFloat(a.fiatSpent),
   };
 
+  async function loadChainData() {
+    const backend = getBackend();
+    const years = await backend.listFrenchTaxReportYears();
+    const map = new Map<number, string>();
+    for (const y of years) {
+      const persisted = await backend.getFrenchTaxReport(y);
+      if (persisted) {
+        map.set(y, persisted.finalAcquisitionCost);
+      }
+    }
+    chainData = map;
+  }
+
+  async function loadSavedReport() {
+    savedReport = await getBackend().getFrenchTaxReport(taxYear);
+    if (savedReport) {
+      report = savedReport.report;
+    } else {
+      report = null;
+    }
+    missingRateRequests = [];
+    error = null;
+    staleWarning = null;
+    overridePriorCost = false;
+    overrideValue = "";
+  }
+
   async function generate() {
     loading = true;
     error = null;
     report = null;
     missingRateRequests = [];
+    staleWarning = null;
 
-    // Save prior acquisition cost to settings
-    settings.update({
-      frenchTax: {
-        ...settings.settings.frenchTax,
-        priorAcquisitionCost: priorAcquisitionCost,
-      },
-    });
+    // Save initial acquisition cost to settings
+    if (initialAcquisitionCost !== (settings.settings.frenchTax?.initialAcquisitionCost ?? "0")) {
+      settings.update({
+        frenchTax: {
+          ...settings.settings.frenchTax,
+          initialAcquisitionCost,
+        },
+      });
+    }
 
     try {
       report = await computeFrenchTaxReport(getBackend(), {
         taxYear,
-        priorAcquisitionCost,
+        priorAcquisitionCost: effectivePriorCost,
         fiatCurrencies: settings.settings.frenchTax?.fiatCurrencies,
       });
+
+      // Auto-save to DB
+      await getBackend().saveFrenchTaxReport(taxYear, report);
+      await loadChainData();
+      savedReport = await getBackend().getFrenchTaxReport(taxYear);
+
+      // Check for stale downstream reports
+      const nextYearReport = await getBackend().getFrenchTaxReport(taxYear + 1);
+      if (nextYearReport) {
+        const nextResolved = resolvePriorAcquisitionCost(taxYear + 1, initialAcquisitionCost, chainData);
+        if (nextResolved.source === "chained" && nextResolved.value !== nextYearReport.report.dispositions?.[0]?.acquisitionCostBefore) {
+          staleWarning = `The ${taxYear + 1} report may be stale — its prior acquisition cost differs from the new ${taxYear} final value. Consider regenerating it.`;
+        }
+      }
+
       if (report.missingCurrencyDates.length > 0) {
         missingRateRequests = await findMissingRates(
           getBackend(),
@@ -92,6 +174,37 @@
       loading = false;
     }
   }
+
+  async function deleteReport() {
+    // Check if downstream reports depend on this
+    const nextYearFinal = chainData.get(taxYear + 1);
+    if (nextYearFinal !== undefined) {
+      if (!confirm(`The ${taxYear + 1} report chains from this year's report. Delete anyway?`)) return;
+    }
+    await getBackend().deleteFrenchTaxReport(taxYear);
+    await loadChainData();
+    savedReport = null;
+    report = null;
+    staleWarning = null;
+  }
+
+  let mounted = $state(false);
+
+  // Load chain data on mount
+  onMount(() => {
+    loadChainData();
+    loadSavedReport();
+    mounted = true;
+  });
+
+  // React to year changes after initial mount
+  let prevYear = $state(taxYear);
+  $effect(() => {
+    if (mounted && taxYear !== prevYear) {
+      prevYear = taxYear;
+      loadSavedReport();
+    }
+  });
 </script>
 
 <div class="space-y-6">
@@ -100,37 +213,113 @@
     <p class="text-muted-foreground">Art. 150 VH bis CGI — Weighted average method for crypto-to-fiat dispositions.</p>
   </div>
 
+  <!-- Chain Visualization -->
+  {#if chainSummary.length > 0}
+    <div class="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
+      {#each chainSummary as part, i}
+        {#if i > 0}<span class="text-muted-foreground/50">&rarr;</span>{/if}
+        <span class="font-mono">{part}</span>
+      {/each}
+    </div>
+  {/if}
+
   <Card.Root>
     <Card.Header>
       <Card.Title>Report Parameters</Card.Title>
     </Card.Header>
-    <Card.Content>
-      <div class="flex items-start gap-4 flex-wrap">
-        <div class="space-y-1">
-          <label for="year" class="text-sm font-medium">Tax Year</label>
-          <Input id="year" type="number" bind:value={taxYear} class="w-28" min="2019" />
-        </div>
-        <div class="space-y-1">
-          <label for="prior-a" class="text-sm font-medium">Prior Acquisition Cost (EUR)</label>
-          <Input id="prior-a" type="text" bind:value={priorAcquisitionCost} class="w-40" placeholder="0.00" />
-          <p class="text-xs text-muted-foreground">Total EUR spent on crypto before your dledger data.</p>
-        </div>
-        <div class="pt-6">
-          <div class="flex gap-2">
-            <Button onclick={generate} disabled={loading}>
-              {loading ? "Generating..." : "Generate"}
-            </Button>
-            {#if report}
-              <Button variant="outline" onclick={() => exportFrenchTaxCsv(report!)}>
-                <Download class="mr-1 h-4 w-4" />
-                CSV
-              </Button>
-            {/if}
-          </div>
+    <Card.Content class="space-y-4">
+      <!-- Year Chips -->
+      <div class="space-y-1">
+        <label class="text-sm font-medium">Tax Year</label>
+        <div class="flex flex-wrap gap-1.5">
+          {#each availableYears as year}
+            <button
+              class="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors
+                {year === taxYear
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : chainData.has(year)
+                    ? 'bg-secondary text-secondary-foreground border-secondary hover:bg-secondary/80'
+                    : 'border-input bg-background hover:bg-accent hover:text-accent-foreground'
+                }"
+              onclick={() => { taxYear = year; }}
+            >
+              {year}
+              {#if chainData.has(year)}
+                <span class="ml-1 text-[10px] opacity-60">&#10003;</span>
+              {/if}
+            </button>
+          {/each}
         </div>
       </div>
+
+      <!-- Prior Acquisition Cost -->
+      <div class="space-y-2">
+        {#if resolved.source === "chained"}
+          <div class="flex items-center gap-2 text-sm">
+            <span class="font-medium">Prior Acquisition Cost:</span>
+            <span class="font-mono">{formatCurrency(resolved.value, "EUR")}</span>
+            <Badge variant="secondary">from {resolved.sourceYear} report</Badge>
+            <Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => { overridePriorCost = !overridePriorCost; overrideValue = resolved.value; }}>
+              {overridePriorCost ? "Use chained" : "Override"}
+            </Button>
+          </div>
+          {#if overridePriorCost}
+            <Input type="text" bind:value={overrideValue} class="w-40" placeholder="0.00" />
+          {/if}
+        {:else}
+          <div class="space-y-1">
+            <label for="initial-a" class="text-sm font-medium">Initial Acquisition Cost (EUR)</label>
+            <Input id="initial-a" type="text" bind:value={initialAcquisitionCost} class="w-40" placeholder="0.00" />
+            <p class="text-xs text-muted-foreground">Total EUR spent on crypto before your dledger data.</p>
+          </div>
+        {/if}
+
+        <!-- Gap warning -->
+        {#if resolved.source !== "chained" && taxYear > 2019}
+          {@const prevYear = taxYear - 1}
+          {#if !chainData.has(prevYear) && chainData.size > 0}
+            <div class="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-2 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+              <AlertTriangle class="h-4 w-4 shrink-0" />
+              <span>No saved report for {prevYear}. Consider generating it first for automatic chaining.</span>
+            </div>
+          {/if}
+        {/if}
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-2">
+        <Button onclick={generate} disabled={loading}>
+          {loading ? "Generating..." : hasSavedReport ? "Regenerate" : "Generate"}
+        </Button>
+        {#if report}
+          <Button variant="outline" onclick={() => exportFrenchTaxCsv(report!)}>
+            <Download class="mr-1 h-4 w-4" />
+            CSV
+          </Button>
+        {/if}
+        {#if hasSavedReport}
+          <Button variant="outline" class="text-destructive hover:text-destructive" onclick={deleteReport}>
+            <Trash2 class="mr-1 h-4 w-4" />
+            Delete
+          </Button>
+        {/if}
+      </div>
+
+      {#if savedReport}
+        <p class="text-xs text-muted-foreground">
+          Last generated: {new Date(savedReport.generatedAt).toLocaleString()}
+        </p>
+      {/if}
     </Card.Content>
   </Card.Root>
+
+  <!-- Stale Warning -->
+  {#if staleWarning}
+    <div class="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+      <AlertTriangle class="h-4 w-4 shrink-0" />
+      <span>{staleWarning}</span>
+    </div>
+  {/if}
 
   {#if loading}
     <Card.Root>
@@ -325,7 +514,7 @@
               <li><strong>Form 2042 C:</strong> Report the total plus-value in box <strong>3AN</strong> (gains) or <strong>3BN</strong> (losses).</li>
               <li><strong>Exemption:</strong> If total fiat dispositions &le; 305 EUR, the plus-value is exempt from tax. You should still declare it.</li>
               <li><strong>PFU (Flat Tax):</strong> The default rate is 30% (12.8% income tax + 17.2% social contributions). You can opt for the progressive income tax scale instead.</li>
-              <li><strong>Carry forward:</strong> The final acquisition cost (A) at year end carries over as the starting A for the next tax year. Save it for next year's declaration.</li>
+              <li><strong>Carry forward:</strong> The final acquisition cost (A) at year end is automatically saved and chained as the starting A for the next tax year.</li>
               <li><strong>Crypto-to-crypto:</strong> Exchanges between crypto assets are NOT taxable events under Art. 150 VH bis.</li>
             </ol>
           </Card.Content>

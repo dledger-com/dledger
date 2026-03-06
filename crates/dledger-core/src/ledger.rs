@@ -779,6 +779,32 @@ impl LedgerEngine {
         Ok(self.storage.get_currency_token_address(currency)?)
     }
 
+    // --- French tax reports ---
+
+    pub fn save_french_tax_report(&self, tax_year: i32, generated_at: &str, final_acquisition_cost: &str, report_json: &str) -> LedgerResult<()> {
+        self.storage.save_french_tax_report(tax_year, generated_at, final_acquisition_cost, report_json)?;
+        Ok(())
+    }
+
+    pub fn get_french_tax_report(&self, tax_year: i32) -> LedgerResult<Option<(String, String, String)>> {
+        Ok(self.storage.get_french_tax_report(tax_year)?)
+    }
+
+    pub fn list_french_tax_report_years(&self) -> LedgerResult<Vec<i32>> {
+        Ok(self.storage.list_french_tax_report_years()?)
+    }
+
+    pub fn delete_french_tax_report(&self, tax_year: i32) -> LedgerResult<()> {
+        self.storage.delete_french_tax_report(tax_year)?;
+        Ok(())
+    }
+
+    // --- Database repair ---
+
+    pub fn repair_database(&self) -> LedgerResult<Vec<String>> {
+        Ok(self.storage.repair_database()?)
+    }
+
     // --- Internal helpers ---
 
     fn audit(&self, action: &str, entity_type: &str, entity_id: Uuid, details: &str) -> LedgerResult<()> {

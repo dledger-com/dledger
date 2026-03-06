@@ -27,6 +27,7 @@ import type {
   BalanceAssertionResult,
 } from "./types/index.js";
 import type { Backend, CurrencyRateSource, Reconciliation, RecurringTemplate, UnreconciledLineItem } from "./backend.js";
+import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
 import { parseTags } from "./utils/tags.js";
 import { isSpamCurrency } from "./currency-validation.js";
 
@@ -294,6 +295,13 @@ CREATE TABLE IF NOT EXISTS entry_link (
     PRIMARY KEY (journal_entry_id, link_name)
 );
 CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name);
+
+CREATE TABLE IF NOT EXISTS french_tax_report (
+    tax_year INTEGER PRIMARY KEY NOT NULL,
+    generated_at TEXT NOT NULL,
+    final_acquisition_cost TEXT NOT NULL,
+    report_json TEXT NOT NULL
+);
 `;
 
 // ---- Row type helpers ----
@@ -490,7 +498,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (19)");
+    db.exec("INSERT INTO schema_version (version) VALUES (20)");
     return backend;
   }
 
@@ -541,7 +549,7 @@ export class SqlJsBackend implements Backend {
         PRIMARY KEY (journal_entry_id, link_name)
       )`);
       db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-      db.exec("INSERT INTO schema_version (version) VALUES (19)");
+      db.exec("INSERT INTO schema_version (version) VALUES (20)");
     } else {
       // Handle partially-initialized DB from previous failed session
       const versionRows = db.exec("SELECT version FROM schema_version");
@@ -924,6 +932,17 @@ PRAGMA foreign_keys = ON;
           db.exec("ALTER TABLE currency_rate_source ADD COLUMN rate_source_id TEXT NOT NULL DEFAULT ''");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (19)");
+        }
+        if (currentVersion < 20) {
+          db.exec("DROP TABLE IF EXISTS french_tax_report");
+          db.exec(`CREATE TABLE IF NOT EXISTS french_tax_report (
+            tax_year INTEGER PRIMARY KEY NOT NULL,
+            generated_at TEXT NOT NULL,
+            final_acquisition_cost TEXT NOT NULL,
+            report_json TEXT NOT NULL
+          )`);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (20)");
         }
       }
     }
@@ -4032,12 +4051,60 @@ PRAGMA foreign_keys = ON;
       "lot_disposal", "lot", "line_item", "entry_link",
       "journal_entry_metadata", "balance_assertion", "audit_log",
       "journal_entry", "raw_transaction", "currency_rate_source",
-      "budget", "recurring_template", "currency_token_address",
+      "budget", "recurring_template", "french_tax_report", "currency_token_address",
       "account_metadata", "account_closure", "account", "currency",
     ]);
     try { this.db.exec("UPDATE exchange_account SET last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
+  }
+
+  // French tax reports
+  async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void> {
+    this.db.run(
+      "INSERT OR REPLACE INTO french_tax_report (tax_year, generated_at, final_acquisition_cost, report_json) VALUES (?, ?, ?, ?)",
+      [taxYear, new Date().toISOString(), report.finalAcquisitionCost, JSON.stringify(report)]
+    );
+    this.scheduleSave();
+  }
+
+  async getFrenchTaxReport(taxYear: number): Promise<PersistedFrenchTaxReport | null> {
+    const rows = this.db.exec(
+      "SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report WHERE tax_year = ?",
+      [taxYear]
+    );
+    if (rows.length === 0 || rows[0].values.length === 0) return null;
+    const [generatedAt, finalAcquisitionCost, reportJson] = rows[0].values[0] as [string, string, string];
+    return { generatedAt, finalAcquisitionCost, report: JSON.parse(reportJson) };
+  }
+
+  async listFrenchTaxReportYears(): Promise<number[]> {
+    const rows = this.db.exec("SELECT tax_year FROM french_tax_report ORDER BY tax_year");
+    if (rows.length === 0) return [];
+    return rows[0].values.map(r => r[0] as number);
+  }
+
+  async deleteFrenchTaxReport(taxYear: number): Promise<void> {
+    this.db.run("DELETE FROM french_tax_report WHERE tax_year = ?", [taxYear]);
+    this.scheduleSave();
+  }
+
+  async repairDatabase(): Promise<string[]> {
+    const repairs: string[] = [];
+    try {
+      this.db.exec("SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report LIMIT 0");
+    } catch {
+      this.db.exec("DROP TABLE IF EXISTS french_tax_report");
+      this.db.exec(`CREATE TABLE IF NOT EXISTS french_tax_report (
+        tax_year INTEGER PRIMARY KEY NOT NULL,
+        generated_at TEXT NOT NULL,
+        final_acquisition_cost TEXT NOT NULL,
+        report_json TEXT NOT NULL
+      )`);
+      repairs.push("Recreated french_tax_report table (missing columns)");
+    }
+    if (repairs.length > 0) this.scheduleSave();
+    return repairs;
   }
 
   async clearAllData(): Promise<void> {
@@ -4046,7 +4113,7 @@ PRAGMA foreign_keys = ON;
       "lot_disposal", "lot", "line_item", "entry_link",
       "journal_entry_metadata", "balance_assertion", "audit_log",
       "journal_entry", "exchange_rate", "raw_transaction",
-      "currency_rate_source", "budget", "recurring_template",
+      "currency_rate_source", "budget", "recurring_template", "french_tax_report",
       "currency_token_address", "account_metadata", "account_closure",
       "account", "exchange_account", "etherscan_account", "currency",
     ]);

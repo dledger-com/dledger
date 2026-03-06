@@ -5,8 +5,10 @@ import type { Account, Currency } from "$lib/types/index.js";
 import {
   classifyEntryEvent,
   computeFrenchTaxReport,
+  resolvePriorAcquisitionCost,
   DEFAULT_FIAT_CURRENCIES,
   type FrenchTaxOptions,
+  type FrenchTaxReport,
 } from "./french-tax.js";
 import type { SqlJsBackend } from "$lib/sql-js-backend.js";
 
@@ -722,5 +724,112 @@ describe("computeFrenchTaxReport", () => {
     expect(dogeMissing.length).toBeLessThanOrEqual(2);
     const uniqueDates = new Set(dogeMissing.map(m => m.date));
     expect(uniqueDates.size).toBe(dogeMissing.length); // all entries are unique
+  });
+});
+
+describe("resolvePriorAcquisitionCost", () => {
+  it("chains from previous year", () => {
+    const persistedYears = new Map([[2023, "42350.00"]]);
+    const result = resolvePriorAcquisitionCost(2024, "50000", persistedYears);
+    expect(result).toEqual({ value: "42350.00", source: "chained", sourceYear: 2023 });
+  });
+
+  it("falls back to initial cost when no prior year", () => {
+    const result = resolvePriorAcquisitionCost(2024, "50000", new Map());
+    expect(result).toEqual({ value: "50000", source: "initial" });
+  });
+
+  it("gap detection: year N-1 missing, year N-2 exists", () => {
+    const persistedYears = new Map([[2022, "30000.00"]]);
+    const result = resolvePriorAcquisitionCost(2024, "50000", persistedYears);
+    // Year 2023 is missing, so it falls back to initial
+    expect(result).toEqual({ value: "50000", source: "initial" });
+  });
+
+  it("empty map + no initial cost → returns '0' with source 'none'", () => {
+    const result = resolvePriorAcquisitionCost(2024, "", new Map());
+    expect(result).toEqual({ value: "0", source: "none" });
+  });
+
+  it("initial cost of '0' → returns '0' with source 'none'", () => {
+    const result = resolvePriorAcquisitionCost(2024, "0", new Map());
+    expect(result).toEqual({ value: "0", source: "none" });
+  });
+
+  it("chained takes precedence over initial cost", () => {
+    const persistedYears = new Map([[2023, "10000.00"]]);
+    const result = resolvePriorAcquisitionCost(2024, "99999", persistedYears);
+    expect(result).toEqual({ value: "10000.00", source: "chained", sourceYear: 2023 });
+  });
+});
+
+describe("french tax report DB round-trip", () => {
+  function makeMockReport(year: number, finalA: string): FrenchTaxReport {
+    return {
+      taxYear: year,
+      dispositions: [],
+      acquisitions: [],
+      totalPlusValue: "0.00",
+      totalFiatReceived: "0.00",
+      finalAcquisitionCost: finalA,
+      yearEndPortfolioValue: "0.00",
+      box3AN: "0.00",
+      box3BN: "0.00",
+      isExempt: true,
+      taxDuePFU30: "0.00",
+      taxDuePFU314: "0.00",
+      warnings: [],
+      missingCurrencyDates: [],
+    };
+  }
+
+  it("save + get report", async () => {
+    const backend = await createTestBackend();
+    const report = makeMockReport(2023, "42350.00");
+    await backend.saveFrenchTaxReport(2023, report);
+
+    const persisted = await backend.getFrenchTaxReport(2023);
+    expect(persisted).not.toBeNull();
+    expect(persisted!.finalAcquisitionCost).toBe("42350.00");
+    expect(persisted!.report.taxYear).toBe(2023);
+    expect(persisted!.report.finalAcquisitionCost).toBe("42350.00");
+    expect(persisted!.generatedAt).toBeTruthy();
+  });
+
+  it("list years", async () => {
+    const backend = await createTestBackend();
+    await backend.saveFrenchTaxReport(2024, makeMockReport(2024, "10000.00"));
+    await backend.saveFrenchTaxReport(2022, makeMockReport(2022, "50000.00"));
+    await backend.saveFrenchTaxReport(2023, makeMockReport(2023, "30000.00"));
+
+    const years = await backend.listFrenchTaxReportYears();
+    expect(years).toEqual([2022, 2023, 2024]);
+  });
+
+  it("delete report", async () => {
+    const backend = await createTestBackend();
+    await backend.saveFrenchTaxReport(2023, makeMockReport(2023, "42350.00"));
+    expect(await backend.getFrenchTaxReport(2023)).not.toBeNull();
+
+    await backend.deleteFrenchTaxReport(2023);
+    expect(await backend.getFrenchTaxReport(2023)).toBeNull();
+  });
+
+  it("upsert: save twice for same year", async () => {
+    const backend = await createTestBackend();
+    await backend.saveFrenchTaxReport(2023, makeMockReport(2023, "10000.00"));
+    await backend.saveFrenchTaxReport(2023, makeMockReport(2023, "20000.00"));
+
+    const persisted = await backend.getFrenchTaxReport(2023);
+    expect(persisted!.finalAcquisitionCost).toBe("20000.00");
+    expect(persisted!.report.finalAcquisitionCost).toBe("20000.00");
+
+    const years = await backend.listFrenchTaxReportYears();
+    expect(years).toEqual([2023]);
+  });
+
+  it("get nonexistent year returns null", async () => {
+    const backend = await createTestBackend();
+    expect(await backend.getFrenchTaxReport(2099)).toBeNull();
   });
 });

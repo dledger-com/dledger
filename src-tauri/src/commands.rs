@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
 use tauri::State;
 use uuid::Uuid;
@@ -832,6 +832,36 @@ pub fn get_currency_token_address(state: State<'_, AppState>, currency: String) 
     Ok(result.map(|(chain, contract_address)| {
         serde_json::json!({ "chain": chain, "contract_address": contract_address })
     }))
+}
+
+// -- French tax report commands --
+
+#[tauri::command]
+pub fn save_french_tax_report(state: State<'_, AppState>, tax_year: i32, final_acquisition_cost: String, report_json: String) -> Result<(), String> {
+    let generated_at = Utc::now().to_rfc3339();
+    state.engine.save_french_tax_report(tax_year, &generated_at, &final_acquisition_cost, &report_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_french_tax_report(state: State<'_, AppState>, tax_year: i32) -> Result<Option<(String, String, String)>, String> {
+    state.engine.get_french_tax_report(tax_year).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_french_tax_report_years(state: State<'_, AppState>) -> Result<Vec<i32>, String> {
+    state.engine.list_french_tax_report_years().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_french_tax_report(state: State<'_, AppState>, tax_year: i32) -> Result<(), String> {
+    state.engine.delete_french_tax_report(tax_year).map_err(|e| e.to_string())
+}
+
+// -- Database repair command --
+
+#[tauri::command]
+pub fn repair_database(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.engine.repair_database().map_err(|e| e.to_string())
 }
 
 // -- HTTP proxy command (bypasses CORS for APIs that don't support it) --

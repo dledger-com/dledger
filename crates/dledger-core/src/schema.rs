@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 18;
+pub const SCHEMA_VERSION: u32 = 19;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -270,6 +270,14 @@ CREATE TABLE IF NOT EXISTS entry_link (
 );
 CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name);
 
+-- French tax reports (v19)
+CREATE TABLE IF NOT EXISTS french_tax_report (
+    tax_year INTEGER PRIMARY KEY NOT NULL,
+    generated_at TEXT NOT NULL,
+    final_acquisition_cost TEXT NOT NULL,
+    report_json TEXT NOT NULL
+);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -287,6 +295,16 @@ CREATE TABLE IF NOT EXISTS budget (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value);
+"#;
+
+pub const MIGRATION_V19: &str = r#"
+DROP TABLE IF EXISTS french_tax_report;
+CREATE TABLE IF NOT EXISTS french_tax_report (
+    tax_year INTEGER PRIMARY KEY NOT NULL,
+    generated_at TEXT NOT NULL,
+    final_acquisition_cost TEXT NOT NULL,
+    report_json TEXT NOT NULL
+);
 "#;
 
 pub const MIGRATION_V18: &str = r#"
