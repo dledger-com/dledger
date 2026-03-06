@@ -1150,12 +1150,7 @@
         return () => clearTimeout(pillTimer);
     });
 
-    // Visible-range metadata loading
-    let tagGen = 0;
-    let prevFilteredRef: unknown = null;
-    let linkGen = 0;
-
-    // Derive visible entry IDs
+    // Derive visible entry IDs (used by converted totals)
     const visibleEntryIds = $derived(
         virtualizer
             .getVirtualItems()
@@ -1163,92 +1158,72 @@
             .filter(Boolean),
     );
 
-    let tagDebounce: ReturnType<typeof setTimeout>;
+    // Bulk-load all tags & links whenever filteredEntries changes
+    let metaGen = 0;
     $effect(() => {
-        const ids = visibleEntryIds;
-        // Clear maps when underlying data changes
-        if (filteredEntries !== prevFilteredRef) {
-            prevFilteredRef = filteredEntries;
-            entryTags = new Map();
-            entryLinks = new Map();
-            convertedTotals = new Map();
-        }
-        if (ids.length === 0) return;
-        clearTimeout(tagDebounce);
-        const gen = ++tagGen;
-        tagDebounce = setTimeout(async () => {
-            // Filter to IDs we haven't loaded yet
-            const needed = ids.filter((id) => !entryTags.has(id));
-            if (needed.length === 0) return;
+        const entries = filteredEntries;
+        const allIds = entries.map((e) => e[0].id).filter(Boolean);
+        // Reset maps and converted totals on data change
+        entryTags = new Map();
+        entryLinks = new Map();
+        convertedTotals = new Map();
+        if (allIds.length === 0) return;
+        const gen = ++metaGen;
+        (async () => {
             try {
                 const backend = getBackend();
-                let metaMap: Map<string, Record<string, string>>;
-                if (backend.getMetadataBatch) {
-                    metaMap = await backend.getMetadataBatch(needed);
-                } else {
-                    const metas = await Promise.all(
-                        needed.map((id) =>
-                            backend
-                                .getMetadata(id)
-                                .catch(() => ({}) as Record<string, string>),
-                        ),
-                    );
-                    metaMap = new Map(needed.map((id, i) => [id, metas[i]]));
-                }
-                if (gen !== tagGen) return;
-                const merged = new Map(entryTags);
+                const [metaMap, linkMap] = await Promise.all([
+                    backend.getMetadataBatch
+                        ? backend.getMetadataBatch(allIds)
+                        : Promise.all(
+                              allIds.map((id) =>
+                                  backend
+                                      .getMetadata(id)
+                                      .catch(
+                                          () =>
+                                              ({}) as Record<string, string>,
+                                      ),
+                              ),
+                          ).then(
+                              (metas) =>
+                                  new Map(
+                                      allIds.map((id, i) => [id, metas[i]]),
+                                  ),
+                          ),
+                    backend.getEntryLinksBatch
+                        ? backend.getEntryLinksBatch(allIds)
+                        : Promise.all(
+                              allIds.map((id) =>
+                                  backend
+                                      .getEntryLinks(id)
+                                      .catch(() => [] as string[]),
+                              ),
+                          ).then(
+                              (links) =>
+                                  new Map(
+                                      allIds.map((id, i) => [id, links[i]]),
+                                  ),
+                          ),
+                ]);
+                if (gen !== metaGen) return;
+                const tags = new Map<string, string[]>();
                 for (const [id, meta] of metaMap) {
-                    const tags = parseTags(meta[TAGS_META_KEY]);
-                    if (tags.length > 0) merged.set(id, tags);
-                    else merged.set(id, []); // Mark as loaded (empty)
+                    const parsed = parseTags(meta[TAGS_META_KEY]);
+                    tags.set(id, parsed);
                 }
-                entryTags = merged;
-            } catch {
-                /* ignore */
-            }
-        }, 80);
-        return () => clearTimeout(tagDebounce);
-    });
-
-    let linkDebounce: ReturnType<typeof setTimeout>;
-    $effect(() => {
-        const ids = visibleEntryIds;
-        if (ids.length === 0) return;
-        clearTimeout(linkDebounce);
-        const gen = ++linkGen;
-        linkDebounce = setTimeout(async () => {
-            const needed = ids.filter((id) => !entryLinks.has(id));
-            if (needed.length === 0) return;
-            try {
-                const backend = getBackend();
-                let linkMap: Map<string, string[]>;
-                if (backend.getEntryLinksBatch) {
-                    linkMap = await backend.getEntryLinksBatch(needed);
-                } else {
-                    const links = await Promise.all(
-                        needed.map((id) =>
-                            backend
-                                .getEntryLinks(id)
-                                .catch(() => [] as string[]),
-                        ),
-                    );
-                    linkMap = new Map(needed.map((id, i) => [id, links[i]]));
-                }
-                if (gen !== linkGen) return;
-                const merged = new Map(entryLinks);
+                entryTags = tags;
+                const linksOut = new Map<string, string[]>();
                 for (const [id, links] of linkMap) {
-                    merged.set(id, links);
+                    linksOut.set(id, links);
                 }
-                // Mark entries with no links as loaded
-                for (const id of needed) {
-                    if (!merged.has(id)) merged.set(id, []);
+                for (const id of allIds) {
+                    if (!linksOut.has(id)) linksOut.set(id, []);
                 }
-                entryLinks = merged;
+                entryLinks = linksOut;
             } catch {
                 /* ignore */
             }
-        }, 80);
-        return () => clearTimeout(linkDebounce);
+        })();
     });
 
     function addTagFilter(tag: string) {
