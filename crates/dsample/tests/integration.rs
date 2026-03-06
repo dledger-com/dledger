@@ -1,0 +1,225 @@
+use chrono::NaiveDate;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+use rust_decimal::Decimal;
+use std::collections::HashMap;
+
+use dsample::generators::crypto::CryptoGenerator;
+use dsample::generators::mixed::MixedGenerator;
+use dsample::generators::personal::PersonalGenerator;
+use dsample::generators::tax::TaxGenerator;
+use dsample::generators::{check_balance, ScenarioGenerator};
+use dsample::formatters::ledger::LedgerFormatter;
+use dsample::formatters::beancount::BeancountFormatter;
+use dsample::formatters::hledger::HledgerFormatter;
+use dsample::formatters::kraken_csv::KrakenCsvFormatter;
+use dsample::formatters::Formatter;
+
+fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+}
+
+// ── Balance invariant ──
+
+fn assert_all_balanced(data: &dsample::model::SampleData) {
+    for (i, entry) in data.entries.iter().enumerate() {
+        assert!(
+            check_balance(&entry.postings),
+            "Entry {} ({}) is imbalanced: {:?}",
+            i,
+            entry.description,
+            entry.postings,
+        );
+    }
+}
+
+#[test]
+fn personal_entries_balanced() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = PersonalGenerator.generate(&mut rng, 200, date(2023, 1, 1), date(2025, 1, 1), false);
+    assert_all_balanced(&data);
+}
+
+#[test]
+fn crypto_entries_balanced() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = CryptoGenerator.generate(&mut rng, 200, date(2023, 1, 1), date(2025, 1, 1), false);
+    assert_all_balanced(&data);
+}
+
+#[test]
+fn mixed_entries_balanced() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 200, date(2023, 1, 1), date(2025, 1, 1), false);
+    assert_all_balanced(&data);
+}
+
+#[test]
+fn tax_entries_balanced() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = TaxGenerator.generate(&mut rng, 200, date(2019, 1, 1), date(2025, 1, 1), false);
+    assert_all_balanced(&data);
+}
+
+// ── Determinism ──
+
+#[test]
+fn deterministic_personal() {
+    let gen = PersonalGenerator;
+    let d1 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2023, 1, 1), date(2024, 1, 1), false);
+    let d2 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2023, 1, 1), date(2024, 1, 1), false);
+    let f = LedgerFormatter;
+    assert_eq!(f.format(&d1, 99), f.format(&d2, 99));
+}
+
+#[test]
+fn deterministic_crypto() {
+    let gen = CryptoGenerator;
+    let d1 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2023, 1, 1), date(2024, 1, 1), true);
+    let d2 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2023, 1, 1), date(2024, 1, 1), true);
+    let f = LedgerFormatter;
+    assert_eq!(f.format(&d1, 99), f.format(&d2, 99));
+}
+
+#[test]
+fn deterministic_mixed() {
+    let gen = MixedGenerator;
+    let d1 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2023, 1, 1), date(2024, 1, 1), false);
+    let d2 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2023, 1, 1), date(2024, 1, 1), false);
+    let f = LedgerFormatter;
+    assert_eq!(f.format(&d1, 99), f.format(&d2, 99));
+}
+
+#[test]
+fn deterministic_tax() {
+    let gen = TaxGenerator;
+    let d1 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2019, 1, 1), date(2025, 1, 1), false);
+    let d2 = gen.generate(&mut StdRng::seed_from_u64(99), 50, date(2019, 1, 1), date(2025, 1, 1), false);
+    let f = LedgerFormatter;
+    assert_eq!(f.format(&d1, 99), f.format(&d2, 99));
+}
+
+// ── Date range ──
+
+#[test]
+fn entries_within_date_range() {
+    let start = date(2023, 6, 1);
+    let end = date(2024, 6, 1);
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 100, start, end, false);
+    for entry in &data.entries {
+        assert!(
+            entry.date >= start && entry.date < end,
+            "Entry date {} outside [{}, {})",
+            entry.date,
+            start,
+            end,
+        );
+    }
+}
+
+// ── Sorted output ──
+
+#[test]
+fn entries_sorted_by_date() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 500, date(2022, 1, 1), date(2025, 1, 1), false);
+    for w in data.entries.windows(2) {
+        assert!(w[0].date <= w[1].date, "Entries not sorted: {} > {}", w[0].date, w[1].date);
+    }
+}
+
+// ── Entry count ──
+
+#[test]
+fn entry_count_matches_request() {
+    let mut rng = StdRng::seed_from_u64(42);
+    // Personal adds 1 opening + monthly salary/rent + count random entries
+    let data = CryptoGenerator.generate(&mut rng, 100, date(2023, 1, 1), date(2024, 1, 1), false);
+    // Crypto: 1 opening + 100 generated = 101
+    assert_eq!(data.entries.len(), 101);
+}
+
+// ── Format correctness ──
+
+#[test]
+fn ledger_format_has_commodity_declarations() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = PersonalGenerator.generate(&mut rng, 10, date(2023, 1, 1), date(2024, 1, 1), false);
+    let output = LedgerFormatter.format(&data, 42);
+    assert!(output.contains("commodity EUR"));
+    assert!(output.contains("; Generated by dsample"));
+    assert!(output.contains(" * "));
+}
+
+#[test]
+fn beancount_format_has_open_directives() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = PersonalGenerator.generate(&mut rng, 10, date(2023, 1, 1), date(2024, 1, 1), false);
+    let output = BeancountFormatter.format(&data, 42);
+    assert!(output.contains("option \"operating_currency\""));
+    assert!(output.contains(" open "));
+    // Beancount uses quoted descriptions
+    assert!(output.contains("* \""));
+    // No spaces in account names
+    assert!(!output.contains("Opening Balances"));
+    assert!(output.contains("Opening-Balances"));
+}
+
+#[test]
+fn hledger_format_has_account_declarations() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = PersonalGenerator.generate(&mut rng, 10, date(2023, 1, 1), date(2024, 1, 1), false);
+    let output = HledgerFormatter.format(&data, 42);
+    assert!(output.contains("account Assets:Bank:Checking"));
+    assert!(output.contains("commodity EUR"));
+}
+
+#[test]
+fn kraken_csv_has_header() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = CryptoGenerator.generate(&mut rng, 20, date(2023, 1, 1), date(2024, 1, 1), false);
+    let output = KrakenCsvFormatter.format(&data, 42);
+    assert!(output.starts_with("\"txid\",\"refid\""));
+    // Should have Kraken currency codes
+    let has_kraken_code = output.contains("XXBT") || output.contains("XETH") || output.contains("ZEUR");
+    assert!(has_kraken_code, "Expected Kraken currency codes in CSV");
+}
+
+// ── Price directives ──
+
+#[test]
+fn with_prices_generates_price_directives() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = CryptoGenerator.generate(&mut rng, 10, date(2023, 1, 1), date(2023, 2, 1), true);
+    assert!(!data.prices.is_empty(), "Expected price directives with --with-prices");
+    let output = LedgerFormatter.format(&data, 42);
+    assert!(output.contains("P 2023-01-"));
+}
+
+// ── Scale test ──
+
+#[test]
+fn scale_100k_entries() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 100_000, date(2020, 1, 1), date(2025, 1, 1), false);
+    assert!(data.entries.len() >= 100_000);
+    assert_all_balanced(&data);
+}
+
+// ── Per-currency sum check ──
+
+#[test]
+fn global_per_currency_sums() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = PersonalGenerator.generate(&mut rng, 100, date(2023, 1, 1), date(2024, 1, 1), false);
+    let mut sums: HashMap<String, Decimal> = HashMap::new();
+    for entry in &data.entries {
+        for p in &entry.postings {
+            *sums.entry(p.currency.clone()).or_insert(Decimal::ZERO) += p.amount;
+        }
+    }
+    for (ccy, sum) in &sums {
+        assert!(sum.is_zero(), "Global sum for {ccy} is {sum}, expected 0");
+    }
+}

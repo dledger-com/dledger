@@ -1,0 +1,18 @@
+[package]
+name = "dsample"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sample data generator for dledger stress testing"
+
+[[bin]]
+name = "dsample"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+thiserror = { workspace = true }
+rand = { version = "0.8", features = ["std_rng"] }
