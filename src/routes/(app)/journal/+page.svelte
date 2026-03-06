@@ -1709,7 +1709,7 @@
                     {
                         key: "other",
                         label: "Other",
-                        color: "var(--color-gray-300)",
+                        color: "var(--color-gray-200)",
                     },
                     {
                         key: "expense",
