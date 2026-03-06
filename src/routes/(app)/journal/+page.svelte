@@ -1063,6 +1063,20 @@
         sortedEntries[virtualItems[0]?.index]?.[0]?.date ?? "",
     );
 
+    // Last visible date in the virtual table (for chart highlight band)
+    const lastChartDate = $derived(
+        sortedEntries[virtualItems[virtualItems.length - 1]?.index]?.[0]
+            ?.date ?? "",
+    );
+
+    // Middle visible date (for chart cursor)
+    const middleChartDate = $derived.by(() => {
+        if (virtualItems.length === 0) return "";
+        const midIdx =
+            virtualItems[Math.floor(virtualItems.length / 2)]?.index;
+        return sortedEntries[midIdx]?.[0]?.date ?? "";
+    });
+
     // Scroll journal to a given date
     function scrollToDate(target: Date) {
         // Find closest date in sortedEntries
@@ -1564,10 +1578,28 @@
                 }}
             >
                 {#snippet aboveMarks()}
-                    {#if Rule_imported && currentChartDate}
+                    {#if chartContext?.xScale && currentChartDate && lastChartDate}
+                        {@const xScale = chartContext.xScale}
+                        {@const step = xScale.step?.() ?? 0}
+                        {@const firstDate = new Date(currentChartDate + "T00:00:00")}
+                        {@const lastDate = new Date(lastChartDate + "T00:00:00")}
+                        {@const p1 = xScale(firstDate) ?? 0}
+                        {@const p2 = xScale(lastDate) ?? 0}
+                        {@const left = Math.min(p1, p2)}
+                        {@const right = Math.max(p1, p2) + step}
+                        <rect
+                            x={left}
+                            y={0}
+                            width={right - left}
+                            height={chartContext.height ?? 0}
+                            fill="currentColor"
+                            opacity={0.06}
+                        />
+                    {/if}
+                    {#if Rule_imported && middleChartDate}
                         {@const RuleComp = Rule_imported}
                         <RuleComp
-                            x={new Date(currentChartDate + "T00:00:00")}
+                            x={new Date(middleChartDate + "T00:00:00")}
                             class="stroke-foreground/50"
                             stroke-dasharray="4 3"
                             stroke-width={1.5}
