@@ -238,8 +238,9 @@
         return groups;
     }
 
-    // Debounced backend search
+    // Debounced backend search (initial load fires immediately)
     let debounceTimer: ReturnType<typeof setTimeout>;
+    let initialLoad = true;
     $effect(() => {
         const { groups, backendText } = searchFilters;
         const orderBy = sort.key !== "amount" ? sort.key : null;
@@ -248,7 +249,8 @@
         const tagFilter = selectedTags;
         const linkFilter = selectedLinks;
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
+
+        const doLoad = () => {
             const filter: TransactionFilter = {};
             if (backendText) filter.description_search = backendText;
             if (orderBy && orderDir) {
@@ -272,7 +274,14 @@
             store.load(filter).then(() => {
                 virtualizer.scrollToOffset(0);
             });
-        }, 300);
+        };
+
+        if (initialLoad) {
+            initialLoad = false;
+            doLoad();
+        } else {
+            debounceTimer = setTimeout(doLoad, 300);
+        }
         return () => clearTimeout(debounceTimer);
     });
 
