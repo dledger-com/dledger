@@ -1705,7 +1705,6 @@
                 grid={false}
                 rule={false}
                 yDomain={chartYMax > 0 ? [0, chartYMax] : undefined}
-                clip={true}
                 series={[
                     {
                         key: "other",
@@ -1728,6 +1727,7 @@
                 xRange={computedXRange}
                 bind:context={chartContext}
                 props={{
+                    svg: { clip: true },
                     bars: { strokeWidth: 0 },
                     tooltip: {
                         header: {
