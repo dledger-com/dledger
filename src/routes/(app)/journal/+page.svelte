@@ -62,7 +62,7 @@
     import { serializeTags } from "$lib/utils/tags.js";
     import TagInput from "$lib/components/TagInput.svelte";
     import LinkInput from "$lib/components/LinkInput.svelte";
-    import Download from "lucide-svelte/icons/download";
+    import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
     import X from "lucide-svelte/icons/x";
     import Check from "lucide-svelte/icons/check";
     import Tag from "lucide-svelte/icons/tag";
@@ -1640,115 +1640,102 @@
             </p>
         </div>
         <div class="flex flex-wrap gap-2 shrink-0">
-            <Button
-                variant="outline"
-                size="sm"
-                class="hidden sm:inline-flex"
-                disabled={findingMatches}
-                onclick={async () => {
-                    findingMatches = true;
-                    try {
-                        const backend = getBackend();
-                        const allEntries = await backend.queryJournalEntries(
-                            {},
-                        );
-                        const accounts = await backend.listAccounts();
-                        const idToName = new Map<string, string>();
-                        const accMap = new Map<string, Account>();
-                        for (const acc of accounts) {
-                            idToName.set(acc.id, acc.full_name);
-                            accMap.set(acc.full_name, acc);
-                        }
-                        // Collect already-linked entry IDs
-                        const linked = new Set<string>();
-                        for (const [entry] of allEntries) {
-                            if (entry.voided_by) continue;
-                            const meta = await backend.getMetadata(entry.id);
-                            if (
-                                meta["cross_match_linked"] ||
-                                meta["cex_linked"] ||
-                                meta["cross_match_skipped"]
-                            )
-                                linked.add(entry.id);
-                        }
-                        const nonVoided = allEntries.filter(
-                            ([e]) => !e.voided_by,
-                        );
-                        const candidates = extractAllCandidates(
-                            nonVoided,
-                            idToName,
-                            linked,
-                        );
-                        // Load metadata for scoring
-                        const metaMap = new Map<
-                            string,
-                            Record<string, string>
-                        >();
-                        for (const c of candidates) {
-                            metaMap.set(
-                                c.entry.id,
-                                await backend.getMetadata(c.entry.id),
-                            );
-                        }
-                        matchCandidates = findMatches(candidates, metaMap);
-                        matchAccountMap = accMap;
-                        showMatches = true;
-                    } catch (e) {
-                        toast.error(String(e));
-                    } finally {
-                        findingMatches = false;
-                    }
-                }}
-            >
-                {#if findingMatches}
-                    <Loader class="h-3.5 w-3.5 mr-1 animate-spin" />
-                {/if}
-                {findingMatches ? "Finding..." : "Find Matches"}
-            </Button>
-            <Button
-                variant="outline"
-                size="sm"
-                class="hidden sm:inline-flex"
-                disabled={detectingDuplicates}
-                onclick={async () => {
-                    detectingDuplicates = true;
-                    try {
-                        const allEntries =
-                            await getBackend().queryJournalEntries({});
-                        const filtered = filterHiddenEntries(
-                            allEntries,
-                            getHiddenCurrencySet(),
-                        );
-                        duplicateGroups = findDuplicateGroups(filtered);
-                        showDuplicates = true;
-                    } finally {
-                        detectingDuplicates = false;
-                    }
-                }}
-            >
-                {#if detectingDuplicates}
-                    <Loader class="h-3.5 w-3.5 mr-1 animate-spin" />
-                {/if}
-                {detectingDuplicates ? "Detecting..." : "Detect Duplicates"}
-            </Button>
+            <Button size="sm" href="/journal/new">New Entry</Button>
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                     {#snippet child({ props })}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            {...props}
-                            disabled={exporting}
-                        >
-                            <Download class="h-3.5 w-3.5 mr-1" />
-                            {exporting ? "Exporting..." : "Export"}
+                        <Button variant="outline" size="icon-sm" {...props}>
+                            <EllipsisVertical class="h-4 w-4" />
+                            <span class="sr-only">More actions</span>
                         </Button>
                     {/snippet}
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Analysis</DropdownMenu.Item>
+                    <DropdownMenu.Separator />
                     <DropdownMenu.Item
-                        onclick={() => handleExport("beancount")}
+                        disabled={findingMatches}
+                        onclick={async () => {
+                            findingMatches = true;
+                            try {
+                                const backend = getBackend();
+                                const allEntries = await backend.queryJournalEntries(
+                                    {},
+                                );
+                                const accounts = await backend.listAccounts();
+                                const idToName = new Map<string, string>();
+                                const accMap = new Map<string, Account>();
+                                for (const acc of accounts) {
+                                    idToName.set(acc.id, acc.full_name);
+                                    accMap.set(acc.full_name, acc);
+                                }
+                                // Collect already-linked entry IDs
+                                const linked = new Set<string>();
+                                for (const [entry] of allEntries) {
+                                    if (entry.voided_by) continue;
+                                    const meta = await backend.getMetadata(entry.id);
+                                    if (
+                                        meta["cross_match_linked"] ||
+                                        meta["cex_linked"] ||
+                                        meta["cross_match_skipped"]
+                                    )
+                                        linked.add(entry.id);
+                                }
+                                const nonVoided = allEntries.filter(
+                                    ([e]) => !e.voided_by,
+                                );
+                                const candidates = extractAllCandidates(
+                                    nonVoided,
+                                    idToName,
+                                    linked,
+                                );
+                                // Load metadata for scoring
+                                const metaMap = new Map<
+                                    string,
+                                    Record<string, string>
+                                >();
+                                for (const c of candidates) {
+                                    metaMap.set(
+                                        c.entry.id,
+                                        await backend.getMetadata(c.entry.id),
+                                    );
+                                }
+                                matchCandidates = findMatches(candidates, metaMap);
+                                matchAccountMap = accMap;
+                                showMatches = true;
+                            } catch (e) {
+                                toast.error(String(e));
+                            } finally {
+                                findingMatches = false;
+                            }
+                        }}
                     >
+                        {findingMatches ? "Finding..." : "Find Matches"}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                        disabled={detectingDuplicates}
+                        onclick={async () => {
+                            detectingDuplicates = true;
+                            try {
+                                const allEntries =
+                                    await getBackend().queryJournalEntries({});
+                                const filtered = filterHiddenEntries(
+                                    allEntries,
+                                    getHiddenCurrencySet(),
+                                );
+                                duplicateGroups = findDuplicateGroups(filtered);
+                                showDuplicates = true;
+                            } finally {
+                                detectingDuplicates = false;
+                            }
+                        }}
+                    >
+                        {detectingDuplicates ? "Detecting..." : "Detect Duplicates"}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Export</DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item onclick={() => handleExport("beancount")}>
                         Beancount (.beancount)
                     </DropdownMenu.Item>
                     <DropdownMenu.Item onclick={() => handleExport("hledger")}>
@@ -1759,7 +1746,6 @@
                     </DropdownMenu.Item>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
-            <Button size="sm" href="/journal/new">New Entry</Button>
         </div>
     </div>
 
