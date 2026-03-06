@@ -656,15 +656,6 @@
         });
     });
 
-    let maxEntryAmount = $derived.by(() => {
-        let max = 0;
-        for (const [, items] of displayEntries) {
-            const a = entryBarAmount(items);
-            if (a > max) max = a;
-        }
-        return max;
-    });
-
     // Sorted entries — needed in script block for virtualizer count
     const sortedEntries = $derived.by(() => {
         if (sort.key === "amount" && sort.direction)
@@ -987,6 +978,16 @@
             .getVirtualItems()
             .filter((row) => row.index < sortedEntries.length),
     );
+    let maxEntryAmount = $derived.by(() => {
+        let max = 0;
+        for (const vi of virtualItems) {
+            const entry = sortedEntries[vi.index];
+            if (!entry) continue;
+            const a = entryBarAmount(entry[1]);
+            if (a > max) max = a;
+        }
+        return max;
+    });
     const totalSize = $derived(virtualizer.getTotalSize());
     const paddingTop = $derived(
         virtualItems.length > 0 ? virtualItems[0].start : 0,
