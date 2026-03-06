@@ -1083,6 +1083,16 @@
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let chartContext = $state<any>(null);
     let isDragging = $state(false);
+    let chartContainerWidth = $state(0);
+
+    const computedBandPadding = $derived.by(() => {
+        const n = chartData.length;
+        if (n === 0 || chartContainerWidth === 0) return 0.15;
+        const step = chartContainerWidth / n;
+        const minPadding = 0.15;
+        if (step * (1 - minPadding) <= 40) return minPadding;
+        return Math.min(0.9, 1 - 40 / step);
+    });
 
     function handleChartPointer(e: PointerEvent) {
         if (!chartContext || !isDragging) return;
@@ -1567,6 +1577,7 @@
         <!-- svelte-ignore binding_property_non_reactive -->
         <div
             class="h-24 px-2 cursor-crosshair select-none touch-none"
+            bind:clientWidth={chartContainerWidth}
             onpointerdown={(e) => {
                 isDragging = true;
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -1598,10 +1609,17 @@
                     },
                 ]}
                 seriesLayout="stack"
-                bandPadding={0.15}
-                tooltip={false}
+                bandPadding={computedBandPadding}
                 bind:context={chartContext}
                 props={{
+                    bars: { strokeWidth: 0 },
+                    tooltip: {
+                        header: {
+                            format: (d: unknown) => d instanceof Date
+                                ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                : String(d)
+                        }
+                    },
                     xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" },
                 }}
             >
