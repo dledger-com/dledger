@@ -1624,7 +1624,7 @@
     }
 </script>
 
-<div class="flex flex-col gap-6 flex-1 min-h-0">
+<div class="flex flex-col gap-6 flex-1 min-h-0 -mb-20 md:-mb-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="shrink-0">
             <h1 class="text-2xl font-bold tracking-tight">Journal</h1>
@@ -2055,14 +2055,14 @@
         </Card.Root>
     {:else}
         <Card.Root
-            class="border-x-0 rounded-none shadow-none py-0 flex-1 min-h-0 flex flex-col"
+            class="border-x-0 border-b-0 rounded-none shadow-none py-0 flex-1 min-h-0 flex flex-col"
         >
             <div class="relative flex-1 min-h-0 flex flex-col">
                 <div
                     bind:this={scrollEl}
                     class="overflow-y-auto flex-1 min-h-0 [&_[data-slot=table-container]]:overflow-visible"
                 >
-                    <Table.Root class="border-separate border-spacing-0 [&_tr]:border-0 [&_td]:border-b [&_th]:border-b">
+                    <Table.Root class="border-separate border-spacing-0 [&_tr]:border-0 [&_td]:border-b [&_th]:border-b [&_tr:last-child_td]:border-b-0 [&_tr:last-child]:border-b-0">
                         <Table.Header class="sticky top-0 z-10 bg-background">
                             {#if isMobileLayout}
                                 <Table.Row>
@@ -2414,7 +2414,7 @@
                       bg-background/95 px-3 py-1 text-xs text-muted-foreground
                       shadow-sm backdrop-blur-sm"
                     >
-                        {positionLabel}
+                        {positionLabel} of {store.totalCount} entries
                     </div>
                 {/if}
 
@@ -2577,21 +2577,6 @@
                 </Button>
             </div>
         {/if}
-
-        <div class="flex items-center justify-between">
-            <span class="text-sm text-muted-foreground">
-                {#if selectedCount > 0}
-                    {selectedCount} of {sortedEntries.length} row(s) selected
-                {:else if isScrolledDown}
-                    {(virtualItems[0]?.index ?? 0) + 1}–{Math.min(
-                        (virtualItems[virtualItems.length - 1]?.index ?? 0) + 1,
-                        sortedEntries.length,
-                    )} of
-                {/if}
-                {store.totalCount}
-                {store.totalCount === 1 ? "entry" : "entries"}
-            </span>
-        </div>
     {/if}
 </div>
 
