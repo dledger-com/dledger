@@ -256,7 +256,7 @@
     let initialLoad = true;
     $effect(() => {
         const { groups, backendText } = searchFilters;
-        const orderBy = sort.key !== "amount" ? sort.key : null;
+        const orderBy = sort.key !== "amount" && sort.key !== "account" ? sort.key : null;
         const orderDir = sort.direction;
         const accountFilter = selectedAccounts;
         const tagFilter = selectedTags;
@@ -721,6 +721,13 @@
             return sortItems(
                 displayEntries,
                 ([, items]: [any, any]) => totalDebits(items),
+                sort.direction,
+            );
+        if (sort.key === "account" && sort.direction)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return sortItems(
+                displayEntries,
+                ([, items]: [any, any]) => mainCounterparty(items),
                 sort.direction,
             );
         return displayEntries;
@@ -2130,7 +2137,15 @@
                                                     >Description</SortableHeader
                                                 >
                                             {:else if header.column.id === "account"}
-                                                <Table.Head class="hidden lg:table-cell">Account</Table.Head>
+                                                <SortableHeader
+                                                    active={sort.key ===
+                                                        "account"}
+                                                    direction={sort.direction}
+                                                    onclick={() =>
+                                                        sort.toggle("account")}
+                                                    class="hidden lg:table-cell"
+                                                    >Account</SortableHeader
+                                                >
                                             {:else if header.column.id === "amount"}
                                                 <SortableHeader
                                                     active={sort.key ===

@@ -4,7 +4,7 @@
 import type { JournalEntry, LineItem } from "$lib/types/index.js";
 import type { SortDirection } from "./sort.js";
 
-export type JournalSortKey = "date" | "description" | "status" | "amount";
+export type JournalSortKey = "date" | "description" | "status" | "amount" | "account";
 
 type EntryPair = [JournalEntry, LineItem[]];
 
@@ -47,6 +47,10 @@ export function derivePositionLabel(
 			return deriveStatusLabel(first[0].status, last[0].status);
 		case "amount":
 			return deriveAmountLabel(first[1], last[1], formatDebitTotal);
+		case "account":
+			// Account names are resolved outside this module; fall back to row range
+			if (firstIndex === lastIndex) return String(firstIndex + 1);
+			return `${firstIndex + 1}–${lastIndex + 1}`;
 	}
 }
 
