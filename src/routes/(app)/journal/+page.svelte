@@ -1055,7 +1055,7 @@
     // Aggregate income/expense from displayEntries, bucketed by adaptive granularity
     type ChartDatum = { date: Date; income: number; expense: number; other: number };
 
-    const MIN_BAR_STEP = 6;
+    const MIN_BAR_STEP = 2;
 
     const chartGranularity: ChartGranularity = $derived.by(() => {
         const entries = displayEntries;
