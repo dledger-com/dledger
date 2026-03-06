@@ -723,14 +723,6 @@
                 <Switch checked={mode.current === "dark"}
                     onCheckedChange={(v) => setMode(v ? "dark" : "light")} />
             </div>
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-sm font-medium">Journal amount bars</p>
-                    <p class="text-sm text-muted-foreground">Show colored bars indicating relative transaction amounts.</p>
-                </div>
-                <Switch checked={settings.settings.journalAmountBars !== false}
-                    onCheckedChange={(v) => settings.update({ journalAmountBars: v })} />
-            </div>
         </Card.Content>
     </Card.Root>
 

@@ -1687,7 +1687,11 @@
                     <DropdownMenu.CheckboxItem
                         checked={showChart}
                         onCheckedChange={(v) => { showChart = !!v; settings.update({ journalShowChart: !!v }); }}
-                    >Expenses & Income</DropdownMenu.CheckboxItem>
+                    >Timeline</DropdownMenu.CheckboxItem>
+                    <DropdownMenu.CheckboxItem
+                        checked={settings.settings.journalAmountBars !== false}
+                        onCheckedChange={(v) => settings.update({ journalAmountBars: !!v })}
+                    >Amount Bars</DropdownMenu.CheckboxItem>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
