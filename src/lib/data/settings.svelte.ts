@@ -1,5 +1,6 @@
 import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { configureAccountPaths, type AccountPathConfig } from "$lib/accounts/paths.js";
+import type { ChartGranularity } from "$lib/utils/chart-granularity.js";
 
 export type DpriceMode = "off" | "integrated" | "http" | "local";
 
@@ -48,6 +49,7 @@ export interface AppSettings {
   journalAmountBars?: boolean;
   journalShowChart?: boolean;
   journalColumnVisibility?: Record<string, boolean>;
+  journalChartGranularity?: ChartGranularity | null;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

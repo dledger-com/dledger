@@ -1058,7 +1058,7 @@
 
     const MIN_BAR_STEP = 2;
 
-    let manualGranularity: ChartGranularity | null = $state(null);
+    let manualGranularity: ChartGranularity | null = $state(settings.settings.journalChartGranularity ?? null);
 
     const autoGranularity: ChartGranularity = $derived.by(() => {
         const entries = displayEntries;
@@ -1715,13 +1715,13 @@
                     </button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
-                    <DropdownMenu.Item inset onclick={() => manualGranularity = null}>
+                    <DropdownMenu.Item inset onclick={() => { manualGranularity = null; settings.update({ journalChartGranularity: null }); }}>
                         {#if !manualGranularity}<Check class="absolute left-2 size-4" />{/if}
                         Auto ({autoGranularity[0].toUpperCase() + autoGranularity.slice(1)})
                     </DropdownMenu.Item>
                     <DropdownMenu.Separator />
                     {#each (["day","week","month","quarter","year"] as const) as g}
-                        <DropdownMenu.Item inset onclick={() => manualGranularity = g}>
+                        <DropdownMenu.Item inset onclick={() => { manualGranularity = g; settings.update({ journalChartGranularity: g }); }}>
                             {#if manualGranularity === g}<Check class="absolute left-2 size-4" />{/if}
                             {g[0].toUpperCase() + g.slice(1)}
                         </DropdownMenu.Item>
