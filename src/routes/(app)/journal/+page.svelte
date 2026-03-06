@@ -1078,7 +1078,7 @@
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
     const chartYMax = $derived.by(() => {
-        const totals = chartData.map(d => d.income + d.expense);
+        const totals = chartData.map(d => Math.max(d.income + d.expense, d.other));
         return percentile95(totals);
     });
 
@@ -1707,11 +1707,6 @@
                 yDomain={chartYMax > 0 ? [0, chartYMax] : undefined}
                 series={[
                     {
-                        key: "other",
-                        label: "Other",
-                        color: "var(--color-gray-200)",
-                    },
-                    {
                         key: "expense",
                         label: "Expenses",
                         color: "var(--color-red-500)",
@@ -1739,6 +1734,21 @@
                     xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" },
                 }}
             >
+                {#snippet belowMarks()}
+                    {#if chartContext?.xScale && chartContext?.yScale}
+                        {#each chartData as d}
+                            {#if d.other > 0}
+                                <rect
+                                    x={chartContext.xScale(d.date)}
+                                    y={chartContext.yScale(d.other)}
+                                    width={chartContext.xScale.bandwidth()}
+                                    height={chartContext.yScale(0) - chartContext.yScale(d.other)}
+                                    fill="var(--color-gray-200)"
+                                />
+                            {/if}
+                        {/each}
+                    {/if}
+                {/snippet}
                 {#snippet aboveMarks()}
                     {#if chartContext?.xScale && currentChartDate && lastChartDate}
                         {@const xScale = chartContext.xScale}
