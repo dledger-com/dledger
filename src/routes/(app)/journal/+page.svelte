@@ -2200,42 +2200,48 @@
                                                     class="flex justify-between items-baseline gap-2"
                                                 >
                                                     <span class="flex items-baseline gap-1 min-w-0">
-                                                        <span
-                                                            class="text-muted-foreground text-xs shrink-0"
-                                                            >{entry.date}</span
-                                                        >
-                                                        {#if mainCounterpartyShort(items)}
-                                                            <span class="text-muted-foreground text-xs truncate min-w-0">· {mainCounterpartyShort(items)}</span>
+                                                        {#if columnVisibility.date !== false}
+                                                            <span
+                                                                class="text-muted-foreground text-xs shrink-0"
+                                                                >{entry.date}</span
+                                                            >
+                                                        {/if}
+                                                        {#if columnVisibility.account !== false && mainCounterpartyShort(items)}
+                                                            <span class="text-muted-foreground text-xs truncate min-w-0">{#if columnVisibility.date !== false}·{/if} {mainCounterpartyShort(items)}</span>
                                                         {/if}
                                                     </span>
-                                                    <span
-                                                        class="font-mono text-sm text-right shrink-0"
-                                                        title={convertedTotals.get(
-                                                            entry.id,
-                                                        ) ?? ""}
-                                                    >
-                                                        {#each entryAmountDisplay(items) as part, i}
-                                                            {#if i > 0}{" "}<span
-                                                                    class="text-muted-foreground"
-                                                                    >+</span
-                                                                >{" "}{/if}
-                                                            <span
-                                                                class={amountColorClass(
-                                                                    part.direction,
-                                                                )}
-                                                                >{part.text}</span
-                                                            >
-                                                        {/each}
-                                                    </span>
+                                                    {#if columnVisibility.amount !== false}
+                                                        <span
+                                                            class="font-mono text-sm text-right shrink-0"
+                                                            title={convertedTotals.get(
+                                                                entry.id,
+                                                            ) ?? ""}
+                                                        >
+                                                            {#each entryAmountDisplay(items) as part, i}
+                                                                {#if i > 0}{" "}<span
+                                                                        class="text-muted-foreground"
+                                                                        >+</span
+                                                                    >{" "}{/if}
+                                                                <span
+                                                                    class={amountColorClass(
+                                                                        part.direction,
+                                                                    )}
+                                                                    >{part.text}</span
+                                                                >
+                                                            {/each}
+                                                        </span>
+                                                    {/if}
                                                 </div>
                                                 <div
                                                     class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5"
                                                 >
-                                                    <span
-                                                        class="font-medium truncate"
-                                                        title={entry.description}
-                                                        >{entry.description}</span
-                                                    >
+                                                    {#if columnVisibility.description !== false}
+                                                        <span
+                                                            class="font-medium truncate"
+                                                            title={entry.description}
+                                                            >{entry.description}</span
+                                                        >
+                                                    {/if}
                                                     {#if entryLinks.get(entry.id)?.length}
                                                         <!-- svelte-ignore a11y_click_events_have_key_events -->
                                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
