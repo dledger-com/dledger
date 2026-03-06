@@ -1085,13 +1085,15 @@
     let isDragging = $state(false);
     let chartContainerWidth = $state(0);
 
-    const computedBandPadding = $derived.by(() => {
+    const MAX_BAR_WIDTH = 20;
+    const BAND_PADDING = 0.15;
+
+    const computedXRange = $derived.by(() => {
         const n = chartData.length;
-        if (n === 0 || chartContainerWidth === 0) return 0.15;
-        const step = chartContainerWidth / n;
-        const minPadding = 0.15;
-        if (step * (1 - minPadding) <= 40) return minPadding;
-        return Math.min(0.9, 1 - 40 / step);
+        if (n === 0 || chartContainerWidth === 0) return [0, chartContainerWidth];
+        const desiredStep = MAX_BAR_WIDTH / (1 - BAND_PADDING);
+        const desiredWidth = n * desiredStep;
+        return [0, Math.min(chartContainerWidth, desiredWidth)];
     });
 
     function handleChartPointer(e: PointerEvent) {
@@ -1609,7 +1611,8 @@
                     },
                 ]}
                 seriesLayout="stack"
-                bandPadding={computedBandPadding}
+                bandPadding={BAND_PADDING}
+                xRange={computedXRange}
                 bind:context={chartContext}
                 props={{
                     bars: { strokeWidth: 0 },
