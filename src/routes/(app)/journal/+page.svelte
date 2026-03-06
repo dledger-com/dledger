@@ -64,6 +64,7 @@
     import LinkInput from "$lib/components/LinkInput.svelte";
     import Download from "lucide-svelte/icons/download";
     import X from "lucide-svelte/icons/x";
+    import Check from "lucide-svelte/icons/check";
     import Tag from "lucide-svelte/icons/tag";
     import Link2 from "lucide-svelte/icons/link-2";
     import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
@@ -1057,7 +1058,9 @@
 
     const MIN_BAR_STEP = 2;
 
-    const chartGranularity: ChartGranularity = $derived.by(() => {
+    let manualGranularity: ChartGranularity | null = $state(null);
+
+    const autoGranularity: ChartGranularity = $derived.by(() => {
         const entries = displayEntries;
         if (entries.length === 0) return "day";
         const dates = new Set<string>();
@@ -1069,6 +1072,7 @@
         const maxBars = chartContainerWidth > 0 ? Math.floor(chartContainerWidth / MIN_BAR_STEP) : 200;
         return chooseGranularity(spanDays, dates.size, maxBars);
     });
+    const effectiveGranularity: ChartGranularity = $derived(manualGranularity ?? autoGranularity);
 
     function buildRawChartData(entries: [JournalEntry, LineItem[]][], granularity: ChartGranularity): ChartDatum[] {
         const map = new Map<string, ChartDatum>();
@@ -1099,7 +1103,7 @@
         );
     }
 
-    const rawChartData = $derived.by(() => buildRawChartData(displayEntries, chartGranularity));
+    const rawChartData = $derived.by(() => buildRawChartData(displayEntries, effectiveGranularity));
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
     const chartYMax = $derived.by(() => {
@@ -1111,7 +1115,7 @@
     $effect(() => {
         const entries = displayEntries;
         const baseCurrency = settings.currency;
-        const granularity = chartGranularity;
+        const granularity = effectiveGranularity;
         convertedChartData = null;
         if (!baseCurrency || entries.length === 0) return;
         const gen = ++chartConversionGen;
@@ -1156,13 +1160,13 @@
     // Current scroll date bucketed (for chart highlight band start)
     const currentChartBucketDate = $derived.by(() => {
         const dateStr = sortedEntries[virtualItems[0]?.index]?.[0]?.date;
-        return dateStr ? dateToBucketDate(dateStr, chartGranularity) : null;
+        return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
     // Last visible date bucketed (for chart highlight band end)
     const lastChartBucketDate = $derived.by(() => {
         const dateStr = sortedEntries[virtualItems[virtualItems.length - 1]?.index]?.[0]?.date;
-        return dateStr ? dateToBucketDate(dateStr, chartGranularity) : null;
+        return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
     // Middle visible date bucketed (for chart cursor rule)
@@ -1170,7 +1174,7 @@
         if (virtualItems.length === 0) return null;
         const midIdx = virtualItems[Math.floor(virtualItems.length / 2)]?.index;
         const dateStr = sortedEntries[midIdx]?.[0]?.date;
-        return dateStr ? dateToBucketDate(dateStr, chartGranularity) : null;
+        return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
     // Scroll journal to a given date
@@ -1702,6 +1706,29 @@
 
     {#if showChart && !store.loading && chartData.length > 1 && BarChart_imported}
         {@const BarChartComp = BarChart_imported}
+        <div class="relative">
+        <div class="absolute top-0 right-2 z-10">
+            <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                    <button class="text-[10px] px-1.5 py-0.5 rounded bg-muted/70 hover:bg-muted text-muted-foreground">
+                        {manualGranularity ? manualGranularity[0].toUpperCase() + manualGranularity.slice(1) : "Auto"}
+                    </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item inset onclick={() => manualGranularity = null}>
+                        {#if !manualGranularity}<Check class="absolute left-2 size-4" />{/if}
+                        Auto ({autoGranularity[0].toUpperCase() + autoGranularity.slice(1)})
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    {#each (["day","week","month","quarter","year"] as const) as g}
+                        <DropdownMenu.Item inset onclick={() => manualGranularity = g}>
+                            {#if manualGranularity === g}<Check class="absolute left-2 size-4" />{/if}
+                            {g[0].toUpperCase() + g.slice(1)}
+                        </DropdownMenu.Item>
+                    {/each}
+                </DropdownMenu.Content>
+            </DropdownMenu.Root>
+        </div>
         <!-- svelte-ignore binding_property_non_reactive -->
         <div
             class="h-36 px-2 cursor-crosshair select-none touch-none"
@@ -1748,11 +1775,11 @@
                     tooltip: {
                         header: {
                             format: (d: unknown) => d instanceof Date
-                                ? formatTooltipHeader(d, chartGranularity)
+                                ? formatTooltipHeader(d, effectiveGranularity)
                                 : String(d)
                         }
                     },
-                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? formatXAxisLabel(d, chartGranularity) : "" },
+                    xAxis: { ticks: 5, format: (d: unknown) => d instanceof Date ? formatXAxisLabel(d, effectiveGranularity) : "" },
                 }}
             >
                 {#snippet belowMarks()}
@@ -1798,6 +1825,7 @@
                     {/if}
                 {/snippet}
             </BarChartComp>
+        </div>
         </div>
     {:else if showChart && (store.loading || !BarChart_imported)}
         <Skeleton class="h-36 w-full" />
