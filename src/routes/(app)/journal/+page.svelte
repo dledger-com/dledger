@@ -1782,6 +1782,8 @@
                 {/snippet}
             </BarChartComp>
         </div>
+    {:else if showChart && (store.loading || !BarChart_imported)}
+        <Skeleton class="h-36 w-full" />
     {/if}
 
     <!-- Filter toolbar -->
