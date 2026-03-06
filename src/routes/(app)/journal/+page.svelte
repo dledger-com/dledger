@@ -50,6 +50,7 @@
     import LinkDisplay from "$lib/components/LinkDisplay.svelte";
     import { parseTags, TAGS_META_KEY } from "$lib/utils/tags.js";
     import { formatExtension, type LedgerFormat } from "$lib/ledger-format.js";
+    import { exportLedger } from "$lib/browser-ledger-file.js";
     import SortableHeader from "$lib/components/SortableHeader.svelte";
     import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
     import type { TransactionFilter } from "$lib/types/index.js";
@@ -1614,7 +1615,7 @@
     async function handleExport(format: LedgerFormat) {
         exporting = true;
         try {
-            const content = await getBackend().exportLedgerFile(format);
+            const content = await exportLedger(getBackend(), format, displayEntries);
             const blob = new Blob([content], { type: "text/plain" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
