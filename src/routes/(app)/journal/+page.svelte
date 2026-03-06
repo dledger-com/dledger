@@ -444,11 +444,12 @@
         return entryBarSegments(items).reduce((s, seg) => s + seg.amount, 0);
     }
 
-    function barGradient(items: LineItem[], maxAmount: number): string {
+    function barGradientFromSegments(
+        segments: BarSegment[],
+        maxAmount: number,
+    ): string {
         if (settings.settings.journalAmountBars === false) return "";
-        if (maxAmount <= 0) return "";
-        const segments = entryBarSegments(items);
-        if (segments.length === 0) return "";
+        if (maxAmount <= 0 || segments.length === 0) return "";
 
         // Single segment: solid color bar
         if (segments.length === 1) {
@@ -463,8 +464,6 @@
 
         // Multiple segments: sized bar with internal gradient (no transparent)
         const sorted = [...segments].sort((a, b) => a.amount - b.amount);
-        const colorStops: string[] = [];
-        let cursor = 0;
         let totalPct = 0;
         for (const seg of sorted) {
             const pct = Math.min(
@@ -476,6 +475,7 @@
         }
         if (totalPct <= 0) return "";
         // Build gradient with stops normalized to 0-100% within the bar
+        const colorStops: string[] = [];
         let pos = 0;
         for (const seg of sorted) {
             const pct = Math.min(
@@ -491,6 +491,10 @@
         }
         const gradient = `linear-gradient(to right, ${colorStops.join(", ")})`;
         return `--bar-bg: ${gradient}; --bar-width: ${totalPct.toFixed(1)}%`;
+    }
+
+    function barGradient(items: LineItem[], maxAmount: number): string {
+        return barGradientFromSegments(entryBarSegments(items), maxAmount);
     }
 
     function entryAmountDisplay(items: LineItem[]): AmountPart[] {
@@ -983,7 +987,10 @@
         for (const vi of virtualItems) {
             const entry = sortedEntries[vi.index];
             if (!entry) continue;
-            const a = entryBarAmount(entry[1]);
+            const segments = convertedBarSegments.get(entry[0].id);
+            const a = segments
+                ? segments.reduce((s, seg) => s + seg.amount, 0)
+                : entryBarAmount(entry[1]);
             if (a > max) max = a;
         }
         return max;
@@ -1029,12 +1036,11 @@
     });
 
     // Aggregate daily income/expense from displayEntries
-    const chartData = $derived.by(() => {
-        const map = new Map<
-            string,
-            { date: Date; income: number; expense: number; other: number }
-        >();
-        for (const [entry, items] of displayEntries) {
+    type ChartDatum = { date: Date; income: number; expense: number; other: number };
+
+    function buildRawChartData(entries: [JournalEntry, LineItem[]][]): ChartDatum[] {
+        const map = new Map<string, ChartDatum>();
+        for (const [entry, items] of entries) {
             const dateKey = entry.date;
             let rec = map.get(dateKey);
             if (!rec) {
@@ -1059,6 +1065,55 @@
         return [...map.values()].sort(
             (a, b) => a.date.getTime() - b.date.getTime(),
         );
+    }
+
+    const rawChartData = $derived.by(() => buildRawChartData(displayEntries));
+    let convertedChartData = $state<ChartDatum[] | null>(null);
+    const chartData = $derived(convertedChartData ?? rawChartData);
+
+    let chartConversionGen = 0;
+    $effect(() => {
+        const entries = displayEntries;
+        const baseCurrency = settings.currency;
+        convertedChartData = null;
+        if (!baseCurrency || entries.length === 0) return;
+        const gen = ++chartConversionGen;
+        (async () => {
+            const cache = new ExchangeRateCache(getBackend());
+            const map = new Map<string, ChartDatum>();
+            for (const [entry, items] of entries) {
+                if (gen !== chartConversionGen) return;
+                const dateKey = entry.date;
+                let rec = map.get(dateKey);
+                if (!rec) {
+                    rec = { date: new Date(dateKey + "T00:00:00"), income: 0, expense: 0, other: 0 };
+                    map.set(dateKey, rec);
+                }
+                for (const item of items) {
+                    const name = accountIdToName.get(item.account_id) ?? "";
+                    const rawAmt = Math.abs(parseFloat(item.amount));
+                    let amt: number;
+                    if (item.currency === baseCurrency) {
+                        amt = rawAmt;
+                    } else {
+                        const rate = await cache.get(item.currency, baseCurrency, dateKey);
+                        if (gen !== chartConversionGen) return;
+                        amt = rate ? rawAmt * Number(rate) : 0;
+                    }
+                    if (name.startsWith("Income:") || name === "Income") {
+                        rec.income += amt;
+                    } else if (name.startsWith("Expenses:") || name === "Expenses") {
+                        rec.expense += amt;
+                    } else {
+                        rec.other += amt;
+                    }
+                }
+            }
+            if (gen !== chartConversionGen) return;
+            convertedChartData = [...map.values()].sort(
+                (a, b) => a.date.getTime() - b.date.getTime(),
+            );
+        })();
     });
 
     // Current scroll date (for chart cursor)
@@ -1169,6 +1224,7 @@
         entryTags = new Map();
         entryLinks = new Map();
         convertedTotals = new Map();
+        convertedBarSegments = new Map();
         if (allIds.length === 0) return;
         const gen = ++metaGen;
         (async () => {
@@ -1242,7 +1298,103 @@
 
     // Visible-range currency conversion
     let convertedTotals = $state(new Map<string, string>());
+    let convertedBarSegments = $state(new Map<string, BarSegment[]>());
     let conversionGen = 0;
+
+    async function convertBarSegments(
+        items: LineItem[],
+        date: string,
+        baseCurrency: string,
+        cache: ExchangeRateCache,
+    ): Promise<BarSegment[]> {
+        const { isTrade, debits } = entryAmountParts(items);
+
+        if (isTrade) {
+            let total = 0;
+            for (const d of debits) {
+                if (d.currency === baseCurrency) {
+                    total += Math.abs(Number(d.amount));
+                } else {
+                    const rate = await cache.get(d.currency, baseCurrency, date);
+                    if (rate) total += Math.abs(Number(d.amount)) * Number(rate);
+                }
+            }
+            return [{ direction: "default", amount: total }];
+        }
+
+        let hasIncome = false,
+            hasExpense = false,
+            hasEquity = false;
+        for (const item of items) {
+            const name = accountIdToName.get(item.account_id) ?? "";
+            if (name.startsWith("Equity:") || name === "Equity") hasEquity = true;
+            else if (name.startsWith("Income:") || name === "Income") hasIncome = true;
+            else if (name.startsWith("Expenses:") || name === "Expenses") hasExpense = true;
+        }
+
+        const isMixed = (hasEquity || hasIncome) && hasExpense;
+
+        async function convertDebitTotal(debits: CurrencyBalance[]): Promise<number> {
+            let total = 0;
+            for (const d of debits) {
+                if (d.currency === baseCurrency) {
+                    total += Math.abs(Number(d.amount));
+                } else {
+                    const rate = await cache.get(d.currency, baseCurrency, date);
+                    if (rate) total += Math.abs(Number(d.amount)) * Number(rate);
+                }
+            }
+            return total;
+        }
+
+        if (!isMixed) {
+            const dir: AmountDirection = hasIncome ? "income" : hasExpense ? "expense" : "default";
+            const total = await convertDebitTotal(debits);
+            return [{ direction: dir, amount: total }];
+        }
+
+        // Mixed: split expense amounts from the rest
+        const expenseByCode = new Map<string, number>();
+        for (const item of items) {
+            const name = accountIdToName.get(item.account_id) ?? "";
+            if (name.startsWith("Expenses:") || name === "Expenses") {
+                const n = parseFloat(item.amount);
+                if (n > 0)
+                    expenseByCode.set(item.currency, (expenseByCode.get(item.currency) ?? 0) + n);
+            }
+        }
+        // Convert expense total
+        let expenseTotal = 0;
+        for (const [cur, amt] of expenseByCode) {
+            if (cur === baseCurrency) {
+                expenseTotal += amt;
+            } else {
+                const rate = await cache.get(cur, baseCurrency, date);
+                if (rate) expenseTotal += amt * Number(rate);
+            }
+        }
+
+        // Convert main total (debits minus expense portions)
+        let mainTotal = 0;
+        for (const d of debits) {
+            const rawTotal = Math.abs(Number(d.amount));
+            const exp = expenseByCode.get(d.currency) ?? 0;
+            const net = rawTotal - exp;
+            if (net <= 0) continue;
+            if (d.currency === baseCurrency) {
+                mainTotal += net;
+            } else {
+                const rate = await cache.get(d.currency, baseCurrency, date);
+                if (rate) mainTotal += net * Number(rate);
+            }
+        }
+
+        const segments: BarSegment[] = [];
+        const mainDir: AmountDirection = hasIncome ? "income" : "default";
+        if (mainTotal > 0) segments.push({ direction: mainDir, amount: mainTotal });
+        if (expenseTotal > 0) segments.push({ direction: "expense", amount: expenseTotal });
+        return segments;
+    }
 
     let convDebounce: ReturnType<typeof setTimeout>;
     $effect(() => {
@@ -1346,6 +1498,20 @@
                 }
                 results.set(id, formatted);
                 convertedTotals = new Map(results);
+            }
+
+            // Also compute converted bar segments for visible entries
+            const barResults = new Map(convertedBarSegments);
+            for (const id of ids) {
+                if (barResults.has(id)) continue;
+                if (gen !== conversionGen) return;
+                const pair = sortedEntries.find(([e]) => e.id === id);
+                if (!pair) continue;
+                const [entry, items] = pair;
+                const segs = await convertBarSegments(items, entry.date, baseCurrency, cache);
+                if (gen !== conversionGen) return;
+                barResults.set(id, segs);
+                convertedBarSegments = new Map(barResults);
             }
         }, 100);
         return () => clearTimeout(convDebounce);
@@ -1856,8 +2022,8 @@
                                             data-state={row.getIsSelected()
                                                 ? "selected"
                                                 : undefined}
-                                            style={barGradient(
-                                                items,
+                                            style={barGradientFromSegments(
+                                                convertedBarSegments.get(entry.id) ?? entryBarSegments(items),
                                                 maxEntryAmount,
                                             )}
                                             onpointerdown={handlers.onpointerdown}
@@ -1966,8 +2132,8 @@
                                             data-state={row.getIsSelected()
                                                 ? "selected"
                                                 : undefined}
-                                            style={barGradient(
-                                                items,
+                                            style={barGradientFromSegments(
+                                                convertedBarSegments.get(entry.id) ?? entryBarSegments(items),
                                                 maxEntryAmount,
                                             )}
                                         >
