@@ -113,7 +113,7 @@
         });
     });
 
-    let showChart = $state(true);
+    let showChart = $state(settings.settings.journalShowChart !== false);
     let exporting = $state(false);
     let detectingDuplicates = $state(false);
     let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
@@ -144,7 +144,7 @@
     ];
 
     let rowSelection = $state<RowSelectionState>({});
-    let columnVisibility = $state<VisibilityState>({});
+    let columnVisibility = $state<VisibilityState>(settings.settings.journalColumnVisibility ?? {});
 
     // Sync searchTerm back to URL so back button works
     $effect(() => {
@@ -702,6 +702,7 @@
                 typeof updater === "function"
                     ? updater(columnVisibility)
                     : updater;
+            settings.update({ journalColumnVisibility: columnVisibility });
         },
         enableRowSelection: (row) => row.original[0].status !== "voided",
     });
@@ -1652,7 +1653,7 @@
                     <DropdownMenu.Separator />
                     <DropdownMenu.CheckboxItem
                         checked={showChart}
-                        onCheckedChange={(v) => showChart = !!v}
+                        onCheckedChange={(v) => { showChart = !!v; settings.update({ journalShowChart: !!v }); }}
                     >Expenses & Income</DropdownMenu.CheckboxItem>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>

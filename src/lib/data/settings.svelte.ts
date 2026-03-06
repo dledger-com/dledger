@@ -46,6 +46,8 @@ export interface AppSettings {
   routescanEnabled?: boolean;
   theGraphEnabled?: boolean;
   journalAmountBars?: boolean;
+  journalShowChart?: boolean;
+  journalColumnVisibility?: Record<string, boolean>;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
