@@ -2199,10 +2199,15 @@
                                                 <div
                                                     class="flex justify-between items-baseline gap-2"
                                                 >
-                                                    <span
-                                                        class="text-muted-foreground text-xs"
-                                                        >{entry.date}</span
-                                                    >
+                                                    <span class="flex items-baseline gap-1 min-w-0">
+                                                        <span
+                                                            class="text-muted-foreground text-xs shrink-0"
+                                                            >{entry.date}</span
+                                                        >
+                                                        {#if mainCounterpartyShort(items)}
+                                                            <span class="text-muted-foreground text-xs truncate min-w-0">· {mainCounterpartyShort(items)}</span>
+                                                        {/if}
+                                                    </span>
                                                     <span
                                                         class="font-mono text-sm text-right shrink-0"
                                                         title={convertedTotals.get(
