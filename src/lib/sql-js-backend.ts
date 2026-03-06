@@ -4048,13 +4048,15 @@ PRAGMA foreign_keys = ON;
   }
 
   async getFrenchTaxReport(taxYear: number): Promise<PersistedFrenchTaxReport | null> {
-    const rows = this.db.exec(
+    return this.queryOne(
       "SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report WHERE tax_year = ?",
-      [taxYear]
+      [taxYear],
+      (row) => ({
+        generatedAt: row.generated_at as string,
+        finalAcquisitionCost: row.final_acquisition_cost as string,
+        report: JSON.parse(row.report_json as string),
+      }),
     );
-    if (rows.length === 0 || rows[0].values.length === 0) return null;
-    const [generatedAt, finalAcquisitionCost, reportJson] = rows[0].values[0] as [string, string, string];
-    return { generatedAt, finalAcquisitionCost, report: JSON.parse(reportJson) };
   }
 
   async listFrenchTaxReportYears(): Promise<number[]> {
