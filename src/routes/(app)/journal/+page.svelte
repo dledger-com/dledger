@@ -1758,6 +1758,12 @@
                 (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
             }}
             onpointercancel={() => (isDragging = false)}
+            onwheel={(e) => {
+                if (scrollEl) {
+                    e.preventDefault();
+                    scrollEl.scrollTop += e.deltaY;
+                }
+            }}
         >
             <BarChartComp
                 data={chartData}
