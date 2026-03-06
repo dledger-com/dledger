@@ -1969,6 +1969,20 @@
                                 .header}</DropdownMenu.CheckboxItem
                         >
                     {/each}
+                    <DropdownMenu.CheckboxItem
+                        checked={columnVisibility.tags !== false}
+                        onCheckedChange={(v) => {
+                            columnVisibility = { ...columnVisibility, tags: !!v };
+                            settings.update({ journalColumnVisibility: columnVisibility });
+                        }}
+                    >Tags</DropdownMenu.CheckboxItem>
+                    <DropdownMenu.CheckboxItem
+                        checked={columnVisibility.links !== false}
+                        onCheckedChange={(v) => {
+                            columnVisibility = { ...columnVisibility, links: !!v };
+                            settings.update({ journalColumnVisibility: columnVisibility });
+                        }}
+                    >Links</DropdownMenu.CheckboxItem>
                     <DropdownMenu.Separator />
                     <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Charts</DropdownMenu.Item>
                     <DropdownMenu.Separator />
@@ -2242,37 +2256,41 @@
                                                             >{entry.description}</span
                                                         >
                                                     {/if}
-                                                    {#if entryLinks.get(entry.id)?.length}
-                                                        <!-- svelte-ignore a11y_click_events_have_key_events -->
-                                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                                        <span
-                                                            onclick={(e) =>
-                                                                e.stopPropagation()}
-                                                        >
-                                                            <LinkDisplay
-                                                                links={entryLinks.get(
-                                                                    entry.id,
-                                                                )!}
-                                                                class="shrink-0"
-                                                                onclick={addLinkFilter}
-                                                            />
-                                                        </span>
+                                                    {#if columnVisibility.links !== false}
+                                                        {#if entryLinks.get(entry.id)?.length}
+                                                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                            <span
+                                                                onclick={(e) =>
+                                                                    e.stopPropagation()}
+                                                            >
+                                                                <LinkDisplay
+                                                                    links={entryLinks.get(
+                                                                        entry.id,
+                                                                    )!}
+                                                                    class="shrink-0"
+                                                                    onclick={addLinkFilter}
+                                                                />
+                                                            </span>
+                                                        {/if}
                                                     {/if}
-                                                    {#if entryTags.get(entry.id)?.length}
-                                                        <!-- svelte-ignore a11y_click_events_have_key_events -->
-                                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                                        <span
-                                                            onclick={(e) =>
-                                                                e.stopPropagation()}
-                                                        >
-                                                            <TagDisplay
-                                                                tags={entryTags.get(
-                                                                    entry.id,
-                                                                )!}
-                                                                class="shrink-0"
-                                                                onclick={addTagFilter}
-                                                            />
-                                                        </span>
+                                                    {#if columnVisibility.tags !== false}
+                                                        {#if entryTags.get(entry.id)?.length}
+                                                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                            <span
+                                                                onclick={(e) =>
+                                                                    e.stopPropagation()}
+                                                            >
+                                                                <TagDisplay
+                                                                    tags={entryTags.get(
+                                                                        entry.id,
+                                                                    )!}
+                                                                    class="shrink-0"
+                                                                    onclick={addTagFilter}
+                                                                />
+                                                            </span>
+                                                        {/if}
                                                     {/if}
                                                 </div>
                                             </td>
@@ -2323,23 +2341,27 @@
                                                                 title={entry.description}
                                                                 >{entry.description}</a
                                                             >
-                                                            {#if entryTags.get(entry.id)?.length}
-                                                                <TagDisplay
-                                                                    tags={entryTags.get(
-                                                                        entry.id,
-                                                                    )!}
-                                                                    class="shrink-0"
-                                                                    onclick={addTagFilter}
-                                                                />
+                                                            {#if columnVisibility.tags !== false}
+                                                                {#if entryTags.get(entry.id)?.length}
+                                                                    <TagDisplay
+                                                                        tags={entryTags.get(
+                                                                            entry.id,
+                                                                        )!}
+                                                                        class="shrink-0"
+                                                                        onclick={addTagFilter}
+                                                                    />
+                                                                {/if}
                                                             {/if}
-                                                            {#if entryLinks.get(entry.id)?.length}
-                                                                <LinkDisplay
-                                                                    links={entryLinks.get(
-                                                                        entry.id,
-                                                                    )!}
-                                                                    class="shrink-0"
-                                                                    onclick={addLinkFilter}
-                                                                />
+                                                            {#if columnVisibility.links !== false}
+                                                                {#if entryLinks.get(entry.id)?.length}
+                                                                    <LinkDisplay
+                                                                        links={entryLinks.get(
+                                                                            entry.id,
+                                                                        )!}
+                                                                        class="shrink-0"
+                                                                        onclick={addLinkFilter}
+                                                                    />
+                                                                {/if}
                                                             {/if}
                                                         </div>
                                                     </Table.Cell>
