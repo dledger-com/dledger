@@ -105,6 +105,19 @@ impl LedgerEngine {
         Ok(())
     }
 
+    pub fn set_account_postable(&self, id: &Uuid, is_postable: bool) -> LedgerResult<()> {
+        let account = self.storage.get_account(id)?
+            .ok_or(LedgerError::AccountNotFound { id: *id })?;
+        self.storage.update_account_postable(id, is_postable)?;
+        self.audit(
+            if is_postable { "set_postable" } else { "set_non_postable" },
+            "account",
+            *id,
+            &account.full_name,
+        )?;
+        Ok(())
+    }
+
     pub fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> LedgerResult<()> {
         self.storage.update_account_opened_at(id, opened_at)?;
         Ok(())

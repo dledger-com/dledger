@@ -293,6 +293,16 @@ impl Storage for TestStorage {
         Ok(())
     }
 
+    fn update_account_postable(&self, id: &Uuid, is_postable: bool) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute(
+            "UPDATE account SET is_postable = ?1 WHERE id = ?2",
+            params![is_postable as i32, id.to_string()],
+        )
+        .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
     fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(

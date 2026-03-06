@@ -36,6 +36,7 @@ pub trait Storage: Send + Sync {
     fn get_account_by_full_name(&self, full_name: &str) -> StorageResult<Option<Account>>;
     fn list_accounts(&self) -> StorageResult<Vec<Account>>;
     fn update_account_archived(&self, id: &Uuid, is_archived: bool) -> StorageResult<()>;
+    fn update_account_postable(&self, id: &Uuid, is_postable: bool) -> StorageResult<()>;
     fn update_account_opened_at(&self, id: &Uuid, opened_at: Option<NaiveDate>) -> StorageResult<()>;
     /// Get all descendant account IDs (via closure table).
     fn get_account_subtree_ids(&self, id: &Uuid) -> StorageResult<Vec<Uuid>>;

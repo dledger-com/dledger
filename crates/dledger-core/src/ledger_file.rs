@@ -491,6 +491,9 @@ fn ensure_account(
         if acc.is_archived {
             engine.unarchive_account(&acc.id).map_err(|e| e.to_string())?;
         }
+        if !acc.is_postable {
+            engine.set_account_postable(&acc.id, true).map_err(|e| e.to_string())?;
+        }
         return Ok(acc.id);
     }
 

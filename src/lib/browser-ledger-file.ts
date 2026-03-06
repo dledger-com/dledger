@@ -166,6 +166,10 @@ export async function importLedger(
         await backend.unarchiveAccount(existing.id);
         existing.is_archived = false;
       }
+      if (!existing.is_postable) {
+        await backend.updateAccount(existing.id, { is_postable: true });
+        existing.is_postable = true;
+      }
       return existing.id;
     }
 
