@@ -70,7 +70,10 @@
     import Link2 from "lucide-svelte/icons/link-2";
     import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
     import FacetedFilter from "$lib/components/FacetedFilter.svelte";
+    import * as Command from "$lib/components/ui/command/index.js";
+    import Separator from "$lib/components/ui/separator/separator.svelte";
     import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+    import Filter from "lucide-svelte/icons/filter";
     import { createSvelteTable } from "$lib/components/ui/data-table/data-table.svelte.js";
     import {
         type ColumnDef,
@@ -144,6 +147,57 @@
             selectedTags.size > 0 ||
             selectedLinks.size > 0,
     );
+    let filterTab = $state<"account" | "tags" | "links">("account");
+    let filterSearch = $state("");
+    let filterPopoverOpen = $state(false);
+    const totalFilterCount = $derived(
+        selectedAccounts.size + selectedTags.size + selectedLinks.size,
+    );
+    const activeFilterOptions = $derived(
+        filterTab === "account"
+            ? accountOptions
+            : filterTab === "tags"
+              ? tagOptions
+              : linkOptions,
+    );
+    const activeFilterSelected = $derived(
+        filterTab === "account"
+            ? selectedAccounts
+            : filterTab === "tags"
+              ? selectedTags
+              : selectedLinks,
+    );
+    const filteredFilterOptions = $derived(
+        filterSearch
+            ? activeFilterOptions.filter((o) =>
+                    o.label.toLowerCase().includes(filterSearch.toLowerCase()),
+                )
+            : activeFilterOptions,
+    );
+    function toggleFilterValue(value: string) {
+        if (filterTab === "account") {
+            const next = new Set(selectedAccounts);
+            next.has(value) ? next.delete(value) : next.add(value);
+            selectedAccounts = next;
+        } else if (filterTab === "tags") {
+            const next = new Set(selectedTags);
+            next.has(value) ? next.delete(value) : next.add(value);
+            selectedTags = next;
+        } else {
+            const next = new Set(selectedLinks);
+            next.has(value) ? next.delete(value) : next.add(value);
+            selectedLinks = next;
+        }
+    }
+    function clearActiveFilter() {
+        if (filterTab === "account") selectedAccounts = new Set();
+        else if (filterTab === "tags") selectedTags = new Set();
+        else selectedLinks = new Set();
+    }
+    function switchFilterTab(tab: "account" | "tags" | "links") {
+        filterTab = tab;
+        filterSearch = "";
+    }
 
     // TanStack Table state
     type JournalRow = [JournalEntry, LineItem[]];
@@ -1900,21 +1954,69 @@
             placeholder="Filter entries..."
             class="w-[200px] lg:w-[250px]"
         />
-        <FacetedFilter
-            title="Account"
-            options={accountOptions}
-            bind:selected={selectedAccounts}
-        />
-        <FacetedFilter
-            title="Tags"
-            options={tagOptions}
-            bind:selected={selectedTags}
-        />
-        <FacetedFilter
-            title="Links"
-            options={linkOptions}
-            bind:selected={selectedLinks}
-        />
+        <Popover.Root bind:open={filterPopoverOpen}>
+            <Popover.Trigger>
+                {#snippet child({ props })}
+                    <Button variant="outline" size="sm" class="h-8 border-dashed" {...props}>
+                        <Filter class="size-4" />
+                        Filter
+                        {#if totalFilterCount > 0}
+                            <Separator orientation="vertical" class="mx-1 h-4" />
+                            <Badge variant="secondary" class="rounded-sm px-1 font-normal">
+                                {totalFilterCount}
+                            </Badge>
+                        {/if}
+                    </Button>
+                {/snippet}
+            </Popover.Trigger>
+            <Popover.Content class="w-[280px] p-0" align="start">
+                <div class="flex border-b">
+                    {#each [["account", "Account", selectedAccounts.size] as const, ["tags", "Tags", selectedTags.size] as const, ["links", "Links", selectedLinks.size] as const] as [tab, label, count]}
+                        <button
+                            class="flex-1 px-2 py-1.5 text-sm font-medium transition-colors
+                                {filterTab === tab ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+                            onclick={() => switchFilterTab(tab as "account" | "tags" | "links")}
+                        >
+                            {label}{count > 0 ? ` (${count})` : ''}
+                        </button>
+                    {/each}
+                </div>
+                <Command.Root shouldFilter={false}>
+                    <Command.Input
+                        placeholder="Search {filterTab}..."
+                        bind:value={filterSearch}
+                    />
+                    <Command.List class="max-h-[300px]">
+                        <Command.Empty>No results.</Command.Empty>
+                        <Command.Group>
+                            {#each filteredFilterOptions as option (option.value)}
+                                <Command.Item
+                                    value={option.value}
+                                    onSelect={() => toggleFilterValue(option.value)}
+                                >
+                                    <Checkbox
+                                        checked={activeFilterSelected.has(option.value)}
+                                        class="pointer-events-none"
+                                    />
+                                    <span class="truncate">{option.label}</span>
+                                </Command.Item>
+                            {/each}
+                        </Command.Group>
+                        {#if activeFilterSelected.size > 0}
+                            <Command.Separator />
+                            <Command.Group>
+                                <Command.Item
+                                    class="justify-center text-center"
+                                    onSelect={clearActiveFilter}
+                                >
+                                    Clear filters
+                                </Command.Item>
+                            </Command.Group>
+                        {/if}
+                    </Command.List>
+                </Command.Root>
+            </Popover.Content>
+        </Popover.Root>
         {#if hasFacetedFilters}
             <Button
                 variant="ghost"
