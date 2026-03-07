@@ -970,6 +970,23 @@ PRAGMA foreign_keys = ON;
     return results;
   }
 
+  private queryChunked<T>(
+    ids: unknown[],
+    buildSql: (placeholders: string) => string,
+    suffixParams: unknown[],
+    mapper: (row: Row) => T,
+  ): T[] {
+    if (ids.length === 0) return [];
+    const results: T[] = [];
+    for (let i = 0; i < ids.length; i += SQL_VAR_LIMIT) {
+      const chunk = ids.slice(i, i + SQL_VAR_LIMIT);
+      const ph = chunk.map(() => "?").join(", ");
+      const params = [...chunk, ...suffixParams];
+      results.push(...this.query(buildSql(ph), params, mapper));
+    }
+    return results;
+  }
+
   private queryOne<T>(
     sql: string,
     params: unknown[],
@@ -1125,19 +1142,20 @@ PRAGMA foreign_keys = ON;
   ): CurrencyBalance[] {
     if (accountIds.length === 0) return [];
 
-    const placeholders = accountIds.map(() => "?").join(", ");
-    const params: unknown[] = [...accountIds];
-
-    let sql = `SELECT li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE li.account_id IN (${placeholders})`;
-    if (beforeDate) {
-      sql += " AND je.date < ?";
-      params.push(beforeDate);
-    }
-
-    const rows = this.query(sql, params, (row) => ({
-      currency: row.currency as string,
-      amount: row.amount as string,
-    }));
+    const extraParams: unknown[] = beforeDate ? [beforeDate] : [];
+    const rows = this.queryChunked(
+      accountIds,
+      (ph) => {
+        let sql = `SELECT li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE li.account_id IN (${ph})`;
+        if (beforeDate) sql += " AND je.date < ?";
+        return sql;
+      },
+      extraParams,
+      (row) => ({
+        currency: row.currency as string,
+        amount: row.amount as string,
+      }),
+    );
 
     const totals = new Map<string, Decimal>();
     for (const row of rows) {
@@ -2203,13 +2221,13 @@ PRAGMA foreign_keys = ON;
     const entries = this.query(sql, params, mapJournalEntry);
     if (entries.length === 0) return [];
 
-    // Batch: one query for ALL line items instead of N+1
+    // Batch: one query for ALL line items instead of N+1 (chunked to avoid SQL variable limit)
     const entryIds = entries.map((e) => e.id);
-    const ph = entryIds.map(() => "?").join(", ");
-    const allItems = this.query(
-      `SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
-       FROM line_item WHERE journal_entry_id IN (${ph})`,
+    const allItems = this.queryChunked(
       entryIds,
+      (ph) => `SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
+       FROM line_item WHERE journal_entry_id IN (${ph})`,
+      [],
       mapLineItem,
     );
     const itemsByEntry = new Map<string, LineItem[]>();
@@ -2769,17 +2787,17 @@ PRAGMA foreign_keys = ON;
     const lines: GainLossLine[] = [];
     let totalGainLoss = new Decimal(0);
 
-    // Batch: fetch all lots at once
+    // Batch: fetch all lots at once (chunked to avoid SQL variable limit)
     const uniqueLotIds = [...new Set(disposals.map((d) => d.lot_id))];
     const lotMap = new Map<string, { currency: string; acquired_date: string; cost_basis_per_unit: string; source_handler: string | null }>();
     if (uniqueLotIds.length > 0) {
-      const ph = uniqueLotIds.map(() => "?").join(", ");
-      const lots = this.query(
-        `SELECT id, currency, acquired_date, cost_basis_per_unit,
+      const lots = this.queryChunked(
+        uniqueLotIds,
+        (ph) => `SELECT id, currency, acquired_date, cost_basis_per_unit,
                 (SELECT m.value FROM journal_entry_metadata m
                  WHERE m.journal_entry_id = lot.journal_entry_id AND m.key = 'handler') as source_handler
          FROM lot WHERE id IN (${ph})`,
-        uniqueLotIds,
+        [],
         (row) => ({
           id: row.id as string,
           currency: row.currency as string,
@@ -3365,10 +3383,10 @@ PRAGMA foreign_keys = ON;
   async getMetadataBatch(entryIds: string[]): Promise<Map<string, Record<string, string>>> {
     const result = new Map<string, Record<string, string>>();
     if (entryIds.length === 0) return result;
-    const ph = entryIds.map(() => "?").join(", ");
-    const rows = this.query(
-      `SELECT journal_entry_id, key, value FROM journal_entry_metadata WHERE journal_entry_id IN (${ph}) ORDER BY key`,
+    const rows = this.queryChunked(
       entryIds,
+      (ph) => `SELECT journal_entry_id, key, value FROM journal_entry_metadata WHERE journal_entry_id IN (${ph}) ORDER BY key`,
+      [],
       (row) => ({ id: row.journal_entry_id as string, key: row.key as string, value: row.value as string }),
     );
     for (const { id, key, value } of rows) {
@@ -3385,10 +3403,10 @@ PRAGMA foreign_keys = ON;
   async getEntryLinksBatch(entryIds: string[]): Promise<Map<string, string[]>> {
     const result = new Map<string, string[]>();
     if (entryIds.length === 0) return result;
-    const ph = entryIds.map(() => "?").join(", ");
-    const rows = this.query(
-      `SELECT journal_entry_id, link_name FROM entry_link WHERE journal_entry_id IN (${ph}) ORDER BY link_name`,
+    const rows = this.queryChunked(
       entryIds,
+      (ph) => `SELECT journal_entry_id, link_name FROM entry_link WHERE journal_entry_id IN (${ph}) ORDER BY link_name`,
+      [],
       (row) => ({ id: row.journal_entry_id as string, link_name: row.link_name as string }),
     );
     for (const { id, link_name } of rows) {
