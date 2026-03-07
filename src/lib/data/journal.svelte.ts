@@ -6,6 +6,7 @@ export class JournalStore {
   entries = $state<JournalEntry[]>([]);
   lineItemCache = $state(new Map<string, LineItem[]>());
   loading = $state(false);
+  loadProgress = $state<number | null>(null);
   error = $state<string | null>(null);
   totalCount = $state(0);
   private currentFilter = $state<TransactionFilter>({});
@@ -43,7 +44,9 @@ export class JournalStore {
       delete queryFilter.offset;
 
       if (backend.queryJournalEntriesOnly) {
-        this.entries = await backend.queryJournalEntriesOnly(queryFilter);
+        this.entries = await backend.queryJournalEntriesOnly(queryFilter, (current, total) => {
+          this.loadProgress = total > 0 ? current / total : null;
+        });
       } else {
         const pairs = await backend.queryJournalEntries(queryFilter);
         this.entries = pairs.map(([e]) => e);
@@ -58,6 +61,7 @@ export class JournalStore {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
       this.loading = false;
+      this.loadProgress = null;
     }
   }
 

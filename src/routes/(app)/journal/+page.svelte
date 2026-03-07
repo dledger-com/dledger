@@ -2240,6 +2240,14 @@
     </div>
 
     {#if store.loading}
+        {#if store.loadProgress != null}
+            <div class="h-1 w-full bg-muted overflow-hidden">
+                <div
+                    class="h-full bg-primary transition-[width] duration-150 ease-linear"
+                    style="width: {store.loadProgress * 100}%"
+                ></div>
+            </div>
+        {/if}
         <Card.Root class="border-x-0 rounded-none shadow-none">
             <Card.Content class="py-4">
                 <div class="space-y-2">

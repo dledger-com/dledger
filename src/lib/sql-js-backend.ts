@@ -976,6 +976,7 @@ PRAGMA foreign_keys = ON;
     params: unknown[],
     mapRow: (row: Row) => T,
     chunkSize = 5000,
+    onProgress?: (current: number, total: number) => void,
   ): Promise<T[]> {
     const stmt = this.db.prepare(sql);
     if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
@@ -985,9 +986,11 @@ PRAGMA foreign_keys = ON;
       while (stmt.step()) {
         results.push(mapRow(stmt.getAsObject()));
         if (++i % chunkSize === 0) {
+          onProgress?.(i, -1);
           await new Promise(r => requestAnimationFrame(r));
         }
       }
+      onProgress?.(results.length, results.length);
     } finally {
       stmt.free();
     }
@@ -2348,6 +2351,7 @@ PRAGMA foreign_keys = ON;
 
   async queryJournalEntriesOnly(
     filter: TransactionFilter,
+    onProgress?: (current: number, total: number) => void,
   ): Promise<JournalEntry[]> {
     const { joinClause, whereClause, params } = this.buildFilterSql(filter);
     let sql = "SELECT DISTINCT je.id, je.date, je.description, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je"
@@ -2374,7 +2378,9 @@ PRAGMA foreign_keys = ON;
       params.push(filter.offset);
     }
 
-    return this.queryAsync(sql, params, mapJournalEntry);
+    const total = onProgress ? await this.countJournalEntries(filter) : 0;
+    return this.queryAsync(sql, params, mapJournalEntry, 5000,
+      onProgress ? (current) => onProgress(current, total) : undefined);
   }
 
   async getLineItemsForEntries(entryIds: string[]): Promise<Map<string, LineItem[]>> {

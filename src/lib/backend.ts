@@ -107,7 +107,7 @@ export interface Backend {
   ): Promise<{ reversalId: string; newEntryId: string }>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
   queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]>;
-  queryJournalEntriesOnly?(filter: TransactionFilter): Promise<JournalEntry[]>;
+  queryJournalEntriesOnly?(filter: TransactionFilter, onProgress?: (current: number, total: number) => void): Promise<JournalEntry[]>;
   getLineItemsForEntries?(entryIds: string[]): Promise<Map<string, LineItem[]>>;
   getJournalChartAggregation?(filter: TransactionFilter): Promise<{ date: string; income: number; expense: number }[]>;
   countJournalEntries(filter: TransactionFilter): Promise<number>;
