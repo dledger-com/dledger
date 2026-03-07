@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, tick } from "svelte";
     import { page } from "$app/state";
     import { goto, replaceState } from "$app/navigation";
     import * as Card from "$lib/components/ui/card/index.js";
@@ -97,11 +97,15 @@
         store.loadAll();
         // Refresh tag/link options (new tags/links may have been added via import)
         const b = getBackend();
+        tagOptionsLoading = true;
+        linkOptionsLoading = true;
         b.getAllTagValues().then((tags) => {
             tagOptions = tags.map((t) => ({ value: t, label: t }));
+            tagOptionsLoading = false;
         });
         b.getAllLinkNames().then((links) => {
             linkOptions = links.map((l) => ({ value: l, label: l }));
+            linkOptionsLoading = false;
         });
     });
     onDestroy(unsubJournal);
@@ -119,12 +123,15 @@
             const map = new Map<string, string>();
             for (const a of accounts) map.set(a.id, a.full_name);
             accountIdToName = map;
+            accountOptionsLoading = false;
         });
         backend.getAllTagValues().then((tags) => {
             tagOptions = tags.map((t) => ({ value: t, label: t }));
+            tagOptionsLoading = false;
         });
         backend.getAllLinkNames().then((links) => {
             linkOptions = links.map((l) => ({ value: l, label: l }));
+            linkOptionsLoading = false;
         });
     });
 
@@ -142,6 +149,9 @@
     let accountIdToName = $state(new Map<string, string>());
     let tagOptions = $state<{ value: string; label: string }[]>([]);
     let linkOptions = $state<{ value: string; label: string }[]>([]);
+    let accountOptionsLoading = $state(true);
+    let tagOptionsLoading = $state(true);
+    let linkOptionsLoading = $state(true);
     const hasFacetedFilters = $derived(
         selectedAccounts.size > 0 ||
             selectedTags.size > 0 ||
@@ -153,26 +163,20 @@
     const totalFilterCount = $derived(
         selectedAccounts.size + selectedTags.size + selectedLinks.size,
     );
-    const activeFilterOptions = $derived(
-        filterTab === "account"
-            ? accountOptions
-            : filterTab === "tags"
-              ? tagOptions
-              : linkOptions,
-    );
-    const activeFilterSelected = $derived(
-        filterTab === "account"
-            ? selectedAccounts
-            : filterTab === "tags"
-              ? selectedTags
-              : selectedLinks,
-    );
-    const filteredFilterOptions = $derived(
+    const filteredAccountOptions = $derived(
         filterSearch
-            ? activeFilterOptions.filter((o) =>
-                    o.label.toLowerCase().includes(filterSearch.toLowerCase()),
-                )
-            : activeFilterOptions,
+            ? accountOptions.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()))
+            : accountOptions,
+    );
+    const filteredTagOptions = $derived(
+        filterSearch
+            ? tagOptions.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()))
+            : tagOptions,
+    );
+    const filteredLinkOptions = $derived(
+        filterSearch
+            ? linkOptions.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()))
+            : linkOptions,
     );
     function toggleFilterValue(value: string) {
         if (filterTab === "account") {
@@ -194,9 +198,18 @@
         else if (filterTab === "tags") selectedTags = new Set();
         else selectedLinks = new Set();
     }
+    let accountInputRef = $state<HTMLInputElement | null>(null);
+    let tagInputRef = $state<HTMLInputElement | null>(null);
+    let linkInputRef = $state<HTMLInputElement | null>(null);
+
     function switchFilterTab(tab: "account" | "tags" | "links") {
         filterTab = tab;
         filterSearch = "";
+        tick().then(() => {
+            if (tab === "account") accountInputRef?.focus();
+            else if (tab === "tags") tagInputRef?.focus();
+            else linkInputRef?.focus();
+        });
     }
 
     // TanStack Table state
@@ -1981,40 +1994,141 @@
                         </button>
                     {/each}
                 </div>
-                <Command.Root shouldFilter={false}>
-                    <Command.Input
-                        placeholder="Search {filterTab}..."
-                        bind:value={filterSearch}
-                    />
-                    <Command.List class="max-h-[300px]">
-                        <Command.Empty>No results.</Command.Empty>
-                        <Command.Group>
-                            {#each filteredFilterOptions as option (option.value)}
-                                <Command.Item
-                                    value={option.value}
-                                    onSelect={() => toggleFilterValue(option.value)}
-                                >
-                                    <Checkbox
-                                        checked={activeFilterSelected.has(option.value)}
-                                        class="pointer-events-none"
-                                    />
-                                    <span class="truncate">{option.label}</span>
-                                </Command.Item>
-                            {/each}
-                        </Command.Group>
-                        {#if activeFilterSelected.size > 0}
-                            <Command.Separator />
-                            <Command.Group>
-                                <Command.Item
-                                    class="justify-center text-center"
-                                    onSelect={clearActiveFilter}
-                                >
-                                    Clear filters
-                                </Command.Item>
-                            </Command.Group>
-                        {/if}
-                    </Command.List>
-                </Command.Root>
+                <div class:hidden={filterTab !== "account"}>
+                    <Command.Root shouldFilter={false}>
+                        <Command.Input
+                            placeholder="Search account..."
+                            bind:value={filterSearch}
+                            bind:ref={accountInputRef}
+                        />
+                        <Command.List class="max-h-[300px]">
+                            {#if accountOptionsLoading}
+                                <div class="p-2 space-y-1.5">
+                                    {#each [1, 2, 3, 4, 5] as _}
+                                        <Skeleton class="h-8 w-full rounded-sm" />
+                                    {/each}
+                                </div>
+                            {:else}
+                                <Command.Empty>No results.</Command.Empty>
+                                <Command.Group>
+                                    {#each filteredAccountOptions as option (option.value)}
+                                        <Command.Item
+                                            value={option.value}
+                                            onSelect={() => toggleFilterValue(option.value)}
+                                        >
+                                            <Checkbox
+                                                checked={selectedAccounts.has(option.value)}
+                                                class="pointer-events-none"
+                                            />
+                                            <span class="truncate">{option.label}</span>
+                                        </Command.Item>
+                                    {/each}
+                                </Command.Group>
+                                {#if selectedAccounts.size > 0}
+                                    <Command.Separator />
+                                    <Command.Group>
+                                        <Command.Item
+                                            class="justify-center text-center"
+                                            onSelect={clearActiveFilter}
+                                        >
+                                            Clear filters
+                                        </Command.Item>
+                                    </Command.Group>
+                                {/if}
+                            {/if}
+                        </Command.List>
+                    </Command.Root>
+                </div>
+                <div class:hidden={filterTab !== "tags"}>
+                    <Command.Root shouldFilter={false}>
+                        <Command.Input
+                            placeholder="Search tags..."
+                            bind:value={filterSearch}
+                            bind:ref={tagInputRef}
+                        />
+                        <Command.List class="max-h-[300px]">
+                            {#if tagOptionsLoading}
+                                <div class="p-2 space-y-1.5">
+                                    {#each [1, 2, 3, 4, 5] as _}
+                                        <Skeleton class="h-8 w-full rounded-sm" />
+                                    {/each}
+                                </div>
+                            {:else}
+                                <Command.Empty>No results.</Command.Empty>
+                                <Command.Group>
+                                    {#each filteredTagOptions as option (option.value)}
+                                        <Command.Item
+                                            value={option.value}
+                                            onSelect={() => toggleFilterValue(option.value)}
+                                        >
+                                            <Checkbox
+                                                checked={selectedTags.has(option.value)}
+                                                class="pointer-events-none"
+                                            />
+                                            <span class="truncate">{option.label}</span>
+                                        </Command.Item>
+                                    {/each}
+                                </Command.Group>
+                                {#if selectedTags.size > 0}
+                                    <Command.Separator />
+                                    <Command.Group>
+                                        <Command.Item
+                                            class="justify-center text-center"
+                                            onSelect={clearActiveFilter}
+                                        >
+                                            Clear filters
+                                        </Command.Item>
+                                    </Command.Group>
+                                {/if}
+                            {/if}
+                        </Command.List>
+                    </Command.Root>
+                </div>
+                <div class:hidden={filterTab !== "links"}>
+                    <Command.Root shouldFilter={false}>
+                        <Command.Input
+                            placeholder="Search links..."
+                            bind:value={filterSearch}
+                            bind:ref={linkInputRef}
+                        />
+                        <Command.List class="max-h-[300px]">
+                            {#if linkOptionsLoading}
+                                <div class="p-2 space-y-1.5">
+                                    {#each [1, 2, 3, 4, 5] as _}
+                                        <Skeleton class="h-8 w-full rounded-sm" />
+                                    {/each}
+                                </div>
+                            {:else}
+                                <Command.Empty>No results.</Command.Empty>
+                                <Command.Group>
+                                    {#each filteredLinkOptions as option (option.value)}
+                                        <Command.Item
+                                            value={option.value}
+                                            onSelect={() => toggleFilterValue(option.value)}
+                                        >
+                                            <Checkbox
+                                                checked={selectedLinks.has(option.value)}
+                                                class="pointer-events-none"
+                                            />
+                                            <span class="truncate">{option.label}</span>
+                                        </Command.Item>
+                                    {/each}
+                                </Command.Group>
+                                {#if selectedLinks.size > 0}
+                                    <Command.Separator />
+                                    <Command.Group>
+                                        <Command.Item
+                                            class="justify-center text-center"
+                                            onSelect={clearActiveFilter}
+                                        >
+                                            Clear filters
+                                        </Command.Item>
+                                    </Command.Group>
+                                {/if}
+                            {/if}
+                        </Command.List>
+                    </Command.Root>
+                </div>
             </Popover.Content>
         </Popover.Root>
         {#if hasFacetedFilters}
