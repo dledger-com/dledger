@@ -675,7 +675,7 @@
                   : "default";
             const text =
                 debits.length === 0
-                    ? formatCurrency(0, settings.currency)
+                    ? ""
                     : debits
                           .map((b) => formatCurrency(b.amount, b.currency))
                           .join(", ");
@@ -743,7 +743,7 @@
             ? parts
             : [
                   {
-                      text: formatCurrency(0, settings.currency),
+                      text: "",
                       direction: "default",
                   },
               ];
