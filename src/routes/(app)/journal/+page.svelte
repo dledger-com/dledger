@@ -1948,18 +1948,18 @@
     {/if}
 
     <!-- Filter toolbar -->
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex items-center gap-2">
         <ListFilter
             bind:value={searchTerm}
             placeholder="Filter entries..."
-            class="w-[200px] lg:w-[250px]"
+            class="min-w-0 w-[200px] lg:w-[250px] shrink"
         />
         <Popover.Root bind:open={filterPopoverOpen}>
             <Popover.Trigger>
                 {#snippet child({ props })}
                     <Button variant="outline" size="sm" class="h-8 border-dashed" {...props}>
                         <Filter class="size-4" />
-                        Filter
+                        <span class="hidden sm:inline">Filter</span>
                         {#if totalFilterCount > 0}
                             <Separator orientation="vertical" class="mx-1 h-4" />
                             <Badge variant="secondary" class="rounded-sm px-1 font-normal">
@@ -2028,7 +2028,7 @@
                     selectedLinks = new Set();
                 }}
             >
-                Reset
+                <span class="hidden sm:inline">Reset</span>
                 <X class="size-4" />
             </Button>
         {/if}
@@ -2043,7 +2043,7 @@
                             {...props}
                         >
                             <SlidersHorizontal class="size-4" />
-                            View
+                            <span class="hidden sm:inline">View</span>
                         </Button>
                     {/snippet}
                 </DropdownMenu.Trigger>
