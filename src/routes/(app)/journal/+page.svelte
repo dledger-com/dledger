@@ -1192,7 +1192,7 @@
     // Aggregate income/expense from displayEntries, bucketed by adaptive granularity
     type ChartDatum = { date: Date; income: number; expense: number; other: number };
 
-    const MIN_BAR_STEP = 2;
+    const MIN_BAR_STEP = 6;
 
     let manualGranularity: ChartGranularity | null = $state(settings.settings.journalChartGranularity ?? null);
 
