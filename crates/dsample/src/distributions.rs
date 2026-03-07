@@ -93,6 +93,47 @@ pub const ENTERTAINMENT: &[&str] = &[
     "Théâtre du Châtelet", "Parc Astérix", "Musée d'Orsay",
 ];
 
+pub const TAG_POOL: &[&str] = &[
+    "groceries", "food", "travel", "business", "personal", "medical",
+    "tax-deductible", "reimbursable", "recurring", "online", "cash",
+    "subscription", "dining-out", "crypto", "trading", "fee", "transfer",
+    "salary", "rent", "utilities",
+];
+
+pub const LINK_PREFIXES: &[&str] = &[
+    "inv", "trip", "project", "order", "ref", "txn",
+];
+
+/// Random tags: 60% none, 30% one, 10% two.
+pub fn random_tags(rng: &mut StdRng, pool: &[&str]) -> Vec<String> {
+    let r: f64 = rng.gen();
+    if r < 0.6 {
+        Vec::new()
+    } else if r < 0.9 {
+        vec![pick(rng, pool).to_string()]
+    } else {
+        let a = pick(rng, pool).to_string();
+        let mut b = pick(rng, pool).to_string();
+        while b == a && pool.len() > 1 {
+            b = pick(rng, pool).to_string();
+        }
+        vec![a, b]
+    }
+}
+
+/// Random links: 80% none, 20% one link (prefix-YYYY-NNNN).
+pub fn random_links(rng: &mut StdRng, prefixes: &[&str]) -> Vec<String> {
+    let r: f64 = rng.gen();
+    if r < 0.8 {
+        Vec::new()
+    } else {
+        let prefix = pick(rng, prefixes);
+        let year = rng.gen_range(2020..=2025);
+        let seq = rng.gen_range(1..=9999);
+        vec![format!("{prefix}-{year}-{seq:04}")]
+    }
+}
+
 pub const EXCHANGE_DESCRIPTIONS: &[&str] = &[
     "Buy BTC", "Sell BTC", "Buy ETH", "Sell ETH",
     "Buy SOL", "Sell SOL", "Deposit EUR", "Withdraw EUR",

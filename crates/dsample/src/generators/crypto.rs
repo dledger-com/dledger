@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::accounts;
 use crate::currencies;
-use crate::distributions::{to_decimal, triangular, random_date, pick, weighted_index};
+use crate::distributions::{to_decimal, triangular, random_date, pick, weighted_index, random_tags, random_links, TAG_POOL, LINK_PREFIXES};
 use crate::model::{SampleData, Entry};
 use crate::price_sim::PriceSimulator;
 use super::{ScenarioGenerator, simple_entry, trade_entry, fee_entry};
@@ -141,6 +141,14 @@ impl ScenarioGenerator for CryptoGenerator {
                     )
                 }
             };
+            let mut entry = entry;
+            match kind {
+                0 | 1 => entry.tags = vec!["trading".to_string(), "crypto".to_string()],
+                2 | 3 => entry.tags = vec!["transfer".to_string()],
+                5 => entry.tags = vec!["fee".to_string()],
+                _ => entry.tags = random_tags(rng, TAG_POOL),
+            }
+            entry.links = random_links(rng, LINK_PREFIXES);
             entries.push(entry);
         }
 

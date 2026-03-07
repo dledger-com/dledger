@@ -50,6 +50,16 @@ impl Formatter for HledgerFormatter {
                 status_marker,
                 entry.description,
             ));
+            if !entry.tags.is_empty() || !entry.links.is_empty() {
+                let mut parts: Vec<String> = Vec::new();
+                for tag in &entry.tags {
+                    parts.push(format!("{tag}:"));
+                }
+                for link in &entry.links {
+                    parts.push(format!("link:{link}"));
+                }
+                out.push_str(&format!("    ; {}\n", parts.join(", ")));
+            }
             for posting in &entry.postings {
                 out.push_str(&format!(
                     "  {}  {} {}\n",

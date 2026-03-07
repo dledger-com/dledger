@@ -42,6 +42,8 @@ pub fn simple_entry(
         status: EntryStatus::Confirmed,
         description: desc.to_string(),
         postings,
+        tags: Vec::new(),
+        links: Vec::new(),
     }
 }
 
@@ -70,6 +72,8 @@ pub fn trade_entry(
         status: EntryStatus::Confirmed,
         description: desc.to_string(),
         postings,
+        tags: Vec::new(),
+        links: Vec::new(),
     }
 }
 
@@ -92,6 +96,8 @@ pub fn fee_entry(
         status: EntryStatus::Confirmed,
         description: desc.to_string(),
         postings,
+        tags: Vec::new(),
+        links: Vec::new(),
     }
 }
 

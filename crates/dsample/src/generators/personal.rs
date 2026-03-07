@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::accounts;
 use crate::currencies;
-use crate::distributions::{self, to_decimal, triangular, random_date, pick, weighted_index};
+use crate::distributions::{self, to_decimal, triangular, random_date, pick, weighted_index, random_tags, random_links, TAG_POOL, LINK_PREFIXES};
 use crate::model::{SampleData, Entry};
 use super::{ScenarioGenerator, simple_entry};
 
@@ -172,6 +172,18 @@ impl ScenarioGenerator for PersonalGenerator {
                     )
                 }
             };
+            // Assign context-appropriate tags for specific types, random for others
+            let mut entry = entry;
+            match kind {
+                0 => entry.tags = vec!["salary".to_string()],
+                1 => entry.tags = vec!["rent".to_string(), "recurring".to_string()],
+                5 => {
+                    entry.tags = vec!["subscription".to_string(), "recurring".to_string()];
+                }
+                7 => entry.tags = vec!["utilities".to_string(), "recurring".to_string()],
+                _ => entry.tags = random_tags(rng, TAG_POOL),
+            }
+            entry.links = random_links(rng, LINK_PREFIXES);
             entries.push(entry);
         }
 

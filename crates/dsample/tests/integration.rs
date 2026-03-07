@@ -223,3 +223,31 @@ fn global_per_currency_sums() {
         assert!(sum.is_zero(), "Global sum for {ccy} is {sum}, expected 0");
     }
 }
+
+// ── Tags and links ──
+
+#[test]
+fn beancount_output_contains_tags_and_links() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 100, date(2023, 1, 1), date(2025, 1, 1), false);
+    let output = BeancountFormatter.format(&data, 42);
+    assert!(output.contains(" #"), "Expected Beancount #tag in output");
+    assert!(output.contains(" ^"), "Expected Beancount ^link in output");
+}
+
+#[test]
+fn hledger_output_contains_comment_tags() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 100, date(2023, 1, 1), date(2025, 1, 1), false);
+    let output = HledgerFormatter.format(&data, 42);
+    assert!(output.contains("; trading:"), "Expected hledger comment-style tag in output");
+}
+
+#[test]
+fn ledger_output_contains_colon_tags() {
+    let mut rng = StdRng::seed_from_u64(42);
+    let data = MixedGenerator.generate(&mut rng, 100, date(2023, 1, 1), date(2025, 1, 1), false);
+    let output = LedgerFormatter.format(&data, 42);
+    assert!(output.contains("; :trading:crypto:"), "Expected Ledger colon-delimited tags in output");
+    assert!(output.contains("; Link: "), "Expected Ledger Link metadata in output");
+}

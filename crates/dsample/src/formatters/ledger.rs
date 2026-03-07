@@ -34,6 +34,13 @@ impl Formatter for LedgerFormatter {
                 status_marker,
                 entry.description,
             ));
+            if !entry.tags.is_empty() {
+                let joined: Vec<&str> = entry.tags.iter().map(|s| s.as_str()).collect();
+                out.push_str(&format!("    ; :{}:\n", joined.join(":")));
+            }
+            for link in &entry.links {
+                out.push_str(&format!("    ; Link: {link}\n"));
+            }
             for posting in &entry.postings {
                 out.push_str(&format!(
                     "  {}  {} {}\n",

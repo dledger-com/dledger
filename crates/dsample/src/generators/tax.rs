@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::accounts;
 use crate::currencies;
-use crate::distributions::{to_decimal, triangular, weighted_index};
+use crate::distributions::{to_decimal, triangular, weighted_index, random_links, LINK_PREFIXES};
 use crate::model::{SampleData, Entry};
 use crate::price_sim::PriceSimulator;
 use super::{ScenarioGenerator, trade_entry};
@@ -55,7 +55,7 @@ impl ScenarioGenerator for TaxGenerator {
                     let crypto_amount = eur_amount / price;
                     let dp = currencies::decimal_places(crypto);
 
-                    entries.push(trade_entry(
+                    let mut entry = trade_entry(
                         date,
                         &format!("Buy {crypto}"),
                         accounts::EXCHANGE_ASSETS_KRAKEN,
@@ -64,7 +64,10 @@ impl ScenarioGenerator for TaxGenerator {
                         crypto,
                         to_decimal(eur_amount, 2),
                         "EUR",
-                    ));
+                    );
+                    entry.tags = vec!["trading".to_string(), "crypto".to_string()];
+                    entry.links = random_links(rng, LINK_PREFIXES);
+                    entries.push(entry);
                 }
                 _ => {
                     // Disposition: sell crypto for EUR
@@ -80,7 +83,7 @@ impl ScenarioGenerator for TaxGenerator {
                     let dp = currencies::decimal_places(crypto);
 
                     // Sell: crypto leaves exchange via Equity:Trading, EUR arrives at bank
-                    entries.push(trade_entry(
+                    let mut entry = trade_entry(
                         date,
                         &format!("Sell {crypto}"),
                         accounts::BANK_CHECKING,
@@ -89,7 +92,10 @@ impl ScenarioGenerator for TaxGenerator {
                         "EUR",
                         to_decimal(crypto_amount, dp),
                         crypto,
-                    ));
+                    );
+                    entry.tags = vec!["trading".to_string(), "crypto".to_string(), "tax-deductible".to_string()];
+                    entry.links = random_links(rng, LINK_PREFIXES);
+                    entries.push(entry);
                 }
             }
         }

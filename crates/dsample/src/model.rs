@@ -20,6 +20,8 @@ pub struct Entry {
     pub status: EntryStatus,
     pub description: String,
     pub postings: Vec<Posting>,
+    pub tags: Vec<String>,
+    pub links: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

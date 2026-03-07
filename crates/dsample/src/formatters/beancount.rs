@@ -55,12 +55,20 @@ impl Formatter for BeancountFormatter {
                 EntryStatus::Confirmed => "*",
                 EntryStatus::Pending => "!",
             };
-            out.push_str(&format!(
-                "{} {} \"{}\"\n",
+            let mut header = format!(
+                "{} {} \"{}\"",
                 entry.date.format("%Y-%m-%d"),
                 status_marker,
                 entry.description,
-            ));
+            );
+            for tag in &entry.tags {
+                header.push_str(&format!(" #{tag}"));
+            }
+            for link in &entry.links {
+                header.push_str(&format!(" ^{link}"));
+            }
+            header.push('\n');
+            out.push_str(&header);
             for posting in &entry.postings {
                 let beancount_account = posting.account.replace(' ', "-");
                 out.push_str(&format!(
