@@ -1782,7 +1782,7 @@
         </div>
         <!-- svelte-ignore binding_property_non_reactive -->
         <div
-            class="h-36 px-2 cursor-crosshair select-none touch-none"
+            class="h-36 px-2 cursor-col-resize select-none touch-none"
             bind:clientWidth={chartContainerWidth}
             onpointerdown={(e) => {
                 isDragging = true;
