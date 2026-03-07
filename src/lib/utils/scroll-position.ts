@@ -6,8 +6,6 @@ import type { SortDirection } from "./sort.js";
 
 export type JournalSortKey = "date" | "description" | "status" | "amount" | "account";
 
-type EntryPair = [JournalEntry, LineItem[]];
-
 /**
  * Returns a compact label describing what's currently visible in the virtual scroll viewport.
  *
@@ -20,12 +18,13 @@ type EntryPair = [JournalEntry, LineItem[]];
  * | null        | "50–75" (row range)                          |
  */
 export function derivePositionLabel(
-	sortedEntries: EntryPair[],
+	sortedEntries: JournalEntry[],
 	firstIndex: number,
 	lastIndex: number,
 	sortKey: JournalSortKey | null,
 	_sortDirection: SortDirection | null,
 	formatDebitTotal: (items: { amount: string; currency: string }[]) => string,
+	getItems?: (entryId: string) => LineItem[],
 ): string {
 	if (sortedEntries.length === 0) return "";
 	const first = sortedEntries[firstIndex];
@@ -40,13 +39,16 @@ export function derivePositionLabel(
 
 	switch (sortKey) {
 		case "date":
-			return deriveDateLabel(first[0].date, last[0].date);
+			return deriveDateLabel(first.date, last.date);
 		case "description":
-			return deriveLetterLabel(first[0].description, last[0].description);
+			return deriveLetterLabel(first.description, last.description);
 		case "status":
-			return deriveStatusLabel(first[0].status, last[0].status);
-		case "amount":
-			return deriveAmountLabel(first[1], last[1], formatDebitTotal);
+			return deriveStatusLabel(first.status, last.status);
+		case "amount": {
+			const firstItems = getItems ? getItems(first.id) : [];
+			const lastItems = getItems ? getItems(last.id) : [];
+			return deriveAmountLabel(firstItems, lastItems, formatDebitTotal);
+		}
 		case "account":
 			// Account names are resolved outside this module; fall back to row range
 			if (firstIndex === lastIndex) return String(firstIndex + 1);

@@ -26,10 +26,8 @@ function makeItems(amounts: [string, string][] = [["100", "USD"]]): LineItem[] {
 	}));
 }
 
-type EntryPair = [JournalEntry, LineItem[]];
-
-function makePairs(entries: Partial<JournalEntry>[], items?: LineItem[][]): EntryPair[] {
-	return entries.map((e, i) => [makeEntry(e), items?.[i] ?? makeItems()]);
+function makeEntries(overrides: Partial<JournalEntry>[]): JournalEntry[] {
+	return overrides.map((e, i) => makeEntry({ id: String(i + 1), ...e }));
 }
 
 const defaultFormat = (items: { amount: string; currency: string }[]) =>
@@ -45,58 +43,56 @@ describe("derivePositionLabel", () => {
 		});
 
 		it("returns empty string for out-of-range indices", () => {
-			const pairs = makePairs([{ date: "2024-03-15" }]);
-			expect(derivePositionLabel(pairs, 5, 10, "date", "asc", defaultFormat)).toBe("");
+			const entries = makeEntries([{ date: "2024-03-15" }]);
+			expect(derivePositionLabel(entries, 5, 10, "date", "asc", defaultFormat)).toBe("");
 		});
 
 		it("handles single entry", () => {
-			const pairs = makePairs([{ date: "2024-03-15" }]);
-			const label = derivePositionLabel(pairs, 0, 0, "date", "asc", defaultFormat);
+			const entries = makeEntries([{ date: "2024-03-15" }]);
+			const label = derivePositionLabel(entries, 0, 0, "date", "asc", defaultFormat);
 			expect(label).toContain("2024");
 		});
 	});
 
 	describe("sortKey = null (row range)", () => {
 		it("shows single row number when first === last", () => {
-			const pairs = makePairs([{ date: "2024-01-01" }, { date: "2024-02-01" }]);
-			expect(derivePositionLabel(pairs, 0, 0, null, null, defaultFormat)).toBe("1");
+			const entries = makeEntries([{ date: "2024-01-01" }, { date: "2024-02-01" }]);
+			expect(derivePositionLabel(entries, 0, 0, null, null, defaultFormat)).toBe("1");
 		});
 
 		it("shows row range", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ date: "2024-01-01" },
 				{ date: "2024-02-01" },
 				{ date: "2024-03-01" },
 			]);
-			expect(derivePositionLabel(pairs, 0, 2, null, null, defaultFormat)).toBe("1–3");
+			expect(derivePositionLabel(entries, 0, 2, null, null, defaultFormat)).toBe("1–3");
 		});
 
 		it("shows correct 1-based range in the middle", () => {
-			const pairs = makePairs(Array.from({ length: 100 }, (_, i) => ({ date: `2024-01-${String(i + 1).padStart(2, "0")}` })));
-			expect(derivePositionLabel(pairs, 49, 74, null, null, defaultFormat)).toBe("50–75");
+			const entries = makeEntries(Array.from({ length: 100 }, (_, i) => ({ date: `2024-01-${String(i + 1).padStart(2, "0")}` })));
+			expect(derivePositionLabel(entries, 49, 74, null, null, defaultFormat)).toBe("50–75");
 		});
 	});
 
 	describe("sortKey = 'date'", () => {
 		it("shows full month+year for same month", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ date: "2024-03-01" },
 				{ date: "2024-03-15" },
 				{ date: "2024-03-31" },
 			]);
-			const label = derivePositionLabel(pairs, 0, 2, "date", "asc", defaultFormat);
-			// Should contain "March" (long format) and "2024"
+			const label = derivePositionLabel(entries, 0, 2, "date", "asc", defaultFormat);
 			expect(label).toMatch(/march\s+2024/i);
 		});
 
 		it("shows short month range for same year", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ date: "2024-03-01" },
 				{ date: "2024-04-15" },
 				{ date: "2024-06-30" },
 			]);
-			const label = derivePositionLabel(pairs, 0, 2, "date", "asc", defaultFormat);
-			// Should be like "Mar–Jun 2024"
+			const label = derivePositionLabel(entries, 0, 2, "date", "asc", defaultFormat);
 			expect(label).toMatch(/mar/i);
 			expect(label).toMatch(/jun/i);
 			expect(label).toContain("2024");
@@ -104,13 +100,12 @@ describe("derivePositionLabel", () => {
 		});
 
 		it("shows cross-year range", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ date: "2023-12-01" },
 				{ date: "2024-01-15" },
 				{ date: "2024-03-30" },
 			]);
-			const label = derivePositionLabel(pairs, 0, 2, "date", "asc", defaultFormat);
-			// Should be like "Dec 2023 – Mar 2024"
+			const label = derivePositionLabel(entries, 0, 2, "date", "asc", defaultFormat);
 			expect(label).toMatch(/dec/i);
 			expect(label).toContain("2023");
 			expect(label).toMatch(/mar/i);
@@ -118,54 +113,54 @@ describe("derivePositionLabel", () => {
 		});
 
 		it("handles single entry date", () => {
-			const pairs = makePairs([{ date: "2024-06-15" }]);
-			const label = derivePositionLabel(pairs, 0, 0, "date", "asc", defaultFormat);
+			const entries = makeEntries([{ date: "2024-06-15" }]);
+			const label = derivePositionLabel(entries, 0, 0, "date", "asc", defaultFormat);
 			expect(label).toMatch(/june?\s+2024/i);
 		});
 	});
 
 	describe("sortKey = 'description'", () => {
 		it("shows single letter when same first letter", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ description: "Dinner" },
 				{ description: "Drinks" },
 			]);
-			expect(derivePositionLabel(pairs, 0, 1, "description", "asc", defaultFormat)).toBe("D");
+			expect(derivePositionLabel(entries, 0, 1, "description", "asc", defaultFormat)).toBe("D");
 		});
 
 		it("shows letter range", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ description: "Dinner" },
 				{ description: "Electricity" },
 				{ description: "Fuel" },
 			]);
-			expect(derivePositionLabel(pairs, 0, 2, "description", "asc", defaultFormat)).toBe("D–F");
+			expect(derivePositionLabel(entries, 0, 2, "description", "asc", defaultFormat)).toBe("D–F");
 		});
 
 		it("handles lowercase descriptions", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ description: "apple" },
 				{ description: "banana" },
 			]);
-			expect(derivePositionLabel(pairs, 0, 1, "description", "asc", defaultFormat)).toBe("A–B");
+			expect(derivePositionLabel(entries, 0, 1, "description", "asc", defaultFormat)).toBe("A–B");
 		});
 	});
 
 	describe("sortKey = 'status'", () => {
 		it("shows single status", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ status: "confirmed" },
 				{ status: "confirmed" },
 			]);
-			expect(derivePositionLabel(pairs, 0, 1, "status", "asc", defaultFormat)).toBe("confirmed");
+			expect(derivePositionLabel(entries, 0, 1, "status", "asc", defaultFormat)).toBe("confirmed");
 		});
 
 		it("shows status range", () => {
-			const pairs = makePairs([
+			const entries = makeEntries([
 				{ status: "confirmed" },
 				{ status: "pending" },
 			]);
-			expect(derivePositionLabel(pairs, 0, 1, "status", "asc", defaultFormat)).toBe(
+			expect(derivePositionLabel(entries, 0, 1, "status", "asc", defaultFormat)).toBe(
 				"confirmed – pending",
 			);
 		});
@@ -174,27 +169,29 @@ describe("derivePositionLabel", () => {
 	describe("sortKey = 'amount'", () => {
 		it("shows single amount when same", () => {
 			const items = makeItems([["100", "USD"]]);
-			const pairs: EntryPair[] = [
-				[makeEntry(), items],
-				[makeEntry({ id: "2" }), items],
-			];
-			const label = derivePositionLabel(pairs, 0, 1, "amount", "asc", defaultFormat);
+			const itemMap = new Map<string, LineItem[]>();
+			itemMap.set("1", items);
+			itemMap.set("2", items);
+			const entries = [makeEntry({ id: "1" }), makeEntry({ id: "2" })];
+			const getItems = (id: string) => itemMap.get(id) ?? [];
+			const label = derivePositionLabel(entries, 0, 1, "amount", "asc", defaultFormat, getItems);
 			expect(label).toBe("100 USD");
 		});
 
 		it("shows amount range", () => {
-			const pairs: EntryPair[] = [
-				[makeEntry(), makeItems([["50", "USD"]])],
-				[makeEntry({ id: "2" }), makeItems([["200", "EUR"]])],
-			];
-			const label = derivePositionLabel(pairs, 0, 1, "amount", "asc", defaultFormat);
+			const itemMap = new Map<string, LineItem[]>();
+			itemMap.set("1", makeItems([["50", "USD"]]));
+			itemMap.set("2", makeItems([["200", "EUR"]]));
+			const entries = [makeEntry({ id: "1" }), makeEntry({ id: "2" })];
+			const getItems = (id: string) => itemMap.get(id) ?? [];
+			const label = derivePositionLabel(entries, 0, 1, "amount", "asc", defaultFormat, getItems);
 			expect(label).toBe("50 USD – 200 EUR");
 		});
 
 		it("uses provided format function", () => {
 			const customFormat = () => "$42.00";
-			const pairs = makePairs([{}, {}]);
-			const label = derivePositionLabel(pairs, 0, 1, "amount", "asc", customFormat);
+			const entries = makeEntries([{}, {}]);
+			const label = derivePositionLabel(entries, 0, 1, "amount", "asc", customFormat, () => []);
 			expect(label).toBe("$42.00");
 		});
 	});

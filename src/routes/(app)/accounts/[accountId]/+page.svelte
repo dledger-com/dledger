@@ -56,7 +56,7 @@
   let editingOpenedAt = $state(false);
   let openedAtValue = $state("");
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
-  const filteredEntries = $derived(filterHiddenEntries(journalStore.entries, hidden));
+  const filteredEntries = $derived(filterHiddenEntries(journalStore.withItems, hidden));
   const filteredBalances = $derived(filterHiddenBalances(balances, hidden));
 
   // Compute running balance for each entry (chronological order)
@@ -170,10 +170,12 @@
       journalStore.load({ account_id: id }),
       getBackend().listBalanceAssertions(id).catch(() => [] as BalanceAssertion[]),
     ]);
+    // Account page has small datasets — load all line items eagerly
+    await journalStore.loadAllLineItems();
     account = accountStore.byId.get(id) ?? null;
     balances = balResult;
     assertions = assertResult;
-    if (account) loadBalanceChart(id, journalStore.entries);
+    if (account) loadBalanceChart(id, journalStore.withItems);
     loading = false;
   });
 </script>
@@ -396,6 +398,7 @@
                             assertions = await backend.listBalanceAssertions(accountId!);
                             balances = await accountStore.getBalance(accountId!);
                             await journalStore.load({ account_id: accountId! });
+                            await journalStore.loadAllLineItems();
                             paddingAssertionId = null;
                             const { invalidate } = await import("$lib/data/invalidation.js");
                             invalidate("journal", "accounts", "reports");

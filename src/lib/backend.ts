@@ -107,6 +107,9 @@ export interface Backend {
   ): Promise<{ reversalId: string; newEntryId: string }>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
   queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]>;
+  queryJournalEntriesOnly?(filter: TransactionFilter): Promise<JournalEntry[]>;
+  getLineItemsForEntries?(entryIds: string[]): Promise<Map<string, LineItem[]>>;
+  getJournalChartAggregation?(filter: TransactionFilter): Promise<{ date: string; income: number; expense: number }[]>;
   countJournalEntries(filter: TransactionFilter): Promise<number>;
 
   // Balances
@@ -334,6 +337,20 @@ class TauriBackend implements Backend {
   }
   async queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]> {
     return this.invoke("query_journal_entries", { filter });
+  }
+  async queryJournalEntriesOnly(filter: TransactionFilter): Promise<JournalEntry[]> {
+    // Tauri backend: fall back to queryJournalEntries and strip line items
+    const pairs = await this.queryJournalEntries(filter);
+    return pairs.map(([e]) => e);
+  }
+  async getLineItemsForEntries(entryIds: string[]): Promise<Map<string, LineItem[]>> {
+    // Tauri backend: fetch each entry individually
+    const map = new Map<string, LineItem[]>();
+    for (const id of entryIds) {
+      const result = await this.getJournalEntry(id);
+      if (result) map.set(id, result[1]);
+    }
+    return map;
   }
   async countJournalEntries(filter: TransactionFilter): Promise<number> {
     return this.invoke("count_journal_entries", { filter });

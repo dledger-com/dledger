@@ -3,20 +3,31 @@ import { getBackend } from "$lib/backend.js";
 import { invalidate } from "$lib/data/invalidation.js";
 
 export class JournalStore {
-  entries = $state<[JournalEntry, LineItem[]][]>([]);
+  entries = $state<JournalEntry[]>([]);
+  lineItemCache = $state(new Map<string, LineItem[]>());
   loading = $state(false);
   error = $state<string | null>(null);
   totalCount = $state(0);
   private currentFilter = $state<TransactionFilter>({});
+  private _loadingLineItems = $state(false);
 
-  readonly headers = $derived(this.entries.map(([e]) => e));
+  get loadingLineItems() {
+    return this._loadingLineItems;
+  }
+
+  /** Entries paired with their line items (from cache). */
+  readonly withItems = $derived<[JournalEntry, LineItem[]][]>(
+    this.entries.map(e => [e, this.lineItemCache.get(e.id) ?? []])
+  );
+
+  readonly headers = $derived(this.entries);
 
   readonly confirmed = $derived(
-    this.entries.filter(([e]) => e.status === "confirmed"),
+    this.entries.filter(e => e.status === "confirmed"),
   );
 
   readonly byId = $derived(
-    new Map(this.entries.map(([e, items]) => [e.id, { entry: e, items }])),
+    new Map(this.entries.map(e => [e.id, { entry: e, items: this.lineItemCache.get(e.id) ?? [] }])),
   );
 
   async load(filter: TransactionFilter = {}) {
@@ -25,12 +36,22 @@ export class JournalStore {
     this.currentFilter = filter;
     try {
       const backend = getBackend();
-      // Remove limit/offset — load all entries for virtual scrolling
       const queryFilter = { ...filter };
       delete queryFilter.limit;
       delete queryFilter.offset;
-      this.entries = await backend.queryJournalEntries(queryFilter);
+
+      if (backend.queryJournalEntriesOnly) {
+        this.entries = await backend.queryJournalEntriesOnly(queryFilter);
+      } else {
+        const pairs = await backend.queryJournalEntries(queryFilter);
+        this.entries = pairs.map(([e]) => e);
+        // Pre-populate cache from full results
+        const cache = new Map<string, LineItem[]>();
+        for (const [e, items] of pairs) cache.set(e.id, items);
+        this.lineItemCache = cache;
+      }
       this.totalCount = this.entries.length;
+      this.lineItemCache = new Map();
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -40,6 +61,39 @@ export class JournalStore {
 
   async loadAll() {
     return this.load(this.currentFilter);
+  }
+
+  /** Load line items for a batch of entry IDs (viewport-driven). */
+  async loadLineItems(entryIds: string[]): Promise<void> {
+    const needed = entryIds.filter(id => !this.lineItemCache.has(id));
+    if (needed.length === 0) return;
+    this._loadingLineItems = true;
+    try {
+      const backend = getBackend();
+      let items: Map<string, LineItem[]>;
+      if (backend.getLineItemsForEntries) {
+        items = await backend.getLineItemsForEntries(needed);
+      } else {
+        // Fallback: use queryJournalEntries per entry
+        items = new Map();
+        for (const id of needed) {
+          const result = await backend.getJournalEntry(id);
+          if (result) items.set(id, result[1]);
+        }
+      }
+      const updated = new Map(this.lineItemCache);
+      for (const [id, li] of items) updated.set(id, li);
+      this.lineItemCache = updated;
+    } finally {
+      this._loadingLineItems = false;
+    }
+  }
+
+  /** Load ALL line items (for operations that need the full dataset). */
+  async loadAllLineItems(): Promise<void> {
+    const needed = this.entries.filter(e => !this.lineItemCache.has(e.id)).map(e => e.id);
+    if (needed.length === 0) return;
+    await this.loadLineItems(needed);
   }
 
   async post(entry: JournalEntry, items: LineItem[]): Promise<boolean> {

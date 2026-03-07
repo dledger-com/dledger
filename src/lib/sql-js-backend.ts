@@ -2242,6 +2242,163 @@ PRAGMA foreign_keys = ON;
     return entries.map((e) => [e, itemsByEntry.get(e.id) ?? []] as [JournalEntry, LineItem[]]);
   }
 
+  private buildFilterSql(filter: TransactionFilter): { joinClause: string; whereClause: string; params: unknown[] } {
+    let joinClause = "";
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (filter.account_ids && filter.account_ids.length > 0) {
+      joinClause = " JOIN line_item li ON li.journal_entry_id = je.id";
+      const placeholders = filter.account_ids.map(() => "?").join(", ");
+      conditions.push(`li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id IN (${placeholders}))`);
+      params.push(...filter.account_ids);
+    } else if (filter.account_id) {
+      joinClause = " JOIN line_item li ON li.journal_entry_id = je.id";
+      conditions.push("li.account_id IN (SELECT descendant_id FROM account_closure WHERE ancestor_id = ?)");
+      params.push(filter.account_id);
+    }
+    if (filter.from_date) {
+      conditions.push("je.date >= ?");
+      params.push(filter.from_date);
+    }
+    if (filter.to_date) {
+      conditions.push("je.date <= ?");
+      params.push(filter.to_date);
+    }
+    if (filter.status) {
+      conditions.push("je.status = ?");
+      params.push(filter.status);
+    }
+    if (filter.source) {
+      conditions.push("je.source = ?");
+      params.push(filter.source);
+    }
+    if (filter.description_search) {
+      conditions.push("je.description LIKE ?");
+      params.push(`%${filter.description_search}%`);
+    }
+    if (filter.tag_filters && filter.tag_filters.length > 0) {
+      for (const tag of filter.tag_filters) {
+        conditions.push(
+          "je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (',' || LOWER(value) || ',') LIKE ?)",
+        );
+        params.push(`%,${tag.toLowerCase()},%`);
+      }
+    }
+    if (filter.tag_filters_or && filter.tag_filters_or.length > 0) {
+      const orParts = filter.tag_filters_or.map(() =>
+        "(',' || LOWER(value) || ',') LIKE ?"
+      );
+      conditions.push(
+        `je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'tags' AND (${orParts.join(" OR ")}))`
+      );
+      for (const tag of filter.tag_filters_or) {
+        params.push(`%,${tag.toLowerCase()},%`);
+      }
+    }
+    if (filter.link_filters && filter.link_filters.length > 0) {
+      for (const link of filter.link_filters) {
+        conditions.push(
+          "je.id IN (SELECT journal_entry_id FROM entry_link WHERE link_name = ?)",
+        );
+        params.push(link.toLowerCase());
+      }
+    }
+    if (filter.link_filters_or && filter.link_filters_or.length > 0) {
+      const orParts = filter.link_filters_or.map(() => "link_name = ?");
+      conditions.push(
+        `je.id IN (SELECT journal_entry_id FROM entry_link WHERE ${orParts.join(" OR ")})`,
+      );
+      for (const link of filter.link_filters_or) {
+        params.push(link.toLowerCase());
+      }
+    }
+    if (filter.exclude_hidden_currencies) {
+      conditions.push(
+        "NOT EXISTS (SELECT 1 FROM line_item li_hc WHERE li_hc.journal_entry_id = je.id AND li_hc.currency IN (SELECT code FROM currency WHERE is_hidden = 1))"
+      );
+    }
+    const whereClause = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
+    return { joinClause, whereClause, params };
+  }
+
+  async queryJournalEntriesOnly(
+    filter: TransactionFilter,
+  ): Promise<JournalEntry[]> {
+    const { joinClause, whereClause, params } = this.buildFilterSql(filter);
+    let sql = "SELECT DISTINCT je.id, je.date, je.description, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je"
+      + joinClause + whereClause;
+
+    const allowedColumns: Record<string, string> = {
+      date: "je.date",
+      description: "je.description",
+      status: "je.status",
+    };
+    const col = filter.order_by && allowedColumns[filter.order_by];
+    const dir = filter.order_direction === "asc" ? "ASC" : "DESC";
+    if (col) {
+      sql += ` ORDER BY ${col} ${dir}, je.created_at ${dir}`;
+    } else {
+      sql += " ORDER BY je.date DESC, je.created_at DESC";
+    }
+    if (filter.limit !== undefined) {
+      sql += " LIMIT ?";
+      params.push(filter.limit);
+    }
+    if (filter.offset !== undefined) {
+      sql += " OFFSET ?";
+      params.push(filter.offset);
+    }
+
+    return this.query(sql, params, mapJournalEntry);
+  }
+
+  async getLineItemsForEntries(entryIds: string[]): Promise<Map<string, LineItem[]>> {
+    const result = new Map<string, LineItem[]>();
+    if (entryIds.length === 0) return result;
+    const allItems = this.queryChunked(
+      entryIds,
+      (ph) => `SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
+       FROM line_item WHERE journal_entry_id IN (${ph})`,
+      [],
+      mapLineItem,
+    );
+    for (const item of allItems) {
+      let list = result.get(item.journal_entry_id);
+      if (!list) {
+        list = [];
+        result.set(item.journal_entry_id, list);
+      }
+      list.push(item);
+    }
+    return result;
+  }
+
+  async getJournalChartAggregation(
+    filter: TransactionFilter,
+  ): Promise<{ date: string; income: number; expense: number }[]> {
+    const { joinClause: filterJoin, whereClause, params } = this.buildFilterSql(filter);
+    // We always need the line_item + account join for aggregation
+    // If filterJoin already has a li join, use it; otherwise add our own
+    const needsLiJoin = !filterJoin.includes("line_item");
+    const liJoin = needsLiJoin ? " JOIN line_item li ON li.journal_entry_id = je.id" : "";
+    const sql = `SELECT je.date,
+      SUM(CASE WHEN a.full_name LIKE 'Income:%' OR a.full_name = 'Income'
+        THEN ABS(CAST(li.amount AS REAL)) ELSE 0 END) as income,
+      SUM(CASE WHEN a.full_name LIKE 'Expenses:%' OR a.full_name = 'Expenses'
+        THEN ABS(CAST(li.amount AS REAL)) ELSE 0 END) as expense
+      FROM journal_entry je${filterJoin}${liJoin}
+      JOIN account a ON a.id = li.account_id
+      ${whereClause ? whereClause + " AND je.status != 'voided'" : "WHERE je.status != 'voided'"}
+      GROUP BY je.date ORDER BY je.date`;
+
+    return this.query(sql, params, (row) => ({
+      date: row.date as string,
+      income: (row.income as number) || 0,
+      expense: (row.expense as number) || 0,
+    }));
+  }
+
   async countJournalEntries(
     filter: TransactionFilter,
   ): Promise<number> {

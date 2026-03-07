@@ -85,12 +85,11 @@
 
     const store = new JournalStore();
     const settings = new SettingsStore();
-    const hidden = $derived(
-        settings.showHidden ? new Set<string>() : getHiddenCurrencySet(),
-    );
-    const filteredEntries = $derived(
-        filterHiddenEntries(store.entries, hidden),
-    );
+
+    /** Helper to get line items for an entry from the store cache */
+    function getItems(entryId: string): LineItem[] {
+        return store.lineItemCache.get(entryId) ?? [];
+    }
 
     // Reload when journal data changes elsewhere (imports, cross-tab)
     const unsubJournal = onInvalidate("journal", () => {
@@ -224,7 +223,7 @@
     }
 
     // TanStack Table state
-    type JournalRow = [JournalEntry, LineItem[]];
+    type JournalRow = JournalEntry;
 
     const columns: ColumnDef<JournalRow>[] = [
         { id: "select", enableSorting: false, enableHiding: false },
@@ -301,7 +300,8 @@
     ): DuplicateGroup[] {
         // O(n): bucket by "date|amounts-fingerprint"
         const buckets = new Map<string, [JournalEntry, LineItem[]][]>();
-        for (const [entry, items] of entries) {
+        for (const pair of entries) {
+            const [entry, items] = pair;
             const fingerprint = items
                 .map((it) => `${it.amount}:${it.currency}`)
                 .sort()
@@ -312,7 +312,7 @@
                 bucket = [];
                 buckets.set(key, bucket);
             }
-            bucket.push([entry, items]);
+            bucket.push(pair);
         }
 
         // Collect buckets with 2+ entries
@@ -340,6 +340,7 @@
         const accountFilter = selectedAccounts;
         const tagFilter = selectedTags;
         const linkFilter = selectedLinks;
+        const showHidden = settings.showHidden;
         clearTimeout(debounceTimer);
 
         const doLoad = () => {
@@ -362,6 +363,11 @@
             if (accountFilter.size > 0) filter.account_ids = [...accountFilter];
             if (tagFilter.size > 0) filter.tag_filters_or = [...tagFilter];
             if (linkFilter.size > 0) filter.link_filters_or = [...linkFilter];
+
+            // Filter hidden currencies in SQL instead of client-side
+            if (!showHidden) {
+                filter.exclude_hidden_currencies = true;
+            }
 
             store.load(filter).then(() => {
                 virtualizer.scrollToOffset(0);
@@ -746,9 +752,9 @@
     let entryLinks = $state<Map<string, string[]>>(new Map());
 
     // Post-filter: OR across comma-separated groups, AND within each group
-    const displayEntries = $derived.by(() => {
+    const displayEntries = $derived.by((): JournalEntry[] => {
         const { groups } = searchFilters;
-        if (groups.length === 0) return filteredEntries;
+        if (groups.length === 0) return store.entries;
         const single = groups.length === 1;
         // Single group: tags/links already filtered by backend SQL, no client-side filtering needed
         if (
@@ -756,10 +762,10 @@
             groups[0].tags.length === 0 &&
             groups[0].links.length === 0
         )
-            return filteredEntries;
-        if (single) return filteredEntries;
+            return store.entries;
+        if (single) return store.entries;
         // Multi-group: client-side OR filtering across groups
-        return filteredEntries.filter(([entry]) => {
+        return store.entries.filter((entry) => {
             return groups.some(({ tags, links, text }) => {
                 if (
                     text &&
@@ -794,19 +800,17 @@
     });
 
     // Sorted entries — needed in script block for virtualizer count
-    const sortedEntries = $derived.by(() => {
+    const sortedEntries = $derived.by((): JournalEntry[] => {
         if (sort.key === "amount" && sort.direction)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return sortItems(
                 displayEntries,
-                ([, items]: [any, any]) => totalDebits(items),
+                (entry: JournalEntry) => totalDebits(getItems(entry.id)),
                 sort.direction,
             );
         if (sort.key === "account" && sort.direction)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return sortItems(
                 displayEntries,
-                ([, items]: [any, any]) => mainCounterparty(items),
+                (entry: JournalEntry) => mainCounterparty(getItems(entry.id)),
                 sort.direction,
             );
         return displayEntries;
@@ -819,7 +823,7 @@
         },
         columns,
         getCoreRowModel: getCoreRowModel(),
-        getRowId: (row) => row[0].id,
+        getRowId: (row) => row.id,
         state: {
             get rowSelection() {
                 return rowSelection;
@@ -839,7 +843,7 @@
                     : updater;
             settings.update({ journalColumnVisibility: columnVisibility });
         },
-        enableRowSelection: (row) => row.original[0].status !== "voided",
+        enableRowSelection: (row) => row.original.status !== "voided",
     });
 
     const visibleColCount = $derived(table.getVisibleLeafColumns().length);
@@ -886,7 +890,7 @@
         try {
             const selectedRows = table.getFilteredSelectedRowModel().rows;
             const ids = selectedRows
-                .map((r) => r.original[0])
+                .map((r) => r.original)
                 .filter((e) => e.status !== "voided")
                 .map((e) => e.id);
             let success = 0;
@@ -922,7 +926,7 @@
         batchTagBusy = true;
         try {
             const selectedRows = table.getFilteredSelectedRowModel().rows;
-            const ids = selectedRows.map((r) => r.original[0].id);
+            const ids = selectedRows.map((r) => r.original.id);
             const backend = getBackend();
             let changed = 0;
             for (const id of ids) {
@@ -977,7 +981,7 @@
         batchLinkBusy = true;
         try {
             const selectedRows = table.getFilteredSelectedRowModel().rows;
-            const ids = selectedRows.map((r) => r.original[0].id);
+            const ids = selectedRows.map((r) => r.original.id);
             const backend = getBackend();
             let changed = 0;
             for (const id of ids) {
@@ -1134,10 +1138,10 @@
         for (const vi of virtualItems) {
             const entry = sortedEntries[vi.index];
             if (!entry) continue;
-            const segments = convertedBarSegments.get(entry[0].id);
+            const segments = convertedBarSegments.get(entry.id);
             const a = segments
                 ? segments.reduce((s, seg) => s + seg.amount, 0)
-                : entryBarAmount(entry[1]);
+                : entryBarAmount(getItems(entry.id));
             amounts.push(a);
         }
         return percentile95(amounts);
@@ -1165,6 +1169,7 @@
             sort.key,
             sort.direction,
             formatDebitTotal,
+            getItems,
         ),
     );
 
@@ -1193,7 +1198,7 @@
         const entries = displayEntries;
         if (entries.length === 0) return "day";
         const dates = new Set<string>();
-        for (const [e] of entries) dates.add(e.date);
+        for (const e of entries) dates.add(e.date);
         const sorted = [...dates].sort();
         const first = new Date(sorted[0] + "T00:00:00");
         const last = new Date(sorted[sorted.length - 1] + "T00:00:00");
@@ -1203,36 +1208,24 @@
     });
     const effectiveGranularity: ChartGranularity = $derived(manualGranularity ?? autoGranularity);
 
-    function buildRawChartData(entries: [JournalEntry, LineItem[]][], granularity: ChartGranularity): ChartDatum[] {
+    function buildChartDataFromAgg(rows: { date: string; income: number; expense: number }[], granularity: ChartGranularity): ChartDatum[] {
         const map = new Map<string, ChartDatum>();
-        for (const [entry, items] of entries) {
-            const key = bucketKey(entry.date, granularity);
+        for (const row of rows) {
+            const key = bucketKey(row.date, granularity);
             let rec = map.get(key);
             if (!rec) {
                 rec = { date: bucketStartDate(key, granularity), income: 0, expense: 0, other: 0 };
                 map.set(key, rec);
             }
-            for (const item of items) {
-                const name = accountIdToName.get(item.account_id) ?? "";
-                const amt = Math.abs(parseFloat(item.amount));
-                if (name.startsWith("Income:") || name === "Income") {
-                    rec.income += amt;
-                } else if (
-                    name.startsWith("Expenses:") ||
-                    name === "Expenses"
-                ) {
-                    rec.expense += amt;
-                } else {
-                    rec.other += amt;
-                }
-            }
+            rec.income += row.income;
+            rec.expense += row.expense;
         }
         return [...map.values()].sort(
             (a, b) => a.date.getTime() - b.date.getTime(),
         );
     }
 
-    const rawChartData = $derived.by(() => buildRawChartData(displayEntries, effectiveGranularity));
+    let rawChartData = $state<ChartDatum[]>([]);
     let convertedChartData = $state<ChartDatum[] | null>(null);
     const chartData = $derived(convertedChartData ?? rawChartData);
     const chartYMax = $derived.by(() => {
@@ -1243,58 +1236,42 @@
     let chartConversionGen = 0;
     $effect(() => {
         const entries = displayEntries;
-        const baseCurrency = settings.currency;
         const granularity = effectiveGranularity;
         convertedChartData = null;
-        if (!baseCurrency || entries.length === 0) return;
+        rawChartData = [];
+        if (entries.length === 0) return;
         const gen = ++chartConversionGen;
-        (async () => {
-            const cache = new ExchangeRateCache(getBackend());
-            const map = new Map<string, ChartDatum>();
-            for (const [entry, items] of entries) {
-                if (gen !== chartConversionGen) return;
-                const key = bucketKey(entry.date, granularity);
-                let rec = map.get(key);
-                if (!rec) {
-                    rec = { date: bucketStartDate(key, granularity), income: 0, expense: 0, other: 0 };
-                    map.set(key, rec);
-                }
-                for (const item of items) {
-                    const name = accountIdToName.get(item.account_id) ?? "";
-                    const rawAmt = Math.abs(parseFloat(item.amount));
-                    let amt: number;
-                    if (item.currency === baseCurrency) {
-                        amt = rawAmt;
-                    } else {
-                        const rate = await cache.get(item.currency, baseCurrency, entry.date);
-                        if (gen !== chartConversionGen) return;
-                        amt = rate ? rawAmt * Number(rate) : 0;
-                    }
-                    if (name.startsWith("Income:") || name === "Income") {
-                        rec.income += amt;
-                    } else if (name.startsWith("Expenses:") || name === "Expenses") {
-                        rec.expense += amt;
-                    } else {
-                        rec.other += amt;
-                    }
-                }
+        const backend = getBackend();
+        if (backend.getJournalChartAggregation) {
+            // Build the same filter used for the current load
+            const filter: TransactionFilter = {};
+            const { groups, backendText } = searchFilters;
+            if (backendText) filter.description_search = backendText;
+            if (groups.length === 1) {
+                if (groups[0].tags.length > 0) filter.tag_filters = groups[0].tags;
+                if (groups[0].links.length > 0) filter.link_filters = groups[0].links;
             }
-            if (gen !== chartConversionGen) return;
-            convertedChartData = [...map.values()].sort(
-                (a, b) => a.date.getTime() - b.date.getTime(),
-            );
-        })();
+            if (selectedAccounts.size > 0) filter.account_ids = [...selectedAccounts];
+            if (selectedTags.size > 0) filter.tag_filters_or = [...selectedTags];
+            if (selectedLinks.size > 0) filter.link_filters_or = [...selectedLinks];
+            if (!settings.showHidden) filter.exclude_hidden_currencies = true;
+
+            backend.getJournalChartAggregation(filter).then(rows => {
+                if (gen !== chartConversionGen) return;
+                rawChartData = buildChartDataFromAgg(rows, granularity);
+            });
+        }
     });
 
     // Current scroll date bucketed (for chart highlight band start)
     const currentChartBucketDate = $derived.by(() => {
-        const dateStr = sortedEntries[virtualItems[0]?.index]?.[0]?.date;
+        const dateStr = sortedEntries[virtualItems[0]?.index]?.date;
         return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
     // Last visible date bucketed (for chart highlight band end)
     const lastChartBucketDate = $derived.by(() => {
-        const dateStr = sortedEntries[virtualItems[virtualItems.length - 1]?.index]?.[0]?.date;
+        const dateStr = sortedEntries[virtualItems[virtualItems.length - 1]?.index]?.date;
         return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
@@ -1302,7 +1279,7 @@
     const middleChartBucketDate = $derived.by(() => {
         if (virtualItems.length === 0) return null;
         const midIdx = virtualItems[Math.floor(virtualItems.length / 2)]?.index;
-        const dateStr = sortedEntries[midIdx]?.[0]?.date;
+        const dateStr = sortedEntries[midIdx]?.date;
         return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
@@ -1321,7 +1298,7 @@
         let bestIdx = 0;
         let bestDiff = Infinity;
         for (let i = 0; i < sortedEntries.length; i++) {
-            const d = sortedEntries[i][0].date;
+            const d = sortedEntries[i].date;
             const diff = Math.abs(
                 new Date(d + "T00:00:00").getTime() - target.getTime(),
             );
@@ -1380,34 +1357,60 @@
         return () => clearTimeout(pillTimer);
     });
 
-    // Derive visible entry IDs (used by converted totals)
+    // Derive visible entry IDs (used by converted totals + viewport line item loading)
     const visibleEntryIds = $derived(
         virtualizer
             .getVirtualItems()
-            .map((item) => sortedEntries[item.index]?.[0]?.id)
+            .map((item) => sortedEntries[item.index]?.id)
             .filter(Boolean),
     );
 
-    // Bulk-load all tags & links whenever filteredEntries changes
-    let metaGen = 0;
+    // Viewport-driven line item loading
+    let lineItemDebounce: ReturnType<typeof setTimeout>;
     $effect(() => {
-        const entries = filteredEntries;
-        const allIds = entries.map((e) => e[0].id).filter(Boolean);
-        // Reset maps and converted totals on data change
+        const items = virtualizer.getVirtualItems();
+        if (items.length === 0 || sortedEntries.length === 0) return;
+        const startIdx = Math.max(0, items[0].index - 50);
+        const endIdx = Math.min(sortedEntries.length, items[items.length - 1].index + 51);
+        const ids = sortedEntries.slice(startIdx, endIdx).map(e => e.id);
+        clearTimeout(lineItemDebounce);
+        lineItemDebounce = setTimeout(() => {
+            store.loadLineItems(ids);
+        }, 16);
+        return () => clearTimeout(lineItemDebounce);
+    });
+
+    // Reset metadata maps when entries change
+    $effect(() => {
+        void store.entries;
         entryTags = new Map();
         entryLinks = new Map();
         convertedTotals = new Map();
         convertedBarSegments = new Map();
-        if (allIds.length === 0) return;
+    });
+
+    // Viewport-driven metadata/links loading
+    let metaGen = 0;
+    let metaDebounce: ReturnType<typeof setTimeout>;
+    $effect(() => {
+        const items = virtualizer.getVirtualItems();
+        if (items.length === 0 || sortedEntries.length === 0) return;
+        const startIdx = Math.max(0, items[0].index - 50);
+        const endIdx = Math.min(sortedEntries.length, items[items.length - 1].index + 51);
+        const ids = sortedEntries.slice(startIdx, endIdx).map(e => e.id);
+        // Filter to IDs not yet loaded
+        const needed = ids.filter(id => !entryTags.has(id));
+        if (needed.length === 0) return;
+        clearTimeout(metaDebounce);
         const gen = ++metaGen;
-        (async () => {
+        metaDebounce = setTimeout(async () => {
             try {
                 const backend = getBackend();
                 const [metaMap, linkMap] = await Promise.all([
                     backend.getMetadataBatch
-                        ? backend.getMetadataBatch(allIds)
+                        ? backend.getMetadataBatch(needed)
                         : Promise.all(
-                              allIds.map((id) =>
+                              needed.map((id) =>
                                   backend
                                       .getMetadata(id)
                                       .catch(
@@ -1418,13 +1421,13 @@
                           ).then(
                               (metas) =>
                                   new Map(
-                                      allIds.map((id, i) => [id, metas[i]]),
+                                      needed.map((id, i) => [id, metas[i]]),
                                   ),
                           ),
                     backend.getEntryLinksBatch
-                        ? backend.getEntryLinksBatch(allIds)
+                        ? backend.getEntryLinksBatch(needed)
                         : Promise.all(
-                              allIds.map((id) =>
+                              needed.map((id) =>
                                   backend
                                       .getEntryLinks(id)
                                       .catch(() => [] as string[]),
@@ -1432,29 +1435,26 @@
                           ).then(
                               (links) =>
                                   new Map(
-                                      allIds.map((id, i) => [id, links[i]]),
+                                      needed.map((id, i) => [id, links[i]]),
                                   ),
                           ),
                 ]);
                 if (gen !== metaGen) return;
-                const tags = new Map<string, string[]>();
+                const tags = new Map(entryTags);
                 for (const [id, meta] of metaMap) {
-                    const parsed = parseTags(meta[TAGS_META_KEY]);
-                    tags.set(id, parsed);
+                    tags.set(id, parseTags(meta[TAGS_META_KEY]));
                 }
                 entryTags = tags;
-                const linksOut = new Map<string, string[]>();
+                const linksOut = new Map(entryLinks);
                 for (const [id, links] of linkMap) {
                     linksOut.set(id, links);
-                }
-                for (const id of allIds) {
-                    if (!linksOut.has(id)) linksOut.set(id, []);
                 }
                 entryLinks = linksOut;
             } catch {
                 /* ignore */
             }
-        })();
+        }, 50);
+        return () => clearTimeout(metaDebounce);
     });
 
     function addTagFilter(tag: string) {
@@ -1588,9 +1588,9 @@
                 [];
 
             for (const id of needed) {
-                const pair = sortedEntries.find(([e]) => e.id === id);
-                if (!pair) continue;
-                const [entry, items] = pair;
+                const entryData = store.byId.get(id);
+                if (!entryData) continue;
+                const { entry, items } = entryData;
                 const { isTrade, debits } = entryAmountParts(items);
                 if (debits.length === 0) {
                     results.set(entry.id, formatCurrency(0, baseCurrency));
@@ -1678,9 +1678,9 @@
             for (const id of ids) {
                 if (barResults.has(id)) continue;
                 if (gen !== conversionGen) return;
-                const pair = sortedEntries.find(([e]) => e.id === id);
-                if (!pair) continue;
-                const [entry, items] = pair;
+                const entryData = store.byId.get(id);
+                if (!entryData) continue;
+                const { entry, items } = entryData;
                 const segs = await convertBarSegments(items, entry.date, baseCurrency, cache);
                 if (gen !== conversionGen) return;
                 barResults.set(id, segs);
@@ -1693,7 +1693,10 @@
     async function handleExport(format: LedgerFormat) {
         exporting = true;
         try {
-            const content = await exportLedger(getBackend(), format, displayEntries);
+            // Build tuples for export — load all line items first if needed
+            await store.loadAllLineItems();
+            const tuples: [JournalEntry, LineItem[]][] = displayEntries.map(e => [e, getItems(e.id)]);
+            const content = await exportLedger(getBackend(), format, tuples);
             const blob = new Blob([content], { type: "text/plain" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -2403,7 +2406,8 @@
                             {#each virtualItems as vItem (vItem.key)}
                                 {@const row = rows[vItem.index]}
                                 {#if row}
-                                    {@const [entry, items] = row.original}
+                                    {@const entry = row.original}
+                                    {@const items = getItems(entry.id)}
                                     {#if isMobileLayout}
                                         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                                         {@const handlers =

@@ -38,6 +38,7 @@ export interface TransactionFilter {
   offset?: number;
   order_by?: "date" | "description" | "status";
   order_direction?: "asc" | "desc";
+  exclude_hidden_currencies?: boolean;
 }
 
 export interface JournalEntryWithItems {
