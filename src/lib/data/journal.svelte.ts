@@ -34,6 +34,8 @@ export class JournalStore {
     this.loading = true;
     this.error = null;
     this.currentFilter = filter;
+    // Yield so Svelte can render the skeleton before the query blocks
+    await new Promise(r => requestAnimationFrame(r));
     try {
       const backend = getBackend();
       const queryFilter = { ...filter };

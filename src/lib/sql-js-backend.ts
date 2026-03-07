@@ -970,6 +970,30 @@ PRAGMA foreign_keys = ON;
     return results;
   }
 
+  /** Like query(), but yields to the browser every `chunkSize` rows so the UI stays responsive. */
+  private async queryAsync<T>(
+    sql: string,
+    params: unknown[],
+    mapRow: (row: Row) => T,
+    chunkSize = 5000,
+  ): Promise<T[]> {
+    const stmt = this.db.prepare(sql);
+    if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
+    const results: T[] = [];
+    try {
+      let i = 0;
+      while (stmt.step()) {
+        results.push(mapRow(stmt.getAsObject()));
+        if (++i % chunkSize === 0) {
+          await new Promise(r => requestAnimationFrame(r));
+        }
+      }
+    } finally {
+      stmt.free();
+    }
+    return results;
+  }
+
   private queryChunked<T>(
     ids: unknown[],
     buildSql: (placeholders: string) => string,
@@ -2350,7 +2374,7 @@ PRAGMA foreign_keys = ON;
       params.push(filter.offset);
     }
 
-    return this.query(sql, params, mapJournalEntry);
+    return this.queryAsync(sql, params, mapJournalEntry);
   }
 
   async getLineItemsForEntries(entryIds: string[]): Promise<Map<string, LineItem[]>> {

@@ -109,29 +109,31 @@
     });
     onDestroy(unsubJournal);
 
-    // Load faceted filter options
+    // Load faceted filter options (deferred to avoid blocking initial render)
     $effect(() => {
         const backend = getBackend();
-        backend.listAccounts().then((accounts) => {
-            accountOptions = accounts
-                .filter((a: Account) => !a.is_archived)
-                .map((a: Account) => ({ value: a.id, label: a.full_name }))
-                .sort((a: { label: string }, b: { label: string }) =>
-                    a.label.localeCompare(b.label),
-                );
-            const map = new Map<string, string>();
-            for (const a of accounts) map.set(a.id, a.full_name);
-            accountIdToName = map;
-            accountOptionsLoading = false;
-        });
-        backend.getAllTagValues().then((tags) => {
-            tagOptions = tags.map((t) => ({ value: t, label: t }));
-            tagOptionsLoading = false;
-        });
-        backend.getAllLinkNames().then((links) => {
-            linkOptions = links.map((l) => ({ value: l, label: l }));
-            linkOptionsLoading = false;
-        });
+        setTimeout(() => {
+            backend.listAccounts().then((accounts) => {
+                accountOptions = accounts
+                    .filter((a: Account) => !a.is_archived)
+                    .map((a: Account) => ({ value: a.id, label: a.full_name }))
+                    .sort((a: { label: string }, b: { label: string }) =>
+                        a.label.localeCompare(b.label),
+                    );
+                const map = new Map<string, string>();
+                for (const a of accounts) map.set(a.id, a.full_name);
+                accountIdToName = map;
+                accountOptionsLoading = false;
+            });
+            backend.getAllTagValues().then((tags) => {
+                tagOptions = tags.map((t) => ({ value: t, label: t }));
+                tagOptionsLoading = false;
+            });
+            backend.getAllLinkNames().then((links) => {
+                linkOptions = links.map((l) => ({ value: l, label: l }));
+                linkOptionsLoading = false;
+            });
+        }, 0);
     });
 
     let showChart = $state(settings.settings.journalShowChart !== false);
