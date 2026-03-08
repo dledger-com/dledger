@@ -40,19 +40,31 @@
   let scaleTime = $state<typeof import("d3-scale").scaleTime | null>(null);
   let scaleLinear = $state<typeof import("d3-scale").scaleLinear | null>(null);
 
-  // Start empty — cache is restored in onMount (like Journal)
-  let recentLoaded = $state(false);
-  let assetsSummary = $state<ConvertedSummary | null>(null);
-  let liabilitiesSummary = $state<ConvertedSummary | null>(null);
-  let revenueSummary = $state<ConvertedSummary | null>(null);
-  let netIncomeSummary = $state<ConvertedSummary | null>(null);
+  // Read cache at script level so the FIRST render already reflects cached state
+  const _cachedRecent = getCachedRecentEntries();
+  const _cachedSummaries = getCachedSummaries();
+  const _cachedCharts = getCachedCharts();
+
+  let recentLoaded = $state(_cachedRecent.loaded);
+  let assetsSummary = $state<ConvertedSummary | null>(_cachedSummaries.assets);
+  let liabilitiesSummary = $state<ConvertedSummary | null>(_cachedSummaries.liabilities);
+  let revenueSummary = $state<ConvertedSummary | null>(_cachedSummaries.revenue);
+  let netIncomeSummary = $state<ConvertedSummary | null>(_cachedSummaries.netIncome);
   let showAssets = $state(false);
   let showLiabilities = $state(false);
   let showRevenue = $state(false);
   let showNetIncome = $state(false);
 
+  // Progress bar — skip if fully cached
+  let loadStepsCompleted = $state(0);
+  const LOAD_STEPS_TOTAL = 5;
+  let loadingActive = $state(
+    !(_cachedRecent.loaded && _cachedSummaries.assets && _cachedSummaries.liabilities
+      && _cachedSummaries.revenue && _cachedSummaries.netIncome && _cachedCharts.loaded)
+  );
+
   // Recent journal entries (queried directly, not via JournalStore)
-  let recentEntries = $state<[JournalEntry, LineItem[]][]>([]);
+  let recentEntries = $state<[JournalEntry, LineItem[]][]>(_cachedRecent.entries);
   let entryTags = $state<Map<string, string[]>>(new Map());
   let entryLinks = $state<Map<string, string[]>>(new Map());
 
@@ -97,9 +109,9 @@
   }
 
   // Charts
-  let netWorthData = $state<NetWorthPoint[]>([]);
-  let expenseData = $state<ExpenseCategory[]>([]);
-  let chartsLoading = $state(true);
+  let netWorthData = $state<NetWorthPoint[]>(_cachedCharts.netWorth);
+  let expenseData = $state<ExpenseCategory[]>(_cachedCharts.expenses);
+  let chartsLoading = $state(!_cachedCharts.loaded);
 
   // Persistent exchange rate cache — rates are immutable by (from, to, date)
   let rateCache: ExchangeRateCache | undefined;
@@ -163,10 +175,12 @@
       console.error("Charts failed:", e);
     } finally {
       chartsLoading = false;
+      loadStepsCompleted++;
+      loadingActive = false;
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
     // 1. Dynamic import of heavy chart libraries (truly async, non-blocking)
     Promise.all([import("layerchart"), import("d3-scale")]).then(([lc, d3]) => {
       AreaChart = lc.AreaChart;
@@ -175,92 +189,86 @@
       scaleLinear = d3.scaleLinear;
     });
 
-    // 2. Restore from cache BEFORE paint (synchronous, cheap reads)
-    const cachedRecent = getCachedRecentEntries();
-    if (cachedRecent.loaded) {
-      recentEntries = cachedRecent.entries;
-      recentLoaded = true;
-    }
-    const cachedSummaries = getCachedSummaries();
-    if (cachedSummaries.assets) assetsSummary = cachedSummaries.assets;
-    if (cachedSummaries.liabilities) liabilitiesSummary = cachedSummaries.liabilities;
-    if (cachedSummaries.revenue) revenueSummary = cachedSummaries.revenue;
-    if (cachedSummaries.netIncome) netIncomeSummary = cachedSummaries.netIncome;
-    const cachedCharts = getCachedCharts();
-    if (cachedCharts.loaded) {
-      netWorthData = cachedCharts.netWorth;
-      expenseData = cachedCharts.expenses;
-      chartsLoading = false;
-    }
+    // 2. Yield to guarantee browser paints skeleton/cached state before heavy queries.
+    //    rAF enters the rendering pipeline → browser paints → setTimeout fires in next macrotask.
+    await new Promise<void>(r => requestAnimationFrame(() => setTimeout(r, 0)));
 
-    // 3. Defer ALL data queries past first paint — sql.js methods are
-    //    synchronous and block the main thread for 500ms+ with large DBs.
-    //    setTimeout(0) lets the browser paint cached data / skeletons first.
-    setTimeout(() => {
-      const date = today();
-      const base = settings.currency;
-      const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
-      const sharedCache = getOrCreateRateCache();
+    // 3. Run ALL data queries after paint
+    const date = today();
+    const base = settings.currency;
+    const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
+    const sharedCache = getOrCreateRateCache();
 
-      // Stream 1: Recent entries (independent, fast single query)
-      getBackend()
-        .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
-        .then((entries) => {
-          const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
-          recentEntries = filtered;
-          recentLoaded = true;
-          setCachedRecentEntries(filtered);
-          loadTagsAndLinks(filtered);
-        })
-        .catch((e) => console.error("Recent entries failed:", e));
+    // Stream 1: Recent entries (independent, fast single query)
+    getBackend()
+      .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
+      .then((entries) => {
+        const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
+        recentEntries = filtered;
+        recentLoaded = true;
+        loadStepsCompleted++;
+        setCachedRecentEntries(filtered);
+        loadTagsAndLinks(filtered);
+      })
+      .catch((e) => console.error("Recent entries failed:", e));
 
-      // Stream 2: Account store (independent, for name lookups)
-      accountStore.load();
+    // Stream 2: Account store (independent, for name lookups)
+    accountStore.load();
 
-      // Stream 3: Balance sheet → assets/liabilities cards (independent chain)
-      const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
-        if (reportStore.balanceSheet) {
+    // Stream 3: Balance sheet → assets/liabilities cards (independent chain)
+    const conversionPromises: Promise<void>[] = [];
+    const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
+      loadStepsCompleted++;
+      if (reportStore.balanceSheet) {
+        conversionPromises.push(
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
             base, date, sharedCache,
-          ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {});
+          ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {}),
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
             base, date, sharedCache,
-          ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {});
-        }
-      });
+          ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {}),
+        );
+      }
+    });
 
-      // Stream 4: Income statement → revenue/net income cards (independent chain)
-      const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
-        if (reportStore.incomeStatement) {
+    // Stream 4: Income statement → revenue/net income cards (independent chain)
+    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
+      loadStepsCompleted++;
+      if (reportStore.incomeStatement) {
+        conversionPromises.push(
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
             base, date, sharedCache,
-          ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {});
+          ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {}),
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
             base, date, sharedCache,
-          ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {});
+          ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {}),
+        );
+      }
+    });
+
+    // Stream 5: Charts (need both reports, but NOT conversions)
+    Promise.all([bsPromise, isPromise])
+      .then(() => {
+        // Track conversion completions
+        Promise.allSettled(conversionPromises).then(() => { loadStepsCompleted++; });
+        return loadCharts(sharedCache);
+      })
+      .catch((e) => console.error("Charts failed:", e));
+
+    // Stream 6: Recurring templates toast (independent)
+    countDueTemplates(getBackend())
+      .then((count) => {
+        if (count > 0) {
+          toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
+            action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
+          });
         }
-      });
-
-      // Stream 5: Charts (need both reports, but NOT conversions)
-      Promise.all([bsPromise, isPromise])
-        .then(() => loadCharts(sharedCache))
-        .catch((e) => console.error("Charts failed:", e));
-
-      // Stream 6: Recurring templates toast (independent)
-      countDueTemplates(getBackend())
-        .then((count) => {
-          if (count > 0) {
-            toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
-              action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
-            });
-          }
-        })
-        .catch(() => {});
-    }, 0);
+      })
+      .catch(() => {});
   });
 
   // ── Invalidation subscriptions ──────────────────────────────────
@@ -277,39 +285,55 @@
   }
 
   function refreshReports() {
+    loadStepsCompleted = 0;
+    loadingActive = true;
+
     const sharedCache = getOrCreateRateCache();
     const date = today();
     const base = settings.currency;
     const hiddenSet = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
 
+    // Recent entries count as already done during refresh (step 1)
+    loadStepsCompleted++;
+
+    const refreshConversionPromises: Promise<void>[] = [];
     const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
+      loadStepsCompleted++;
       if (reportStore.balanceSheet) {
-        convertBalances(
-          filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {});
-        convertBalances(
-          filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {});
+        refreshConversionPromises.push(
+          convertBalances(
+            filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {}),
+          convertBalances(
+            filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {}),
+        );
       }
     });
 
     const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
+      loadStepsCompleted++;
       if (reportStore.incomeStatement) {
-        convertBalances(
-          filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {});
-        convertBalances(
-          filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
-          base, date, sharedCache,
-        ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {});
+        refreshConversionPromises.push(
+          convertBalances(
+            filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {}),
+          convertBalances(
+            filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
+            base, date, sharedCache,
+          ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {}),
+        );
       }
     });
 
     Promise.all([bsPromise, isPromise])
-      .then(() => loadCharts(sharedCache))
+      .then(() => {
+        Promise.allSettled(refreshConversionPromises).then(() => { loadStepsCompleted++; });
+        return loadCharts(sharedCache);
+      })
       .catch((e) => console.error("Failed to refresh reports:", e));
   }
 
@@ -377,6 +401,15 @@
     </Card.Header>
   </Card.Root>
 {/snippet}
+
+{#if loadingActive && loadStepsCompleted < LOAD_STEPS_TOTAL}
+  <div class="h-1 w-full bg-muted overflow-hidden">
+    <div
+      class="h-full bg-primary transition-[width] duration-150 ease-linear"
+      style="width: {(loadStepsCompleted / LOAD_STEPS_TOTAL) * 100}%"
+    ></div>
+  </div>
+{/if}
 
 <div class="space-y-6">
   <div class="flex items-center justify-between gap-4">
