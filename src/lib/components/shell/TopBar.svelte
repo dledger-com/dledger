@@ -61,6 +61,7 @@
           variant={action.variant ?? 'default'}
           href={action.href}
           onclick={action.onclick}
+          disabled={action.disabled}
           class={action.fab ? 'hidden md:inline-flex' : ''}
         >
           {action.label}

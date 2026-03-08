@@ -21,6 +21,7 @@
   import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
 
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
@@ -128,35 +129,34 @@
     ]);
   });
 
+  $effect(() => {
+    if (entry && entry.status === "confirmed") {
+      setTopBarActions([
+        { type: 'button', label: 'Edit Entry', href: `/journal/new?edit=${entryId}`, variant: 'outline' },
+        { type: 'menu', items: [
+          { label: 'Make Recurring', onclick: async () => {
+            if (!entry) return;
+            const template = templateFromEntry(entry, items);
+            await getBackend().createRecurringTemplate(template);
+            toast.success("Recurring template created");
+            goto("/journal/recurring");
+          }},
+          { label: 'Void Entry', onclick: handleVoid }
+        ]}
+      ]);
+    } else {
+      clearTopBarActions();
+    }
+  });
+
   onDestroy(() => {
     const id = entryId;
     if (id) clearBreadcrumbOverride(id);
+    clearTopBarActions();
   });
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">Journal Entry</h1>
-      {#if entry}
-        <p class="text-muted-foreground">{entry.description}</p>
-      {/if}
-    </div>
-    <div class="flex gap-2">
-      {#if entry && entry.status === "confirmed"}
-        <Button variant="outline" onclick={async () => {
-          if (!entry) return;
-          const template = templateFromEntry(entry, items);
-          await getBackend().createRecurringTemplate(template);
-          toast.success("Recurring template created");
-          goto("/journal/recurring");
-        }}>Make Recurring</Button>
-        <Button variant="outline" href="/journal/new?edit={entryId}">Edit Entry</Button>
-        <Button variant="destructive" onclick={handleVoid}>Void Entry</Button>
-      {/if}
-    </div>
-  </div>
-
   {#if loading}
     <Card.Root>
       <Card.Content class="py-4">

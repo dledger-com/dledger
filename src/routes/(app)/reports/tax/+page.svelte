@@ -78,11 +78,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Tax Summary Report</h1>
-    <p class="text-muted-foreground">Capital gains classification, income summary, and unrealized positions.</p>
-  </div>
-
   <Card.Root>
     <Card.Header>
       <Card.Title>Report Parameters</Card.Title>

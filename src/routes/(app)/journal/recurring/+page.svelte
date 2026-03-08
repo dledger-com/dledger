@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -19,6 +19,7 @@
   import ListFilter from "$lib/components/ListFilter.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
 
   type RecurringSortKey = "description" | "frequency" | "nextDate" | "active";
   const sort = createSortState<RecurringSortKey>();
@@ -173,28 +174,24 @@
       generating = false;
     }
   }
+
+  $effect(() => {
+    const actions: import("$lib/data/page-actions.svelte.js").PageAction[] = [];
+    actions.push({ type: 'button', label: 'New Template', onclick: () => { showForm = !showForm; }, fab: true, fabIcon: Plus });
+    if (dueCount > 0) {
+      actions.push({ type: 'button', label: `Generate ${dueCount} Due`, onclick: handleGenerate, disabled: generating, variant: 'outline' });
+    }
+    setTopBarActions(actions);
+  });
+
+  onDestroy(() => {
+    clearTopBarActions();
+  });
 </script>
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">Recurring Transactions</h1>
-      <p class="text-muted-foreground">
-        Automate repeating journal entries.
-      </p>
-    </div>
     <ListFilter bind:value={searchTerm} placeholder="Filter templates..." />
-    <div class="flex gap-2">
-      {#if dueCount > 0}
-        <Button onclick={handleGenerate} disabled={generating}>
-          <Play class="mr-1 h-4 w-4" />
-          {generating ? "Generating..." : `Generate ${dueCount} Due`}
-        </Button>
-      {/if}
-      <Button variant="outline" onclick={() => { showForm = !showForm; }}>
-        {showForm ? "Cancel" : "New Template"}
-      </Button>
-    </div>
   </div>
 
   {#if showForm}

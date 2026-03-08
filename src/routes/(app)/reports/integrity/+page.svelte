@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { getBackend } from "$lib/backend.js";
   import { runIntegrityChecks, type IntegrityIssue } from "$lib/utils/integrity-check.js";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
 
   let running = $state(false);
   let issues = $state<IntegrityIssue[] | null>(null);
@@ -27,19 +28,19 @@
       running = false;
     }
   }
+
+  $effect(() => {
+    setTopBarActions([
+      { type: 'button', label: running ? 'Running...' : 'Run Checks', onclick: runChecks, disabled: running }
+    ]);
+  });
+
+  onDestroy(() => {
+    clearTopBarActions();
+  });
 </script>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">Data Integrity Check</h1>
-      <p class="text-muted-foreground">Verify ledger consistency and detect issues.</p>
-    </div>
-    <Button onclick={runChecks} disabled={running}>
-      {running ? "Running..." : "Run Checks"}
-    </Button>
-  </div>
-
   {#if running}
     <Card.Root>
       <Card.Content class="py-4">

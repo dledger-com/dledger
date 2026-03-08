@@ -634,11 +634,6 @@
 </script>
 
 <div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-bold tracking-tight">Settings</h1>
-        <p class="text-muted-foreground">Configure application preferences.</p>
-    </div>
-
     <!-- General -->
     <Card.Root>
         <Card.Header>

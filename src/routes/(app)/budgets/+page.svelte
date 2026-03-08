@@ -142,13 +142,6 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">Budgets</h1>
-      <p class="text-muted-foreground">
-        Set monthly or yearly spending limits for expense categories.
-        <a href="/reports/budget" class="underline hover:text-foreground">View budget report</a>.
-      </p>
-    </div>
     <ListFilter bind:value={searchTerm} placeholder="Filter budgets..." />
   </div>
 

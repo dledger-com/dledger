@@ -80,11 +80,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Gain/Loss Report</h1>
-    <p class="text-muted-foreground">Realized capital gains and losses from lot disposals.</p>
-  </div>
-
   <Card.Root>
     <Card.Header>
       <Card.Title>Report Period</Card.Title>

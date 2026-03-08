@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import Plus from "lucide-svelte/icons/plus";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
@@ -32,7 +34,17 @@
 
   // Reload when account data changes elsewhere (imports, cross-tab)
   const unsubAccounts = onInvalidate("accounts", () => { store.load(); });
-  onDestroy(unsubAccounts);
+
+  $effect(() => {
+    setTopBarActions([
+      { type: 'button', label: 'New Account', onclick: () => { dialogOpen = true; }, fab: true, fabIcon: Plus }
+    ]);
+  });
+
+  onDestroy(() => {
+    unsubAccounts();
+    clearTopBarActions();
+  });
 
   let dialogOpen = $state(false);
 
@@ -457,10 +469,6 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <div class="shrink-0">
-      <h1 class="text-2xl font-bold tracking-tight">Chart of Accounts</h1>
-      <p class="text-muted-foreground hidden sm:block">Manage your account structure and hierarchy.</p>
-    </div>
     <ListFilter bind:value={searchTerm} placeholder="Filter accounts..." class="order-last sm:order-none" />
     {#if store.archivedCount > 0}
       <label class="flex items-center gap-2 text-sm">
@@ -468,12 +476,9 @@
         Show archived ({store.archivedCount})
       </label>
     {/if}
+  </div>
+
     <Dialog.Root bind:open={dialogOpen}>
-      <Dialog.Trigger>
-        {#snippet child({ props })}
-          <Button {...props}>New Account</Button>
-        {/snippet}
-      </Dialog.Trigger>
       <Dialog.Content>
         <Dialog.Header>
           <Dialog.Title>Create Account</Dialog.Title>
@@ -545,7 +550,6 @@
         </form>
       </Dialog.Content>
     </Dialog.Root>
-  </div>
 
   {#if store.loading}
     <Card.Root>

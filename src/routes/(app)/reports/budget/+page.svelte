@@ -81,14 +81,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Budget Report</h1>
-    <p class="text-muted-foreground">
-      Compare actual spending against budget targets.
-      <a href="/budgets" class="underline hover:text-foreground">Manage budgets</a>.
-    </p>
-  </div>
-
   <div class="flex items-end gap-4 flex-wrap">
     <div class="space-y-2">
       <label for="from" class="text-sm font-medium">From</label>

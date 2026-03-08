@@ -147,10 +147,6 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <div class="shrink-0">
-      <h1 class="text-2xl font-bold tracking-tight">Currencies</h1>
-      <p class="text-muted-foreground hidden sm:block">Manage currencies and rate sources.</p>
-    </div>
     <ListFilter bind:value={currencySearchTerm} placeholder="Filter currencies..." class="order-last sm:order-none" />
     <div class="flex flex-wrap items-center gap-3 shrink-0">
       <label class="flex items-center gap-2 text-sm">

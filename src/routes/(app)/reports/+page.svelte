@@ -3,11 +3,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Reports</h1>
-    <p class="text-muted-foreground">Generate and view financial reports.</p>
-  </div>
-
   <div class="grid gap-4 sm:grid-cols-2">
     <a href="/reports/trial-balance" class="block">
       <Card.Root class="transition-colors hover:bg-accent">

@@ -328,13 +328,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">{isEditMode ? "Edit Journal Entry" : "New Journal Entry"}</h1>
-    <p class="text-muted-foreground">
-      {isEditMode ? "Modify the entry below. The original will be voided and a new corrected entry posted." : "Create a new double-entry transaction."}
-    </p>
-  </div>
-
   {#if editLoading}
     <Card.Root>
       <Card.Content class="py-8">

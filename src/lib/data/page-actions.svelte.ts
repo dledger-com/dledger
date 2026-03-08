@@ -4,6 +4,8 @@ export interface PageActionButton {
 	href?: string;
 	onclick?: () => void;
 	variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'link';
+	/** Disable the button */
+	disabled?: boolean;
 	/** Show as a floating action button on mobile instead of in the TopBar */
 	fab?: boolean;
 	/** Icon component to render inside the FAB (lucide-svelte icon or similar) */

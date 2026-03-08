@@ -208,11 +208,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">French Crypto Tax Report</h1>
-    <p class="text-muted-foreground">Art. 150 VH bis CGI — Weighted average method for crypto-to-fiat dispositions.</p>
-  </div>
-
   <!-- Chain Visualization -->
   {#if chainSummary.length > 0}
     <div class="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">

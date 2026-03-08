@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
@@ -17,6 +17,7 @@
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
   import type { Account, CurrencyBalance } from "$lib/types/index.js";
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
 
   const accountId = $derived(page.params.accountId);
   let account = $state<Account | null>(null);
@@ -133,6 +134,16 @@
       loading = false;
     }
   });
+
+  $effect(() => {
+    if (account) {
+      setBreadcrumbOverride(accountId!, account.full_name);
+    }
+  });
+
+  onDestroy(() => {
+    if (accountId) clearBreadcrumbOverride(accountId);
+  });
 </script>
 
 <div class="space-y-6">
@@ -145,14 +156,6 @@
       </Card.Content>
     </Card.Root>
   {:else}
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Reconcile: {account.full_name}</h1>
-        <p class="text-muted-foreground">Match transactions against a bank statement.</p>
-      </div>
-      <Button variant="outline" href="/accounts/{accountId}">Back to Account</Button>
-    </div>
-
     <!-- Setup -->
     <Card.Root>
       <Card.Header>

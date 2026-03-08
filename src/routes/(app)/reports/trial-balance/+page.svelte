@@ -38,11 +38,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Trial Balance</h1>
-    <p class="text-muted-foreground">All account balances verifying that total debits equal total credits.</p>
-  </div>
-
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
       <label for="asOf" class="text-sm font-medium">As of Date</label>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -24,6 +24,8 @@
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
 
   type AssertionSortKey = "date" | "currency" | "expected" | "actual" | "status";
   const assertionSort = createSortState<AssertionSortKey>();
@@ -178,6 +180,20 @@
     if (account) loadBalanceChart(id, journalStore.withItems);
     loading = false;
   });
+
+  $effect(() => {
+    if (account) {
+      setBreadcrumbOverride(accountId!, account.full_name);
+      setTopBarActions([
+        { type: 'button', label: 'Reconcile', href: `/accounts/${accountId}/reconcile`, variant: 'outline' }
+      ]);
+    }
+  });
+
+  onDestroy(() => {
+    if (accountId) clearBreadcrumbOverride(accountId);
+    clearTopBarActions();
+  });
 </script>
 
 <div class="space-y-6">
@@ -191,35 +207,29 @@
       </Card.Content>
     </Card.Root>
   {:else}
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">{account.full_name}</h1>
-        <p class="text-muted-foreground flex items-center gap-2">
-          <AccountTypeBadge type={account.account_type} />
-          {#if account.is_archived}
-            <Badge variant="destructive">Archived</Badge>
-          {/if}
-          {#if editingOpenedAt}
-            <span class="text-xs">Opened:</span>
-            <Input type="date" class="w-36 h-7 text-xs" bind:value={openedAtValue} />
-            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={async () => {
-              try {
-                await getBackend().updateAccount(accountId!, { opened_at: openedAtValue || null });
-                account = { ...account!, opened_at: openedAtValue || null };
-                editingOpenedAt = false;
-                toast.success("Opened date updated");
-              } catch (e) { toast.error(String(e)); }
-            }}>Save</Button>
-            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => { editingOpenedAt = false; }}>Cancel</Button>
-          {:else}
-            <button class="text-xs hover:underline cursor-pointer" onclick={() => { openedAtValue = account!.opened_at ?? account!.created_at; editingOpenedAt = true; }}>
-              Opened: {account.opened_at ?? account.created_at}
-            </button>
-          {/if}
-        </p>
-      </div>
-      <Button variant="outline" href="/accounts/{accountId}/reconcile">Reconcile</Button>
-    </div>
+    <p class="text-muted-foreground flex items-center gap-2">
+      <AccountTypeBadge type={account.account_type} />
+      {#if account.is_archived}
+        <Badge variant="destructive">Archived</Badge>
+      {/if}
+      {#if editingOpenedAt}
+        <span class="text-xs">Opened:</span>
+        <Input type="date" class="w-36 h-7 text-xs" bind:value={openedAtValue} />
+        <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={async () => {
+          try {
+            await getBackend().updateAccount(accountId!, { opened_at: openedAtValue || null });
+            account = { ...account!, opened_at: openedAtValue || null };
+            editingOpenedAt = false;
+            toast.success("Opened date updated");
+          } catch (e) { toast.error(String(e)); }
+        }}>Save</Button>
+        <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => { editingOpenedAt = false; }}>Cancel</Button>
+      {:else}
+        <button class="text-xs hover:underline cursor-pointer" onclick={() => { openedAtValue = account!.opened_at ?? account!.created_at; editingOpenedAt = true; }}>
+          Opened: {account.opened_at ?? account.created_at}
+        </button>
+      {/if}
+    </p>
 
     <div class="grid gap-4 sm:grid-cols-2">
       <Card.Root>

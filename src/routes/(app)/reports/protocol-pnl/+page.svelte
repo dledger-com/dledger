@@ -40,11 +40,6 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Protocol P&L</h1>
-    <p class="text-muted-foreground">Revenue and expenses broken down by DeFi protocol.</p>
-  </div>
-
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
       <label for="from" class="text-sm font-medium">From</label>

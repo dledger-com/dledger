@@ -20,7 +20,7 @@
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
-  import ArrowLeft from "lucide-svelte/icons/arrow-left";
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
 
   const settings = new SettingsStore();
   const code = $derived(page.params.code ?? "");
@@ -233,6 +233,16 @@
   const unsubCurrencies = onInvalidate("currencies", reloadAll);
   onDestroy(unsubCurrencies);
 
+  $effect(() => {
+    if (currency) {
+      setBreadcrumbOverride(code, `${currency.code} — ${currency.name}`);
+    }
+  });
+
+  onDestroy(() => {
+    clearBreadcrumbOverride(code);
+  });
+
   onMount(async () => {
     rateFrom = code;
     rateTo = settings.currency !== code ? settings.currency : "";
@@ -272,17 +282,6 @@
       </Card.Content>
     </Card.Root>
   {:else}
-    <!-- Header -->
-    <div class="flex items-center gap-3">
-      <Button variant="ghost" size="icon" href="/currencies">
-        <ArrowLeft class="h-4 w-4" />
-      </Button>
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">{currency.code}</h1>
-        <p class="text-muted-foreground">{currency.name}</p>
-      </div>
-    </div>
-
     <!-- Summary row -->
     <div class="grid gap-4 sm:grid-cols-3">
       <Card.Root>

@@ -425,11 +425,7 @@
 {/snippet}
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between gap-4">
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
-      <p class="text-muted-foreground">Overview of your financial data at a glance.</p>
-    </div>
+  <div class="flex justify-end">
     <div class="flex gap-1">
       <Button variant={rangePreset === "mtd" ? "default" : "outline"} size="sm" onclick={() => selectRange("mtd")}>MTD</Button>
       <Button variant={rangePreset === "ytd" ? "default" : "outline"} size="sm" onclick={() => selectRange("ytd")}>YTD</Button>
