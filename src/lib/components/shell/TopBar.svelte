@@ -2,11 +2,14 @@
   import { page } from "$app/state";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-  import ThemeToggle from "./ThemeToggle.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
   import TaskQueueIndicator from "./TaskQueueIndicator.svelte";
   import TaskQueueDrawer from "./TaskQueueDrawer.svelte";
   import ReprocessPreviewDialog from "./ReprocessPreviewDialog.svelte";
   import { getBreadcrumbOverrides } from "$lib/data/breadcrumb.svelte.js";
+  import { getTopBarActions, type PageAction } from "$lib/data/page-actions.svelte.js";
 
   interface Props {
     showSidebarTrigger?: boolean;
@@ -25,6 +28,8 @@
       href: "/" + segments.slice(0, i + 1).join("/"),
     }));
   });
+
+  const actions = $derived(getTopBarActions());
 </script>
 
 <header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -49,8 +54,43 @@
   </nav>
 
   <div class="ml-auto flex items-center gap-2">
+    {#each actions as action}
+      {#if action.type === 'button'}
+        <Button
+          size="sm"
+          variant={action.variant ?? 'default'}
+          href={action.href}
+          onclick={action.onclick}
+        >
+          {action.label}
+        </Button>
+      {:else if action.type === 'menu'}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button variant="outline" size="icon-sm" {...props}>
+                <EllipsisVertical class="h-4 w-4" />
+                <span class="sr-only">More actions</span>
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            {#each action.items as item}
+              {#if item.separator}
+                <DropdownMenu.Separator />
+              {:else if item.header}
+                <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">{item.label}</DropdownMenu.Item>
+              {:else}
+                <DropdownMenu.Item disabled={item.disabled} onclick={item.onclick}>
+                  {item.label}
+                </DropdownMenu.Item>
+              {/if}
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      {/if}
+    {/each}
     <TaskQueueIndicator onclick={() => { drawerOpen = true; }} />
-    <ThemeToggle />
   </div>
 </header>
 <TaskQueueDrawer bind:open={drawerOpen} />

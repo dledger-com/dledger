@@ -10,6 +10,7 @@
   import Settings from "lucide-svelte/icons/settings";
   import PiggyBank from "lucide-svelte/icons/piggy-bank";
   import Coins from "lucide-svelte/icons/coins";
+  import ThemeToggle from "./ThemeToggle.svelte";
 
   const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
 
@@ -68,8 +69,9 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <div class="px-2 py-1 text-xs text-muted-foreground">
-      dLedger {versionLabel}
+    <div class="flex items-center justify-between px-2 py-1">
+      <span class="text-xs text-muted-foreground">dLedger {versionLabel}</span>
+      <ThemeToggle />
     </div>
   </Sidebar.Footer>
   <Sidebar.Rail />

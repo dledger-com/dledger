@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onDestroy, tick } from "svelte";
+    import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
     import { page } from "$app/state";
     import { goto, replaceState } from "$app/navigation";
     import * as Card from "$lib/components/ui/card/index.js";
@@ -110,6 +111,41 @@
     onDestroy(() => {
         loadController?.abort();
         unsubJournal();
+        clearTopBarActions();
+    });
+
+    // Register page actions in the TopBar
+    $effect(() => {
+        // Read reactive deps so $effect re-runs when they change
+        const _fm = findingMatches;
+        const _dd = detectingDuplicates;
+        setTopBarActions([
+            { type: 'button', label: 'New Entry', href: '/journal/new' },
+            {
+                type: 'menu',
+                items: [
+                    { label: 'Analysis', header: true },
+                    { label: '', separator: true },
+                    {
+                        label: _fm ? 'Finding...' : 'Find Matches',
+                        disabled: _fm,
+                        onclick: handleFindMatches,
+                    },
+                    {
+                        label: _dd ? 'Detecting...' : 'Detect Duplicates',
+                        disabled: _dd,
+                        onclick: handleDetectDuplicates,
+                    },
+                    { label: '', separator: true },
+                    { label: 'Export', header: true },
+                    { label: '', separator: true },
+                    { label: 'Beancount (.beancount)', onclick: () => handleExport('beancount') },
+                    { label: 'hledger (.journal)', onclick: () => handleExport('hledger') },
+                    { label: 'ledger (.ledger)', onclick: () => handleExport('ledger') },
+                ],
+            },
+        ]);
+        return () => clearTopBarActions();
     });
 
     // Load faceted filter options (deferred to avoid blocking initial render)
@@ -1690,6 +1726,55 @@
         return () => clearTimeout(convDebounce);
     });
 
+    async function handleFindMatches() {
+        findingMatches = true;
+        try {
+            const backend = getBackend();
+            const allEntries = await backend.queryJournalEntries({});
+            const accounts = await backend.listAccounts();
+            const idToName = new Map<string, string>();
+            const accMap = new Map<string, Account>();
+            for (const acc of accounts) {
+                idToName.set(acc.id, acc.full_name);
+                accMap.set(acc.full_name, acc);
+            }
+            // Collect already-linked entry IDs
+            const linked = new Set<string>();
+            for (const [entry] of allEntries) {
+                if (entry.voided_by) continue;
+                const meta = await backend.getMetadata(entry.id);
+                if (meta["cross_match_linked"] || meta["cex_linked"] || meta["cross_match_skipped"])
+                    linked.add(entry.id);
+            }
+            const nonVoided = allEntries.filter(([e]) => !e.voided_by);
+            const candidates = extractAllCandidates(nonVoided, idToName, linked);
+            // Load metadata for scoring
+            const metaMap = new Map<string, Record<string, string>>();
+            for (const c of candidates) {
+                metaMap.set(c.entry.id, await backend.getMetadata(c.entry.id));
+            }
+            matchCandidates = findMatches(candidates, metaMap);
+            matchAccountMap = accMap;
+            showMatches = true;
+        } catch (e) {
+            toast.error(String(e));
+        } finally {
+            findingMatches = false;
+        }
+    }
+
+    async function handleDetectDuplicates() {
+        detectingDuplicates = true;
+        try {
+            const allEntries = await getBackend().queryJournalEntries({});
+            const filtered = filterHiddenEntries(allEntries, getHiddenCurrencySet());
+            duplicateGroups = findDuplicateGroups(filtered);
+            showDuplicates = true;
+        } finally {
+            detectingDuplicates = false;
+        }
+    }
+
     async function handleExport(format: LedgerFormat) {
         exporting = true;
         try {
@@ -1714,123 +1799,6 @@
 </script>
 
 <div class="flex flex-col gap-6 flex-1 min-h-0 -mb-20 md:-mb-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="shrink-0">
-            <h1 class="text-2xl font-bold tracking-tight">Journal</h1>
-            <p class="text-muted-foreground hidden sm:block">
-                View and manage all journal entries.
-            </p>
-        </div>
-        <div class="flex flex-wrap gap-2 shrink-0">
-            <Button size="sm" href="/journal/new">New Entry</Button>
-            <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                    {#snippet child({ props })}
-                        <Button variant="outline" size="icon-sm" {...props}>
-                            <EllipsisVertical class="h-4 w-4" />
-                            <span class="sr-only">More actions</span>
-                        </Button>
-                    {/snippet}
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Analysis</DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item
-                        disabled={findingMatches}
-                        onclick={async () => {
-                            findingMatches = true;
-                            try {
-                                const backend = getBackend();
-                                const allEntries = await backend.queryJournalEntries(
-                                    {},
-                                );
-                                const accounts = await backend.listAccounts();
-                                const idToName = new Map<string, string>();
-                                const accMap = new Map<string, Account>();
-                                for (const acc of accounts) {
-                                    idToName.set(acc.id, acc.full_name);
-                                    accMap.set(acc.full_name, acc);
-                                }
-                                // Collect already-linked entry IDs
-                                const linked = new Set<string>();
-                                for (const [entry] of allEntries) {
-                                    if (entry.voided_by) continue;
-                                    const meta = await backend.getMetadata(entry.id);
-                                    if (
-                                        meta["cross_match_linked"] ||
-                                        meta["cex_linked"] ||
-                                        meta["cross_match_skipped"]
-                                    )
-                                        linked.add(entry.id);
-                                }
-                                const nonVoided = allEntries.filter(
-                                    ([e]) => !e.voided_by,
-                                );
-                                const candidates = extractAllCandidates(
-                                    nonVoided,
-                                    idToName,
-                                    linked,
-                                );
-                                // Load metadata for scoring
-                                const metaMap = new Map<
-                                    string,
-                                    Record<string, string>
-                                >();
-                                for (const c of candidates) {
-                                    metaMap.set(
-                                        c.entry.id,
-                                        await backend.getMetadata(c.entry.id),
-                                    );
-                                }
-                                matchCandidates = findMatches(candidates, metaMap);
-                                matchAccountMap = accMap;
-                                showMatches = true;
-                            } catch (e) {
-                                toast.error(String(e));
-                            } finally {
-                                findingMatches = false;
-                            }
-                        }}
-                    >
-                        {findingMatches ? "Finding..." : "Find Matches"}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                        disabled={detectingDuplicates}
-                        onclick={async () => {
-                            detectingDuplicates = true;
-                            try {
-                                const allEntries =
-                                    await getBackend().queryJournalEntries({});
-                                const filtered = filterHiddenEntries(
-                                    allEntries,
-                                    getHiddenCurrencySet(),
-                                );
-                                duplicateGroups = findDuplicateGroups(filtered);
-                                showDuplicates = true;
-                            } finally {
-                                detectingDuplicates = false;
-                            }
-                        }}
-                    >
-                        {detectingDuplicates ? "Detecting..." : "Detect Duplicates"}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Export</DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item onclick={() => handleExport("beancount")}>
-                        Beancount (.beancount)
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onclick={() => handleExport("hledger")}>
-                        hledger (.journal)
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onclick={() => handleExport("ledger")}>
-                        ledger (.ledger)
-                    </DropdownMenu.Item>
-                </DropdownMenu.Content>
-            </DropdownMenu.Root>
-        </div>
-    </div>
-
     {#if showChart && !store.loading && chartData.length > 1 && BarChart_imported}
         {@const BarChartComp = BarChart_imported}
         <div class="relative">
