@@ -4,6 +4,11 @@ export interface PageActionButton {
 	href?: string;
 	onclick?: () => void;
 	variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'link';
+	/** Show as a floating action button on mobile instead of in the TopBar */
+	fab?: boolean;
+	/** Icon component to render inside the FAB (lucide-svelte icon or similar) */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	fabIcon?: any;
 }
 
 export interface MenuItem {

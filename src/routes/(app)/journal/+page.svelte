@@ -65,6 +65,7 @@
     import TagInput from "$lib/components/TagInput.svelte";
     import LinkInput from "$lib/components/LinkInput.svelte";
     import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
+    import Plus from "lucide-svelte/icons/plus";
     import X from "lucide-svelte/icons/x";
     import Check from "lucide-svelte/icons/check";
     import Tag from "lucide-svelte/icons/tag";
@@ -120,7 +121,7 @@
         const _fm = findingMatches;
         const _dd = detectingDuplicates;
         setTopBarActions([
-            { type: 'button', label: 'New Entry', href: '/journal/new' },
+            { type: 'button', label: 'New Entry', href: '/journal/new', fab: true, fabIcon: Plus },
             {
                 type: 'menu',
                 items: [

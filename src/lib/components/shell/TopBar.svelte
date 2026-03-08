@@ -61,6 +61,7 @@
           variant={action.variant ?? 'default'}
           href={action.href}
           onclick={action.onclick}
+          class={action.fab ? 'hidden md:inline-flex' : ''}
         >
           {action.label}
         </Button>
@@ -93,5 +94,24 @@
     <TaskQueueIndicator onclick={() => { drawerOpen = true; }} />
   </div>
 </header>
+
+{#each actions as action}
+  {#if action.type === 'button' && action.fab}
+    {@const FabIcon = action.fabIcon}
+    <Button
+      size="icon"
+      variant={action.variant ?? 'default'}
+      href={action.href}
+      onclick={action.onclick}
+      class="fixed bottom-20 right-4 z-50 rounded-full shadow-lg md:hidden size-12 [&_svg]:size-5"
+      aria-label={action.label}
+    >
+      {#if FabIcon}
+        <FabIcon />
+      {/if}
+    </Button>
+  {/if}
+{/each}
+
 <TaskQueueDrawer bind:open={drawerOpen} />
 <ReprocessPreviewDialog />
