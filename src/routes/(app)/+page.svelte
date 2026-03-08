@@ -155,7 +155,7 @@
       .join(", ");
   }
 
-  async function loadCharts(sharedCache?: ExchangeRateCache) {
+  async function loadCharts(sharedCache?: ExchangeRateCache, signal?: AbortSignal) {
     chartsLoading = true;
     try {
       const from = rangeFromDate();
@@ -165,13 +165,15 @@
       const backend = getBackend();
       const cache = sharedCache ?? new ExchangeRateCache(backend);
       const [nw, exp] = await Promise.all([
-        computeNetWorthSeries(backend, from, to, base, cache),
-        computeExpenseBreakdown(backend, from, to, base, 6, reportStore.incomeStatement ?? undefined, cache),
+        computeNetWorthSeries(backend, from, to, base, cache, signal),
+        computeExpenseBreakdown(backend, from, to, base, 6, reportStore.incomeStatement ?? undefined, cache, signal),
       ]);
+      if (signal?.aborted) return;
       netWorthData = nw;
       expenseData = exp;
       setCachedCharts(nw, exp);
     } catch (e) {
+      if (signal?.aborted) return;
       console.error("Charts failed:", e);
     } finally {
       chartsLoading = false;
@@ -180,7 +182,12 @@
     }
   }
 
+  let loadController: AbortController | undefined;
+
   onMount(async () => {
+    loadController = new AbortController();
+    const signal = loadController.signal;
+
     // 1. Dynamic import of heavy chart libraries (truly async, non-blocking)
     Promise.all([import("layerchart"), import("d3-scale")]).then(([lc, d3]) => {
       AreaChart = lc.AreaChart;
@@ -192,6 +199,7 @@
     // 2. Yield to guarantee browser paints skeleton/cached state before heavy queries.
     //    rAF enters the rendering pipeline → browser paints → setTimeout fires in next macrotask.
     await new Promise<void>(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    if (signal.aborted) return;
 
     // 3. Run ALL data queries after paint
     const date = today();
@@ -203,6 +211,7 @@
     getBackend()
       .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
       .then((entries) => {
+        if (signal.aborted) return;
         const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
         recentEntries = filtered;
         recentLoaded = true;
@@ -210,42 +219,44 @@
         setCachedRecentEntries(filtered);
         loadTagsAndLinks(filtered);
       })
-      .catch((e) => console.error("Recent entries failed:", e));
+      .catch((e) => { if (!signal.aborted) console.error("Recent entries failed:", e); });
 
     // Stream 2: Account store (independent, for name lookups)
     accountStore.load();
 
     // Stream 3: Balance sheet → assets/liabilities cards (independent chain)
     const conversionPromises: Promise<void>[] = [];
-    const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
+    const bsPromise = reportStore.loadBalanceSheet(date, signal).then(() => {
+      if (signal.aborted) return;
       loadStepsCompleted++;
       if (reportStore.balanceSheet) {
         conversionPromises.push(
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch(() => {}),
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch(() => {}),
         );
       }
     });
 
     // Stream 4: Income statement → revenue/net income cards (independent chain)
-    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
+    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date, signal).then(() => {
+      if (signal.aborted) return;
       loadStepsCompleted++;
       if (reportStore.incomeStatement) {
         conversionPromises.push(
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch(() => {}),
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch(() => {}),
         );
       }
     });
@@ -253,15 +264,17 @@
     // Stream 5: Charts (need both reports, but NOT conversions)
     Promise.all([bsPromise, isPromise])
       .then(() => {
+        if (signal.aborted) return;
         // Track conversion completions
-        Promise.allSettled(conversionPromises).then(() => { loadStepsCompleted++; });
-        return loadCharts(sharedCache);
+        Promise.allSettled(conversionPromises).then(() => { if (!signal.aborted) loadStepsCompleted++; });
+        return loadCharts(sharedCache, signal);
       })
-      .catch((e) => console.error("Charts failed:", e));
+      .catch((e) => { if (!signal.aborted) console.error("Charts failed:", e); });
 
     // Stream 6: Recurring templates toast (independent)
     countDueTemplates(getBackend())
       .then((count) => {
+        if (signal.aborted) return;
         if (count > 0) {
           toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
             action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
@@ -285,6 +298,11 @@
   }
 
   function refreshReports() {
+    // Cancel any in-flight load
+    loadController?.abort();
+    loadController = new AbortController();
+    const signal = loadController.signal;
+
     loadStepsCompleted = 0;
     loadingActive = true;
 
@@ -297,44 +315,47 @@
     loadStepsCompleted++;
 
     const refreshConversionPromises: Promise<void>[] = [];
-    const bsPromise = reportStore.loadBalanceSheet(date).then(() => {
+    const bsPromise = reportStore.loadBalanceSheet(date, signal).then(() => {
+      if (signal.aborted) return;
       loadStepsCompleted++;
       if (reportStore.balanceSheet) {
         refreshConversionPromises.push(
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { assetsSummary = s; setCachedSummary("assets", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch(() => {}),
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { liabilitiesSummary = s; setCachedSummary("liabilities", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch(() => {}),
         );
       }
     });
 
-    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date).then(() => {
+    const isPromise = reportStore.loadIncomeStatement(rangeFromDate(), date, signal).then(() => {
+      if (signal.aborted) return;
       loadStepsCompleted++;
       if (reportStore.incomeStatement) {
         refreshConversionPromises.push(
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { revenueSummary = s; setCachedSummary("revenue", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch(() => {}),
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
-            base, date, sharedCache,
-          ).then((s) => { netIncomeSummary = s; setCachedSummary("netIncome", s); }).catch(() => {}),
+            base, date, sharedCache, signal,
+          ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch(() => {}),
         );
       }
     });
 
     Promise.all([bsPromise, isPromise])
       .then(() => {
-        Promise.allSettled(refreshConversionPromises).then(() => { loadStepsCompleted++; });
-        return loadCharts(sharedCache);
+        if (signal.aborted) return;
+        Promise.allSettled(refreshConversionPromises).then(() => { if (!signal.aborted) loadStepsCompleted++; });
+        return loadCharts(sharedCache, signal);
       })
-      .catch((e) => console.error("Failed to refresh reports:", e));
+      .catch((e) => { if (!signal.aborted) console.error("Failed to refresh reports:", e); });
   }
 
   const unsubJournal = onInvalidate("journal", refreshRecentEntries);
@@ -342,6 +363,7 @@
   const unsubReports = onInvalidate("reports", refreshReports);
 
   onDestroy(() => {
+    loadController?.abort();
     unsubJournal();
     unsubAccounts();
     unsubReports();

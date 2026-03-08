@@ -31,12 +31,13 @@ export class JournalStore {
     new Map(this.entries.map(e => [e.id, { entry: e, items: this.lineItemCache.get(e.id) ?? [] }])),
   );
 
-  async load(filter: TransactionFilter = {}) {
+  async load(filter: TransactionFilter = {}, signal?: AbortSignal) {
     this.loading = true;
     this.error = null;
     this.currentFilter = filter;
     // Yield so Svelte can render the skeleton before the query blocks
     await new Promise(r => requestAnimationFrame(r));
+    if (signal?.aborted) { this.loading = false; return; }
     try {
       const backend = getBackend();
       const queryFilter = { ...filter };
@@ -46,7 +47,7 @@ export class JournalStore {
       if (backend.queryJournalEntriesOnly) {
         this.entries = await backend.queryJournalEntriesOnly(queryFilter, (current, total) => {
           this.loadProgress = total > 0 ? current / total : null;
-        });
+        }, signal);
       } else {
         const pairs = await backend.queryJournalEntries(queryFilter);
         this.entries = pairs.map(([e]) => e);
@@ -55,9 +56,11 @@ export class JournalStore {
         for (const [e, items] of pairs) cache.set(e.id, items);
         this.lineItemCache = cache;
       }
+      if (signal?.aborted) return;
       this.totalCount = this.entries.length;
       this.lineItemCache = new Map();
     } catch (e) {
+      if (signal?.aborted) return;
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
       this.loading = false;

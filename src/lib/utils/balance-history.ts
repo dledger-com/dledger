@@ -82,16 +82,19 @@ export async function computeNetWorthSeries(
   toDate: string,
   baseCurrency: string,
   sharedCache?: ExchangeRateCache,
+  signal?: AbortSignal,
 ): Promise<NetWorthPoint[]> {
   const from = new Date(fromDate);
   const to = new Date(toDate);
   const dates = monthEndDates(from, to);
   const rateCache = sharedCache ?? new ExchangeRateCache(backend);
 
-  const sheets = await backend.balanceSheetBatch(dates);
+  const sheets = await backend.balanceSheetBatch(dates, signal);
+  if (signal?.aborted) return [];
   const points: NetWorthPoint[] = [];
 
   for (const date of dates) {
+    if (signal?.aborted) return points;
     const sheet = sheets.get(date)!;
     const assets = await convertBalancesToNumber(sheet.assets.totals, baseCurrency, date, rateCache);
     const liabilities = await convertBalancesToNumber(sheet.liabilities.totals, baseCurrency, date, rateCache);
@@ -128,6 +131,7 @@ export async function computeExpenseBreakdown(
   maxCategories = 6,
   preloadedStatement?: IncomeStatement,
   sharedCache?: ExchangeRateCache,
+  signal?: AbortSignal,
 ): Promise<ExpenseCategory[]> {
   const stmt = preloadedStatement ?? await backend.incomeStatement(fromDate, toDate);
   const rateCache = sharedCache ?? new ExchangeRateCache(backend);

@@ -15,6 +15,7 @@ export async function convertBalances(
   baseCurrency: string,
   asOfDate: string,
   cache?: ExchangeRateCache,
+  signal?: AbortSignal,
 ): Promise<ConvertedSummary> {
   const backend = getBackend();
   let total = 0;

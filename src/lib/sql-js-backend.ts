@@ -31,6 +31,11 @@ import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-t
 import { parseTags } from "./utils/tags.js";
 import { isSpamCurrency } from "./currency-validation.js";
 
+/** Yield to the browser event loop so click events can process. No-op in non-browser (test) environments. */
+const _isBrowser = typeof requestAnimationFrame === "function";
+const yieldToEventLoop = (): Promise<void> =>
+  _isBrowser ? new Promise(r => requestAnimationFrame(() => r())) : Promise.resolve();
+
 // ---- IndexedDB persistence ----
 
 const IDB_NAME = "dledger";
@@ -975,8 +980,9 @@ PRAGMA foreign_keys = ON;
     sql: string,
     params: unknown[],
     mapRow: (row: Row) => T,
-    chunkSize = 5000,
+    chunkSize = 1000,
     onProgress?: (current: number, total: number) => void,
+    signal?: AbortSignal,
   ): Promise<T[]> {
     const stmt = this.db.prepare(sql);
     if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
@@ -987,7 +993,8 @@ PRAGMA foreign_keys = ON;
         results.push(mapRow(stmt.getAsObject()));
         if (++i % chunkSize === 0) {
           onProgress?.(i, -1);
-          await new Promise(r => requestAnimationFrame(r));
+          await yieldToEventLoop();
+          if (signal?.aborted) return results;
         }
       }
       onProgress?.(results.length, results.length);
@@ -1202,9 +1209,10 @@ PRAGMA foreign_keys = ON;
    * Single-query batch: returns balances for ALL accounts at once.
    * Result map is keyed by account_id → CurrencyBalance[].
    */
-  private sumAllLineItemsByAccount(
+  private async sumAllLineItemsByAccount(
     beforeDate?: string,
-  ): Map<string, CurrencyBalance[]> {
+    signal?: AbortSignal,
+  ): Promise<Map<string, CurrencyBalance[]>> {
     const params: unknown[] = [];
     let sql =
       "SELECT li.account_id, li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id";
@@ -1218,6 +1226,7 @@ PRAGMA foreign_keys = ON;
     const stmt = this.db.prepare(sql);
     if (params.length) stmt.bind(params as (string | number | null | Uint8Array)[]);
     try {
+      let i = 0;
       while (stmt.step()) {
         const row = stmt.getAsObject();
         const accountId = row.account_id as string;
@@ -1231,6 +1240,11 @@ PRAGMA foreign_keys = ON;
         }
         const current = currencies.get(currency) ?? new Decimal(0);
         currencies.set(currency, current.plus(amount));
+
+        if (++i % 1000 === 0) {
+          await yieldToEventLoop();
+          if (signal?.aborted) return new Map();
+        }
       }
     } finally {
       stmt.free();
@@ -2352,6 +2366,7 @@ PRAGMA foreign_keys = ON;
   async queryJournalEntriesOnly(
     filter: TransactionFilter,
     onProgress?: (current: number, total: number) => void,
+    signal?: AbortSignal,
   ): Promise<JournalEntry[]> {
     const { joinClause, whereClause, params } = this.buildFilterSql(filter);
     let sql = "SELECT DISTINCT je.id, je.date, je.description, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je"
@@ -2379,8 +2394,9 @@ PRAGMA foreign_keys = ON;
     }
 
     const total = onProgress ? await this.countJournalEntries(filter) : 0;
-    return this.queryAsync(sql, params, mapJournalEntry, 5000,
-      onProgress ? (current) => onProgress(current, total) : undefined);
+    return this.queryAsync(sql, params, mapJournalEntry, 1000,
+      onProgress ? (current) => onProgress(current, total) : undefined,
+      signal);
   }
 
   async getLineItemsForEntries(entryIds: string[]): Promise<Map<string, LineItem[]>> {
@@ -2540,7 +2556,7 @@ PRAGMA foreign_keys = ON;
       mapAccount,
     );
 
-    const allBalances = this.sumAllLineItemsByAccount(asOf);
+    const allBalances = await this.sumAllLineItemsByAccount(asOf);
     const lines: TrialBalanceLine[] = [];
     const debitTotals = new Map<string, Decimal>();
     const creditTotals = new Map<string, Decimal>();
@@ -2581,10 +2597,11 @@ PRAGMA foreign_keys = ON;
    * Single-pass dual-date scan: returns balances for ALL accounts at two dates.
    * Scans line_items once up to the later date, snapshots at the earlier boundary.
    */
-  private sumAllLineItemsByAccountDual(
+  private async sumAllLineItemsByAccountDual(
     date1: string,
     date2: string,
-  ): [Map<string, CurrencyBalance[]>, Map<string, CurrencyBalance[]>] {
+    signal?: AbortSignal,
+  ): Promise<[Map<string, CurrencyBalance[]>, Map<string, CurrencyBalance[]>]> {
     const [earlier, later] = date1 < date2 ? [date1, date2] : [date2, date1];
 
     const sql =
@@ -2597,6 +2614,7 @@ PRAGMA foreign_keys = ON;
     let passedEarlier = false;
 
     try {
+      let i = 0;
       while (stmt.step()) {
         const row = stmt.getAsObject();
         const rowDate = row.date as string;
@@ -2621,6 +2639,11 @@ PRAGMA foreign_keys = ON;
         }
         const current = currencies.get(currency) ?? new Decimal(0);
         currencies.set(currency, current.plus(amount));
+
+        if (++i % 1000 === 0) {
+          await yieldToEventLoop();
+          if (signal?.aborted) return [new Map(), new Map()];
+        }
       }
     } finally {
       stmt.free();
@@ -2656,6 +2679,7 @@ PRAGMA foreign_keys = ON;
   async incomeStatement(
     fromDate: string,
     toDate: string,
+    signal?: AbortSignal,
   ): Promise<IncomeStatement> {
     const accounts = this.query(
       "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
@@ -2663,7 +2687,7 @@ PRAGMA foreign_keys = ON;
       mapAccount,
     );
 
-    const [allBalancesStart, allBalancesEnd] = this.sumAllLineItemsByAccountDual(fromDate, toDate);
+    const [allBalancesStart, allBalancesEnd] = await this.sumAllLineItemsByAccountDual(fromDate, toDate, signal);
     const revenueLines: TrialBalanceLine[] = [];
     const expenseLines: TrialBalanceLine[] = [];
     const revenueTotals = new Map<string, Decimal>();
@@ -2729,14 +2753,14 @@ PRAGMA foreign_keys = ON;
     };
   }
 
-  async balanceSheet(asOf: string): Promise<BalanceSheet> {
+  async balanceSheet(asOf: string, signal?: AbortSignal): Promise<BalanceSheet> {
     const accounts = this.query(
       "SELECT id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at FROM account ORDER BY full_name",
       [],
       mapAccount,
     );
 
-    const allBalances = this.sumAllLineItemsByAccount(asOf);
+    const allBalances = await this.sumAllLineItemsByAccount(asOf, signal);
     const assetLines: TrialBalanceLine[] = [];
     const liabilityLines: TrialBalanceLine[] = [];
     const equityLines: TrialBalanceLine[] = [];
@@ -2804,7 +2828,7 @@ PRAGMA foreign_keys = ON;
     };
   }
 
-  async balanceSheetBatch(dates: string[]): Promise<Map<string, BalanceSheet>> {
+  async balanceSheetBatch(dates: string[], signal?: AbortSignal): Promise<Map<string, BalanceSheet>> {
     if (dates.length === 0) return new Map();
 
     // Single-pass: query accounts once, scan line_items once up to max date
@@ -2832,6 +2856,7 @@ PRAGMA foreign_keys = ON;
     let dateIdx = 0;
 
     try {
+      let i = 0;
       while (stmt.step()) {
         const row = stmt.getAsObject();
         const rowDate = row.date as string;
@@ -2859,6 +2884,11 @@ PRAGMA foreign_keys = ON;
         }
         const current = currencies.get(currency) ?? new Decimal(0);
         currencies.set(currency, current.plus(amount));
+
+        if (++i % 1000 === 0) {
+          await yieldToEventLoop();
+          if (signal?.aborted) return new Map();
+        }
       }
     } finally {
       stmt.free();
@@ -3991,7 +4021,7 @@ PRAGMA foreign_keys = ON;
     const distinctDates = [...new Set(assertions.map((a) => a.date))];
     const balancesByDate = new Map<string, Map<string, CurrencyBalance[]>>();
     for (const date of distinctDates) {
-      balancesByDate.set(date, this.sumAllLineItemsByAccount(date));
+      balancesByDate.set(date, await this.sumAllLineItemsByAccount(date));
     }
 
     const results: BalanceAssertionResult[] = [];

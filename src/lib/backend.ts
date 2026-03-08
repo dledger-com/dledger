@@ -107,7 +107,7 @@ export interface Backend {
   ): Promise<{ reversalId: string; newEntryId: string }>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
   queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]>;
-  queryJournalEntriesOnly?(filter: TransactionFilter, onProgress?: (current: number, total: number) => void): Promise<JournalEntry[]>;
+  queryJournalEntriesOnly?(filter: TransactionFilter, onProgress?: (current: number, total: number) => void, signal?: AbortSignal): Promise<JournalEntry[]>;
   getLineItemsForEntries?(entryIds: string[]): Promise<Map<string, LineItem[]>>;
   getJournalChartAggregation?(filter: TransactionFilter): Promise<{ date: string; income: number; expense: number }[]>;
   countJournalEntries(filter: TransactionFilter): Promise<number>;
@@ -118,9 +118,9 @@ export interface Backend {
 
   // Reports
   trialBalance(asOf: string): Promise<TrialBalance>;
-  incomeStatement(fromDate: string, toDate: string): Promise<IncomeStatement>;
-  balanceSheet(asOf: string): Promise<BalanceSheet>;
-  balanceSheetBatch(dates: string[]): Promise<Map<string, BalanceSheet>>;
+  incomeStatement(fromDate: string, toDate: string, signal?: AbortSignal): Promise<IncomeStatement>;
+  balanceSheet(asOf: string, signal?: AbortSignal): Promise<BalanceSheet>;
+  balanceSheetBatch(dates: string[], signal?: AbortSignal): Promise<Map<string, BalanceSheet>>;
   gainLossReport(fromDate: string, toDate: string): Promise<GainLossReport>;
   listOpenLots(): Promise<OpenLot[]>;
 

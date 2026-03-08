@@ -85,6 +85,7 @@
 
     const store = new JournalStore();
     const settings = new SettingsStore();
+    let loadController: AbortController | undefined;
 
     /** Helper to get line items for an entry from the store cache */
     function getItems(entryId: string): LineItem[] {
@@ -107,7 +108,10 @@
             linkOptionsLoading = false;
         });
     });
-    onDestroy(unsubJournal);
+    onDestroy(() => {
+        loadController?.abort();
+        unsubJournal();
+    });
 
     // Load faceted filter options (deferred to avoid blocking initial render)
     $effect(() => {
@@ -346,6 +350,11 @@
         clearTimeout(debounceTimer);
 
         const doLoad = () => {
+            // Cancel previous in-flight load
+            loadController?.abort();
+            loadController = new AbortController();
+            const signal = loadController.signal;
+
             const filter: TransactionFilter = {};
             if (backendText) filter.description_search = backendText;
             if (orderBy && orderDir) {
@@ -371,8 +380,8 @@
                 filter.exclude_hidden_currencies = true;
             }
 
-            store.load(filter).then(() => {
-                virtualizer.scrollToOffset(0);
+            store.load(filter, signal).then(() => {
+                if (!signal.aborted) virtualizer.scrollToOffset(0);
             });
         };
 

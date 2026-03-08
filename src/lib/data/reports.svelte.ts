@@ -28,29 +28,33 @@ export class ReportStore {
     }
   }
 
-  async loadIncomeStatement(fromDate: string, toDate: string) {
+  async loadIncomeStatement(fromDate: string, toDate: string, signal?: AbortSignal) {
     if (!_cachedIS || _isFrom !== fromDate || _isTo !== toDate) this.loading = true;
     this.error = null;
     try {
-      this.incomeStatement = await getBackend().incomeStatement(fromDate, toDate);
+      this.incomeStatement = await getBackend().incomeStatement(fromDate, toDate, signal);
+      if (signal?.aborted) return;
       _cachedIS = this.incomeStatement;
       _isFrom = fromDate;
       _isTo = toDate;
     } catch (e) {
+      if (signal?.aborted) return;
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
       this.loading = false;
     }
   }
 
-  async loadBalanceSheet(asOf: string) {
+  async loadBalanceSheet(asOf: string, signal?: AbortSignal) {
     if (!_cachedBS || _bsDate !== asOf) this.loading = true;
     this.error = null;
     try {
-      this.balanceSheet = await getBackend().balanceSheet(asOf);
+      this.balanceSheet = await getBackend().balanceSheet(asOf, signal);
+      if (signal?.aborted) return;
       _cachedBS = this.balanceSheet;
       _bsDate = asOf;
     } catch (e) {
+      if (signal?.aborted) return;
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
       this.loading = false;
