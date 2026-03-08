@@ -69,10 +69,9 @@
     import Tag from "lucide-svelte/icons/tag";
     import Link2 from "lucide-svelte/icons/link-2";
     import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
-    import FacetedFilter from "$lib/components/FacetedFilter.svelte";
-    import * as Command from "$lib/components/ui/command/index.js";
     import Separator from "$lib/components/ui/separator/separator.svelte";
     import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+    import SearchIcon from "lucide-svelte/icons/search";
     import Filter from "lucide-svelte/icons/filter";
     import { createSvelteTable } from "$lib/components/ui/data-table/data-table.svelte.js";
     import {
@@ -163,35 +162,26 @@
             selectedLinks.size > 0,
     );
     let filterTab = $state<"account" | "tags" | "links">("account");
-    let filterSearch = $state("");
+    let accountSearch = $state("");
+    let tagSearch = $state("");
+    let linkSearch = $state("");
     let filterPopoverOpen = $state(false);
-    let filterMountPhase = $state(0); // 0=skeleton, 1=active tab, 2=all tabs
-    $effect(() => {
-        if (filterPopoverOpen && filterMountPhase === 0) {
-            requestAnimationFrame(() => {
-                filterMountPhase = 1;
-                requestAnimationFrame(() => {
-                    filterMountPhase = 2;
-                });
-            });
-        }
-    });
     const totalFilterCount = $derived(
         selectedAccounts.size + selectedTags.size + selectedLinks.size,
     );
     const filteredAccountOptions = $derived(
-        filterSearch
-            ? accountOptions.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()))
+        accountSearch
+            ? accountOptions.filter((o) => o.label.toLowerCase().includes(accountSearch.toLowerCase()))
             : accountOptions,
     );
     const filteredTagOptions = $derived(
-        filterSearch
-            ? tagOptions.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()))
+        tagSearch
+            ? tagOptions.filter((o) => o.label.toLowerCase().includes(tagSearch.toLowerCase()))
             : tagOptions,
     );
     const filteredLinkOptions = $derived(
-        filterSearch
-            ? linkOptions.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()))
+        linkSearch
+            ? linkOptions.filter((o) => o.label.toLowerCase().includes(linkSearch.toLowerCase()))
             : linkOptions,
     );
     function toggleFilterValue(value: string) {
@@ -220,7 +210,6 @@
 
     function switchFilterTab(tab: "account" | "tags" | "links") {
         filterTab = tab;
-        filterSearch = "";
         tick().then(() => {
             if (tab === "account") accountInputRef?.focus();
             else if (tab === "tags") tagInputRef?.focus();
@@ -2019,155 +2008,132 @@
                         </button>
                     {/each}
                 </div>
-                {#if filterMountPhase < 1}
-                    <div class="p-2 space-y-1.5">
-                        <Skeleton class="h-9 w-full rounded-sm" />
-                        {#each [1, 2, 3, 4, 5] as _}
-                            <Skeleton class="h-8 w-full rounded-sm" />
-                        {/each}
+                <div class:hidden={filterTab !== "account"}>
+                    <div class="flex h-9 items-center gap-2 border-b ps-3 pe-8">
+                        <SearchIcon class="size-4 shrink-0 opacity-50" />
+                        <input
+                            type="text"
+                            placeholder="Search account..."
+                            bind:value={accountSearch}
+                            bind:this={accountInputRef}
+                            class="placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden"
+                        />
                     </div>
-                {/if}
-                {#if (filterTab === "account" && filterMountPhase >= 1) || filterMountPhase >= 2}
-                    <div class:hidden={filterTab !== "account"}>
-                        <Command.Root shouldFilter={false}>
-                            <Command.Input
-                                placeholder="Search account..."
-                                bind:value={filterSearch}
-                                bind:ref={accountInputRef}
-                            />
-                            <Command.List class="max-h-[300px]">
-                                {#if accountOptionsLoading}
-                                    <div class="p-2 space-y-1.5">
-                                        {#each [1, 2, 3, 4, 5] as _}
-                                            <Skeleton class="h-8 w-full rounded-sm" />
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <Command.Empty>No results.</Command.Empty>
-                                    <Command.Group>
-                                        {#each filteredAccountOptions as option (option.value)}
-                                            <Command.Item
-                                                value={option.value}
-                                                onSelect={() => toggleFilterValue(option.value)}
-                                            >
-                                                <Checkbox
-                                                    checked={selectedAccounts.has(option.value)}
-                                                    class="pointer-events-none"
-                                                />
-                                                <span class="truncate">{option.label}</span>
-                                            </Command.Item>
-                                        {/each}
-                                    </Command.Group>
-                                    {#if selectedAccounts.size > 0}
-                                        <Command.Separator />
-                                        <Command.Group>
-                                            <Command.Item
-                                                class="justify-center text-center"
-                                                onSelect={clearActiveFilter}
-                                            >
-                                                Clear filters
-                                            </Command.Item>
-                                        </Command.Group>
-                                    {/if}
-                                {/if}
-                            </Command.List>
-                        </Command.Root>
+                    <div class="max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto">
+                        {#if accountOptionsLoading}
+                            <div class="p-2 space-y-1.5">
+                                {#each {length: 5} as _}<Skeleton class="h-8 w-full rounded-sm" />{/each}
+                            </div>
+                        {:else if filteredAccountOptions.length === 0}
+                            <p class="py-6 text-center text-sm">No results.</p>
+                        {:else}
+                            <div class="text-foreground overflow-hidden p-1">
+                                {#each filteredAccountOptions as option (option.value)}
+                                    <button
+                                        type="button"
+                                        class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0"
+                                        onclick={() => toggleFilterValue(option.value)}
+                                    >
+                                        <Checkbox checked={selectedAccounts.has(option.value)} class="pointer-events-none" />
+                                        <span class="truncate">{option.label}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                            {#if selectedAccounts.size > 0}
+                                <div class="bg-border -mx-1 h-px"></div>
+                                <div class="text-foreground overflow-hidden p-1">
+                                    <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
+                                        Clear filters
+                                    </button>
+                                </div>
+                            {/if}
+                        {/if}
                     </div>
-                {/if}
-                {#if (filterTab === "tags" && filterMountPhase >= 1) || filterMountPhase >= 2}
-                    <div class:hidden={filterTab !== "tags"}>
-                        <Command.Root shouldFilter={false}>
-                            <Command.Input
-                                placeholder="Search tags..."
-                                bind:value={filterSearch}
-                                bind:ref={tagInputRef}
-                            />
-                            <Command.List class="max-h-[300px]">
-                                {#if tagOptionsLoading}
-                                    <div class="p-2 space-y-1.5">
-                                        {#each [1, 2, 3, 4, 5] as _}
-                                            <Skeleton class="h-8 w-full rounded-sm" />
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <Command.Empty>No results.</Command.Empty>
-                                    <Command.Group>
-                                        {#each filteredTagOptions as option (option.value)}
-                                            <Command.Item
-                                                value={option.value}
-                                                onSelect={() => toggleFilterValue(option.value)}
-                                            >
-                                                <Checkbox
-                                                    checked={selectedTags.has(option.value)}
-                                                    class="pointer-events-none"
-                                                />
-                                                <span class="truncate">{option.label}</span>
-                                            </Command.Item>
-                                        {/each}
-                                    </Command.Group>
-                                    {#if selectedTags.size > 0}
-                                        <Command.Separator />
-                                        <Command.Group>
-                                            <Command.Item
-                                                class="justify-center text-center"
-                                                onSelect={clearActiveFilter}
-                                            >
-                                                Clear filters
-                                            </Command.Item>
-                                        </Command.Group>
-                                    {/if}
-                                {/if}
-                            </Command.List>
-                        </Command.Root>
+                </div>
+                <div class:hidden={filterTab !== "tags"}>
+                    <div class="flex h-9 items-center gap-2 border-b ps-3 pe-8">
+                        <SearchIcon class="size-4 shrink-0 opacity-50" />
+                        <input
+                            type="text"
+                            placeholder="Search tags..."
+                            bind:value={tagSearch}
+                            bind:this={tagInputRef}
+                            class="placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden"
+                        />
                     </div>
-                {/if}
-                {#if (filterTab === "links" && filterMountPhase >= 1) || filterMountPhase >= 2}
-                    <div class:hidden={filterTab !== "links"}>
-                        <Command.Root shouldFilter={false}>
-                            <Command.Input
-                                placeholder="Search links..."
-                                bind:value={filterSearch}
-                                bind:ref={linkInputRef}
-                            />
-                            <Command.List class="max-h-[300px]">
-                                {#if linkOptionsLoading}
-                                    <div class="p-2 space-y-1.5">
-                                        {#each [1, 2, 3, 4, 5] as _}
-                                            <Skeleton class="h-8 w-full rounded-sm" />
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <Command.Empty>No results.</Command.Empty>
-                                    <Command.Group>
-                                        {#each filteredLinkOptions as option (option.value)}
-                                            <Command.Item
-                                                value={option.value}
-                                                onSelect={() => toggleFilterValue(option.value)}
-                                            >
-                                                <Checkbox
-                                                    checked={selectedLinks.has(option.value)}
-                                                    class="pointer-events-none"
-                                                />
-                                                <span class="truncate">{option.label}</span>
-                                            </Command.Item>
-                                        {/each}
-                                    </Command.Group>
-                                    {#if selectedLinks.size > 0}
-                                        <Command.Separator />
-                                        <Command.Group>
-                                            <Command.Item
-                                                class="justify-center text-center"
-                                                onSelect={clearActiveFilter}
-                                            >
-                                                Clear filters
-                                            </Command.Item>
-                                        </Command.Group>
-                                    {/if}
-                                {/if}
-                            </Command.List>
-                        </Command.Root>
+                    <div class="max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto">
+                        {#if tagOptionsLoading}
+                            <div class="p-2 space-y-1.5">
+                                {#each {length: 5} as _}<Skeleton class="h-8 w-full rounded-sm" />{/each}
+                            </div>
+                        {:else if filteredTagOptions.length === 0}
+                            <p class="py-6 text-center text-sm">No results.</p>
+                        {:else}
+                            <div class="text-foreground overflow-hidden p-1">
+                                {#each filteredTagOptions as option (option.value)}
+                                    <button
+                                        type="button"
+                                        class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0"
+                                        onclick={() => toggleFilterValue(option.value)}
+                                    >
+                                        <Checkbox checked={selectedTags.has(option.value)} class="pointer-events-none" />
+                                        <span class="truncate">{option.label}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                            {#if selectedTags.size > 0}
+                                <div class="bg-border -mx-1 h-px"></div>
+                                <div class="text-foreground overflow-hidden p-1">
+                                    <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
+                                        Clear filters
+                                    </button>
+                                </div>
+                            {/if}
+                        {/if}
                     </div>
-                {/if}
+                </div>
+                <div class:hidden={filterTab !== "links"}>
+                    <div class="flex h-9 items-center gap-2 border-b ps-3 pe-8">
+                        <SearchIcon class="size-4 shrink-0 opacity-50" />
+                        <input
+                            type="text"
+                            placeholder="Search links..."
+                            bind:value={linkSearch}
+                            bind:this={linkInputRef}
+                            class="placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden"
+                        />
+                    </div>
+                    <div class="max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto">
+                        {#if linkOptionsLoading}
+                            <div class="p-2 space-y-1.5">
+                                {#each {length: 5} as _}<Skeleton class="h-8 w-full rounded-sm" />{/each}
+                            </div>
+                        {:else if filteredLinkOptions.length === 0}
+                            <p class="py-6 text-center text-sm">No results.</p>
+                        {:else}
+                            <div class="text-foreground overflow-hidden p-1">
+                                {#each filteredLinkOptions as option (option.value)}
+                                    <button
+                                        type="button"
+                                        class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0"
+                                        onclick={() => toggleFilterValue(option.value)}
+                                    >
+                                        <Checkbox checked={selectedLinks.has(option.value)} class="pointer-events-none" />
+                                        <span class="truncate">{option.label}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                            {#if selectedLinks.size > 0}
+                                <div class="bg-border -mx-1 h-px"></div>
+                                <div class="text-foreground overflow-hidden p-1">
+                                    <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
+                                        Clear filters
+                                    </button>
+                                </div>
+                            {/if}
+                        {/if}
+                    </div>
+                </div>
             </Popover.Content>
         </Popover.Root>
         {#if hasFacetedFilters}
