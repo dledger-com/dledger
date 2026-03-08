@@ -1945,6 +1945,16 @@
 
     <!-- Filter toolbar -->
     <div class="flex items-center gap-2">
+        {#if isMobileLayout && multiSelectMode}
+            <Checkbox
+                checked={table.getIsAllPageRowsSelected()}
+                indeterminate={table.getIsSomePageRowsSelected() &&
+                    !table.getIsAllPageRowsSelected()}
+                onCheckedChange={(v) =>
+                    table.toggleAllPageRowsSelected(!!v)}
+                aria-label="Select all"
+            />
+        {/if}
         <ListFilter
             bind:value={searchTerm}
             placeholder="Filter entries..."
@@ -2256,34 +2266,7 @@
                 >
                     <Table.Root class="border-separate border-spacing-0 [&_tr]:border-0 [&_td]:border-b [&_th]:border-b [&_tr:last-child_td]:border-b-0 [&_tr:last-child]:border-b-0">
                         <Table.Header class="sticky top-0 z-10 bg-background">
-                            {#if isMobileLayout}
-                                <Table.Row>
-                                    {#if multiSelectMode}
-                                        <Table.Head class="w-10">
-                                            <Checkbox
-                                                checked={table.getIsAllPageRowsSelected()}
-                                                indeterminate={table.getIsSomePageRowsSelected() &&
-                                                    !table.getIsAllPageRowsSelected()}
-                                                onCheckedChange={(v) =>
-                                                    table.toggleAllPageRowsSelected(
-                                                        !!v,
-                                                    )}
-                                                aria-label="Select all"
-                                            />
-                                        </Table.Head>
-                                    {/if}
-                                    <SortableHeader
-                                        active={sort.key === "description"}
-                                        direction={sort.direction}
-                                        onclick={() =>
-                                            sort.toggle("description")}
-                                        colspan={multiSelectMode
-                                            ? undefined
-                                            : visibleColCount}
-                                        >Description</SortableHeader
-                                    >
-                                </Table.Row>
-                            {:else}
+                            {#if !isMobileLayout}
                                 {#each table.getHeaderGroups() as headerGroup}
                                     <Table.Row>
                                         {#each headerGroup.headers as header}
