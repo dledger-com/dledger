@@ -2624,14 +2624,15 @@
         {#if selectedCount > 0}
             <div
                 class="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-50
-                        flex items-center gap-3 rounded-lg border bg-background/95
+                        flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5
+                        max-w-[calc(100vw-2rem)] rounded-lg border bg-background/95
                         px-4 py-2.5 shadow-lg backdrop-blur-sm"
             >
                 <span class="text-sm text-muted-foreground whitespace-nowrap">
                     {selectedCount}
                     {selectedCount === 1 ? "entry" : "entries"} selected
                 </span>
-                <div class="h-4 w-px bg-border"></div>
+                <div class="hidden sm:block h-4 w-px bg-border"></div>
                 <Popover.Root bind:open={batchTagOpen}>
                     <Popover.Trigger>
                         {#snippet child({ props })}
