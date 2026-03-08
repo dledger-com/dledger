@@ -424,15 +424,6 @@
   </Card.Root>
 {/snippet}
 
-{#if loadingActive && loadStepsCompleted < LOAD_STEPS_TOTAL}
-  <div class="h-1 w-full bg-muted overflow-hidden">
-    <div
-      class="h-full bg-primary transition-[width] duration-150 ease-linear"
-      style="width: {(loadStepsCompleted / LOAD_STEPS_TOTAL) * 100}%"
-    ></div>
-  </div>
-{/if}
-
 <div class="space-y-6">
   <div class="flex items-center justify-between gap-4">
     <div>
@@ -446,6 +437,15 @@
       <Button variant={rangePreset === "all" ? "default" : "outline"} size="sm" onclick={() => selectRange("all")}>All</Button>
     </div>
   </div>
+
+  {#if loadingActive && loadStepsCompleted < LOAD_STEPS_TOTAL}
+    <div class="h-1 w-full bg-muted overflow-hidden">
+      <div
+        class="h-full bg-primary transition-[width] duration-150 ease-linear"
+        style="width: {(loadStepsCompleted / LOAD_STEPS_TOTAL) * 100}%"
+      ></div>
+    </div>
+  {/if}
 
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     {@render summaryCard(
