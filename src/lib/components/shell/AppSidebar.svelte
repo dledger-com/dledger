@@ -53,7 +53,7 @@
                   <a
                     href={item.href}
                     {...props}
-                    data-active={isActive(item.href) ? "" : undefined}
+                    data-active={isActive(item.href) ? "true" : undefined}
                   >
                     <item.icon class="h-4 w-4" />
                     <span>{item.title}</span>
