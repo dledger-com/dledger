@@ -197,7 +197,7 @@ export class SettingsStore {
   }
 
   update(partial: Partial<AppSettings>) {
-    this.settings = { ...this.settings, ...partial };
+    Object.assign(this.settings, partial);
     saveToStorage(this.settings);
     if (partial.accountPaths !== undefined) {
       configureAccountPaths(this.settings.accountPaths ?? {});
