@@ -2611,7 +2611,7 @@
 
                 {#if showPill && positionLabel}
                     <div
-                        class="absolute bottom-28 md:bottom-12 right-4 z-20 rounded-full border
+                        class="fixed md:absolute bottom-[11.75rem] md:bottom-12 right-4 z-20 rounded-full border
                       bg-background/95 px-3 py-1 text-xs text-muted-foreground
                       shadow-sm backdrop-blur-sm"
                     >
@@ -2622,7 +2622,7 @@
                 {#if isScrolledDown}
                     <button
                         type="button"
-                        class="absolute bottom-19 md:bottom-3 right-4 z-20 flex h-8 w-8 items-center
+                        class="fixed md:absolute bottom-[9.5rem] md:bottom-3 right-4 z-20 flex h-8 w-8 items-center
                    justify-center rounded-full border bg-background/95
                    text-muted-foreground shadow-sm backdrop-blur-sm
                    hover:text-foreground"
