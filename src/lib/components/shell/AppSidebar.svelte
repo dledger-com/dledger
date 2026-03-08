@@ -22,7 +22,6 @@
     { title: "Budgets", href: "/budgets", icon: PiggyBank },
     { title: "Currencies", href: "/currencies", icon: Coins },
     { title: "Sources", href: "/sources", icon: ArrowUpDown },
-    { title: "Settings", href: "/settings", icon: Settings },
   ];
 
   function isActive(href: string): boolean {
@@ -71,7 +70,16 @@
   <Sidebar.Footer>
     <div class="flex items-center justify-between px-2 py-1">
       <span class="text-xs text-muted-foreground">dLedger {versionLabel}</span>
-      <ThemeToggle />
+      <div class="flex items-center gap-1">
+        <a
+          href="/settings"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+          class:text-foreground={isActive("/settings")}
+        >
+          <Settings class="h-4 w-4" />
+        </a>
+        <ThemeToggle />
+      </div>
     </div>
   </Sidebar.Footer>
   <Sidebar.Rail />
