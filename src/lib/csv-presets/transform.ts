@@ -14,6 +14,7 @@ import { invalidate } from "$lib/data/invalidation.js";
 import { toast } from "svelte-sonner";
 import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
 import type { HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
+import { yieldToUI } from "$lib/utils/yield.js";
 
 
 export interface ImportOptions {
@@ -265,6 +266,7 @@ export async function importRecords(
     }
     processed++;
     options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
+    if (processed % 10 === 0) await yieldToUI();
   }
 
   // Process grouped records: merge lines into a single entry
@@ -299,6 +301,7 @@ export async function importRecords(
     }
     processed++;
     options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
+    if (processed % 10 === 0) await yieldToUI();
   }
 
   result.accounts_created = counters.accounts;

@@ -19,6 +19,7 @@ import {
 } from "./csv-presets/dedup.js";
 import { parseLinks, serializeLinksForExport } from "./utils/links.js";
 import { parseTags, serializeTags } from "./utils/tags.js";
+import { yieldToUI } from "./utils/yield.js";
 
 // ---- Helpers ----
 
@@ -1089,6 +1090,7 @@ export async function importLedger(
     if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
     if (i % 50 === 0) {
       options?.onProgress?.({ current: i, total: totalLines, message: "Importing ledger..." });
+      await yieldToUI();
     }
     const line = lines[i];
     const trimmed = line.trim();
