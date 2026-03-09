@@ -235,6 +235,36 @@ export function exportPortfolioCsv(report: PortfolioReport): void {
   downloadCsv(`portfolio-${report.as_of}.csv`, rows.join("\n"));
 }
 
+export function exportForm3916bisCsv(
+  accounts: import("$lib/cex/types.js").ExchangeAccount[],
+): void {
+  const EXCHANGE_COUNTRIES: Record<string, { name: string; country: string; foreign: boolean }> = {
+    kraken: { name: "Kraken", country: "United States", foreign: true },
+    binance: { name: "Binance", country: "Cayman Islands", foreign: true },
+    coinbase: { name: "Coinbase", country: "United States", foreign: true },
+    bybit: { name: "Bybit", country: "UAE", foreign: true },
+    okx: { name: "OKX", country: "Seychelles", foreign: true },
+    bitstamp: { name: "Bitstamp", country: "Luxembourg", foreign: true },
+    cryptocom: { name: "Crypto.com", country: "Singapore", foreign: true },
+    volet: { name: "Volet", country: "France", foreign: false },
+  };
+
+  const rows: string[] = [toCsvRow(["Platform", "Label", "Country", "Declaration Required"])];
+
+  for (const account of accounts) {
+    const info = EXCHANGE_COUNTRIES[account.exchange] ?? {
+      name: account.exchange,
+      country: "Unknown",
+      foreign: true,
+    };
+    rows.push(
+      toCsvRow([info.name, account.label, info.country, info.foreign ? "Yes" : "No"]),
+    );
+  }
+
+  downloadCsv("form-3916-bis-accounts.csv", rows.join("\n"));
+}
+
 export function exportFrenchTaxCsv(report: FrenchTaxReport): void {
   const rows: string[] = [];
 

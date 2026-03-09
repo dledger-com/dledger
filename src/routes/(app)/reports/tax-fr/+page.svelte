@@ -1,7 +1,6 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card/index.js";
-  import * as Table from "$lib/components/ui/table/index.js";
-  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -15,20 +14,22 @@
     type FrenchTaxReport,
     type PersistedFrenchTaxReport,
   } from "$lib/utils/french-tax.js";
-  import { exportFrenchTaxCsv } from "$lib/utils/csv-export.js";
+  import { exportFrenchTaxCsv, exportForm3916bisCsv } from "$lib/utils/csv-export.js";
   import {
     findMissingRates,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
-  import Download from "lucide-svelte/icons/download";
-  import ChevronDown from "lucide-svelte/icons/chevron-down";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
-  import Info from "lucide-svelte/icons/info";
-  import Trash2 from "lucide-svelte/icons/trash-2";
-  import SortableHeader from "$lib/components/SortableHeader.svelte";
-  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
-  import { onMount } from "svelte";
+  import TaxSummaryBanner from "./TaxSummaryBanner.svelte";
+  import OverviewTab from "./OverviewTab.svelte";
+  import Form2086Tab from "./Form2086Tab.svelte";
+  import Form2042CTab from "./Form2042CTab.svelte";
+  import Form3916bisTab from "./Form3916bisTab.svelte";
+  import ChecklistTab from "./ChecklistTab.svelte";
+  import type { ExchangeAccount, ExchangeId } from "$lib/cex/types.js";
+  import { onMount, onDestroy } from "svelte";
 
   const settings = new SettingsStore();
 
@@ -50,51 +51,50 @@
   let overrideValue = $state("");
   let staleWarning = $state<string | null>(null);
 
+  // Exchange accounts for 3916-bis
+  let exchangeAccounts = $state<ExchangeAccount[]>([]);
+
+  const EXCHANGE_FOREIGN: Record<ExchangeId, boolean> = {
+    kraken: true, binance: true, coinbase: true, bybit: true,
+    okx: true, bitstamp: true, cryptocom: true, volet: false,
+  };
+
+  const foreignAccountCount = $derived(
+    exchangeAccounts.filter((a) => EXCHANGE_FOREIGN[a.exchange] !== false).length,
+  );
+
   // Resolved prior cost for current year
   const resolved = $derived(resolvePriorAcquisitionCost(taxYear, initialAcquisitionCost, chainData));
   const effectivePriorCost = $derived(overridePriorCost ? overrideValue : resolved.value);
 
   const hasSavedReport = $derived(chainData.has(taxYear));
 
-  const totalPV = $derived(report ? parseFloat(report.totalPlusValue) : 0);
-  const totalFiat = $derived(report ? parseFloat(report.totalFiatReceived) : 0);
-  const finalA = $derived(report ? parseFloat(report.finalAcquisitionCost) : 0);
-  const yearEndV = $derived(report ? parseFloat(report.yearEndPortfolioValue) : 0);
-
   // Chain visualization
   const chainSummary = $derived.by(() => {
     const years = [...chainData.keys()].sort((a, b) => a - b);
-    const parts: string[] = [];
+    const parts: { label: string; value: string }[] = [];
     if (initialAcquisitionCost && initialAcquisitionCost !== "0") {
-      parts.push(`Initial: ${formatCurrency(initialAcquisitionCost, "EUR")}`);
+      parts.push({ label: "Pre-dledger", value: formatCurrency(initialAcquisitionCost, "EUR") });
     }
     for (const y of years) {
-      parts.push(`${y}: ${formatCurrency(chainData.get(y)!, "EUR")}`);
+      parts.push({ label: `After ${y}`, value: formatCurrency(chainData.get(y)!, "EUR") });
     }
     return parts;
   });
 
-  type DispSortKey = "date" | "description" | "crypto" | "fiat" | "portfolio" | "acqCost" | "costFraction" | "plusValue";
-  const sortDisp = createSortState<DispSortKey>();
-  const dispAccessors: Record<DispSortKey, (d: any) => string | number | null> = {
-    date: (d) => d.date,
-    description: (d) => d.description,
-    crypto: (d) => d.cryptoCurrencies.join(","),
-    fiat: (d) => parseFloat(d.fiatReceived),
-    portfolio: (d) => parseFloat(d.portfolioValue),
-    acqCost: (d) => parseFloat(d.acquisitionCostBefore),
-    costFraction: (d) => parseFloat(d.costFraction),
-    plusValue: (d) => parseFloat(d.plusValue),
-  };
+  // Multi-year gap detection
+  const missingYears = $derived.by(() => {
+    if (taxYear <= 2019) return [];
+    const missing: number[] = [];
+    for (let y = 2019; y < taxYear; y++) {
+      if (!chainData.has(y)) missing.push(y);
+    }
+    // Only warn if there are some reports but gaps exist
+    if (chainData.size === 0) return [];
+    return missing;
+  });
 
-  type AcqSortKey = "date" | "description" | "crypto" | "fiatSpent";
-  const sortAcq = createSortState<AcqSortKey>();
-  const acqAccessors: Record<AcqSortKey, (a: any) => string | number | null> = {
-    date: (a) => a.date,
-    description: (a) => a.description,
-    crypto: (a) => a.cryptoCurrencies.join(","),
-    fiatSpent: (a) => parseFloat(a.fiatSpent),
-  };
+  let generatingAll = $state(false);
 
   async function loadChainData() {
     const backend = getBackend();
@@ -121,6 +121,14 @@
     staleWarning = null;
     overridePriorCost = false;
     overrideValue = "";
+  }
+
+  async function loadExchangeAccounts() {
+    try {
+      exchangeAccounts = await getBackend().listExchangeAccounts();
+    } catch {
+      exchangeAccounts = [];
+    }
   }
 
   async function generate() {
@@ -188,13 +196,40 @@
     staleWarning = null;
   }
 
+  async function generateAllMissing() {
+    generatingAll = true;
+    try {
+      for (const year of missingYears) {
+        const r = resolvePriorAcquisitionCost(year, initialAcquisitionCost, chainData);
+        const rpt = await computeFrenchTaxReport(getBackend(), {
+          taxYear: year,
+          priorAcquisitionCost: r.value,
+          fiatCurrencies: settings.settings.frenchTax?.fiatCurrencies,
+        });
+        await getBackend().saveFrenchTaxReport(year, rpt);
+        await loadChainData();
+      }
+      // Reload current year
+      await loadSavedReport();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      generatingAll = false;
+    }
+  }
+
   let mounted = $state(false);
 
-  // Load chain data on mount
+  // Load data on mount
   onMount(() => {
     loadChainData();
     loadSavedReport();
+    loadExchangeAccounts();
     mounted = true;
+  });
+
+  onDestroy(() => {
+    clearTopBarActions();
   });
 
   // React to year changes after initial mount
@@ -205,6 +240,45 @@
       loadSavedReport();
     }
   });
+
+  // TopBar actions
+  $effect(() => {
+    const _report = report;
+    const _hasSaved = hasSavedReport;
+    const _loading = loading;
+
+    const actions: import("$lib/data/page-actions.svelte.js").PageAction[] = [
+      {
+        type: "button",
+        label: _loading ? "Generating..." : _hasSaved ? "Regenerate" : "Generate",
+        onclick: generate,
+        disabled: _loading,
+      },
+    ];
+
+    if (_report || _hasSaved) {
+      actions.push({
+        type: "menu",
+        items: [
+          ...(_report
+            ? [
+                { label: "Export CSV (Form 2086)", onclick: () => exportFrenchTaxCsv(_report) },
+                ...(exchangeAccounts.length > 0
+                  ? [{ label: "Export CSV (3916-bis)", onclick: () => exportForm3916bisCsv(exchangeAccounts) }]
+                  : []),
+                { separator: true, label: "" },
+              ]
+            : []),
+          ...(_hasSaved
+            ? [{ label: "Delete Report", onclick: deleteReport }]
+            : []),
+        ],
+      });
+    }
+
+    setTopBarActions(actions);
+    return () => clearTopBarActions();
+  });
 </script>
 
 <div class="space-y-6">
@@ -213,14 +287,34 @@
     <div class="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
       {#each chainSummary as part, i}
         {#if i > 0}<span class="text-muted-foreground/50">&rarr;</span>{/if}
-        <span class="font-mono">{part}</span>
+        <span class="font-mono"><span class="text-xs opacity-60">{part.label}:</span> {part.value}</span>
       {/each}
     </div>
   {/if}
 
+  <!-- Multi-year gap warning -->
+  {#if missingYears.length > 0}
+    <div class="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+      <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" />
+      <div class="flex-1">
+        <p>Missing reports for {missingYears.join(", ")}. For accurate cost chaining, generate from the earliest year first.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          class="mt-2"
+          onclick={generateAllMissing}
+          disabled={generatingAll}
+        >
+          {generatingAll ? "Generating..." : `Generate All Missing (${missingYears.length})`}
+        </Button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Parameters Card -->
   <Card.Root>
-    <Card.Header>
-      <Card.Title>Report Parameters</Card.Title>
+    <Card.Header class="pb-3">
+      <Card.Title class="text-base">Report Parameters</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
       <!-- Year Chips -->
@@ -250,7 +344,7 @@
       <!-- Prior Acquisition Cost -->
       <div class="space-y-2">
         {#if resolved.source === "chained"}
-          <div class="flex items-center gap-2 text-sm">
+          <div class="flex items-center gap-2 text-sm flex-wrap">
             <span class="font-medium">Prior Acquisition Cost:</span>
             <span class="font-mono">{formatCurrency(resolved.value, "EUR")}</span>
             <Badge variant="secondary">from {resolved.sourceYear} report</Badge>
@@ -271,32 +365,13 @@
 
         <!-- Gap warning -->
         {#if resolved.source !== "chained" && taxYear > 2019}
-          {@const prevYear = taxYear - 1}
-          {#if !chainData.has(prevYear) && chainData.size > 0}
+          {@const prevYearVal = taxYear - 1}
+          {#if !chainData.has(prevYearVal) && chainData.size > 0}
             <div class="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-2 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
               <AlertTriangle class="h-4 w-4 shrink-0" />
-              <span>No saved report for {prevYear}. Consider generating it first for automatic chaining.</span>
+              <span>No saved report for {prevYearVal}. Consider generating it first for automatic chaining.</span>
             </div>
           {/if}
-        {/if}
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="flex gap-2">
-        <Button onclick={generate} disabled={loading}>
-          {loading ? "Generating..." : hasSavedReport ? "Regenerate" : "Generate"}
-        </Button>
-        {#if report}
-          <Button variant="outline" onclick={() => exportFrenchTaxCsv(report!)}>
-            <Download class="mr-1 h-4 w-4" />
-            CSV
-          </Button>
-        {/if}
-        {#if hasSavedReport}
-          <Button variant="outline" class="text-destructive hover:text-destructive" onclick={deleteReport}>
-            <Trash2 class="mr-1 h-4 w-4" />
-            Delete
-          </Button>
         {/if}
       </div>
 
@@ -333,246 +408,68 @@
       </Card.Content>
     </Card.Root>
   {:else if report}
-    <!-- Summary Cards -->
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Card.Root>
-        <Card.Header class="pb-2">
-          <Card.Description>Total Plus-Value</Card.Description>
-          <Card.Title class="text-xl {totalPV >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-            {totalPV >= 0 ? "+" : ""}{formatCurrency(totalPV, "EUR")}
-          </Card.Title>
-        </Card.Header>
-        <Card.Content class="pt-0">
-          <p class="text-xs text-muted-foreground">
-            {#if totalPV >= 0}Box 3AN{:else}Box 3BN{/if}
-          </p>
-        </Card.Content>
-      </Card.Root>
-
-      <Card.Root>
-        <Card.Header class="pb-2">
-          <Card.Description>Total Fiat Received</Card.Description>
-          <Card.Title class="text-xl">{formatCurrency(totalFiat, "EUR")}</Card.Title>
-        </Card.Header>
-        <Card.Content class="pt-0">
-          {#if report.isExempt}
-            <Badge variant="secondary">Exempt (&le; 305 EUR)</Badge>
-          {/if}
-        </Card.Content>
-      </Card.Root>
-
-      <Card.Root>
-        <Card.Header class="pb-2">
-          <Card.Description>Tax at PFU</Card.Description>
-          <Card.Title class="text-xl">{formatCurrency(report.taxDuePFU30, "EUR")}</Card.Title>
-        </Card.Header>
-        <Card.Content class="pt-0">
-          <p class="text-xs text-muted-foreground">
-            30% flat tax (12.8% IR + 17.2% PS)
-          </p>
-        </Card.Content>
-      </Card.Root>
-
-      <Card.Root>
-        <Card.Header class="pb-2">
-          <Card.Description>Final Acquisition Cost (A)</Card.Description>
-          <Card.Title class="text-xl">{formatCurrency(finalA, "EUR")}</Card.Title>
-        </Card.Header>
-      </Card.Root>
-
-      <Card.Root>
-        <Card.Header class="pb-2">
-          <Card.Description>Portfolio Value (Dec 31)</Card.Description>
-          <Card.Title class="text-xl">{formatCurrency(yearEndV, "EUR")}</Card.Title>
-        </Card.Header>
-      </Card.Root>
-
-      <Card.Root>
-        <Card.Header class="pb-2">
-          <Card.Description>Tax at PFU (31.4%)</Card.Description>
-          <Card.Title class="text-xl">{formatCurrency(report.taxDuePFU314, "EUR")}</Card.Title>
-        </Card.Header>
-        <Card.Content class="pt-0">
-          <p class="text-xs text-muted-foreground">
-            Including contribution exceptionnelle
-          </p>
-        </Card.Content>
-      </Card.Root>
-    </div>
-
-    <!-- Form 2086 Table -->
-    {#if report.dispositions.length > 0}
-      <Card.Root>
-        <Card.Header>
-          <Card.Title>Dispositions (Form 2086)</Card.Title>
-          <Card.Description>One row per crypto-to-fiat sale event.</Card.Description>
-        </Card.Header>
-        <div class="overflow-x-auto">
-          <Table.Root>
-            <Table.Header>
-              <Table.Row>
-                <Table.Head class="w-10">#</Table.Head>
-                <SortableHeader active={sortDisp.key === "date"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("date")}>Date</SortableHeader>
-                <SortableHeader active={sortDisp.key === "description"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("description")} class="hidden sm:table-cell">Description</SortableHeader>
-                <SortableHeader active={sortDisp.key === "crypto"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("crypto")}>Crypto</SortableHeader>
-                <SortableHeader active={sortDisp.key === "fiat"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("fiat")} class="text-right">C (Fiat)</SortableHeader>
-                <SortableHeader active={sortDisp.key === "portfolio"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("portfolio")} class="text-right hidden md:table-cell">V (Portfolio)</SortableHeader>
-                <SortableHeader active={sortDisp.key === "acqCost"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("acqCost")} class="text-right hidden md:table-cell">A (Acq. Cost)</SortableHeader>
-                <SortableHeader active={sortDisp.key === "costFraction"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("costFraction")} class="text-right hidden lg:table-cell">A*C/V</SortableHeader>
-                <SortableHeader active={sortDisp.key === "plusValue"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("plusValue")} class="text-right">Plus-Value</SortableHeader>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {@const sortedDisp = sortDisp.key && sortDisp.direction ? sortItems(report.dispositions, dispAccessors[sortDisp.key], sortDisp.direction) : report.dispositions}
-              {#each sortedDisp as d, i (d.entryId)}
-                {@const pv = parseFloat(d.plusValue)}
-                <Table.Row>
-                  <Table.Cell class="font-mono text-muted-foreground">{i + 1}</Table.Cell>
-                  <Table.Cell class="text-muted-foreground">{d.date}</Table.Cell>
-                  <Table.Cell class="hidden sm:table-cell max-w-48 truncate">{d.description}</Table.Cell>
-                  <Table.Cell>
-                    {#each d.cryptoCurrencies as c}
-                      <Badge variant="outline" class="mr-1">{c}</Badge>
-                    {/each}
-                  </Table.Cell>
-                  <Table.Cell class="text-right font-mono">{formatCurrency(d.fiatReceived, "EUR")}</Table.Cell>
-                  <Table.Cell class="text-right font-mono hidden md:table-cell">{formatCurrency(d.portfolioValue, "EUR")}</Table.Cell>
-                  <Table.Cell class="text-right font-mono hidden md:table-cell">{formatCurrency(d.acquisitionCostBefore, "EUR")}</Table.Cell>
-                  <Table.Cell class="text-right font-mono hidden lg:table-cell">{formatCurrency(d.costFraction, "EUR")}</Table.Cell>
-                  <Table.Cell class="text-right font-mono {pv >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-                    {pv >= 0 ? "+" : ""}{formatCurrency(pv, "EUR")}
-                  </Table.Cell>
-                </Table.Row>
-              {/each}
-            </Table.Body>
-            <Table.Footer>
-              <Table.Row>
-                <Table.Cell colspan={4} class="font-medium">Total</Table.Cell>
-                <Table.Cell class="text-right font-mono font-medium">{formatCurrency(totalFiat, "EUR")}</Table.Cell>
-                <Table.Cell class="hidden md:table-cell"></Table.Cell>
-                <Table.Cell class="hidden md:table-cell"></Table.Cell>
-                <Table.Cell class="hidden lg:table-cell"></Table.Cell>
-                <Table.Cell class="text-right font-mono font-medium {totalPV >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-                  {totalPV >= 0 ? "+" : ""}{formatCurrency(totalPV, "EUR")}
-                </Table.Cell>
-              </Table.Row>
-            </Table.Footer>
-          </Table.Root>
-        </div>
-      </Card.Root>
-    {:else}
-      <Card.Root>
-        <Card.Content class="py-8">
-          <p class="text-sm text-muted-foreground text-center">
-            No crypto-to-fiat dispositions in {report.taxYear}.
-          </p>
-        </Card.Content>
-      </Card.Root>
-    {/if}
-
-    <!-- Form 2042 C Summary -->
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Form 2042 C Summary</Card.Title>
-        <Card.Description>Values to report on your income tax declaration.</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="rounded-md border p-4">
-            <p class="text-sm font-medium text-muted-foreground">Box 3AN — Plus-values</p>
-            <p class="text-2xl font-bold">{formatCurrency(report.box3AN, "EUR")}</p>
-          </div>
-          <div class="rounded-md border p-4">
-            <p class="text-sm font-medium text-muted-foreground">Box 3BN — Moins-values</p>
-            <p class="text-2xl font-bold">{formatCurrency(report.box3BN, "EUR")}</p>
-          </div>
-        </div>
-      </Card.Content>
-    </Card.Root>
-
-    <!-- Declaration Guide -->
-    <Collapsible.Root>
-      <Card.Root>
-        <Collapsible.Trigger class="w-full">
-          <Card.Header class="flex flex-row items-center justify-between">
-            <div class="flex items-center gap-2">
-              <Info class="h-4 w-4 text-muted-foreground" />
-              <Card.Title>Declaration Guide</Card.Title>
-            </div>
-            <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
-          </Card.Header>
-        </Collapsible.Trigger>
-        <Collapsible.Content>
-          <Card.Content class="prose prose-sm dark:prose-invert max-w-none">
-            <ol class="space-y-2 text-sm">
-              <li><strong>Form 2086:</strong> Fill one row per disposition from the table above. Fields 211-224 map to each column.</li>
-              <li><strong>Form 2042 C:</strong> Report the total plus-value in box <strong>3AN</strong> (gains) or <strong>3BN</strong> (losses).</li>
-              <li><strong>Exemption:</strong> If total fiat dispositions &le; 305 EUR, the plus-value is exempt from tax. You should still declare it.</li>
-              <li><strong>PFU (Flat Tax):</strong> The default rate is 30% (12.8% income tax + 17.2% social contributions). You can opt for the progressive income tax scale instead.</li>
-              <li><strong>Carry forward:</strong> The final acquisition cost (A) at year end is automatically saved and chained as the starting A for the next tax year.</li>
-              <li><strong>Crypto-to-crypto:</strong> Exchanges between crypto assets are NOT taxable events under Art. 150 VH bis.</li>
-            </ol>
-          </Card.Content>
-        </Collapsible.Content>
-      </Card.Root>
-    </Collapsible.Root>
+    <!-- Summary Banner -->
+    <TaxSummaryBanner {report} {taxYear} />
 
     <MissingRateBanner requests={missingRateRequests} onFetched={generate} baseCurrency="EUR" />
 
-    <!-- Warnings -->
-    {#if report.warnings.length > 0}
-      <Card.Root>
-        <Card.Header>
-          <div class="flex items-center gap-2">
-            <AlertTriangle class="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-            <Card.Title>Warnings</Card.Title>
-          </div>
-        </Card.Header>
-        <Card.Content>
-          <ul class="space-y-1 text-sm text-muted-foreground">
-            {#each report.warnings as w}
-              <li>{w}</li>
-            {/each}
-          </ul>
-        </Card.Content>
-      </Card.Root>
-    {/if}
+    <!-- Tabs -->
+    <Tabs.Root value="overview">
+      <Tabs.List class="overflow-x-auto">
+        <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+        <Tabs.Trigger value="form2086">Form 2086</Tabs.Trigger>
+        <Tabs.Trigger value="form2042c">Form 2042 C</Tabs.Trigger>
+        <Tabs.Trigger value="form3916bis">Form 3916-bis</Tabs.Trigger>
+        <Tabs.Trigger value="checklist">Checklist</Tabs.Trigger>
+      </Tabs.List>
 
-    <!-- Acquisitions Reference -->
-    {#if report.acquisitions.length > 0}
-      <Card.Root>
-        <Card.Header>
-          <Card.Title>Acquisitions Reference</Card.Title>
-          <Card.Description>Fiat-to-crypto purchases that contributed to acquisition cost (A).</Card.Description>
-        </Card.Header>
-        <div class="overflow-x-auto">
-          <Table.Root>
-            <Table.Header>
-              <Table.Row>
-                <SortableHeader active={sortAcq.key === "date"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("date")}>Date</SortableHeader>
-                <SortableHeader active={sortAcq.key === "description"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("description")} class="hidden sm:table-cell">Description</SortableHeader>
-                <SortableHeader active={sortAcq.key === "crypto"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("crypto")}>Crypto</SortableHeader>
-                <SortableHeader active={sortAcq.key === "fiatSpent"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("fiatSpent")} class="text-right">Fiat Spent (EUR)</SortableHeader>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {@const sortedAcq = sortAcq.key && sortAcq.direction ? sortItems(report.acquisitions, acqAccessors[sortAcq.key], sortAcq.direction) : report.acquisitions}
-              {#each sortedAcq as a (a.entryId)}
-                <Table.Row>
-                  <Table.Cell class="text-muted-foreground">{a.date}</Table.Cell>
-                  <Table.Cell class="hidden sm:table-cell max-w-48 truncate">{a.description}</Table.Cell>
-                  <Table.Cell>
-                    {#each a.cryptoCurrencies as c}
-                      <Badge variant="outline" class="mr-1">{c}</Badge>
-                    {/each}
-                  </Table.Cell>
-                  <Table.Cell class="text-right font-mono">{formatCurrency(a.fiatSpent, "EUR")}</Table.Cell>
-                </Table.Row>
-              {/each}
-            </Table.Body>
-          </Table.Root>
-        </div>
-      </Card.Root>
-    {/if}
+      <Tabs.Content value="overview" class="mt-4">
+        <OverviewTab {report} {taxYear} {foreignAccountCount} />
+      </Tabs.Content>
+
+      <Tabs.Content value="form2086" class="mt-4">
+        <Form2086Tab {report} />
+      </Tabs.Content>
+
+      <Tabs.Content value="form2042c" class="mt-4">
+        <Form2042CTab {report} {taxYear} />
+      </Tabs.Content>
+
+      <Tabs.Content value="form3916bis" class="mt-4">
+        <Form3916bisTab {exchangeAccounts} />
+      </Tabs.Content>
+
+      <Tabs.Content value="checklist" class="mt-4">
+        <ChecklistTab {report} {taxYear} {hasSavedReport} {foreignAccountCount} />
+      </Tabs.Content>
+    </Tabs.Root>
+  {:else}
+    <!-- Empty state: no report generated -->
+    <Card.Root>
+      <Card.Content class="py-8 text-center space-y-3">
+        <p class="text-lg font-semibold">Ready to generate your {taxYear} crypto tax report</p>
+        <p class="text-sm text-muted-foreground max-w-lg mx-auto">
+          This will compute your taxable crypto-to-fiat dispositions
+          using the Art. 150 VH bis portfolio-weighted formula.
+        </p>
+        {#if resolved.source === "chained"}
+          <p class="text-sm text-green-700 dark:text-green-300">
+            Prior year report available (acquisition cost: {formatCurrency(resolved.value, "EUR")})
+          </p>
+        {:else if initialAcquisitionCost && initialAcquisitionCost !== "0"}
+          <p class="text-sm text-muted-foreground">
+            Using initial cost of {formatCurrency(initialAcquisitionCost, "EUR")}
+          </p>
+        {:else}
+          <div class="flex items-center justify-center gap-1.5 text-sm text-yellow-700 dark:text-yellow-300">
+            <AlertTriangle class="h-3.5 w-3.5" />
+            <span>No prior year report — using initial cost of 0 EUR</span>
+          </div>
+        {/if}
+        <Button onclick={generate} disabled={loading} class="mt-2">
+          Generate Report
+        </Button>
+      </Card.Content>
+    </Card.Root>
   {/if}
 </div>
