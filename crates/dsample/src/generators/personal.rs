@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::accounts;
 use crate::currencies;
-use crate::distributions::{self, to_decimal, triangular, random_date, pick, weighted_index, random_tags, random_links, TAG_POOL, LINK_PREFIXES};
+use crate::distributions::{self, to_decimal, triangular, pick, weighted_index, random_tags, random_links, ActivityProfile, TAG_POOL, LINK_PREFIXES};
 use crate::model::{SampleData, Entry};
 use super::{ScenarioGenerator, simple_entry};
 
@@ -30,6 +30,9 @@ impl ScenarioGenerator for PersonalGenerator {
             to_decimal(10000.0, 2),
             "EUR",
         ));
+
+        // Activity profile for temporal variation (peaks and valleys)
+        let profile = ActivityProfile::new(rng, start, end);
 
         // Weights: salary=1, rent=1, groceries=15, restaurants=10, transport=8,
         //          subscriptions=2, shopping=5, utilities=1, health=2, entertainment=3
@@ -71,7 +74,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 15.0, 200.0, 50.0);
                     let desc = pick(rng, distributions::GROCERY_STORES);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_GROCERIES,
@@ -84,7 +87,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 12.0, 120.0, 30.0);
                     let desc = pick(rng, distributions::RESTAURANTS);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_RESTAURANTS,
@@ -97,7 +100,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 1.5, 80.0, 15.0);
                     let desc = pick(rng, distributions::TRANSPORT);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_TRANSPORT,
@@ -110,7 +113,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 5.0, 50.0, 12.0);
                     let desc = pick(rng, distributions::SUBSCRIPTIONS);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_SUBSCRIPTIONS,
@@ -123,7 +126,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 10.0, 500.0, 60.0);
                     let desc = pick(rng, distributions::SHOPPING);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_SHOPPING,
@@ -150,7 +153,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 15.0, 300.0, 50.0);
                     let desc = pick(rng, distributions::HEALTH);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_HEALTH,
@@ -163,7 +166,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 8.0, 100.0, 25.0);
                     let desc = pick(rng, distributions::ENTERTAINMENT);
                     simple_entry(
-                        random_date(rng, start, end),
+                        profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_ENTERTAINMENT,

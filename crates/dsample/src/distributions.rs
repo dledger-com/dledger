@@ -22,6 +22,70 @@ pub fn to_decimal(val: f64, dp: u8) -> Decimal {
         .unwrap_or_else(|_| Decimal::new((rounded * scale) as i64, dp as u32))
 }
 
+/// Activity profile that creates temporal variation by assigning random weights
+/// to 2-week windows. This produces visible peaks and valleys instead of flat
+/// uniform distribution.
+pub struct ActivityProfile {
+    window_days: i64,
+    start: NaiveDate,
+    end: NaiveDate,
+    cum_weights: Vec<f64>,
+}
+
+impl ActivityProfile {
+    /// Divide [start, end) into 14-day windows, each with a random activity weight.
+    /// ~10% of windows get near-zero weight ("vacation" periods).
+    pub fn new(rng: &mut StdRng, start: NaiveDate, end: NaiveDate) -> Self {
+        let total_days = (end - start).num_days().max(1);
+        let window_days = 14i64;
+        let n_windows = ((total_days + window_days - 1) / window_days) as usize;
+
+        let mut cum = Vec::with_capacity(n_windows);
+        let mut sum = 0.0;
+        for _ in 0..n_windows {
+            let w = if rng.gen::<f64>() < 0.10 {
+                0.05 // vacation / quiet period
+            } else {
+                triangular(rng, 0.2, 1.8, 1.0)
+            };
+            sum += w;
+            cum.push(sum);
+        }
+
+        Self {
+            window_days,
+            start,
+            end,
+            cum_weights: cum,
+        }
+    }
+
+    /// Pick a date using weighted window selection, then uniform day within window.
+    pub fn pick_date(&self, rng: &mut StdRng) -> NaiveDate {
+        let total = *self.cum_weights.last().unwrap_or(&1.0);
+        let r = rng.gen::<f64>() * total;
+
+        // Binary search for the window
+        let win = match self.cum_weights.binary_search_by(|w| w.partial_cmp(&r).unwrap()) {
+            Ok(i) => i,
+            Err(i) => i.min(self.cum_weights.len() - 1),
+        };
+
+        let win_start = self.start + chrono::Duration::days(win as i64 * self.window_days);
+        let win_end_unclamped =
+            self.start + chrono::Duration::days((win as i64 + 1) * self.window_days);
+        let win_end = if win_end_unclamped > self.end {
+            self.end
+        } else {
+            win_end_unclamped
+        };
+
+        let days_in_win = (win_end - win_start).num_days().max(1);
+        let offset = rng.gen_range(0..days_in_win);
+        win_start + chrono::Duration::days(offset)
+    }
+}
+
 /// Pick a uniformly random date in range [start, end).
 pub fn random_date(rng: &mut StdRng, start: NaiveDate, end: NaiveDate) -> NaiveDate {
     let days = (end - start).num_days();
@@ -159,6 +223,46 @@ mod tests {
     fn to_decimal_rounds() {
         let d = to_decimal(1.23456, 2);
         assert_eq!(d, Decimal::from_str("1.23").unwrap());
+    }
+
+    #[test]
+    fn activity_profile_dates_in_range() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let start = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        let profile = ActivityProfile::new(&mut rng, start, end);
+        for _ in 0..1000 {
+            let d = profile.pick_date(&mut rng);
+            assert!(d >= start && d < end, "date {d} out of range");
+        }
+    }
+
+    #[test]
+    fn activity_profile_shows_variation() {
+        let mut rng = StdRng::seed_from_u64(123);
+        let start = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        let profile = ActivityProfile::new(&mut rng, start, end);
+
+        // Count entries per 2-week window
+        let n_windows = 26; // ~365/14
+        let mut counts = vec![0u32; n_windows];
+        for _ in 0..10000 {
+            let d = profile.pick_date(&mut rng);
+            let day_offset = (d - start).num_days();
+            let win = (day_offset / 14) as usize;
+            if win < n_windows {
+                counts[win] += 1;
+            }
+        }
+        let min = *counts.iter().min().unwrap();
+        let max = *counts.iter().max().unwrap();
+        // With uniform distribution over 26 windows, ratio would be close to 1.
+        // With activity weights, max/min should be notably > 2.
+        assert!(
+            max as f64 / min.max(1) as f64 > 2.0,
+            "expected variation, got min={min} max={max}"
+        );
     }
 
     #[test]

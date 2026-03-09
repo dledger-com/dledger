@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::accounts;
 use crate::currencies;
-use crate::distributions::{to_decimal, triangular, random_date, pick, weighted_index, random_tags, random_links, TAG_POOL, LINK_PREFIXES};
+use crate::distributions::{to_decimal, triangular, pick, weighted_index, random_tags, random_links, ActivityProfile, TAG_POOL, LINK_PREFIXES};
 use crate::model::{SampleData, Entry};
 use crate::price_sim::PriceSimulator;
 use super::{ScenarioGenerator, simple_entry, trade_entry, fee_entry};
@@ -25,6 +25,7 @@ impl ScenarioGenerator for CryptoGenerator {
     ) -> SampleData {
         let crypto_codes: Vec<String> = CRYPTO_CODES.iter().map(|s| s.to_string()).collect();
         let mut price_sim = PriceSimulator::new(&crypto_codes, 0.025);
+        let profile = ActivityProfile::new(rng, start, end);
 
         let mut entries: Vec<Entry> = Vec::with_capacity(count + 1);
 
@@ -48,7 +49,7 @@ impl ScenarioGenerator for CryptoGenerator {
 
         for _ in 0..count {
             let kind = weighted_index(rng, &weights);
-            let date = random_date(rng, start, end);
+            let date = profile.pick_date(rng);
             price_sim.step(rng);
 
             let entry = match kind {
