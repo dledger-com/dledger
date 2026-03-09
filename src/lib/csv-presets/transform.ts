@@ -3,11 +3,23 @@ import type { Backend } from "$lib/backend.js";
 import type { Account, AccountType, Currency, JournalEntry, LineItem } from "$lib/types/index.js";
 import type { CsvImportResult } from "$lib/utils/csv-import.js";
 import type { CsvRecord } from "./types.js";
+
 import { parseDate, type DateFormatId } from "./parse-date.js";
 import { parseAmount } from "./parse-amount.js";
 import { buildDedupIndex, isDuplicate, computeRecordFingerprint, computeAmountFingerprint } from "./dedup.js";
 import { ASSETS_IMPORT, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
+import { getBackend } from "$lib/backend.js";
+import { taskQueue } from "$lib/task-queue.svelte.js";
+import { invalidate } from "$lib/data/invalidation.js";
+import { toast } from "svelte-sonner";
+import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
+import type { HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
 
+
+export interface ImportOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: { current: number; total: number; message?: string }) => void;
+}
 
 export interface TransformOptions {
   dateColumn: string;
@@ -186,6 +198,7 @@ export async function importRecords(
   backend: Backend,
   records: CsvRecord[],
   presetId?: string,
+  options?: ImportOptions,
 ): Promise<CsvImportResult> {
   const result: CsvImportResult = {
     entries_created: 0,
@@ -222,10 +235,17 @@ export async function importRecords(
     }
   }
 
+  const totalCount = ungrouped.length + groups.size;
+  let processed = 0;
+  options?.onProgress?.({ current: 0, total: totalCount, message: "Importing records..." });
+
   // Process ungrouped records individually
   for (const rec of ungrouped) {
+    if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
     if (isDuplicate(rec, presetId, dedupIndex)) {
       result.duplicates_skipped++;
+      processed++;
+      options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
       continue;
     }
     const entryResult = await postRecord(
@@ -243,10 +263,13 @@ export async function importRecords(
     } else {
       result.warnings.push(`Skipped: "${rec.description}" on ${rec.date}`);
     }
+    processed++;
+    options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
   }
 
   // Process grouped records: merge lines into a single entry
   for (const [, group] of groups) {
+    if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
     const merged: CsvRecord = {
       date: group[0].date,
       description: group[0].description,
@@ -256,6 +279,8 @@ export async function importRecords(
     };
     if (isDuplicate(merged, presetId, dedupIndex)) {
       result.duplicates_skipped++;
+      processed++;
+      options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
       continue;
     }
     const entryResult = await postRecord(
@@ -272,6 +297,8 @@ export async function importRecords(
     } else {
       result.warnings.push(`Skipped grouped: "${merged.description}" on ${merged.date}`);
     }
+    processed++;
+    options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
   }
 
   result.accounts_created = counters.accounts;
@@ -342,4 +369,52 @@ async function postRecord(
   }
 
   return true;
+}
+
+export function enqueueRecordImport(params: {
+  key: string;
+  label: string;
+  records: CsvRecord[];
+  presetId?: string;
+  postImport?: (backend: Backend, result: CsvImportResult) => Promise<void>;
+  rateConfig: HistoricalFetchConfig;
+  hiddenCurrencies: Set<string>;
+}): string | null {
+  const { key, label, records, presetId, postImport, rateConfig, hiddenCurrencies } = params;
+
+  return taskQueue.enqueue({
+    key,
+    label,
+    description: `Importing ${records.length} records`,
+    run: async (ctx) => {
+      const backend = getBackend();
+      const result = await importRecords(backend, records, presetId, {
+        signal: ctx.signal,
+        onProgress: (p) => ctx.reportProgress(p),
+      });
+
+      if (postImport) {
+        await postImport(backend, result);
+      }
+
+      const skipMsg = result.duplicates_skipped > 0 ? `, ${result.duplicates_skipped} duplicates skipped` : "";
+      toast.success(`Imported ${result.entries_created} entries${skipMsg}`);
+      if (result.entries_created > 0) invalidate("journal", "accounts", "reports");
+
+      if (result.transaction_currency_dates.length > 0) {
+        enqueueRateBackfill(
+          taskQueue,
+          backend,
+          rateConfig,
+          hiddenCurrencies,
+          result.transaction_currency_dates,
+        );
+      }
+
+      return {
+        summary: `${result.entries_created} entries imported${skipMsg}`,
+        data: result,
+      };
+    },
+  });
 }

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { invalidate } from "$lib/data/invalidation.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -12,13 +11,13 @@
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
   import { parseCsv, detectDelimiter } from "$lib/utils/csv-import.js";
-  import type { CsvImportResult } from "$lib/utils/csv-import.js";
+
   import { readFileAsText } from "$lib/utils/read-file-text.js";
   import {
     getDefaultPresetRegistry,
     detectColumns,
     transformGeneric,
-    importRecords,
+    enqueueRecordImport,
     buildDedupIndex,
     isDuplicate,
     applyRuleTags,
@@ -36,7 +35,7 @@
     type DedupIndex,
   } from "$lib/csv-presets/index.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
-  import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
+
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
@@ -119,8 +118,6 @@
   // -- Step 3 state --
   let previewRecords = $state<CsvRecord[]>([]);
   let previewWarnings = $state<string[]>([]);
-  let importing = $state(false);
-  let importResult = $state<CsvImportResult | null>(null);
   let duplicateFlags = $state<boolean[]>([]);
   let duplicateCount = $derived(duplicateFlags.filter(Boolean).length);
   let nonDuplicateCount = $derived(previewRecords.length - duplicateCount);
@@ -394,88 +391,81 @@
     }
   }
 
-  async function doImport() {
-    importing = true;
-    importResult = null;
-    try {
-      // Merge batch tags + rule tags into records before import
-      if (importTags.length > 0) {
-        const tagValue = serializeTags(importTags);
-        for (const rec of previewRecords) {
-          const existing = parseTags(rec.metadata?.[TAGS_META_KEY]);
-          const merged = [...new Set([...existing, ...importTags])];
-          rec.metadata = { ...rec.metadata, [TAGS_META_KEY]: serializeTags(merged) };
-        }
+  function doImport() {
+    // Merge batch tags + rule tags into records before import
+    const recordsSnapshot = [...previewRecords];
+    if (importTags.length > 0) {
+      for (const rec of recordsSnapshot) {
+        const existing = parseTags(rec.metadata?.[TAGS_META_KEY]);
+        const merged = [...new Set([...existing, ...importTags])];
+        rec.metadata = { ...rec.metadata, [TAGS_META_KEY]: serializeTags(merged) };
       }
-      applyRuleTags(previewRecords, rules);
+    }
+    applyRuleTags(recordsSnapshot, rules);
 
-      const backend = getBackend();
-      const presetId = usePreset && selectedPresetId ? selectedPresetId : undefined;
-      const result = await importRecords(backend, previewRecords, presetId);
+    const presetIdSnapshot = usePreset && selectedPresetId ? selectedPresetId : undefined;
+    const fileHeaderSnapshot = fileHeader;
+    const mainAccountSnapshot = mainAccount;
 
-      // Store account metadata from file header if available
-      if (fileHeader?.accountMetadata && mainAccount) {
-        try {
-          const accounts = await backend.listAccounts();
-          const acct = accounts.find((a) => a.full_name === mainAccount);
-          if (acct) {
-            await backend.setAccountMetadata(acct.id, fileHeader.accountMetadata);
+    const taskId = enqueueRecordImport({
+      key: "csv-import",
+      label: "CSV Import",
+      records: recordsSnapshot,
+      presetId: presetIdSnapshot,
+      postImport: async (backend, result) => {
+        // Store account metadata from file header if available
+        if (fileHeaderSnapshot?.accountMetadata && mainAccountSnapshot) {
+          try {
+            const accounts = await backend.listAccounts();
+            const acct = accounts.find((a) => a.full_name === mainAccountSnapshot);
+            if (acct) {
+              await backend.setAccountMetadata(acct.id, fileHeaderSnapshot.accountMetadata);
+            }
+          } catch {
+            // Account metadata is non-critical
           }
-        } catch {
-          // Account metadata is non-critical
         }
-      }
 
-      // Create balance assertion from file header if available
-      if (fileHeader?.balanceDate && fileHeader?.balanceAmount && fileHeader?.balanceCurrency) {
-        try {
-          const accounts = await backend.listAccounts();
-          const acct = accounts.find((a) => a.full_name === mainAccount);
-          if (acct) {
-            await backend.createBalanceAssertion({
-              id: uuidv7(),
-              account_id: acct.id,
-              date: fileHeader.balanceDate,
-              currency: fileHeader.balanceCurrency,
-              expected_balance: fileHeader.balanceAmount,
-              is_passing: true,
-              actual_balance: null,
-              is_strict: false,
-              include_subaccounts: false,
-            });
-            result.balance_assertion_created = true;
+        // Create balance assertion from file header if available
+        if (fileHeaderSnapshot?.balanceDate && fileHeaderSnapshot?.balanceAmount && fileHeaderSnapshot?.balanceCurrency) {
+          try {
+            const accounts = await backend.listAccounts();
+            const acct = accounts.find((a) => a.full_name === mainAccountSnapshot);
+            if (acct) {
+              await backend.createBalanceAssertion({
+                id: uuidv7(),
+                account_id: acct.id,
+                date: fileHeaderSnapshot.balanceDate,
+                currency: fileHeaderSnapshot.balanceCurrency,
+                expected_balance: fileHeaderSnapshot.balanceAmount,
+                is_passing: true,
+                actual_balance: null,
+                is_strict: false,
+                include_subaccounts: false,
+              });
+              result.balance_assertion_created = true;
+            }
+          } catch {
+            // Balance assertion is non-critical
           }
-        } catch {
-          // Balance assertion is non-critical
         }
-      }
+      },
+      rateConfig: {
+        baseCurrency: settings.currency,
+        coingeckoApiKey: settings.coingeckoApiKey,
+        finnhubApiKey: settings.finnhubApiKey,
+        cryptoCompareApiKey: settings.cryptoCompareApiKey,
+        dpriceMode: settings.settings.dpriceMode,
+        dpriceUrl: settings.settings.dpriceUrl,
+      },
+      hiddenCurrencies: getHiddenCurrencySet(),
+    });
 
-      importResult = result;
-      const skipMsg = result.duplicates_skipped > 0 ? `, ${result.duplicates_skipped} duplicates skipped` : "";
-      toast.success(`Imported ${importResult.entries_created} entries${skipMsg}`);
-      if (result.entries_created > 0) invalidate("journal", "accounts", "reports");
-
-      // Auto-backfill missing exchange rates for imported currencies
-      if (result.transaction_currency_dates.length > 0) {
-        enqueueRateBackfill(
-          taskQueue,
-          backend,
-          {
-            baseCurrency: settings.currency,
-            coingeckoApiKey: settings.coingeckoApiKey,
-            finnhubApiKey: settings.finnhubApiKey,
-            cryptoCompareApiKey: settings.cryptoCompareApiKey,
-            dpriceMode: settings.settings.dpriceMode,
-            dpriceUrl: settings.settings.dpriceUrl,
-          },
-          getHiddenCurrencySet(),
-          result.transaction_currency_dates,
-        );
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      importing = false;
+    if (taskId) {
+      toast.info("Import queued");
+      open = false;
+    } else {
+      toast.error("An import is already in progress");
     }
   }
 
@@ -523,7 +513,6 @@
     previewRecords = [];
     previewWarnings = [];
     duplicateFlags = [];
-    importResult = null;
     mlSuggestions = new Map();
     mlAccepted = new Set();
     mlClassifying = false;
@@ -1018,49 +1007,6 @@
     <!-- Step 3: Preview & Import -->
     {#if step === 3}
       <div class="space-y-4">
-        {#if importResult}
-          <!-- Import Results -->
-          <div class="rounded-md border bg-muted/50 p-4 space-y-3">
-            <h4 class="text-sm font-semibold">Import Complete</h4>
-            <div class="grid grid-cols-4 gap-4">
-              <div class="text-center">
-                <p class="text-2xl font-bold">{importResult.entries_created}</p>
-                <p class="text-xs text-muted-foreground">Entries</p>
-              </div>
-              <div class="text-center">
-                <p class="text-2xl font-bold">{importResult.duplicates_skipped}</p>
-                <p class="text-xs text-muted-foreground">Duplicates Skipped</p>
-              </div>
-              <div class="text-center">
-                <p class="text-2xl font-bold">{importResult.accounts_created}</p>
-                <p class="text-xs text-muted-foreground">Accounts Created</p>
-              </div>
-              <div class="text-center">
-                <p class="text-2xl font-bold">{importResult.currencies_created}</p>
-                <p class="text-xs text-muted-foreground">Currencies Created</p>
-              </div>
-            </div>
-            {#if importResult.balance_assertion_created}
-              <p class="text-xs text-green-600 dark:text-green-400">Balance assertion created from file header.</p>
-            {/if}
-            {#if importResult.warnings.length > 0}
-              <div>
-                <h4 class="text-xs font-semibold mb-1">Warnings ({importResult.warnings.length})</h4>
-                <div class="max-h-24 overflow-y-auto space-y-0.5">
-                  {#each importResult.warnings.slice(0, 20) as w}
-                    <p class="text-xs text-muted-foreground">{w}</p>
-                  {/each}
-                  {#if importResult.warnings.length > 20}
-                    <p class="text-xs text-muted-foreground">... and {importResult.warnings.length - 20} more</p>
-                  {/if}
-                </div>
-              </div>
-            {/if}
-            <div class="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onclick={() => { open = false; }}>Close</Button>
-            </div>
-          </div>
-        {:else}
           <!-- Preview -->
           <div class="flex items-center justify-between">
             <p class="text-sm">
@@ -1204,11 +1150,10 @@
 
           <div class="flex justify-between">
             <Button variant="outline" onclick={() => { step = 2; }}>Back</Button>
-            <Button onclick={doImport} disabled={importing || nonDuplicateCount === 0}>
-              {importing ? "Importing..." : `Import ${nonDuplicateCount} entries`}
+            <Button onclick={doImport} disabled={taskQueue.isActive("csv-import") || nonDuplicateCount === 0}>
+              {taskQueue.isActive("csv-import") ? "Importing..." : `Import ${nonDuplicateCount} entries`}
             </Button>
           </div>
-        {/if}
       </div>
     {/if}
   </Dialog.Content>

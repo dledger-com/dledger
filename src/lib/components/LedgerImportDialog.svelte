@@ -15,7 +15,6 @@
     enqueueRateBackfill,
   } from "$lib/exchange-rate-historical.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
-  import type { LedgerImportResult } from "$lib/types/index.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
@@ -38,8 +37,6 @@
   let fileContent = $state("");
   let fileName = $state<string | null>(null);
   let fileCount = $state(0);
-  let submitting = $state(false);
-  let result = $state<LedgerImportResult | null>(null);
   let formatOverride = $state<LedgerFormat | null>(null);
 
   let detectedFormat = $derived<LedgerFormat | null>(
@@ -106,46 +103,62 @@
     }
   }
 
-  async function handleImport() {
+  function handleImport() {
     if (!fileContent.trim()) {
       toast.error("No ledger data to import");
       return;
     }
 
-    submitting = true;
-    result = null;
+    const contentSnapshot = fileContent;
+    const formatSnapshot = effectiveFormat ?? undefined;
 
-    try {
-      const backend = getBackend();
-      result = await backend.importLedgerFile(fileContent, effectiveFormat ?? undefined);
-      const parts = [`${result.transactions_imported} transaction(s) imported`];
-      if (result.duplicates_skipped > 0) {
-        parts.push(`${result.duplicates_skipped} duplicate(s) skipped`);
-      }
-      toast.success(parts.join(", "));
-      if (result.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+    const taskId = taskQueue.enqueue({
+      key: "ledger-import",
+      label: "Ledger Import",
+      description: "Importing ledger file",
+      run: async (ctx) => {
+        const backend = getBackend();
+        const importResult = await backend.importLedgerFile(contentSnapshot, formatSnapshot, {
+          signal: ctx.signal,
+          onProgress: (p) => ctx.reportProgress(p),
+        });
+        const parts = [`${importResult.transactions_imported} transaction(s) imported`];
+        if (importResult.duplicates_skipped > 0) {
+          parts.push(`${importResult.duplicates_skipped} duplicate(s) skipped`);
+        }
+        toast.success(parts.join(", "));
+        if (importResult.transactions_imported > 0) invalidate("journal", "accounts", "reports");
 
-      // Auto-backfill missing exchange rates for imported currencies
-      if (result.transaction_currency_dates && result.transaction_currency_dates.length > 0) {
-        enqueueRateBackfill(
-          taskQueue,
-          backend,
-          {
-            baseCurrency: settings.currency,
-            coingeckoApiKey: settings.coingeckoApiKey,
-            finnhubApiKey: settings.finnhubApiKey,
-            cryptoCompareApiKey: settings.cryptoCompareApiKey,
-            dpriceMode: settings.settings.dpriceMode,
-            dpriceUrl: settings.settings.dpriceUrl,
-          },
-          getHiddenCurrencySet(),
-          result.transaction_currency_dates,
-        );
-      }
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      submitting = false;
+        // Auto-backfill missing exchange rates for imported currencies
+        if (importResult.transaction_currency_dates && importResult.transaction_currency_dates.length > 0) {
+          enqueueRateBackfill(
+            taskQueue,
+            backend,
+            {
+              baseCurrency: settings.currency,
+              coingeckoApiKey: settings.coingeckoApiKey,
+              finnhubApiKey: settings.finnhubApiKey,
+              cryptoCompareApiKey: settings.cryptoCompareApiKey,
+              dpriceMode: settings.settings.dpriceMode,
+              dpriceUrl: settings.settings.dpriceUrl,
+            },
+            getHiddenCurrencySet(),
+            importResult.transaction_currency_dates,
+          );
+        }
+
+        return {
+          summary: parts.join(", "),
+          data: importResult,
+        };
+      },
+    });
+
+    if (taskId) {
+      toast.info("Import queued");
+      open = false;
+    } else {
+      toast.error("An import is already in progress");
     }
   }
 
@@ -153,7 +166,6 @@
     fileContent = "";
     fileName = null;
     fileCount = 0;
-    result = null;
     formatOverride = null;
   }
 
@@ -187,7 +199,6 @@
     </Dialog.Header>
 
     <div class="space-y-4">
-      {#if !result}
         <!-- File picker -->
         <div class="flex items-center gap-4">
           <label
@@ -252,59 +263,12 @@
         <div class="flex justify-end">
           <Button
             onclick={handleImport}
-            disabled={submitting || !fileContent.trim()}
+            disabled={taskQueue.isActive("ledger-import") || !fileContent.trim()}
           >
             <Upload class="mr-2 h-4 w-4" />
-            {submitting ? "Importing..." : "Import"}
+            {taskQueue.isActive("ledger-import") ? "Importing..." : "Import"}
           </Button>
         </div>
-      {:else}
-        <!-- Import Results -->
-        <div class="rounded-md border bg-muted/50 p-4 space-y-3">
-          <h4 class="text-sm font-semibold">Import Complete</h4>
-          <div class="grid grid-cols-2 gap-4 sm:grid-cols-5">
-            <div class="text-center">
-              <p class="text-2xl font-bold">{result.accounts_created}</p>
-              <p class="text-xs text-muted-foreground">Accounts</p>
-            </div>
-            <div class="text-center">
-              <p class="text-2xl font-bold">{result.currencies_created}</p>
-              <p class="text-xs text-muted-foreground">Currencies</p>
-            </div>
-            <div class="text-center">
-              <p class="text-2xl font-bold">{result.transactions_imported}</p>
-              <p class="text-xs text-muted-foreground">Transactions</p>
-            </div>
-            <div class="text-center">
-              <p class="text-2xl font-bold">{result.prices_imported}</p>
-              <p class="text-xs text-muted-foreground">Prices</p>
-            </div>
-            <div class="text-center">
-              <p class="text-2xl font-bold">{result.duplicates_skipped}</p>
-              <p class="text-xs text-muted-foreground">Duplicates Skipped</p>
-            </div>
-          </div>
-
-          {#if result.warnings.length > 0}
-            <div>
-              <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-                Warnings ({result.warnings.length})
-              </p>
-              <ul class="mt-1 max-h-40 overflow-y-auto text-xs text-muted-foreground">
-                {#each result.warnings as warning}
-                  <li class="py-0.5">{warning}</li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-
-          <div class="flex justify-end gap-2">
-            <Button variant="outline" size="sm" href="/journal">View Journal</Button>
-            <Button variant="outline" size="sm" href="/accounts">View Accounts</Button>
-            <Button variant="outline" size="sm" onclick={() => { open = false; }}>Close</Button>
-          </div>
-        </div>
-      {/if}
     </div>
   </Dialog.Content>
 </Dialog.Root>

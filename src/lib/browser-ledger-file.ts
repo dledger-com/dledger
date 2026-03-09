@@ -103,10 +103,16 @@ function parseDecimal(s: string): Decimal {
 
 // ---- Import ----
 
+export interface LedgerImportOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: { current: number; total: number; message?: string }) => void;
+}
+
 export async function importLedger(
   backend: Backend,
   content: string,
   format?: LedgerFormat,
+  options?: LedgerImportOptions,
 ): Promise<LedgerImportResult> {
   const fmt = format ?? detectFormat(content);
 
@@ -1076,8 +1082,14 @@ export async function importLedger(
   const lines = content.split("\n");
   let i = 0;
   let inBlockComment = false;
+  const totalLines = lines.length;
+  options?.onProgress?.({ current: 0, total: totalLines, message: "Importing ledger..." });
 
   while (i < lines.length) {
+    if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
+    if (i % 50 === 0) {
+      options?.onProgress?.({ current: i, total: totalLines, message: "Importing ledger..." });
+    }
     const line = lines[i];
     const trimmed = line.trim();
 

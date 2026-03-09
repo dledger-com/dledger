@@ -3554,11 +3554,11 @@ PRAGMA foreign_keys = ON;
 
   // ---- Backend: Ledger file import/export ----
 
-  async importLedgerFile(content: string, format?: import("./ledger-format.js").LedgerFormat): Promise<LedgerImportResult> {
+  async importLedgerFile(content: string, format?: import("./ledger-format.js").LedgerFormat, options?: import("./browser-ledger-file.js").LedgerImportOptions): Promise<LedgerImportResult> {
     const { importLedger } = await import("./browser-ledger-file.js");
     this.beginTransaction();
     try {
-      const result = await importLedger(this, content, format);
+      const result = await importLedger(this, content, format, options);
       this.commitTransaction();
       return result;
     } catch (e) {

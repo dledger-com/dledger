@@ -21,6 +21,7 @@ import type {
 } from "./types/index.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
+import type { LedgerImportOptions } from "./browser-ledger-file.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
 
 export interface Reconciliation {
@@ -143,7 +144,7 @@ export interface Backend {
   getCurrencyDateRequirements?(baseCurrency: string): Promise<CurrencyDateRequirement[]>;
 
   // Ledger file import/export
-  importLedgerFile(content: string, format?: LedgerFormat): Promise<LedgerImportResult>;
+  importLedgerFile(content: string, format?: LedgerFormat, options?: LedgerImportOptions): Promise<LedgerImportResult>;
   exportLedgerFile(format?: LedgerFormat): Promise<string>;
 
   // Etherscan
