@@ -36,7 +36,7 @@
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
 
   async function generate() {
-    await store.loadIncomeStatement(fromDate, toDate);
+    await store.enqueueIncomeStatement(fromDate, toDate);
     if (convertToBase && store.incomeStatement) {
       await runConversion();
     }

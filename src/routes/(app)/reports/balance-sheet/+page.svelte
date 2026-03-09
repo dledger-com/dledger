@@ -36,7 +36,7 @@
   let missingRateRequests = $state<HistoricalRateRequest[]>([]);
 
   async function generate() {
-    await store.loadBalanceSheet(asOf);
+    await store.enqueueBalanceSheet(asOf);
     if (convertToBase && store.balanceSheet) {
       await runConversion();
     }

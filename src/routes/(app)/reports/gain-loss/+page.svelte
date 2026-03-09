@@ -70,7 +70,7 @@
 
   async function generate() {
     generated = false;
-    await reportStore.loadGainLossReport(fromDate, toDate);
+    await reportStore.enqueueGainLossReport(fromDate, toDate);
     generated = true;
   }
 

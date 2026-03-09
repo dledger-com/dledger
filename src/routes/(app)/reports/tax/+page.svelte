@@ -10,6 +10,7 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { computeTaxSummary, computeTaxYearDates, type TaxSummary } from "$lib/utils/tax-summary.js";
   import { exportTaxSummaryCsv } from "$lib/utils/csv-export.js";
+  import { taskQueue } from "$lib/task-queue.svelte.js";
   import Download from "lucide-svelte/icons/download";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
@@ -62,18 +63,33 @@
     loading = true;
     error = null;
     summary = null;
-    try {
-      summary = await computeTaxSummary(getBackend(), {
-        fromDate,
-        toDate,
-        holdingPeriodDays,
-        baseCurrency: settings.currency,
+    return new Promise<void>((resolve) => {
+      const id = taskQueue.enqueue({
+        key: `report:tax:${fromDate}:${toDate}`,
+        label: "Tax Summary",
+        description: `${fromDate} to ${toDate}`,
+        run: async () => {
+          try {
+            summary = await computeTaxSummary(getBackend(), {
+              fromDate,
+              toDate,
+              holdingPeriodDays,
+              baseCurrency: settings.currency,
+            });
+          } catch (e) {
+            error = e instanceof Error ? e.message : String(e);
+          } finally {
+            loading = false;
+            resolve();
+          }
+          return { summary: "Tax summary generated" };
+        },
       });
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
+      if (id === null) {
+        loading = false;
+        resolve();
+      }
+    });
   }
 </script>
 

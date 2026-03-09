@@ -31,7 +31,7 @@
   };
 
   async function generate() {
-    await store.loadTrialBalance(asOf);
+    await store.enqueueTrialBalance(asOf);
   }
 
   onMount(generate);

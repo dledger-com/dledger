@@ -20,6 +20,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { taskQueue } from "$lib/task-queue.svelte.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
   import TaxSummaryBanner from "./TaxSummaryBanner.svelte";
@@ -138,7 +139,7 @@
     missingRateRequests = [];
     staleWarning = null;
 
-    // Save initial acquisition cost to settings
+    // Save initial acquisition cost to settings (sync, fine outside task)
     if (initialAcquisitionCost !== (settings.settings.frenchTax?.initialAcquisitionCost ?? "0")) {
       settings.update({
         frenchTax: {
@@ -148,39 +149,59 @@
       });
     }
 
-    try {
-      report = await computeFrenchTaxReport(getBackend(), {
-        taxYear,
-        priorAcquisitionCost: effectivePriorCost,
-        fiatCurrencies: settings.settings.frenchTax?.fiatCurrencies,
+    const capturedYear = taxYear;
+    const capturedPriorCost = effectivePriorCost;
+    const capturedFiatCurrencies = settings.settings.frenchTax?.fiatCurrencies;
+    const capturedInitialCost = initialAcquisitionCost;
+
+    return new Promise<void>((resolve) => {
+      const id = taskQueue.enqueue({
+        key: `report:tax-fr:${capturedYear}`,
+        label: "French Tax Report",
+        description: `Year ${capturedYear}`,
+        run: async () => {
+          try {
+            report = await computeFrenchTaxReport(getBackend(), {
+              taxYear: capturedYear,
+              priorAcquisitionCost: capturedPriorCost,
+              fiatCurrencies: capturedFiatCurrencies,
+            });
+
+            // Auto-save to DB
+            await getBackend().saveFrenchTaxReport(capturedYear, report);
+            await loadChainData();
+            savedReport = await getBackend().getFrenchTaxReport(capturedYear);
+
+            // Check for stale downstream reports
+            const nextYearReport = await getBackend().getFrenchTaxReport(capturedYear + 1);
+            if (nextYearReport) {
+              const nextResolved = resolvePriorAcquisitionCost(capturedYear + 1, capturedInitialCost, chainData);
+              if (nextResolved.source === "chained" && nextResolved.value !== nextYearReport.report.dispositions?.[0]?.acquisitionCostBefore) {
+                staleWarning = `The ${capturedYear + 1} report may be stale — its prior acquisition cost differs from the new ${capturedYear} final value. Consider regenerating it.`;
+              }
+            }
+
+            if (report.missingCurrencyDates.length > 0) {
+              missingRateRequests = await findMissingRates(
+                getBackend(),
+                "EUR",
+                report.missingCurrencyDates,
+              );
+            }
+          } catch (e) {
+            error = e instanceof Error ? e.message : String(e);
+          } finally {
+            loading = false;
+            resolve();
+          }
+          return { summary: `French tax report for ${capturedYear} generated` };
+        },
       });
-
-      // Auto-save to DB
-      await getBackend().saveFrenchTaxReport(taxYear, report);
-      await loadChainData();
-      savedReport = await getBackend().getFrenchTaxReport(taxYear);
-
-      // Check for stale downstream reports
-      const nextYearReport = await getBackend().getFrenchTaxReport(taxYear + 1);
-      if (nextYearReport) {
-        const nextResolved = resolvePriorAcquisitionCost(taxYear + 1, initialAcquisitionCost, chainData);
-        if (nextResolved.source === "chained" && nextResolved.value !== nextYearReport.report.dispositions?.[0]?.acquisitionCostBefore) {
-          staleWarning = `The ${taxYear + 1} report may be stale — its prior acquisition cost differs from the new ${taxYear} final value. Consider regenerating it.`;
-        }
+      if (id === null) {
+        loading = false;
+        resolve();
       }
-
-      if (report.missingCurrencyDates.length > 0) {
-        missingRateRequests = await findMissingRates(
-          getBackend(),
-          "EUR",
-          report.missingCurrencyDates,
-        );
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
+    });
   }
 
   async function deleteReport() {
@@ -198,24 +219,39 @@
 
   async function generateAllMissing() {
     generatingAll = true;
-    try {
-      for (const year of missingYears) {
-        const r = resolvePriorAcquisitionCost(year, initialAcquisitionCost, chainData);
-        const rpt = await computeFrenchTaxReport(getBackend(), {
-          taxYear: year,
-          priorAcquisitionCost: r.value,
-          fiatCurrencies: settings.settings.frenchTax?.fiatCurrencies,
-        });
-        await getBackend().saveFrenchTaxReport(year, rpt);
-        await loadChainData();
-      }
-      // Reload current year
-      await loadSavedReport();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      generatingAll = false;
-    }
+    const years = [...missingYears];
+    const capturedFiatCurrencies = settings.settings.frenchTax?.fiatCurrencies;
+    const capturedInitialCost = initialAcquisitionCost;
+
+    return new Promise<void>((resolve) => {
+      taskQueue.enqueue({
+        key: `report:tax-fr:all-missing`,
+        label: "French Tax Reports",
+        description: `Generating ${years.length} missing years`,
+        run: async (ctx) => {
+          try {
+            for (const year of years) {
+              if (ctx.signal.aborted) break;
+              const r = resolvePriorAcquisitionCost(year, capturedInitialCost, chainData);
+              const rpt = await computeFrenchTaxReport(getBackend(), {
+                taxYear: year,
+                priorAcquisitionCost: r.value,
+                fiatCurrencies: capturedFiatCurrencies,
+              });
+              await getBackend().saveFrenchTaxReport(year, rpt);
+              await loadChainData();
+            }
+            await loadSavedReport();
+          } catch (e) {
+            error = e instanceof Error ? e.message : String(e);
+          } finally {
+            generatingAll = false;
+            resolve();
+          }
+          return { summary: `Generated ${years.length} missing reports` };
+        },
+      });
+    });
   }
 
   let mounted = $state(false);
