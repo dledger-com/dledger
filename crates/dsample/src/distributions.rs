@@ -198,6 +198,12 @@ pub fn random_links(rng: &mut StdRng, prefixes: &[&str]) -> Vec<String> {
     }
 }
 
+pub const FREELANCE_CLIENTS: &[&str] = &[
+    "Acme Consulting", "TechCorp", "Freelance.com", "Upwork Project",
+    "DataViz Ltd", "WebDev Agency", "StrategyOne", "InnoSoft",
+    "CloudNine Solutions", "PixelCraft Studio",
+];
+
 pub const EXCHANGE_DESCRIPTIONS: &[&str] = &[
     "Buy BTC", "Sell BTC", "Buy ETH", "Sell ETH",
     "Buy SOL", "Sell SOL", "Deposit EUR", "Withdraw EUR",

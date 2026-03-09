@@ -31,12 +31,16 @@ impl ScenarioGenerator for PersonalGenerator {
             "EUR",
         ));
 
-        // Activity profile for temporal variation (peaks and valleys)
-        let profile = ActivityProfile::new(rng, start, end);
+        // Separate activity profiles for income and expenses — independent random
+        // weights mean income peaks land in different windows than expense peaks,
+        // creating visible periods where one dominates the other.
+        let expense_profile = ActivityProfile::new(rng, start, end);
+        let income_profile = ActivityProfile::new(rng, start, end);
 
         // Weights: salary=1, rent=1, groceries=15, restaurants=10, transport=8,
-        //          subscriptions=2, shopping=5, utilities=1, health=2, entertainment=3
-        let weights = [1.0, 1.0, 15.0, 10.0, 8.0, 2.0, 5.0, 1.0, 2.0, 3.0];
+        //          subscriptions=2, shopping=5, utilities=1, health=2, entertainment=3,
+        //          freelance=6, interest=2
+        let weights = [1.0, 1.0, 15.0, 10.0, 8.0, 2.0, 5.0, 1.0, 2.0, 3.0, 6.0, 2.0];
 
         // Pick a fixed salary amount and rent amount for consistency
         let salary_amount = rng.gen_range(3000.0..6000.0);
@@ -74,7 +78,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 15.0, 200.0, 50.0);
                     let desc = pick(rng, distributions::GROCERY_STORES);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_GROCERIES,
@@ -87,7 +91,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 12.0, 120.0, 30.0);
                     let desc = pick(rng, distributions::RESTAURANTS);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_RESTAURANTS,
@@ -100,7 +104,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 1.5, 80.0, 15.0);
                     let desc = pick(rng, distributions::TRANSPORT);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_TRANSPORT,
@@ -113,7 +117,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 5.0, 50.0, 12.0);
                     let desc = pick(rng, distributions::SUBSCRIPTIONS);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_SUBSCRIPTIONS,
@@ -126,7 +130,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 10.0, 500.0, 60.0);
                     let desc = pick(rng, distributions::SHOPPING);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_SHOPPING,
@@ -153,7 +157,7 @@ impl ScenarioGenerator for PersonalGenerator {
                     let amount = triangular(rng, 15.0, 300.0, 50.0);
                     let desc = pick(rng, distributions::HEALTH);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_HEALTH,
@@ -161,15 +165,40 @@ impl ScenarioGenerator for PersonalGenerator {
                         "EUR",
                     )
                 }
-                _ => {
+                9 => {
                     // Entertainment
                     let amount = triangular(rng, 8.0, 100.0, 25.0);
                     let desc = pick(rng, distributions::ENTERTAINMENT);
                     simple_entry(
-                        profile.pick_date(rng),
+                        expense_profile.pick_date(rng),
                         desc,
                         accounts::BANK_CHECKING,
                         accounts::EXPENSES_ENTERTAINMENT,
+                        to_decimal(amount, 2),
+                        "EUR",
+                    )
+                }
+                10 => {
+                    // Freelance income
+                    let amount = triangular(rng, 200.0, 3000.0, 800.0);
+                    let desc = pick(rng, distributions::FREELANCE_CLIENTS);
+                    simple_entry(
+                        income_profile.pick_date(rng),
+                        desc,
+                        accounts::INCOME_FREELANCE,
+                        accounts::BANK_CHECKING,
+                        to_decimal(amount, 2),
+                        "EUR",
+                    )
+                }
+                _ => {
+                    // Interest / dividends
+                    let amount = triangular(rng, 5.0, 200.0, 30.0);
+                    simple_entry(
+                        income_profile.pick_date(rng),
+                        "Interest / dividends",
+                        accounts::INCOME_INTEREST,
+                        accounts::BANK_CHECKING,
                         to_decimal(amount, 2),
                         "EUR",
                     )
@@ -184,6 +213,8 @@ impl ScenarioGenerator for PersonalGenerator {
                     entry.tags = vec!["subscription".to_string(), "recurring".to_string()];
                 }
                 7 => entry.tags = vec!["utilities".to_string(), "recurring".to_string()],
+                10 => entry.tags = vec!["freelance".to_string()],
+                11 => entry.tags = vec!["interest".to_string()],
                 _ => entry.tags = random_tags(rng, TAG_POOL),
             }
             entry.links = random_links(rng, LINK_PREFIXES);
