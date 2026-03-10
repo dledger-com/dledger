@@ -23,9 +23,8 @@
                 class="h-7 px-2 text-xs"
                 onpointerdown={(e: PointerEvent) => {
                     e.stopPropagation();
-                    importDrop.closeCurrentDialog();
+                    importDrop.skipFile();
                 }}
-                onclick={() => importDrop.closeCurrentDialog()}
             >
                 <SkipForward class="mr-1 h-3 w-3" /> Skip
             </Button>
@@ -37,7 +36,6 @@
                     e.stopPropagation();
                     importDrop.cancelBatch();
                 }}
-                onclick={() => importDrop.cancelBatch()}
             >
                 <XCircle class="mr-1 h-3 w-3" /> Cancel All
             </Button>

@@ -33,6 +33,7 @@ class ImportDropStore {
     _queueTotal = $state(0);
     private _advancing = false; // plain boolean — not reactive to avoid effect loops
     private _cancelled = false;
+    private _skippedCount = 0;
     batchActive = $derived(this._queueTotal > 1 && this._queueIndex <= this._queueTotal);
 
     get batchIndex(): number {
@@ -177,6 +178,7 @@ class ImportDropStore {
         } else {
             // Start new batch
             this._cancelled = false;
+            this._skippedCount = 0;
             this._queue = expanded;
             this._queueTotal = expanded.length;
             this._queueIndex = 0;
@@ -194,6 +196,7 @@ class ImportDropStore {
         if (this._cancelled) {
             this._queueTotal = 0;
             this._queueIndex = 0;
+            this._skippedCount = 0;
             return;
         }
         if (this._queue.length > 0) {
@@ -204,14 +207,18 @@ class ImportDropStore {
         }
         // Queue empty — reset batch state if a batch was active
         if (this._queueTotal > 1) {
-            const idx = this._queueIndex;
-            const total = this._queueTotal;
+            const imported = this._queueIndex - this._skippedCount;
+            const parts: string[] = [];
+            if (imported > 0) parts.push(`${imported} imported`);
+            if (this._skippedCount > 0) parts.push(`${this._skippedCount} skipped`);
             this._queueTotal = 0;
             this._queueIndex = 0;
-            toast.info(`Batch import complete: ${idx} of ${total} files processed`);
+            this._skippedCount = 0;
+            toast.info(`Batch import complete: ${parts.join(", ")}`);
         } else if (this._queueTotal > 0) {
             this._queueTotal = 0;
             this._queueIndex = 0;
+            this._skippedCount = 0;
         }
     }
 
@@ -237,12 +244,15 @@ class ImportDropStore {
             // Queue exhausted without opening a dialog — reset immediately
             if (this._cancelled) return;
             if (this._queueTotal > 1) {
-                toast.info(
-                    `Batch import complete: ${this._queueIndex} of ${this._queueTotal} files processed`,
-                );
+                const imported = this._queueIndex - this._skippedCount;
+                const parts: string[] = [];
+                if (imported > 0) parts.push(`${imported} imported`);
+                if (this._skippedCount > 0) parts.push(`${this._skippedCount} skipped`);
+                toast.info(`Batch import complete: ${parts.join(", ")}`);
             }
             this._queueTotal = 0;
             this._queueIndex = 0;
+            this._skippedCount = 0;
         } finally {
             this._advancing = false;
         }
@@ -253,16 +263,31 @@ class ImportDropStore {
      */
     cancelBatch(): void {
         if (this._cancelled) return;
+        const openDialogCount = this.anyDialogOpen ? 1 : 0;
+        const remaining = this._queue.length + openDialogCount;
+        const imported = this._queueIndex - this._skippedCount - openDialogCount;
+        const parts: string[] = [`${remaining} cancelled`];
+        if (imported > 0) parts.push(`${imported} imported`);
+        if (this._skippedCount > 0) parts.push(`${this._skippedCount} skipped`);
         this._queue = [];
         this._cancelled = true;
+        this._skippedCount = 0;
         this._queueTotal = 0;
         this._queueIndex = 0;
         this.closeCurrentDialog();
-        toast.info("Batch import cancelled");
+        toast.info(`Batch import: ${parts.join(", ")}`);
     }
 
     /**
-     * Close the currently open dialog (used by Skip button).
+     * Skip the current file (increments skip counter) then close the dialog.
+     */
+    skipFile(): void {
+        this._skippedCount++;
+        this.closeCurrentDialog();
+    }
+
+    /**
+     * Close the currently open dialog.
      */
     closeCurrentDialog(): void {
         if (this.csvOpen) this.csvOpen = false;
