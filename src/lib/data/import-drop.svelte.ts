@@ -189,8 +189,21 @@ class ImportDropStore {
      * mutating reactive state synchronously inside an effect.
      */
     scheduleAdvance(): void {
-        if (this._queue.length === 0) return;
-        queueMicrotask(() => this.advanceQueue());
+        if (this._queue.length > 0) {
+            queueMicrotask(() => this.advanceQueue());
+            return;
+        }
+        // Queue empty — reset batch state if a batch was active
+        if (this._queueTotal > 1) {
+            const idx = this._queueIndex;
+            const total = this._queueTotal;
+            this._queueTotal = 0;
+            this._queueIndex = 0;
+            toast.info(`Batch import complete: ${idx} of ${total} files processed`);
+        } else if (this._queueTotal > 0) {
+            this._queueTotal = 0;
+            this._queueIndex = 0;
+        }
     }
 
     /**
