@@ -352,7 +352,6 @@
     });
 
     if (taskId) {
-      toast.info("Import queued");
       open = false;
     } else {
       toast.error("An import is already in progress");
