@@ -23,13 +23,10 @@
     import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
     import X from "lucide-svelte/icons/x";
     import Pencil from "lucide-svelte/icons/pencil";
-    import { readFileAsText } from "$lib/utils/read-file-text.js";
-    import { unzipSync, strFromU8 } from "fflate";
-    import { filterLedgerFiles, resolveIncludes } from "$lib/ledger-include.js";
-    import { detectImportTarget } from "$lib/import-detect.js";
     import {
         enqueueRateBackfill,
     } from "$lib/exchange-rate-historical.js";
+    import { importDrop } from "$lib/data/import-drop.svelte.js";
     import type { ChainInfo, EtherscanAccount } from "$lib/types/index.js";
     import { SUPPORTED_CHAINS } from "$lib/types/index.js";
     import {
@@ -48,117 +45,12 @@
     } from "$lib/cex/index.js";
     import { taskQueue } from "$lib/task-queue.svelte.js";
     import Link2 from "lucide-svelte/icons/link-2";
-    import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
-    import OfxImportDialog from "$lib/components/OfxImportDialog.svelte";
-    import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
-    import LedgerImportDialog from "$lib/components/LedgerImportDialog.svelte";
     import SortableHeader from "$lib/components/SortableHeader.svelte";
     import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
     import AddSourceInput from "$lib/components/AddSourceInput.svelte";
     import type { ExchangeId } from "$lib/cex/types.js";
 
-    let csvDialogOpen = $state(false);
-    let csvInitialContent = $state("");
-    let csvInitialFileName = $state("");
-
-    let ofxDialogOpen = $state(false);
-    let ofxInitialContent = $state("");
-    let ofxInitialFileName = $state("");
-
-    let pdfDialogOpen = $state(false);
-    let pdfInitialFile = $state<File | null>(null);
-    let pdfInitialFileName = $state("");
-
-    let ledgerDialogOpen = $state(false);
-    let ledgerInitialContent = $state("");
-    let ledgerInitialFileName = $state("");
-
-    let importDragCounter = $state(0);
-    let dragging = $derived(importDragCounter > 0);
     let fileInputEl = $state<HTMLInputElement | null>(null);
-
-    // Clear initial content when dialogs close
-    $effect(() => {
-        if (!ledgerDialogOpen) {
-            ledgerInitialContent = "";
-            ledgerInitialFileName = "";
-        }
-    });
-
-    $effect(() => {
-        if (!csvDialogOpen) {
-            csvInitialContent = "";
-            csvInitialFileName = "";
-        }
-    });
-
-    $effect(() => {
-        if (!ofxDialogOpen) {
-            ofxInitialContent = "";
-            ofxInitialFileName = "";
-        }
-    });
-
-    $effect(() => {
-        if (!pdfDialogOpen) {
-            pdfInitialFile = null;
-            pdfInitialFileName = "";
-        }
-    });
-
-    async function routeFile(file: File) {
-        const result = await detectImportTarget(file);
-        if (!result) {
-            toast.error("Unsupported file format");
-            return;
-        }
-
-        switch (result.target) {
-            case "csv":
-                csvInitialContent = result.text ?? await readFileAsText(file);
-                csvInitialFileName = file.name;
-                csvDialogOpen = true;
-                break;
-            case "ofx":
-                ofxInitialContent = result.text ?? await readFileAsText(file);
-                ofxInitialFileName = file.name;
-                ofxDialogOpen = true;
-                break;
-            case "pdf":
-                pdfInitialFile = file;
-                pdfInitialFileName = file.name;
-                pdfDialogOpen = true;
-                break;
-            case "ledger":
-                if (result.bytes && file.name.toLowerCase().endsWith(".zip")) {
-                    try {
-                        const entries = unzipSync(result.bytes);
-                        const fileMap = new Map<string, string>();
-                        for (const [name, data] of Object.entries(entries)) {
-                            fileMap.set(name, strFromU8(data));
-                        }
-                        const ledgerFiles = filterLedgerFiles(fileMap);
-                        if (ledgerFiles.length === 0) {
-                            toast.error("No ledger files found in archive");
-                            return;
-                        }
-                        const parts: string[] = [];
-                        for (const [, content] of ledgerFiles) {
-                            parts.push(resolveIncludes(content, fileMap));
-                        }
-                        ledgerInitialContent = parts.join("\n\n");
-                    } catch (err) {
-                        toast.error(`Failed to read zip: ${err}`);
-                        return;
-                    }
-                } else {
-                    ledgerInitialContent = result.text ?? await readFileAsText(file);
-                }
-                ledgerInitialFileName = file.name;
-                ledgerDialogOpen = true;
-                break;
-        }
-    }
 
     function handleImportClick() {
         fileInputEl?.click();
@@ -167,20 +59,8 @@
     async function handleFileInputChange(e: Event) {
         const input = e.target as HTMLInputElement;
         const file = input.files?.[0];
-        if (file) await routeFile(file);
+        if (file) await importDrop.routeFile(file);
         input.value = "";
-    }
-
-    async function handleFileDrop(e: DragEvent) {
-        e.preventDefault();
-        importDragCounter = 0;
-        const files = e.dataTransfer?.files;
-        if (!files || files.length === 0) return;
-        if (files.length > 1) {
-            toast.error("Please drop only one file at a time");
-            return;
-        }
-        await routeFile(files[0]);
     }
 
     const handlerRegistry = getDefaultRegistry();
@@ -816,22 +696,7 @@
 
 <div class="space-y-6">
     <!-- Import Files -->
-    <Card.Root
-        class={dragging
-            ? "outline-2 outline-dashed outline-primary -outline-offset-2 bg-accent/50 transition-colors"
-            : "transition-colors"}
-        ondragenter={(e: DragEvent) => {
-            e.preventDefault();
-            importDragCounter++;
-        }}
-        ondragover={(e: DragEvent) => {
-            e.preventDefault();
-        }}
-        ondragleave={() => {
-            importDragCounter--;
-        }}
-        ondrop={handleFileDrop}
-    >
+    <Card.Root>
         <Card.Header>
             <Card.Title>Import Files</Card.Title>
             <Card.Description>
@@ -873,35 +738,9 @@
                     class="hidden"
                     onchange={handleFileInputChange}
                 />
-                {#if dragging}
-                    <p class="text-sm text-muted-foreground">
-                        Drop file to import...
-                    </p>
-                {/if}
             </div>
         </Card.Content>
     </Card.Root>
-
-    <LedgerImportDialog
-        bind:open={ledgerDialogOpen}
-        initialContent={ledgerInitialContent}
-        initialFileName={ledgerInitialFileName}
-    />
-    <CsvImportDialog
-        bind:open={csvDialogOpen}
-        initialContent={csvInitialContent}
-        initialFileName={csvInitialFileName}
-    />
-    <OfxImportDialog
-        bind:open={ofxDialogOpen}
-        initialContent={ofxInitialContent}
-        initialFileName={ofxInitialFileName}
-    />
-    <PdfImportDialog
-        bind:open={pdfDialogOpen}
-        initialFile={pdfInitialFile}
-        initialFileName={pdfInitialFileName}
-    />
 
     <!-- Online Sources -->
     <Card.Root>
