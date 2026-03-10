@@ -2262,7 +2262,7 @@
             <div class="relative flex-1 min-h-0 flex flex-col">
                 <div
                     bind:this={scrollEl}
-                    class="overflow-y-auto flex-1 min-h-0 [&_[data-slot=table-container]]:overflow-visible"
+                    class="overflow-y-auto overflow-x-hidden flex-1 min-h-0 [&_[data-slot=table-container]]:overflow-visible"
                 >
                     <Table.Root class="border-separate border-spacing-0 [&_tr]:border-0 [&_td]:border-b [&_th]:border-b [&_tr:last-child_td]:border-b-0 [&_tr:last-child]:border-b-0">
                         <Table.Header class="sticky top-0 z-10 bg-background">
@@ -2521,7 +2521,7 @@
                                                         >
                                                             <a
                                                                 href="/journal/{entry.id}"
-                                                                class="font-medium hover:underline truncate"
+                                                                class="font-medium hover:underline truncate max-w-md"
                                                                 title={entry.description}
                                                                 >{entry.description}</a
                                                             >
