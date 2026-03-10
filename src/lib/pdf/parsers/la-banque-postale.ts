@@ -182,11 +182,13 @@ export function parseLbpStatement(pages: PdfPage[]): PdfStatement {
     const year = resolveYear(raw.month, openingYear, closingYear, openingDate, closingDate);
     const mm = String(raw.month).padStart(2, "0");
     const dd = String(raw.day).padStart(2, "0");
+    const { description, metadata } = extractLbpMetadata(raw.descParts.join(" "));
     return {
       date: `${year}-${mm}-${dd}`,
-      description: raw.descParts.join(" "),
+      description,
       amount: raw.amount!,
       index: idx,
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     };
   });
 
@@ -343,6 +345,120 @@ function extractIban(pages: PdfPage[]): string | null {
     }
   }
   return null;
+}
+
+// ─── Metadata extraction ────────────────────────────────────────────────────
+
+interface LbpKeyword {
+  pattern: RegExp;
+  type: string;
+}
+
+/**
+ * Keyword table for LBP transaction types. Order matters:
+ * - REMISE CHEQUE before CHEQUE
+ * - VIREMENT EN FAVEUR DE / VIREMENT POUR before VIREMENT DE
+ */
+const LBP_TX_TYPE_KEYWORDS: LbpKeyword[] = [
+  { pattern: /^REMISE CHEQUE\s*/i, type: "check-deposit" },
+  { pattern: /^ACHAT CB\s*/i, type: "card-purchase" },
+  { pattern: /^RETRAIT DAB\s*/i, type: "atm-withdrawal" },
+  { pattern: /^VIREMENT EN FAVEUR DE\s*/i, type: "transfer-out" },
+  { pattern: /^VIREMENT POUR\s*/i, type: "transfer-out" },
+  { pattern: /^VIREMENT DE\s*/i, type: "transfer-in" },
+  { pattern: /^PRELEVEMENT DE\s*/i, type: "direct-debit" },
+  { pattern: /^CHEQUE N[°\s]/i, type: "check" },
+  { pattern: /^INTERETS ACQUIS\s*/i, type: "interest" },
+  { pattern: /^AVOIR\s*/i, type: "refund" },
+  { pattern: /^COTISATION\s*/i, type: "fee" },
+  { pattern: /^COMMISSION\s*/i, type: "fee" },
+  { pattern: /^FRAIS\s*/i, type: "fee" },
+];
+
+/** Extract card number: CARTE NUMERO 999 or CB*1234 */
+const CARD_NUMBER_RE = /CARTE\s+NUMERO\s+(\d+)/i;
+const CB_STAR_RE = /CB\*(\d{4})/i;
+
+/** Extract operation date: DD.MM.YY or DD/MM or DD.MM */
+const OP_DATE_RE = /(\d{2})[./](\d{2})[./]?(\d{2,4})?/;
+
+/** Extract reference and mandate */
+const REF_RE = /REF(?:ERENCE)?\s*:\s*(\S+)/i;
+const MANDATE_RE = /MAND(?:AT)?\s*:?\s*(\S+)/i;
+
+/** Extract check number */
+const CHECK_NUM_RE = /N[°\s]+(\d+)/i;
+
+/**
+ * Extract structured metadata from an LBP transaction description.
+ * Strips keywords, card numbers, dates, references — returns clean description + metadata.
+ */
+export function extractLbpMetadata(rawDesc: string): { description: string; metadata: Record<string, string> } {
+  const metadata: Record<string, string> = {};
+  let text = rawDesc;
+
+  // Step 1 — Match transaction type keyword
+  for (const kw of LBP_TX_TYPE_KEYWORDS) {
+    const kwMatch = text.match(kw.pattern);
+    if (kwMatch) {
+      metadata["transaction-type"] = kw.type;
+      text = text.slice(kwMatch[0].length);
+      break;
+    }
+  }
+
+  // Step 2 — Extract card number
+  const cardMatch = text.match(CARD_NUMBER_RE);
+  if (cardMatch) {
+    metadata["card-number"] = cardMatch[1];
+    text = text.replace(cardMatch[0], " ");
+  } else {
+    const cbMatch = text.match(CB_STAR_RE);
+    if (cbMatch) {
+      metadata["card-number"] = cbMatch[1];
+      text = text.replace(cbMatch[0], " ");
+    }
+  }
+
+  // Step 3 — Extract operation date (DD.MM.YY or DD/MM)
+  const dateMatch = text.match(OP_DATE_RE);
+  if (dateMatch) {
+    metadata["operation-date"] = `${dateMatch[1]}/${dateMatch[2]}`;
+    text = text.replace(dateMatch[0], " ");
+  }
+
+  // Step 4 — Extract references
+  const refMatch = text.match(REF_RE);
+  if (refMatch) {
+    metadata["reference"] = refMatch[1];
+    text = text.replace(refMatch[0], " ");
+  }
+
+  const mandateMatch = text.match(MANDATE_RE);
+  if (mandateMatch) {
+    metadata["mandate"] = mandateMatch[1];
+    text = text.replace(mandateMatch[0], " ");
+  }
+
+  // Step 5 — Extract check number (for CHEQUE type)
+  // After keyword strip, remaining text may be "° 2676038" or just "2676038"
+  if (metadata["transaction-type"] === "check") {
+    const checkMatch = text.match(/°?\s*(\d+)/);
+    if (checkMatch) {
+      metadata["check-number"] = checkMatch[1];
+      text = text.replace(checkMatch[0], " ");
+    }
+  }
+
+  // Step 6 — Normalize whitespace, trim
+  let description = text.replace(/\s+/g, " ").trim();
+
+  // If empty after stripping, keep original
+  if (!description) {
+    description = rawDesc;
+  }
+
+  return { description, metadata };
 }
 
 function makeEmptyStatement(warnings: string[]): PdfStatement {

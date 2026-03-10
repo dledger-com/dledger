@@ -70,6 +70,7 @@ describe("La Banque Postale integration tests", () => {
     const first = result.transactions[0];
     expect(first.date).toBe("2022-01-31");
     expect(first.description).toContain("TOLLOPERATOR");
+    expect(first.metadata?.["transaction-type"]).toBe("card-purchase");
 
     const last = result.transactions[result.transactions.length - 1];
     expect(last.date).toContain("2022-02");

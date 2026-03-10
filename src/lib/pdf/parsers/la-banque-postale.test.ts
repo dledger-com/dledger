@@ -4,6 +4,7 @@ import {
   detectColumns,
   parseLbpAmount,
   resolveYear,
+  extractLbpMetadata,
 } from "./la-banque-postale.js";
 import type { PdfPage, PdfTextItem, PdfTextLine } from "../types.js";
 
@@ -129,9 +130,12 @@ describe("parseLbpStatement", () => {
 
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].date).toBe("2022-01-31");
-    expect(result.transactions[0].description).toBe("ACHAT CB TOLLOPERATOR EXAMPLE 28.01.22 CARTE NUMERO 999");
+    expect(result.transactions[0].description).toBe("TOLLOPERATOR EXAMPLE");
     expect(result.transactions[0].amount).toBe(-2.2);
     expect(result.transactions[0].index).toBe(0);
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-purchase");
+    expect(result.transactions[0].metadata?.["card-number"]).toBe("336");
+    expect(result.transactions[0].metadata?.["operation-date"]).toBe("28/01");
   });
 
   it("parses credit transaction", () => {
@@ -147,7 +151,9 @@ describe("parseLbpStatement", () => {
 
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].amount).toBe(750);
-    expect(result.transactions[0].description).toContain("VIREMENT DE MLLE JANE DOE");
+    expect(result.transactions[0].description).toContain("MLLE JANE DOE");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("transfer-in");
+    expect(result.transactions[0].metadata?.["reference"]).toBe("0000000000000001");
   });
 
   it("classifies debit vs credit by column position", () => {
@@ -181,9 +187,10 @@ describe("parseLbpStatement", () => {
     const result = parseLbpStatement([page]);
 
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].description).toBe(
-      "PRELEVEMENT DE EXAMPLECARRIER REF : 00000000A EXAMPLECARRIER MANDAT : XXXX-00000",
-    );
+    expect(result.transactions[0].description).toBe("EXAMPLECARRIER EXAMPLECARRIER");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("direct-debit");
+    expect(result.transactions[0].metadata?.["reference"]).toBe("00000000A");
+    expect(result.transactions[0].metadata?.["mandate"]).toBe("XXXX-00000");
   });
 
   it("extracts opening and closing balance", () => {
@@ -355,5 +362,113 @@ describe("parseLbpStatement", () => {
   it("defaults currency to EUR", () => {
     const result = parseLbpStatement([make2022Page([HEADER_2022])]);
     expect(result.currency).toBe("EUR");
+  });
+});
+
+describe("extractLbpMetadata", () => {
+  it("extracts ACHAT CB with merchant, date, and card number", () => {
+    const result = extractLbpMetadata("ACHAT CB TOLLOPERATOR EXAMPLE 28.01.22 CARTE NUMERO 999");
+    expect(result.description).toBe("TOLLOPERATOR EXAMPLE");
+    expect(result.metadata["transaction-type"]).toBe("card-purchase");
+    expect(result.metadata["card-number"]).toBe("336");
+    expect(result.metadata["operation-date"]).toBe("28/01");
+  });
+
+  it("extracts ACHAT CB with CB*XXXX format", () => {
+    const result = extractLbpMetadata("ACHAT CB SUPERMARCHE 15.03 CB*4567");
+    expect(result.description).toBe("SUPERMARCHE");
+    expect(result.metadata["transaction-type"]).toBe("card-purchase");
+    expect(result.metadata["card-number"]).toBe("4567");
+    expect(result.metadata["operation-date"]).toBe("15/03");
+  });
+
+  it("extracts VIREMENT DE with REFERENCE", () => {
+    const result = extractLbpMetadata("VIREMENT DE MLLE JANE DOE loyer loyer REFERENCE : 0000000000000001");
+    expect(result.description).toBe("MLLE JANE DOE loyer loyer");
+    expect(result.metadata["transaction-type"]).toBe("transfer-in");
+    expect(result.metadata["reference"]).toBe("0000000000000001");
+  });
+
+  it("VIREMENT EN FAVEUR DE must not match as VIREMENT DE", () => {
+    const result = extractLbpMetadata("VIREMENT EN FAVEUR DE JOHN DOE");
+    expect(result.metadata["transaction-type"]).toBe("transfer-out");
+    expect(result.description).toBe("JOHN DOE");
+  });
+
+  it("extracts VIREMENT POUR as transfer-out", () => {
+    const result = extractLbpMetadata("VIREMENT POUR LOYER MARS");
+    expect(result.metadata["transaction-type"]).toBe("transfer-out");
+    expect(result.description).toBe("LOYER MARS");
+  });
+
+  it("extracts CHEQUE N° with number", () => {
+    const result = extractLbpMetadata("CHEQUE N° 2676038");
+    expect(result.metadata["transaction-type"]).toBe("check");
+    expect(result.metadata["check-number"]).toBe("2676038");
+  });
+
+  it("extracts PRELEVEMENT DE with REF + MANDAT", () => {
+    const result = extractLbpMetadata("PRELEVEMENT DE EXAMPLECARRIER REF : 00000000A EXAMPLECARRIER MANDAT : XXXX-00000");
+    expect(result.description).toBe("EXAMPLECARRIER EXAMPLECARRIER");
+    expect(result.metadata["transaction-type"]).toBe("direct-debit");
+    expect(result.metadata["reference"]).toBe("00000000A");
+    expect(result.metadata["mandate"]).toBe("XXXX-00000");
+  });
+
+  it("extracts INTERETS ACQUIS", () => {
+    const result = extractLbpMetadata("INTERETS ACQUIS AU 31/12/2022");
+    expect(result.metadata["transaction-type"]).toBe("interest");
+    expect(result.metadata["operation-date"]).toBe("31/12");
+  });
+
+  it("extracts RETRAIT DAB with location + date", () => {
+    const result = extractLbpMetadata("RETRAIT DAB ANNECY 15/02");
+    expect(result.description).toBe("ANNECY");
+    expect(result.metadata["transaction-type"]).toBe("atm-withdrawal");
+    expect(result.metadata["operation-date"]).toBe("15/02");
+  });
+
+  it("maps FRAIS to fee", () => {
+    const result = extractLbpMetadata("FRAIS DE TENUE DE COMPTE");
+    expect(result.metadata["transaction-type"]).toBe("fee");
+    expect(result.description).toBe("DE TENUE DE COMPTE");
+  });
+
+  it("maps COMMISSION to fee", () => {
+    const result = extractLbpMetadata("COMMISSION D'INTERVENTION");
+    expect(result.metadata["transaction-type"]).toBe("fee");
+    expect(result.description).toBe("D'INTERVENTION");
+  });
+
+  it("maps COTISATION to fee", () => {
+    const result = extractLbpMetadata("COTISATION TRIMESTRIELLE");
+    expect(result.metadata["transaction-type"]).toBe("fee");
+    expect(result.description).toBe("TRIMESTRIELLE");
+  });
+
+  it("extracts REMISE CHEQUE distinct from CHEQUE", () => {
+    const result = extractLbpMetadata("REMISE CHEQUE 3 CHEQUES");
+    expect(result.metadata["transaction-type"]).toBe("check-deposit");
+    expect(result.description).toBe("3 CHEQUES");
+  });
+
+  it("maps AVOIR to refund", () => {
+    const result = extractLbpMetadata("AVOIR REMBOURSEMENT ACHAT");
+    expect(result.metadata["transaction-type"]).toBe("refund");
+    expect(result.description).toBe("REMBOURSEMENT ACHAT");
+  });
+
+  it("returns empty metadata and unchanged description for no match", () => {
+    const result = extractLbpMetadata("Some unknown description");
+    expect(result.description).toBe("Some unknown description");
+    expect(Object.keys(result.metadata)).toHaveLength(0);
+  });
+
+  it("keeps original description if empty after stripping", () => {
+    const result = extractLbpMetadata("CHEQUE N° 1234");
+    expect(result.metadata["transaction-type"]).toBe("check");
+    expect(result.metadata["check-number"]).toBe("1234");
+    // After stripping "CHEQUE " prefix and "N° 1234", body is empty → keep original
+    expect(result.description).toBe("CHEQUE N° 1234");
   });
 });
