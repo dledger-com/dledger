@@ -58,8 +58,10 @@
 
     async function handleFileInputChange(e: Event) {
         const input = e.target as HTMLInputElement;
-        const file = input.files?.[0];
-        if (file) await importDrop.routeFile(file);
+        const files = input.files;
+        if (files && files.length > 0) {
+            await importDrop.routeFiles(Array.from(files));
+        }
         input.value = "";
     }
 
@@ -729,11 +731,12 @@
         <Card.Content>
             <div class="flex items-center gap-3">
                 <Button onclick={handleImportClick}>
-                    <Upload class="mr-2 h-4 w-4" /> Import File
+                    <Upload class="mr-2 h-4 w-4" /> Import Files
                 </Button>
                 <input
                     bind:this={fileInputEl}
                     type="file"
+                    multiple
                     accept=".csv,.tsv,.txt,.ofx,.qfx,.qbo,.pdf,.ledger,.beancount,.journal,.hledger,.dat,.zip"
                     class="hidden"
                     onchange={handleFileInputChange}

@@ -5,6 +5,7 @@
   import TopBar from "$lib/components/shell/TopBar.svelte";
   import BottomTabBar from "$lib/components/shell/BottomTabBar.svelte";
   import GlobalDropZone from "$lib/components/GlobalDropZone.svelte";
+  import BatchImportBar from "$lib/components/BatchImportBar.svelte";
   import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
   import OfxImportDialog from "$lib/components/OfxImportDialog.svelte";
   import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
@@ -15,29 +16,33 @@
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
 
-  // Clear content when dialogs close
+  // Clear content when dialogs close, and advance batch queue
   $effect(() => {
     if (!importDrop.csvOpen) {
       importDrop.csvContent = "";
       importDrop.csvFileName = "";
+      importDrop.advanceQueue();
     }
   });
   $effect(() => {
     if (!importDrop.ofxOpen) {
       importDrop.ofxContent = "";
       importDrop.ofxFileName = "";
+      importDrop.advanceQueue();
     }
   });
   $effect(() => {
     if (!importDrop.pdfOpen) {
       importDrop.pdfFile = null;
       importDrop.pdfFileName = "";
+      importDrop.advanceQueue();
     }
   });
   $effect(() => {
     if (!importDrop.ledgerOpen) {
       importDrop.ledgerContent = "";
       importDrop.ledgerFileName = "";
+      importDrop.advanceQueue();
     }
   });
 </script>
@@ -54,6 +59,7 @@
 </Sidebar.Provider>
 
 <GlobalDropZone />
+<BatchImportBar />
 
 <LedgerImportDialog
   bind:open={importDrop.ledgerOpen}

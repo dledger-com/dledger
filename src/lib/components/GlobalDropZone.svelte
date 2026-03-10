@@ -28,9 +28,9 @@
         ></div>
         <div class="flex flex-col items-center gap-2 text-center">
             <Upload class="h-12 w-12 text-primary" />
-            <p class="text-lg font-semibold">Drop file to import</p>
+            <p class="text-lg font-semibold">Drop files to import</p>
             <p class="text-sm text-muted-foreground">
-                CSV, OFX, PDF, or Ledger
+                CSV, OFX, PDF, Ledger, or ZIP
             </p>
         </div>
     </div>
