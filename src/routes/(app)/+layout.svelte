@@ -21,28 +21,28 @@
     if (!importDrop.csvOpen) {
       importDrop.csvContent = "";
       importDrop.csvFileName = "";
-      importDrop.advanceQueue();
+      importDrop.scheduleAdvance();
     }
   });
   $effect(() => {
     if (!importDrop.ofxOpen) {
       importDrop.ofxContent = "";
       importDrop.ofxFileName = "";
-      importDrop.advanceQueue();
+      importDrop.scheduleAdvance();
     }
   });
   $effect(() => {
     if (!importDrop.pdfOpen) {
       importDrop.pdfFile = null;
       importDrop.pdfFileName = "";
-      importDrop.advanceQueue();
+      importDrop.scheduleAdvance();
     }
   });
   $effect(() => {
     if (!importDrop.ledgerOpen) {
       importDrop.ledgerContent = "";
       importDrop.ledgerFileName = "";
-      importDrop.advanceQueue();
+      importDrop.scheduleAdvance();
     }
   });
 </script>

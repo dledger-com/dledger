@@ -31,7 +31,7 @@ class ImportDropStore {
     _queue = $state<File[]>([]);
     _queueIndex = $state(0);
     _queueTotal = $state(0);
-    _advancing = $state(false);
+    private _advancing = false; // plain boolean — not reactive to avoid effect loops
     batchActive = $derived(this._queueTotal > 1 && this._queueIndex < this._queueTotal);
 
     get batchIndex(): number {
@@ -185,8 +185,16 @@ class ImportDropStore {
     }
 
     /**
+     * Schedule advanceQueue outside the current $effect to avoid
+     * mutating reactive state synchronously inside an effect.
+     */
+    scheduleAdvance(): void {
+        if (this._queue.length === 0) return;
+        queueMicrotask(() => this.advanceQueue());
+    }
+
+    /**
      * Advance to the next file in the batch queue.
-     * Called when a dialog closes (from layout $effect blocks).
      */
     async advanceQueue(): Promise<void> {
         if (this._advancing) return;
