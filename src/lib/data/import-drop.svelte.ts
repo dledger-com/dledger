@@ -32,6 +32,7 @@ class ImportDropStore {
     _queueIndex = $state(0);
     _queueTotal = $state(0);
     private _advancing = false; // plain boolean — not reactive to avoid effect loops
+    private _cancelled = false;
     batchActive = $derived(this._queueTotal > 1 && this._queueIndex < this._queueTotal);
 
     get batchIndex(): number {
@@ -175,6 +176,7 @@ class ImportDropStore {
             // advanceQueue will pick these up when current dialog closes
         } else {
             // Start new batch
+            this._cancelled = false;
             this._queue = expanded;
             this._queueTotal = expanded.length;
             this._queueIndex = 0;
@@ -189,8 +191,15 @@ class ImportDropStore {
      * mutating reactive state synchronously inside an effect.
      */
     scheduleAdvance(): void {
+        if (this._cancelled) {
+            this._queueTotal = 0;
+            this._queueIndex = 0;
+            return;
+        }
         if (this._queue.length > 0) {
-            queueMicrotask(() => this.advanceQueue());
+            queueMicrotask(() => {
+                if (!this._cancelled) this.advanceQueue();
+            });
             return;
         }
         // Queue empty — reset batch state if a batch was active
@@ -211,6 +220,7 @@ class ImportDropStore {
      */
     async advanceQueue(): Promise<void> {
         if (this._advancing) return;
+        if (this._cancelled) return;
         this._advancing = true;
         try {
             while (this._queue.length > 0) {
@@ -219,11 +229,13 @@ class ImportDropStore {
                 this._queueIndex++;
                 // Small delay to let dialog animate out
                 await new Promise((r) => setTimeout(r, 100));
+                if (this._cancelled) return;
                 const opened = await this.routeFile(next, true);
                 if (opened) return; // Dialog opened, wait for user
                 // Unsupported file — loop to next
             }
             // Queue exhausted
+            if (this._cancelled) return;
             if (this._queueTotal > 1) {
                 toast.info(
                     `Batch import complete: ${this._queueIndex} of ${this._queueTotal} files processed`,
@@ -240,13 +252,12 @@ class ImportDropStore {
      * Cancel the entire batch, closing any open dialog.
      */
     cancelBatch(): void {
+        if (this._cancelled) return;
         this._queue = [];
-        this._queueIndex = this._queueTotal;
+        this._cancelled = true;
         this._queueTotal = 0;
-        this.csvOpen = false;
-        this.ofxOpen = false;
-        this.pdfOpen = false;
-        this.ledgerOpen = false;
+        this._queueIndex = 0;
+        this.closeCurrentDialog();
         toast.info("Batch import cancelled");
     }
 
