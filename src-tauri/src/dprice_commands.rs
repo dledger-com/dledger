@@ -656,11 +656,11 @@ mod tests {
             db.upsert_prices_batch(&[
                 DailyPrice {
                     asset_id: "btc".into(), date: NaiveDate::from_ymd_opt(2024, 1, 26).unwrap(),
-                    close_usd: 42150.0, open_usd: None, high_usd: None, low_usd: None, volume_usd: None, source: "test".into(),
+                    close_usd: 42150.0, open_usd: None, high_usd: None, low_usd: None, volume_usd: None, market_cap_usd: None, source: "test".into(),
                 },
                 DailyPrice {
                     asset_id: "eur".into(), date: NaiveDate::from_ymd_opt(2024, 1, 26).unwrap(),
-                    close_usd: 1.085, open_usd: None, high_usd: None, low_usd: None, volume_usd: None, source: "test".into(),
+                    close_usd: 1.085, open_usd: None, high_usd: None, low_usd: None, volume_usd: None, market_cap_usd: None, source: "test".into(),
                 },
             ]).unwrap();
         }
