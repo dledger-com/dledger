@@ -13,7 +13,7 @@
  */
 import Decimal from "decimal.js-light";
 import type { Backend } from "$lib/backend.js";
-import type { Account, JournalEntry, LineItem, TrialBalance } from "$lib/types/index.js";
+import type { Account, JournalEntry, LineItem, TrialBalance, TrialBalanceLine, CurrencyBalance } from "$lib/types/index.js";
 import { ExchangeRateCache } from "./exchange-rate-cache.js";
 import { isValidCurrencyCode } from "$lib/currency-validation.js";
 
@@ -242,7 +242,57 @@ export async function computePortfolioValueEUR(
   return { value, missingRates, missingCurrencyDates };
 }
 
+// ---------- Incremental trial balance ----------
+
+/**
+ * Maintains a running balance from journal entries, avoiding repeated DB scans.
+ * Accumulates line items incrementally; snapshots produce TrialBalance objects.
+ */
+class IncrementalBalance {
+  private balances = new Map<string, Map<string, Decimal>>();
+
+  addItems(items: LineItem[]): void {
+    for (const item of items) {
+      let currencies = this.balances.get(item.account_id);
+      if (!currencies) {
+        currencies = new Map();
+        this.balances.set(item.account_id, currencies);
+      }
+      const current = currencies.get(item.currency) ?? new Decimal(0);
+      currencies.set(item.currency, current.plus(new Decimal(item.amount)));
+    }
+  }
+
+  snapshot(accountMap: Map<string, Account>): TrialBalance {
+    const lines: TrialBalanceLine[] = [];
+    for (const [accountId, currencies] of this.balances) {
+      const account = accountMap.get(accountId);
+      if (!account || !account.is_postable) continue;
+      const balances: CurrencyBalance[] = [];
+      for (const [currency, amount] of currencies) {
+        if (!amount.isZero()) {
+          balances.push({ currency, amount: amount.toString() });
+        }
+      }
+      if (balances.length === 0) continue;
+      balances.sort((a, b) => a.currency.localeCompare(b.currency));
+      lines.push({
+        account_id: accountId,
+        account_name: account.full_name,
+        account_type: account.account_type,
+        balances,
+      });
+    }
+    return { as_of: "", lines, total_debits: [], total_credits: [] };
+  }
+}
+
 // ---------- Main algorithm ----------
+
+/** Yield to event loop so UI stays responsive. No-op outside browsers. */
+const _hasBrowserLoop = typeof requestAnimationFrame === "function";
+const yieldToEventLoop = (): Promise<void> =>
+  _hasBrowserLoop ? new Promise(r => requestAnimationFrame(() => r())) : Promise.resolve();
 
 export async function computeFrenchTaxReport(
   backend: Backend,
@@ -285,32 +335,44 @@ export async function computeFrenchTaxReport(
     return a[0].created_at.localeCompare(b[0].created_at);
   });
 
-  // 3. Process entries: build running A, collect dispositions/acquisitions
-  let A = new Decimal(opts.priorAcquisitionCost || "0");
+  // 3. Bulk-preload exchange rates into memory for fast in-memory lookup
   const rateCache = new ExchangeRateCache(backend);
+  await rateCache.preloadUpTo(yearEnd);
+
+  // 4. Process entries: build running A, collect dispositions/acquisitions
+  //    Use incremental trial balance instead of per-disposition DB queries
+  let A = new Decimal(opts.priorAcquisitionCost || "0");
   const dispositions: Disposition[] = [];
   const acquisitions: Acquisition[] = [];
 
-  // Cache trial balances by date to avoid repeated queries
-  const trialBalanceCache = new Map<string, TrialBalance>();
-
-  async function getTrialBalance(date: string): Promise<TrialBalance> {
-    let tb = trialBalanceCache.get(date);
-    if (!tb) {
-      tb = await backend.trialBalance(date);
-      trialBalanceCache.set(date, tb);
-    }
-    return tb;
-  }
+  const incrementalBalance = new IncrementalBalance();
+  let currentDate = "";
+  let currentDateTB: TrialBalance | null = null;
+  let pendingItems: LineItem[] = [];
+  let entryIndex = 0;
 
   for (const [entry, items] of allEntries) {
+    // Yield periodically for UI responsiveness
+    if (++entryIndex % 200 === 0) {
+      await yieldToEventLoop();
+    }
+
+    // When the date changes, flush pending items and snapshot
+    if (entry.date !== currentDate) {
+      if (pendingItems.length > 0) {
+        incrementalBalance.addItems(pendingItems);
+        pendingItems = [];
+      }
+      // Snapshot BEFORE adding current date's entries (matches "WHERE date < ?" semantics)
+      currentDateTB = incrementalBalance.snapshot(accountMap);
+      currentDate = entry.date;
+    }
+
     const event = classifyEntryEvent(entry, items, accountMap, fiatSet);
 
     if (event.type === "acquisition") {
       // Convert to EUR if not already
       let fiatEUR = event.fiatAmountEUR;
-      // The fiat might be in USD or other; we need EUR
-      // Check what fiat currency was actually used
       const fiatCurrencyUsed = findFiatCurrency(items, accountMap, fiatSet, "out");
       if (fiatCurrencyUsed && fiatCurrencyUsed !== baseCurrency) {
         const rate = await rateCache.get(fiatCurrencyUsed, baseCurrency, entry.date);
@@ -347,8 +409,8 @@ export async function computeFrenchTaxReport(
         }
       }
 
-      // Get portfolio value V at moment of sale
-      const tb = await getTrialBalance(entry.date);
+      // Use incremental trial balance snapshot (already computed for this date)
+      const tb = currentDateTB!;
       const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
         tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
       );
@@ -361,7 +423,6 @@ export async function computeFrenchTaxReport(
       if (entry.date >= yearStart) {
         if (V.isZero()) {
           warnings.push(`Portfolio value is 0 on ${entry.date} — cannot compute plus-value for entry ${entry.description}`);
-          // Still update A if needed
         } else {
           // Apply formula: PV = C - (A * C / V)
           const costFraction = V.gt(0) ? A.times(C).div(V) : new Decimal(0);
@@ -397,9 +458,12 @@ export async function computeFrenchTaxReport(
         }
       }
     }
+
+    // Accumulate current entry's items for the next date boundary
+    pendingItems.push(...items);
   }
 
-  // 4. Compute totals
+  // 5. Compute totals
   let totalPlusValue = new Decimal(0);
   let totalFiatReceived = new Decimal(0);
   for (const d of dispositions) {
@@ -407,9 +471,11 @@ export async function computeFrenchTaxReport(
     totalFiatReceived = totalFiatReceived.plus(new Decimal(d.fiatReceived));
   }
 
-  // 5. Compute end-of-year portfolio value
-  const yearEndDate = `${opts.taxYear + 1}-01-01`; // trial balance as-of is exclusive
-  const yearEndTb = await getTrialBalance(yearEndDate);
+  // 6. Compute end-of-year portfolio value (flush remaining items first)
+  if (pendingItems.length > 0) {
+    incrementalBalance.addItems(pendingItems);
+  }
+  const yearEndTb = incrementalBalance.snapshot(accountMap);
   const { value: yearEndV, missingRates: yearEndMissing, missingCurrencyDates: yearEndMissingCd } = await computePortfolioValueEUR(
     yearEndTb, fiatSet, rateCache, yearEnd, baseCurrency, skipCurrencies,
   );
