@@ -379,17 +379,15 @@
     importTags = [];
   }
 
-  // Reset on close
-  $effect(() => {
-    if (!open) resetDialog();
-  });
-
-  // Auto-advance when opened with initial content (drag-and-drop)
-  $effect(() => {
+  // Auto-advance when opened with initial content (drag-and-drop),
+  // or reset state on manual open. No reset on close to avoid flash.
+  $effect.pre(() => {
     if (open && initialContent) {
       rawContent = initialContent;
       fileName = initialFileName;
       untrack(() => handleParse());
+    } else if (open) {
+      untrack(() => resetDialog());
     }
   });
 </script>

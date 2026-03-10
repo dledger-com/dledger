@@ -175,16 +175,14 @@
     untrack(() => { formatOverride = null; });
   });
 
-  // Reset on close
-  $effect(() => {
-    if (!open) resetDialog();
-  });
-
-  // Auto-advance when opened with initial content (drag-and-drop)
-  $effect(() => {
+  // Auto-advance when opened with initial content (drag-and-drop),
+  // or reset state on manual open. No reset on close to avoid flash.
+  $effect.pre(() => {
     if (open && initialContent) {
       fileContent = initialContent;
       fileName = initialFileName;
+    } else if (open) {
+      untrack(() => resetDialog());
     }
   });
 </script>

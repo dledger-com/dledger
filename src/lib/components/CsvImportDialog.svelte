@@ -520,19 +520,16 @@
     importTags = [];
   }
 
-  // Reset on close
-  $effect(() => {
-    if (!open) resetDialog();
-  });
-
-  // Auto-advance to step 2 when opened with initial content (drag-and-drop)
-  $effect(() => {
+  // Auto-advance to step 2 when opened with initial content (drag-and-drop),
+  // or reset state on manual open. We don't reset on close to avoid flashing
+  // step 1 during the dialog's CSS exit animation.
+  $effect.pre(() => {
     if (open && initialContent) {
-      // Use untrack to avoid infinite loop: handleParse writes reactive state
-      // that this effect would otherwise re-track
       rawContent = initialContent;
       fileName = initialFileName;
       untrack(() => handleParse());
+    } else if (open) {
+      untrack(() => resetDialog());
     }
   });
 </script>
