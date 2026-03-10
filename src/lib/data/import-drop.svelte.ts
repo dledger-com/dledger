@@ -33,7 +33,7 @@ class ImportDropStore {
     _queueTotal = $state(0);
     private _advancing = false; // plain boolean — not reactive to avoid effect loops
     private _cancelled = false;
-    batchActive = $derived(this._queueTotal > 1 && this._queueIndex < this._queueTotal);
+    batchActive = $derived(this._queueTotal > 1 && this._queueIndex <= this._queueTotal);
 
     get batchIndex(): number {
         return this._queueIndex;
@@ -234,7 +234,7 @@ class ImportDropStore {
                 if (opened) return; // Dialog opened, wait for user
                 // Unsupported file — loop to next
             }
-            // Queue exhausted
+            // Queue exhausted without opening a dialog — reset immediately
             if (this._cancelled) return;
             if (this._queueTotal > 1) {
                 toast.info(

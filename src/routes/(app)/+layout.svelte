@@ -11,38 +11,41 @@
   import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
   import LedgerImportDialog from "$lib/components/LedgerImportDialog.svelte";
   import { importDrop } from "$lib/data/import-drop.svelte.js";
+  import { untrack } from "svelte";
 
   let { children } = $props();
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
 
-  // Clear content when dialogs close, and advance batch queue
+  // Clear content when dialogs close, and advance batch queue.
+  // scheduleAdvance() is wrapped in untrack() so these effects only
+  // depend on the dialog open/close state, not on queue internals.
   $effect(() => {
     if (!importDrop.csvOpen) {
       importDrop.csvContent = "";
       importDrop.csvFileName = "";
-      importDrop.scheduleAdvance();
+      untrack(() => importDrop.scheduleAdvance());
     }
   });
   $effect(() => {
     if (!importDrop.ofxOpen) {
       importDrop.ofxContent = "";
       importDrop.ofxFileName = "";
-      importDrop.scheduleAdvance();
+      untrack(() => importDrop.scheduleAdvance());
     }
   });
   $effect(() => {
     if (!importDrop.pdfOpen) {
       importDrop.pdfFile = null;
       importDrop.pdfFileName = "";
-      importDrop.scheduleAdvance();
+      untrack(() => importDrop.scheduleAdvance());
     }
   });
   $effect(() => {
     if (!importDrop.ledgerOpen) {
       importDrop.ledgerContent = "";
       importDrop.ledgerFileName = "";
-      importDrop.scheduleAdvance();
+      untrack(() => importDrop.scheduleAdvance());
     }
   });
 </script>
