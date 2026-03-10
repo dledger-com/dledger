@@ -3,8 +3,12 @@ import { v7 as uuidv7 } from "uuid";
 import type { Backend } from "../backend.js";
 import type { Account, JournalEntry, LineItem, EtherscanAccount } from "../types/index.js";
 import { SUPPORTED_CHAINS } from "../types/index.js";
-import type { HandlerRegistry } from "../handlers/registry.js";
-import type { TxHashGroup } from "../handlers/types.js";
+import type { HandlerContext, HandlerResult, TxHashGroup } from "../handlers/types.js";
+
+/** Structural type for handler registry — accepts both HandlerRegistry and IndexedHandlerRegistry */
+interface HandlerRegistryLike {
+  processGroup(group: TxHashGroup, ctx: HandlerContext): Promise<HandlerResult & { handlerId: string; warnings?: string[] }>;
+}
 import { inferAccountType } from "../browser-etherscan.js";
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "../handlers/item-builder.js";
 import type { ItemAccum } from "../handlers/item-builder.js";
@@ -53,7 +57,7 @@ export interface ConsolidationResult {
  */
 export async function retroactiveConsolidate(
   backend: Backend,
-  registry: HandlerRegistry,
+  registry: HandlerRegistryLike,
   options?: ConsolidationOptions,
 ): Promise<ConsolidationResult> {
   const result: ConsolidationResult = {
@@ -355,7 +359,7 @@ function extractEtherscanWalletMovement(
  */
 async function consolidateViaHandlers(
   backend: Backend,
-  registry: HandlerRegistry,
+  registry: HandlerRegistryLike,
   etherscanSource: string,
   rawData: string,
   cexTargetAccount: string,

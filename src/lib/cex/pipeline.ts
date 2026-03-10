@@ -5,10 +5,14 @@ import { SUPPORTED_CHAINS } from "../types/index.js";
 import type { Backend } from "../backend.js";
 import type { CexAdapter, CexLedgerRecord, CexSyncResult, ExchangeAccount } from "./types.js";
 import { inferAccountType } from "../browser-etherscan.js";
-import type { HandlerRegistry } from "../handlers/registry.js";
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "../handlers/item-builder.js";
 import type { ItemAccum } from "../handlers/item-builder.js";
-import type { TxHashGroup } from "../handlers/types.js";
+import type { HandlerContext, HandlerResult, TxHashGroup } from "../handlers/types.js";
+
+/** Structural type for handler registry — accepts both HandlerRegistry and IndexedHandlerRegistry */
+interface HandlerRegistryLike {
+  processGroup(group: TxHashGroup, ctx: HandlerContext): Promise<HandlerResult & { handlerId: string; warnings?: string[] }>;
+}
 import type { TaskProgress } from "../task-queue.svelte.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
@@ -41,7 +45,7 @@ export async function syncCexAccount(
   backend: Backend,
   adapter: CexAdapter,
   account: ExchangeAccount,
-  registry?: HandlerRegistry,
+  registry?: HandlerRegistryLike,
   options?: CexSyncOptions,
 ): Promise<CexSyncResult> {
   const result: CexSyncResult = {
@@ -519,7 +523,7 @@ export function findEtherscanSourceByTxid(
  */
 async function consolidateWithEtherscan(
   backend: Backend,
-  registry: HandlerRegistry,
+  registry: HandlerRegistryLike,
   etherscanSource: string,
   cexTargetAccount: string,
   cexDescription: string,

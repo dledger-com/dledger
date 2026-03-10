@@ -1,28 +1,8 @@
 import type { ExchangeId, CexAdapter } from "./types.js";
-import { KrakenAdapter } from "./kraken.js";
-import { BinanceAdapter } from "./binance.js";
-import { BybitAdapter } from "./bybit.js";
-import { CoinbaseAdapter } from "./coinbase.js";
-import { CryptocomAdapter } from "./cryptocom.js";
-import { BitstampAdapter } from "./bitstamp.js";
-import { OkxAdapter } from "./okx.js";
-import { VoletAdapter } from "./volet.js";
-
-const ADAPTERS: Partial<Record<ExchangeId, () => CexAdapter>> = {
-  kraken: () => new KrakenAdapter(),
-  binance: () => new BinanceAdapter(),
-  bybit: () => new BybitAdapter(),
-  coinbase: () => new CoinbaseAdapter(),
-  cryptocom: () => new CryptocomAdapter(),
-  bitstamp: () => new BitstampAdapter(),
-  okx: () => new OkxAdapter(),
-  volet: () => new VoletAdapter(),
-};
+import { getPluginManager } from "../plugins/manager.js";
 
 export function getCexAdapter(id: ExchangeId): CexAdapter {
-  const factory = ADAPTERS[id];
-  if (!factory) throw new Error(`Unknown exchange: ${id}`);
-  return factory();
+  return getPluginManager().cexAdapters.get(id);
 }
 
 export { syncCexAccount, normalizeTxid } from "./pipeline.js";

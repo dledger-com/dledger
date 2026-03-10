@@ -1,7 +1,12 @@
 import { v7 as uuidv7 } from "uuid";
 import type { Backend } from "../backend.js";
-import type { HandlerRegistry } from "./registry.js";
-import type { HandlerContext, TxHashGroup } from "./types.js";
+import type { HandlerContext, HandlerResult, TxHashGroup } from "./types.js";
+
+/** Structural type for handler registry — accepts both HandlerRegistry and IndexedHandlerRegistry */
+interface HandlerRegistryLike {
+  processGroup(group: TxHashGroup, ctx: HandlerContext): Promise<HandlerResult & { handlerId: string; warnings?: string[] }>;
+  getAll(): { id: string; name: string }[];
+}
 import type {
   Account,
   ChainInfo,
@@ -123,7 +128,7 @@ export function buildTxGroupMetadata(group: TxHashGroup, chain: ChainInfo): Reco
 
 export async function syncEtherscanWithHandlers(
   backend: Backend,
-  registry: HandlerRegistry,
+  registry: HandlerRegistryLike,
   apiKey: string,
   address: string,
   label: string,
@@ -353,7 +358,7 @@ export async function syncEtherscanWithHandlers(
   });
 
   // Pre-scan for Aave groups and batch-prefetch enrichment data
-  if (settings.handlers?.aave?.enrichment && settings.theGraphApiKey && settings.theGraphEnabled !== false) {
+  if ((settings.enrichmentEnabled ?? false) && settings.theGraphApiKey && settings.theGraphEnabled !== false) {
     const aaveEntries: { hash: string; isV2: boolean }[] = [];
     for (const group of sortedGroups) {
       const source = `etherscan:${chainId}:${group.hash}`;
@@ -635,6 +640,7 @@ function buildHandlerContext(
     chain,
     backend,
     settings,
+    enrichment: settings.enrichmentEnabled ?? false,
     ensureAccount,
     ensureCurrency,
   };
@@ -654,7 +660,7 @@ function canonicalItems(items: Omit<LineItem, "id" | "journal_entry_id">[]): str
  */
 export async function dryRunReprocess(
   backend: Backend,
-  registry: HandlerRegistry,
+  registry: HandlerRegistryLike,
   options: ReprocessOptions,
 ): Promise<ReprocessResult> {
   const { chainId, address, label, settings, hashes, onProgress } = options;
@@ -796,7 +802,7 @@ export async function dryRunReprocess(
  */
 export async function applyReprocess(
   backend: Backend,
-  registry: HandlerRegistry,
+  registry: HandlerRegistryLike,
   options: ReprocessOptions,
   changes: ReprocessChange[],
 ): Promise<ReprocessResult> {

@@ -39,7 +39,6 @@ describe("HandlerRegistry", () => {
   });
 
   it("findBest returns highest-confidence handler", () => {
-    // Create a custom handler with high confidence
     const highConfidenceHandler = {
       id: "test-high",
       name: "High Confidence",
@@ -49,7 +48,6 @@ describe("HandlerRegistry", () => {
       process: async () => ({ type: "skip" as const, reason: "test" }),
     };
     registry.register(highConfidenceHandler);
-    ctx.settings.handlers["test-high"] = { enabled: true };
 
     const group = makeEmptyGroup();
     const handler = registry.findBest(group, ctx);
@@ -66,7 +64,6 @@ describe("HandlerRegistry", () => {
       process: async () => ({ type: "skip" as const, reason: "test" }),
     };
     registry.register(chainSpecificHandler);
-    ctx.settings.handlers["chain-specific"] = { enabled: true };
 
     // chainId=1 (Ethereum) should not match chain-specific handler
     const group = makeEmptyGroup();
@@ -74,24 +71,22 @@ describe("HandlerRegistry", () => {
     expect(handler.id).not.toBe("chain-specific");
   });
 
-  it("findBest respects enabled setting", () => {
-    // Disable pendle handler
-    ctx.settings.handlers["pendle"] = { enabled: false };
-
-    const highConfidenceDisabled = {
-      id: "disabled-handler",
-      name: "Disabled",
+  it("all handlers participate in scoring (no enabled check)", () => {
+    // All registered handlers should be candidates regardless of settings
+    const highConfidenceHandler = {
+      id: "always-active",
+      name: "Always Active",
       description: "test",
       supportedChainIds: [],
       match: () => 99,
       process: async () => ({ type: "skip" as const, reason: "test" }),
     };
-    registry.register(highConfidenceDisabled);
-    // Don't add to enabled handlers
+    registry.register(highConfidenceHandler);
+    // No need to add to settings.handlers — all handlers participate
 
     const group = makeEmptyGroup();
     const handler = registry.findBest(group, ctx);
-    expect(handler.id).toBe("generic-etherscan");
+    expect(handler.id).toBe("always-active");
   });
 
   it("processGroup falls back to generic on handler error", async () => {
@@ -104,7 +99,6 @@ describe("HandlerRegistry", () => {
       process: async () => { throw new Error("intentional failure"); },
     };
     registry.register(failingHandler);
-    ctx.settings.handlers["failing"] = { enabled: true };
 
     const group = makeEmptyGroup();
     const result = await registry.processGroup(group, ctx);

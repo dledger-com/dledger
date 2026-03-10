@@ -24,6 +24,8 @@ export interface AppSettings {
   debugMode: boolean;
   holdingPeriodDays: number;
   handlers: Record<string, { enabled: boolean; enrichment?: boolean }>;
+  /** Global enrichment toggle (replaces per-handler enrichment flags). Default: true */
+  enrichmentEnabled?: boolean;
   frenchTax?: {
     initialAcquisitionCost?: string;  // EUR, default "0"
     fiatCurrencies?: string[];        // override defaults
@@ -120,6 +122,12 @@ function loadFromStorage(): AppSettings {
       if (parsed.frenchTax?.priorAcquisitionCost !== undefined && parsed.frenchTax?.initialAcquisitionCost === undefined) {
         parsed.frenchTax.initialAcquisitionCost = parsed.frenchTax.priorAcquisitionCost;
         delete parsed.frenchTax.priorAcquisitionCost;
+      }
+      // Migrate per-handler enrichment → global enrichmentEnabled
+      if (parsed.enrichmentEnabled === undefined && parsed.handlers) {
+        const anyEnrichment = Object.values(parsed.handlers as Record<string, { enrichment?: boolean }>)
+          .some((h) => h.enrichment === true);
+        if (anyEnrichment) parsed.enrichmentEnabled = true;
       }
       return { ...DEFAULT_SETTINGS, ...parsed };
     }

@@ -4,89 +4,41 @@ import type {
   HandlerResult,
   TxHashGroup,
 } from "./types.js";
+import { IndexedHandlerRegistry } from "../plugins/indexed-handler-registry.js";
+import type { TransactionHandlerExtension } from "../plugins/types.js";
 
+/**
+ * HandlerRegistry — thin wrapper that delegates to IndexedHandlerRegistry.
+ * Kept for backward compatibility; new code should use IndexedHandlerRegistry directly.
+ */
 export class HandlerRegistry {
-  private handlers: TransactionHandler[] = [];
+  private indexed = new IndexedHandlerRegistry();
 
   register(handler: TransactionHandler): void {
-    this.handlers.push(handler);
+    // Legacy register — no hints, so handler becomes universal
+    this.indexed.register({ handler });
+  }
+
+  /** Register with hints for indexed matching. */
+  registerExtension(ext: TransactionHandlerExtension): void {
+    this.indexed.register(ext);
   }
 
   getAll(): TransactionHandler[] {
-    return [...this.handlers];
+    return this.indexed.getAll();
   }
 
   findBest(
     group: TxHashGroup,
     ctx: HandlerContext,
   ): TransactionHandler {
-    let bestHandler: TransactionHandler | null = null;
-    let bestScore = 0;
-
-    for (const handler of this.handlers) {
-      // Only enabled handlers participate
-      const config = ctx.settings.handlers[handler.id];
-      if (!config?.enabled && handler.id !== "generic-etherscan") continue;
-
-      // Check chain support
-      if (
-        handler.supportedChainIds.length > 0 &&
-        !handler.supportedChainIds.includes(ctx.chainId)
-      ) {
-        continue;
-      }
-
-      const score = handler.match(group, ctx);
-      if (score > bestScore) {
-        bestScore = score;
-        bestHandler = handler;
-      }
-    }
-
-    // Fallback to generic (always registered)
-    if (!bestHandler) {
-      bestHandler = this.handlers.find((h) => h.id === "generic-etherscan")!;
-    }
-
-    return bestHandler;
+    return this.indexed.findBest(group, ctx);
   }
 
   async processGroup(
     group: TxHashGroup,
     ctx: HandlerContext,
   ): Promise<HandlerResult & { handlerId: string; warnings?: string[] }> {
-    const handler = this.findBest(group, ctx);
-    const warnings: string[] = [];
-
-    // Resolve enrichment flag from handler-specific settings
-    const handlerConfig = ctx.settings.handlers[handler.id];
-    const enrichedCtx: HandlerContext = {
-      ...ctx,
-      enrichment: handlerConfig?.enrichment ?? false,
-    };
-
-    try {
-      const result = await handler.process(group, enrichedCtx);
-      return { ...result, handlerId: handler.id, warnings };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      warnings.push(`handler ${handler.id} failed: ${msg}, falling back to generic`);
-
-      // Fall back to generic handler
-      if (handler.id !== "generic-etherscan") {
-        const generic = this.handlers.find((h) => h.id === "generic-etherscan");
-        if (generic) {
-          const result = await generic.process(group, { ...ctx, enrichment: false });
-          return { ...result, handlerId: "generic-etherscan", warnings };
-        }
-      }
-
-      return {
-        type: "skip",
-        reason: `handler error: ${msg}`,
-        handlerId: handler.id,
-        warnings,
-      };
-    }
+    return this.indexed.processGroup(group, ctx);
   }
 }

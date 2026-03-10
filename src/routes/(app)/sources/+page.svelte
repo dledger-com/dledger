@@ -1354,125 +1354,26 @@
         <Card.Header>
             <Card.Title>Transaction Handlers</Card.Title>
             <Card.Description
-                >Enable protocol-specific handlers for richer transaction
-                interpretation.</Card.Description
+                >{handlers.length} protocol handlers active. All handlers are always
+                enabled; the best match is selected automatically by scoring.</Card.Description
             >
         </Card.Header>
         <Card.Content>
-            <Table.Root>
-                <Table.Header>
-                    <Table.Row>
-                        <Table.Head>Handler</Table.Head>
-                        <Table.Head class="hidden md:table-cell"
-                            >Description</Table.Head
-                        >
-                        <Table.Head class="hidden lg:table-cell"
-                            >Chains</Table.Head
-                        >
-                        <Table.Head class="text-right hidden sm:table-cell"
-                            >Enrichment</Table.Head
-                        >
-                        <Table.Head class="text-right">Enabled</Table.Head>
-                    </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                    {#each handlers as handler}
-                        {@const isGeneric = handler.id === "generic-etherscan"}
-                        {@const isEnabled =
-                            isGeneric ||
-                            settings.settings.handlers[handler.id]?.enabled}
-                        <Table.Row>
-                            <Table.Cell class="font-medium"
-                                >{handler.name}</Table.Cell
-                            >
-                            <Table.Cell
-                                class="text-muted-foreground hidden md:table-cell"
-                                >{handler.description}</Table.Cell
-                            >
-                            <Table.Cell class="hidden lg:table-cell">
-                                {#if handler.supportedChainIds.length === 0}
-                                    <Badge variant="secondary">All chains</Badge
-                                    >
-                                {:else}
-                                    <div class="flex flex-wrap gap-1">
-                                        {#each handler.supportedChainIds as chainId}
-                                            <Badge variant="secondary"
-                                                >{getChainName(chainId)}</Badge
-                                            >
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </Table.Cell>
-                            {@const hasEnrichment = [
-                                "uniswap",
-                                "aave",
-                                "lido",
-                                "curve",
-                                "pendle",
-                                "compound",
-                                "yearn",
-                                "balancer",
-                                "maker",
-                            ].includes(handler.id)}
-                            {@const enrichmentEnabled =
-                                settings.settings.handlers[handler.id]
-                                    ?.enrichment ?? false}
-                            <Table.Cell class="text-right hidden sm:table-cell">
-                                {#if hasEnrichment && !isGeneric}
-                                    <Switch
-                                        checked={enrichmentEnabled}
-                                        disabled={!isEnabled}
-                                        onCheckedChange={(v) => {
-                                            const current = {
-                                                ...settings.settings.handlers,
-                                            };
-                                            const prev = current[
-                                                handler.id
-                                            ] ?? { enabled: false };
-                                            current[handler.id] = {
-                                                ...prev,
-                                                enrichment: v,
-                                            };
-                                            settings.update({
-                                                handlers: current,
-                                            });
-                                            suggestReprocess();
-                                        }}
-                                    />
-                                {:else}
-                                    <span class="text-sm text-muted-foreground"
-                                        >--</span
-                                    >
-                                {/if}
-                            </Table.Cell>
-                            <Table.Cell class="text-right">
-                                {#if isGeneric}
-                                    <span class="text-sm text-muted-foreground"
-                                        >Always enabled</span
-                                    >
-                                {:else}
-                                    <Switch
-                                        checked={isEnabled ?? false}
-                                        onCheckedChange={(v) => {
-                                            const current = {
-                                                ...settings.settings.handlers,
-                                            };
-                                            current[handler.id] = {
-                                                ...current[handler.id],
-                                                enabled: v,
-                                            };
-                                            settings.update({
-                                                handlers: current,
-                                            });
-                                            suggestReprocess();
-                                        }}
-                                    />
-                                {/if}
-                            </Table.Cell>
-                        </Table.Row>
-                    {/each}
-                </Table.Body>
-            </Table.Root>
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">API Enrichment</p>
+                    <p class="text-sm text-muted-foreground">
+                        Enable external API calls for richer transaction data (e.g., Aave interest rates)
+                    </p>
+                </div>
+                <Switch
+                    checked={settings.settings.enrichmentEnabled ?? false}
+                    onCheckedChange={(v) => {
+                        settings.update({ enrichmentEnabled: v });
+                        suggestReprocess();
+                    }}
+                />
+            </div>
         </Card.Content>
     </Card.Root>
 
