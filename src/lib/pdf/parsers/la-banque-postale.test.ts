@@ -283,7 +283,7 @@ describe("parseLbpStatement", () => {
       HEADER_2012,
       makeLine(290, ["Ancien solde au 24/08/2012", 197], ["445,75", 422]),
       // Debit at x=362 (near debitX=355), plus francs value at x=513
-      makeLine(252, ["30/08", 54], ["ACHAT CB INSURANCE-VAD 29.08.12", 86], ["24,27", 362]),
+      makeLine(252, ["30/08", 54], ["ACHAT CB INSURANCE-VAD 29.08.12", 86], ["24,27", 362], ["-159,18", 513]),
       makeLine(243, ["CARTE NUMERO 888", 86]),
       makeLine(623, ["Nouveau solde au 26/09/2012", 264], ["421,48", 422]),
     ]);
@@ -293,6 +293,45 @@ describe("parseLbpStatement", () => {
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].amount).toBe(-24.27);
     expect(result.transactions[0].date).toBe("2012-08-30");
+    expect(result.transactions[0].description).not.toContain("-159,18");
+    // extractLbpMetadata strips "ACHAT CB", date "29.08.12", and "CARTE NUMERO 888"
+    expect(result.transactions[0].description).toBe("INSURANCE-VAD");
+  });
+
+  it("excludes francs column values from credit transaction descriptions", () => {
+    const page = make2022Page([
+      makeLine(401, ["Compte Courant Postal", 54], ["n° 12 345 67X 000", 201]),
+      HEADER_2012,
+      makeLine(290, ["Ancien solde au 24/08/2012", 197], ["445,75", 422]),
+      // Credit at x=430 (near creditX=423), plus francs value at x=510
+      makeLine(252, ["15/09", 54], ["VIR SEPA SALAIRE", 86], ["76,22", 430], ["+ 499,64", 510]),
+      makeLine(623, ["Nouveau solde au 26/09/2012", 264], ["521,97", 422]),
+    ]);
+
+    const result = parseLbpStatement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].amount).toBe(76.22);
+    expect(result.transactions[0].description).not.toContain("499,64");
+  });
+
+  it("skips francs values on continuation lines", () => {
+    const page = make2022Page([
+      makeLine(401, ["Compte Courant Postal", 54], ["n° 12 345 67X 000", 201]),
+      HEADER_2012,
+      makeLine(290, ["Ancien solde au 24/08/2012", 197], ["445,75", 422]),
+      makeLine(252, ["30/08", 54], ["ACHAT CB INSURANCE-VAD 29.08.12", 86], ["24,27", 362], ["-159,18", 513]),
+      // Continuation line with a francs-column value
+      makeLine(243, ["CARTE NUMERO 888", 86], ["-159,18", 513]),
+      makeLine(623, ["Nouveau solde au 26/09/2012", 264], ["421,48", 422]),
+    ]);
+
+    const result = parseLbpStatement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    // extractLbpMetadata strips "ACHAT CB", date, and card number — francs value must not leak
+    expect(result.transactions[0].description).toBe("INSURANCE-VAD");
+    expect(result.transactions[0].description).not.toContain("-159,18");
   });
 
   it("extracts account number", () => {

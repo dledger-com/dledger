@@ -137,6 +137,8 @@ export function parseLbpStatement(pages: PdfPage[]): PdfStatement {
         const descItems = line.items.filter((it) => {
           if (it === firstItem) return false;
           if (isNearColumn(it.x, columns!)) return false;
+          // Exclude items in the "Soit en francs" column (beyond credit column)
+          if (it.x > columns!.creditX + X_COL_TOLERANCE) return false;
           return true;
         });
         const desc = descItems.map((it) => it.str).join(" ").trim();
@@ -154,7 +156,9 @@ export function parseLbpStatement(pages: PdfPage[]): PdfStatement {
 
       // Continuation line (no date at start)
       if (currentTx) {
-        const descItems = line.items.filter((it) => !isNearColumn(it.x, columns!));
+        const descItems = line.items.filter((it) =>
+          !isNearColumn(it.x, columns!) && it.x <= columns!.creditX + X_COL_TOLERANCE
+        );
         const text = descItems.map((it) => it.str).join(" ").trim();
         if (text) {
           // Skip "Soit en francs" values (numeric-only lines in far-right column)
