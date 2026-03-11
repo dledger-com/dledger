@@ -1,6 +1,7 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
+import { hmacSha256Hex } from "./crypto-utils.js";
 
 const BINANCE_API = "https://api.binance.com";
 
@@ -26,18 +27,7 @@ const QUOTE_CURRENCIES = ["USDT", "BTC", "ETH", "BNB", "FDUSD", "EUR"];
  * Signature = hex(HMAC-SHA256(secret, queryString))
  */
 async function binanceSign(queryString: string, secret: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(queryString));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return hmacSha256Hex(secret, queryString);
 }
 
 interface BinanceTrade {

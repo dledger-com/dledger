@@ -1,3 +1,5 @@
+import { untrack } from 'svelte';
+
 export interface PageActionButton {
 	type: 'button';
 	label: string;
@@ -31,7 +33,9 @@ export type PageAction = PageActionButton | PageActionMenu;
 let _actions = $state<PageAction[]>([]);
 
 export function setTopBarActions(actions: PageAction[]) {
-	if (JSON.stringify(_actions) === JSON.stringify(actions)) return;
+	// Use untrack to avoid creating a reactive dependency when called from $effect
+	const current = untrack(() => _actions);
+	if (JSON.stringify(current) === JSON.stringify(actions)) return;
 	_actions = actions;
 }
 

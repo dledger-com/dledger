@@ -489,8 +489,10 @@ async function fetchCoinGeckoHistorical(
       try {
         const url = config.coingeckoPro
           ? `https://pro-api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}`
-          : `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}&x_cg_demo_api_key=${config.coingeckoApiKey}`;
-        const headers: Record<string, string> = config.coingeckoPro ? { "x-cg-pro-api-key": config.coingeckoApiKey } : {};
+          : `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}`;
+        const headers: Record<string, string> = config.coingeckoPro
+          ? { "x-cg-pro-api-key": config.coingeckoApiKey }
+          : { "x-cg-demo-api-key": config.coingeckoApiKey };
         const resp = await geckoFetch.fetch(url, { headers, signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`CoinGecko HTTP ${resp.status} for ${req.currency}`);
@@ -579,8 +581,8 @@ async function fetchFinnhubHistorical(
       const toUnix = Math.floor(new Date(sortedDates[sortedDates.length - 1]).getTime() / 1000) + 86400;
 
       try {
-        const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(req.currency)}&resolution=D&from=${fromUnix}&to=${toUnix}&token=${config.finnhubApiKey}`;
-        const resp = await finnhubFetch.fetch(url, { signal: config.signal });
+        const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(req.currency)}&resolution=D&from=${fromUnix}&to=${toUnix}`;
+        const resp = await finnhubFetch.fetch(url, { headers: { "X-Finnhub-Token": config.finnhubApiKey }, signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`Finnhub HTTP ${resp.status} for ${req.currency}`);
           continue;
@@ -788,8 +790,8 @@ async function fetchCryptoCompareHistorical(
       const toTs = Math.floor(latest.getTime() / 1000) + 86400;
 
       try {
-        const url = `https://min-api.cryptocompare.com/data/v2/histoday?fsym=${req.currency}&tsym=${config.baseCurrency}&limit=${limit}&toTs=${toTs}&api_key=${config.cryptoCompareApiKey}`;
-        const resp = await ccFetch.fetch(url, { signal: config.signal });
+        const url = `https://min-api.cryptocompare.com/data/v2/histoday?fsym=${req.currency}&tsym=${config.baseCurrency}&limit=${limit}&toTs=${toTs}`;
+        const resp = await ccFetch.fetch(url, { headers: { authorization: `Apikey ${config.cryptoCompareApiKey}` }, signal: config.signal });
         if (!resp.ok) {
           result.errors.push(`CryptoCompare HTTP ${resp.status} for ${req.currency}`);
           continue;

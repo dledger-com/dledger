@@ -1,5 +1,6 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
+import { sha256Hex } from "./crypto-utils.js";
 
 const VOLET_API = "https://account.volet.com";
 const VOLET_SOAP_URL = `${VOLET_API}/wsm/apiWebService`;
@@ -15,8 +16,7 @@ export async function voletAuthToken(securityWord: string, now?: Date): Promise<
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const prehash = `${securityWord}:${yyyy}${mm}${dd}:${hh}`;
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(prehash));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(prehash);
 }
 
 /** Build a SOAP envelope and POST it to the Volet API. */

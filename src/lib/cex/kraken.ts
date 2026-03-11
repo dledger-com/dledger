@@ -1,6 +1,7 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
+import { sha256, hmacSha512Base64 } from "./crypto-utils.js";
 
 const KRAKEN_API = "https://api.kraken.com";
 
@@ -80,10 +81,10 @@ async function krakenSign(
   secret: string,
 ): Promise<string> {
   // SHA256(nonce + postData)
-  const encoder = new TextEncoder();
-  const sha256Hash = await crypto.subtle.digest("SHA-256", encoder.encode(nonce + postData));
+  const sha256Hash = await sha256(nonce + postData);
 
   // Prepend URL path
+  const encoder = new TextEncoder();
   const pathBytes = encoder.encode(path);
   const message = new Uint8Array(pathBytes.length + sha256Hash.byteLength);
   message.set(pathBytes, 0);
@@ -93,11 +94,7 @@ async function krakenSign(
   const secretBytes = Uint8Array.from(atob(secret), (c) => c.charCodeAt(0));
 
   // HMAC-SHA512
-  const key = await crypto.subtle.importKey("raw", secretBytes, { name: "HMAC", hash: "SHA-512" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, message);
-
-  // Return as base64
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return hmacSha512Base64(secretBytes, message);
 }
 
 interface KrakenLedgerEntry {

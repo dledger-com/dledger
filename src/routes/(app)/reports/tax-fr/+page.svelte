@@ -313,7 +313,6 @@
     }
 
     setTopBarActions(actions);
-    return () => clearTopBarActions();
   });
 </script>
 

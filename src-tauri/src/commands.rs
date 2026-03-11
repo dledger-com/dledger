@@ -507,7 +507,26 @@ pub fn set_metadata(
     entry_id: Uuid,
     entries: std::collections::HashMap<String, String>,
 ) -> Result<(), String> {
+    if entries.len() > 1000 {
+        return Err(format!(
+            "Too many metadata entries: {} (max 1000 per call)",
+            entries.len()
+        ));
+    }
     for (key, value) in &entries {
+        if key.len() > 256 {
+            return Err(format!(
+                "Metadata key too long: {} bytes (max 256)",
+                key.len()
+            ));
+        }
+        if value.len() > 65536 {
+            return Err(format!(
+                "Metadata value too long for key '{}': {} bytes (max 65536)",
+                key,
+                value.len()
+            ));
+        }
         state
             .engine
             .set_metadata(&entry_id, key, value)
@@ -813,8 +832,57 @@ pub fn remove_exchange_account(
 
 // -- Currency token address commands --
 
+fn is_evm_chain(chain: &str) -> bool {
+    matches!(
+        chain.to_lowercase().as_str(),
+        "ethereum" | "polygon" | "arbitrum" | "optimism" | "avalanche"
+            | "bsc" | "fantom" | "base" | "gnosis" | "celo" | "linea"
+            | "scroll" | "zksync" | "mantle" | "blast" | "mode"
+    )
+}
+
+fn is_valid_evm_address(addr: &str) -> bool {
+    if addr.len() != 42 || !addr.starts_with("0x") {
+        return false;
+    }
+    addr[2..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
 #[tauri::command]
 pub fn set_currency_token_address(state: State<'_, AppState>, currency: String, chain: String, contract_address: String) -> Result<(), String> {
+    if currency.is_empty() {
+        return Err("Currency code must not be empty".to_string());
+    }
+    if currency.len() > 32 {
+        return Err(format!(
+            "Currency code too long: {} chars (max 32)",
+            currency.len()
+        ));
+    }
+    if chain.is_empty() {
+        return Err("Chain must not be empty".to_string());
+    }
+    if chain.len() > 64 {
+        return Err(format!(
+            "Chain name too long: {} chars (max 64)",
+            chain.len()
+        ));
+    }
+    if !contract_address.is_empty() {
+        if is_evm_chain(&chain) {
+            if !is_valid_evm_address(&contract_address) {
+                return Err(format!(
+                    "Invalid EVM contract address for chain '{}': expected format 0x followed by 40 hex characters",
+                    chain
+                ));
+            }
+        } else if contract_address.len() > 256 {
+            return Err(format!(
+                "Contract address too long: {} chars (max 256)",
+                contract_address.len()
+            ));
+        }
+    }
     state.engine.set_currency_token_address(&currency, &chain, &contract_address).map_err(|e| e.to_string())
 }
 
@@ -866,6 +934,39 @@ pub fn repair_database(state: State<'_, AppState>) -> Result<Vec<String>, String
 
 // -- HTTP proxy command (bypasses CORS for APIs that don't support it) --
 
+const ALLOWED_DOMAINS: &[&str] = &[
+    "api.kraken.com",
+    "api.binance.com",
+    "api.coinbase.com",
+    "api.bybit.com",
+    "www.okx.com",
+    "www.bitstamp.net",
+    "api.crypto.com",
+    "api.coingecko.com",
+    "pro-api.coingecko.com",
+    "min-api.cryptocompare.com",
+    "finnhub.io",
+    "coins.llama.fi",
+    "api.frankfurter.dev",
+    "api.etherscan.io",
+    "api.routescan.io",
+    "gateway.thegraph.com",
+    "api.volet.com",
+];
+
+fn is_private_ip(host: &str) -> bool {
+    if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+        return true;
+    }
+    if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
+        let octets = ip.octets();
+        return octets[0] == 10
+            || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+            || (octets[0] == 192 && octets[1] == 168);
+    }
+    false
+}
+
 #[tauri::command]
 pub fn proxy_fetch(
     url: String,
@@ -873,6 +974,22 @@ pub fn proxy_fetch(
     headers: std::collections::HashMap<String, String>,
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let parsed = url::Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
+
+    if parsed.scheme() != "https" {
+        return Err("Only HTTPS URLs are allowed".to_string());
+    }
+
+    let host = parsed.host_str().ok_or("URL has no host")?;
+
+    if is_private_ip(host) {
+        return Err("Requests to private/local addresses are not allowed".to_string());
+    }
+
+    if !ALLOWED_DOMAINS.contains(&host) {
+        return Err(format!("Domain not allowed: {host}"));
+    }
+
     let mut resp = if method == "POST" {
         let mut req = ureq::post(&url);
         for (k, v) in &headers {

@@ -1,6 +1,7 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
+import { hmacSha256Base64 } from "./crypto-utils.js";
 
 const OKX_API = "https://www.okx.com";
 
@@ -24,19 +25,8 @@ async function okxSign(
   body: string,
   secret: string,
 ): Promise<string> {
-  const encoder = new TextEncoder();
   const prehash = timestamp + method + requestPath + body;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(prehash));
-
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return hmacSha256Base64(secret, prehash);
 }
 
 interface OkxFillEntry {

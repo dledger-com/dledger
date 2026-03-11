@@ -1,6 +1,7 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
+import { hmacSha256Hex } from "./crypto-utils.js";
 
 const CRYPTOCOM_API = "https://api.crypto.com";
 const RATE_LIMIT_MS = 1000;
@@ -39,19 +40,7 @@ export async function cryptocomSign(
   const paramString = buildParamString(params);
   const prehash = method + id + apiKey + paramString + nonce;
 
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(prehash));
-
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return hmacSha256Hex(secret, prehash);
 }
 
 // ---------------------------------------------------------------------------

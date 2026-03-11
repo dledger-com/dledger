@@ -146,7 +146,6 @@
                 ],
             },
         ]);
-        return () => clearTopBarActions();
     });
 
     // Load faceted filter options (deferred to avoid blocking initial render)

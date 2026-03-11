@@ -30,7 +30,8 @@ export async function testFinnhub(apiKey: string): Promise<TestResult> {
   if (!apiKey) return { ok: false, error: "API key required" };
   try {
     const resp = await safeFetch(
-      `https://finnhub.io/api/v1/quote?symbol=AAPL&token=${encodeURIComponent(apiKey)}`,
+      `https://finnhub.io/api/v1/quote?symbol=AAPL`,
+      { headers: { "X-Finnhub-Token": apiKey } },
     );
     const data = await resp.json();
     if (data?.error) return { ok: false, error: data.error };
@@ -48,8 +49,10 @@ export async function testCoinGecko(apiKey: string, pro?: boolean): Promise<Test
   try {
     const url = pro
       ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd`
-      : `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&x_cg_demo_api_key=${encodeURIComponent(apiKey)}`;
-    const headers: Record<string, string> = pro ? { "x-cg-pro-api-key": apiKey } : {};
+      : `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd`;
+    const headers: Record<string, string> = pro
+      ? { "x-cg-pro-api-key": apiKey }
+      : { "x-cg-demo-api-key": apiKey };
     const resp = await safeFetch(url, { headers });
     const data = await resp.json();
     const price = data?.bitcoin?.usd;
@@ -65,7 +68,8 @@ export async function testCryptoCompare(apiKey: string): Promise<TestResult> {
   if (!apiKey) return { ok: false, error: "API key required" };
   try {
     const resp = await safeFetch(
-      `https://min-api.cryptocompare.com/data/pricemulti?fsyms=BTC&tsyms=USD&api_key=${encodeURIComponent(apiKey)}`,
+      `https://min-api.cryptocompare.com/data/pricemulti?fsyms=BTC&tsyms=USD`,
+      { headers: { authorization: `Apikey ${apiKey}` } },
     );
     const data = await resp.json();
     if (data?.Response === "Error") return { ok: false, error: data.Message ?? "API error" };

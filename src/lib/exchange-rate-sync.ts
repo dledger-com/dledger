@@ -456,8 +456,10 @@ export async function syncExchangeRates(
           const vsBase = baseCurrency.toLowerCase();
           const url = coingeckoPro
             ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}`
-            : `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
-          const headers: Record<string, string> = coingeckoPro ? { "x-cg-pro-api-key": coingeckoApiKey } : {};
+            : `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}`;
+          const headers: Record<string, string> = coingeckoPro
+            ? { "x-cg-pro-api-key": coingeckoApiKey }
+            : { "x-cg-demo-api-key": coingeckoApiKey };
           const resp = await geckoFetch.fetch(url, { headers });
 
           if (!resp.ok) {
@@ -515,8 +517,8 @@ export async function syncExchangeRates(
       const finnhubFetch = new RateLimitedFetcher({ maxRequests: 55, intervalMs: 60_000 });
       try {
         for (const code of finnhubCodes) {
-          const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
-          const resp = await finnhubFetch.fetch(url);
+          const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}`;
+          const resp = await finnhubFetch.fetch(url, { headers: { "X-Finnhub-Token": finnhubApiKey } });
 
           if (!resp.ok) {
             result.errors.push(`Finnhub HTTP ${resp.status} for ${code}`);
@@ -567,8 +569,8 @@ export async function syncExchangeRates(
     } else {
       try {
         const fsyms = cryptocompareCodes.join(",");
-        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${fsyms}&tsyms=${baseCurrency}&api_key=${cryptoCompareApiKey}`;
-        const resp = await fetch(url);
+        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${fsyms}&tsyms=${baseCurrency}`;
+        const resp = await fetch(url, { headers: { authorization: `Apikey ${cryptoCompareApiKey}` } });
         if (!resp.ok) {
           result.errors.push(`CryptoCompare HTTP ${resp.status}: ${resp.statusText}`);
           for (const code of cryptocompareCodes) {
@@ -803,8 +805,10 @@ export async function fetchSingleRate(
         const vsBase = baseCurrency.toLowerCase();
         const url = coingeckoPro
           ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}`
-          : `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}&x_cg_demo_api_key=${coingeckoApiKey}`;
-        const headers: Record<string, string> = coingeckoPro ? { "x-cg-pro-api-key": coingeckoApiKey } : {};
+          : `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}`;
+        const headers: Record<string, string> = coingeckoPro
+          ? { "x-cg-pro-api-key": coingeckoApiKey }
+          : { "x-cg-demo-api-key": coingeckoApiKey };
         const resp = await fetch(url, { headers });
         if (!resp.ok) return { success: false, error: `CoinGecko HTTP ${resp.status}: ${resp.statusText}` };
         const data: CoinGeckoResponse = await resp.json();
@@ -827,8 +831,8 @@ export async function fetchSingleRate(
     case "finnhub": {
       if (!finnhubApiKey) return { success: false, error: "Finnhub API key is required" };
       try {
-        const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}&token=${finnhubApiKey}`;
-        const resp = await fetch(url);
+        const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(code)}`;
+        const resp = await fetch(url, { headers: { "X-Finnhub-Token": finnhubApiKey } });
         if (!resp.ok) return { success: false, error: `Finnhub HTTP ${resp.status} for ${code}` };
         const data = await resp.json();
         if (!data.c || data.c === 0) return { success: false, error: `Finnhub: no price for ${code}` };
@@ -881,8 +885,8 @@ export async function fetchSingleRate(
     case "cryptocompare": {
       if (!cryptoCompareApiKey) return { success: false, error: "CryptoCompare API key is required" };
       try {
-        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${code}&tsyms=${baseCurrency}&api_key=${cryptoCompareApiKey}`;
-        const resp = await fetch(url);
+        const url = `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${code}&tsyms=${baseCurrency}`;
+        const resp = await fetch(url, { headers: { authorization: `Apikey ${cryptoCompareApiKey}` } });
         if (!resp.ok) return { success: false, error: `CryptoCompare HTTP ${resp.status}: ${resp.statusText}` };
         const data = await resp.json() as Record<string, Record<string, number>>;
         const priceData = data[code];

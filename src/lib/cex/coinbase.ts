@@ -2,6 +2,7 @@ import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
 import Decimal from "decimal.js-light";
+import { hmacSha256Hex } from "./crypto-utils.js";
 
 const COINBASE_API = "https://api.coinbase.com";
 const COINBASE_HOST = "api.coinbase.com";
@@ -227,21 +228,8 @@ export async function coinbaseHmacSign(
   path: string,
   body: string = "",
 ): Promise<string> {
-  const encoder = new TextEncoder();
   const prehash = `${timestamp}${method}${path}${body}`;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(prehash));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return hmacSha256Hex(secret, prehash);
 }
 
 // ---------------------------------------------------------------------------

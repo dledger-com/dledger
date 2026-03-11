@@ -26,6 +26,7 @@ rust_decimal = { workspace = true }
 chrono = { workspace = true }
 tracing = "0.1"
 ureq = { version = "3", features = ["json"] }
+url = "2"
 
 [dev-dependencies]
 tempfile = "3"

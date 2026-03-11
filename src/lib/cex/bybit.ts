@@ -1,6 +1,7 @@
 import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
+import { hmacSha256Hex } from "./crypto-utils.js";
 
 const BYBIT_API = "https://api.bybit.com";
 const RECV_WINDOW = "5000";
@@ -33,22 +34,8 @@ export async function bybitSign(
   queryString: string,
   secret: string,
 ): Promise<string> {
-  const encoder = new TextEncoder();
   const prehash = timestamp + apiKey + recvWindow + queryString;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(prehash));
-
-  // Convert to hex string
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return hmacSha256Hex(secret, prehash);
 }
 
 /**
