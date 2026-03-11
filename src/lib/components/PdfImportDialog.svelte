@@ -409,7 +409,10 @@
   $effect.pre(() => {
     if (open && initialFile) {
       const file = initialFile;
-      untrack(() => parseFile(file));
+      untrack(() => {
+        resetDialog();
+        parseFile(file);
+      });
     } else if (open) {
       untrack(() => resetDialog());
     }

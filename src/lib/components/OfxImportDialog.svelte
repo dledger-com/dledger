@@ -382,6 +382,7 @@
   // or reset state on manual open. No reset on close to avoid flash.
   $effect.pre(() => {
     if (open && initialContent) {
+      untrack(() => resetDialog());
       rawContent = initialContent;
       fileName = initialFileName;
       untrack(() => handleParse());

@@ -524,6 +524,7 @@
   // step 1 during the dialog's CSS exit animation.
   $effect.pre(() => {
     if (open && initialContent) {
+      untrack(() => resetDialog());
       rawContent = initialContent;
       fileName = initialFileName;
       untrack(() => handleParse());
