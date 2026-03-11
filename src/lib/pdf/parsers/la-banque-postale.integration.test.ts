@@ -57,6 +57,14 @@ const sample2022Mar = loadSample("2022-03-28 La Banque Postale statement.pdf");
 const sample2012CCP = loadSample("releve_CCP1234567X020_20120926.pdf");
 const sample2012LA = loadSample("releve_LA0000000000X_20121126.pdf");
 
+function loadTaxFrSample(filename: string): Uint8Array | null {
+  const path = resolve(__dirname, "../../../../tmp/Tax Fr", filename);
+  if (!existsSync(path)) return null;
+  return new Uint8Array(readFileSync(path));
+}
+
+const sample2016CCP = loadTaxFrSample("releve_CCP1234567X020_20161226.pdf");
+
 describe("La Banque Postale integration tests", () => {
   it.skipIf(!sample2022Feb)("2022-02-28: parses transactions, balance, and account info", async () => {
     const result = await parseFromFile(sample2022Feb!);
@@ -110,5 +118,24 @@ describe("La Banque Postale integration tests", () => {
     expect(result.transactions.length).toBeGreaterThan(0);
     expect(result.openingDate).toBe("2012-10-26");
     expect(result.closingDate).toBe("2012-11-26");
+  });
+
+  it.skipIf(!sample2016CCP)("2016 CCP: RETRAIT DAB with CARTE X date prefix parsed correctly", async () => {
+    const result = await parseFromFile(sample2016CCP!);
+
+    expect(result.transactions.length).toBeGreaterThan(0);
+
+    // Find RETRAIT DAB transactions — they should have atm-withdrawal metadata
+    const retraits = result.transactions.filter(
+      (tx) => tx.metadata?.["transaction-type"] === "atm-withdrawal",
+    );
+    expect(retraits.length).toBeGreaterThan(0);
+
+    for (const tx of retraits) {
+      expect(tx.metadata?.["card-number"]).toBeTruthy();
+      expect(tx.metadata?.["operation-time"]).toMatch(/^\d{2}:\d{2}$/);
+      // Description should be the location, not the CARTE X prefix
+      expect(tx.description).not.toMatch(/^CARTE/);
+    }
   });
 });

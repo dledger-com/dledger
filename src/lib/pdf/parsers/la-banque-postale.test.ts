@@ -398,6 +398,26 @@ describe("parseLbpStatement", () => {
     expect(result.closingBalance).toBe(3500);
   });
 
+  it("parses ATM withdrawal with CARTE X prefix on date line and RETRAIT DAB on continuation", () => {
+    const page = make2022Page([
+      HEADER_2022,
+      makeLine(300, ["Ancien solde au 26/01/2022", 272], ["500,00", 506]),
+      makeLine(282, ["15/02", 54], ["CARTE X2843 A 09H27", 86], ["60,00", 446]),
+      makeLine(273, ["RETRAIT DAB LA BANQUE POSTALE", 86]),
+      makeLine(623, ["Nouveau solde au 25/02/2022", 264], ["440,00", 506]),
+    ]);
+
+    const result = parseLbpStatement([page]);
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].date).toBe("2022-02-15");
+    expect(result.transactions[0].amount).toBe(-60);
+    expect(result.transactions[0].description).toBe("LA BANQUE POSTALE");
+    expect(result.transactions[0].metadata?.["transaction-type"]).toBe("atm-withdrawal");
+    expect(result.transactions[0].metadata?.["card-number"]).toBe("2843");
+    expect(result.transactions[0].metadata?.["operation-time"]).toBe("09:27");
+  });
+
   it("defaults currency to EUR", () => {
     const result = parseLbpStatement([make2022Page([HEADER_2022])]);
     expect(result.currency).toBe("EUR");
@@ -495,6 +515,35 @@ describe("extractLbpMetadata", () => {
     const result = extractLbpMetadata("AVOIR REMBOURSEMENT ACHAT");
     expect(result.metadata["transaction-type"]).toBe("refund");
     expect(result.description).toBe("REMBOURSEMENT ACHAT");
+  });
+
+  it("strips CARTE X prefix with embedded date and extracts ATM withdrawal metadata", () => {
+    const result = extractLbpMetadata("CARTE X2843 02/12/16 A 09H27 RETRAIT DAB LA BANQUE POSTALE");
+    expect(result.metadata["transaction-type"]).toBe("atm-withdrawal");
+    expect(result.metadata["card-number"]).toBe("2843");
+    expect(result.metadata["operation-time"]).toBe("09:27");
+    expect(result.metadata["operation-date"]).toBe("02/12");
+    expect(result.description).toBe("LA BANQUE POSTALE");
+  });
+
+  it("strips CARTE X prefix without date (backward compat)", () => {
+    const result = extractLbpMetadata("CARTE X2843 A 09H27 RETRAIT DAB LA BANQUE POSTALE");
+    expect(result.metadata["transaction-type"]).toBe("atm-withdrawal");
+    expect(result.metadata["card-number"]).toBe("2843");
+    expect(result.metadata["operation-time"]).toBe("09:27");
+    expect(result.description).toBe("LA BANQUE POSTALE");
+  });
+
+  it("extracts VIREMENT PERMANENT POUR as standing-order", () => {
+    const result = extractLbpMetadata("VIREMENT PERMANENT POUR M. DUPONT");
+    expect(result.metadata["transaction-type"]).toBe("standing-order");
+    expect(result.description).toBe("M. DUPONT");
+  });
+
+  it("extracts VIREMENT PERMANENT DE as standing-order", () => {
+    const result = extractLbpMetadata("VIREMENT PERMANENT DE MME MARTIN");
+    expect(result.metadata["transaction-type"]).toBe("standing-order");
+    expect(result.description).toBe("MME MARTIN");
   });
 
   it("returns empty metadata and unchanged description for no match", () => {

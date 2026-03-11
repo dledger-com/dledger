@@ -367,6 +367,8 @@ const LBP_TX_TYPE_KEYWORDS: LbpKeyword[] = [
   { pattern: /^REMISE CHEQUE\s*/i, type: "check-deposit" },
   { pattern: /^ACHAT CB\s*/i, type: "card-purchase" },
   { pattern: /^RETRAIT DAB\s*/i, type: "atm-withdrawal" },
+  { pattern: /^VIREMENT PERMANENT POUR\s*/i, type: "standing-order" },
+  { pattern: /^VIREMENT PERMANENT DE\s*/i, type: "standing-order" },
   { pattern: /^VIREMENT EN FAVEUR DE\s*/i, type: "transfer-out" },
   { pattern: /^VIREMENT POUR\s*/i, type: "transfer-out" },
   { pattern: /^VIREMENT DE\s*/i, type: "transfer-in" },
@@ -400,6 +402,18 @@ const CHECK_NUM_RE = /N[°\s]+(\d+)/i;
 export function extractLbpMetadata(rawDesc: string): { description: string; metadata: Record<string, string> } {
   const metadata: Record<string, string> = {};
   let text = rawDesc;
+
+  // Step 0 — Strip "CARTE Xnnnn [DD/MM[/YY]] A HHhMM" prefix (ATM/card with card ID + time)
+  const carteTimeRe = /^CARTE\s+X(\d+)\s+(?:(\d{2})\/(\d{2})(?:\/\d{2,4})?\s+)?A\s+(\d{2})H(\d{2})\s*/i;
+  const carteTimeMatch = text.match(carteTimeRe);
+  if (carteTimeMatch) {
+    metadata["card-number"] = carteTimeMatch[1];
+    metadata["operation-time"] = `${carteTimeMatch[4]}:${carteTimeMatch[5]}`;
+    if (carteTimeMatch[2] && carteTimeMatch[3]) {
+      metadata["operation-date"] = `${carteTimeMatch[2]}/${carteTimeMatch[3]}`;
+    }
+    text = text.slice(carteTimeMatch[0].length);
+  }
 
   // Step 1 — Match transaction type keyword
   for (const kw of LBP_TX_TYPE_KEYWORDS) {
