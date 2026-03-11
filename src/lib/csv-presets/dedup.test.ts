@@ -5,7 +5,7 @@ import {
   computeAmountFingerprint,
   computeEntryAmountFingerprint,
   buildDedupIndex,
-  isDuplicate,
+  markDuplicates,
 } from "./dedup.js";
 import type { DedupIndex } from "./dedup.js";
 import { importRecords } from "./transform.js";
@@ -164,12 +164,12 @@ describe("buildDedupIndex", () => {
   });
 });
 
-describe("isDuplicate", () => {
+describe("markDuplicates", () => {
   it("detects source-based duplicate", () => {
     const index: DedupIndex = {
       sources: new Set(["csv-import:kraken:tx-001"]),
-      fingerprints: new Set(),
-      amountFingerprints: new Set(),
+      fingerprints: new Map(),
+      amountFingerprints: new Map(),
     };
     const rec: CsvRecord = {
       date: "2024-01-15",
@@ -180,7 +180,7 @@ describe("isDuplicate", () => {
       ],
       sourceKey: "tx-001",
     };
-    expect(isDuplicate(rec, "kraken", index)).toBe(true);
+    expect(markDuplicates([rec], "kraken", index)).toEqual([true]);
   });
 
   it("detects fingerprint-based duplicate", () => {
@@ -194,17 +194,17 @@ describe("isDuplicate", () => {
     };
     const index: DedupIndex = {
       sources: new Set(),
-      fingerprints: new Set([computeRecordFingerprint(rec)]),
-      amountFingerprints: new Set(),
+      fingerprints: new Map([[computeRecordFingerprint(rec), 1]]),
+      amountFingerprints: new Map(),
     };
-    expect(isDuplicate(rec, undefined, index)).toBe(true);
+    expect(markDuplicates([rec], undefined, index)).toEqual([true]);
   });
 
   it("returns false for non-duplicate", () => {
     const index: DedupIndex = {
       sources: new Set(),
-      fingerprints: new Set(),
-      amountFingerprints: new Set(),
+      fingerprints: new Map(),
+      amountFingerprints: new Map(),
     };
     const rec: CsvRecord = {
       date: "2024-01-15",
@@ -214,14 +214,14 @@ describe("isDuplicate", () => {
         { account: "Assets:Bank", currency: "EUR", amount: "-5" },
       ],
     };
-    expect(isDuplicate(rec, undefined, index)).toBe(false);
+    expect(markDuplicates([rec], undefined, index)).toEqual([false]);
   });
 
   it("source check requires both sourceKey and presetId", () => {
     const index: DedupIndex = {
       sources: new Set(["csv-import:kraken:tx-001"]),
-      fingerprints: new Set(),
-      amountFingerprints: new Set(),
+      fingerprints: new Map(),
+      amountFingerprints: new Map(),
     };
     // No sourceKey on record
     const rec1: CsvRecord = {
@@ -232,7 +232,7 @@ describe("isDuplicate", () => {
         { account: "Assets:USD", currency: "USD", amount: "-50000" },
       ],
     };
-    expect(isDuplicate(rec1, "kraken", index)).toBe(false);
+    expect(markDuplicates([rec1], "kraken", index)).toEqual([false]);
 
     // No presetId
     const rec2: CsvRecord = {
@@ -244,7 +244,7 @@ describe("isDuplicate", () => {
       ],
       sourceKey: "tx-001",
     };
-    expect(isDuplicate(rec2, undefined, index)).toBe(false);
+    expect(markDuplicates([rec2], undefined, index)).toEqual([false]);
   });
 
   it("detects amount-fingerprint duplicate (same date+amounts, different description)", () => {
@@ -256,19 +256,20 @@ describe("isDuplicate", () => {
         { account: "Assets:Bank", currency: "EUR", amount: "-42.50" },
       ],
     };
+    const afp = computeAmountFingerprint({
+      date: "2024-01-15",
+      description: "PAYMENT CARREFOUR STORE 123",
+      lines: [
+        { account: "Expenses:Groceries", currency: "EUR", amount: "42.50" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-42.50" },
+      ],
+    });
     const index: DedupIndex = {
       sources: new Set(),
-      fingerprints: new Set(),
-      amountFingerprints: new Set([computeAmountFingerprint({
-        date: "2024-01-15",
-        description: "PAYMENT CARREFOUR STORE 123",
-        lines: [
-          { account: "Expenses:Groceries", currency: "EUR", amount: "42.50" },
-          { account: "Assets:Bank", currency: "EUR", amount: "-42.50" },
-        ],
-      })]),
+      fingerprints: new Map(),
+      amountFingerprints: new Map([[afp, 1]]),
     };
-    expect(isDuplicate(csvRec, undefined, index)).toBe(true);
+    expect(markDuplicates([csvRec], undefined, index)).toEqual([true]);
   });
 
   it("does not match amount fingerprint when amounts differ", () => {
@@ -282,10 +283,132 @@ describe("isDuplicate", () => {
     };
     const index: DedupIndex = {
       sources: new Set(),
-      fingerprints: new Set(),
-      amountFingerprints: new Set(["2024-01-15:EUR:10|EUR:-10"]),
+      fingerprints: new Map(),
+      amountFingerprints: new Map([["2024-01-15:EUR:10|EUR:-10", 1]]),
     };
-    expect(isDuplicate(rec, undefined, index)).toBe(false);
+    expect(markDuplicates([rec], undefined, index)).toEqual([false]);
+  });
+});
+
+describe("counting-based dedup", () => {
+  it("DB has 1 entry, batch has 2 identical records — only first is duplicate", () => {
+    const rec: CsvRecord = {
+      date: "2024-01-15",
+      description: "Coffee",
+      lines: [
+        { account: "Expenses:Food", currency: "EUR", amount: "5" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-5" },
+      ],
+    };
+    const index: DedupIndex = {
+      sources: new Set(),
+      fingerprints: new Map([[computeRecordFingerprint(rec), 1]]),
+      amountFingerprints: new Map([[computeAmountFingerprint(rec), 1]]),
+    };
+    expect(markDuplicates([rec, rec], undefined, index)).toEqual([true, false]);
+  });
+
+  it("DB has 2 entries, batch has 2 identical records — both are duplicates", () => {
+    const rec: CsvRecord = {
+      date: "2024-01-15",
+      description: "Coffee",
+      lines: [
+        { account: "Expenses:Food", currency: "EUR", amount: "5" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-5" },
+      ],
+    };
+    const index: DedupIndex = {
+      sources: new Set(),
+      fingerprints: new Map([[computeRecordFingerprint(rec), 2]]),
+      amountFingerprints: new Map([[computeAmountFingerprint(rec), 2]]),
+    };
+    expect(markDuplicates([rec, rec], undefined, index)).toEqual([true, true]);
+  });
+
+  it("amount-only false positive fix: count exhausted after first match", () => {
+    const rec1: CsvRecord = {
+      date: "2024-01-15",
+      description: "GOOGLE Square",
+      lines: [
+        { account: "Expenses:Food", currency: "EUR", amount: "0.50" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-0.50" },
+      ],
+    };
+    const rec2: CsvRecord = {
+      date: "2024-01-15",
+      description: "GOOGLE Maps",
+      lines: [
+        { account: "Expenses:Food", currency: "EUR", amount: "0.50" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-0.50" },
+      ],
+    };
+    // DB has 1 entry with matching amount fingerprint (different description)
+    const afp = computeAmountFingerprint(rec1); // same as rec2's afp
+    const index: DedupIndex = {
+      sources: new Set(),
+      fingerprints: new Map(),
+      amountFingerprints: new Map([[afp, 1]]),
+    };
+    const flags = markDuplicates([rec1, rec2], undefined, index);
+    expect(flags).toEqual([true, false]);
+  });
+
+  it("full fp match consumes amount fp slot", () => {
+    const recA: CsvRecord = {
+      date: "2024-01-15",
+      description: "Coffee Shop",
+      lines: [
+        { account: "Expenses:Food", currency: "EUR", amount: "5" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-5" },
+      ],
+    };
+    const recB: CsvRecord = {
+      date: "2024-01-15",
+      description: "Tea Shop",
+      lines: [
+        { account: "Expenses:Food", currency: "EUR", amount: "5" },
+        { account: "Assets:Bank", currency: "EUR", amount: "-5" },
+      ],
+    };
+    // DB has 1 entry matching recA's full fingerprint
+    const index: DedupIndex = {
+      sources: new Set(),
+      fingerprints: new Map([[computeRecordFingerprint(recA), 1]]),
+      amountFingerprints: new Map([[computeAmountFingerprint(recA), 1]]),
+    };
+    // recA matches full fp (consuming the afp slot too), recB should NOT match afp
+    const flags = markDuplicates([recA, recB], undefined, index);
+    expect(flags).toEqual([true, false]);
+  });
+
+  it("source match does NOT consume fingerprint slots", () => {
+    const rec1: CsvRecord = {
+      date: "2024-01-15",
+      description: "Trade",
+      lines: [
+        { account: "Assets:BTC", currency: "BTC", amount: "1" },
+        { account: "Assets:USD", currency: "USD", amount: "-50000" },
+      ],
+      sourceKey: "tx-001",
+    };
+    const rec2: CsvRecord = {
+      date: "2024-01-15",
+      description: "Trade",
+      lines: [
+        { account: "Assets:BTC", currency: "BTC", amount: "1" },
+        { account: "Assets:USD", currency: "USD", amount: "-50000" },
+      ],
+    };
+    const fp = computeRecordFingerprint(rec1);
+    const afp = computeAmountFingerprint(rec1);
+    const index: DedupIndex = {
+      sources: new Set(["csv-import:kraken:tx-001"]),
+      fingerprints: new Map([[fp, 1]]),
+      amountFingerprints: new Map([[afp, 1]]),
+    };
+    // rec1 matches via source (doesn't consume fp slot), rec2 should still match via fp
+    const flags = markDuplicates([rec1, rec2], "kraken", index);
+    expect(flags).toEqual([true, true]);
   });
 });
 
@@ -439,7 +562,7 @@ describe("cross-format dedup scenario", () => {
     ];
 
     const index = await buildDedupIndex(backend, ofxRecords, "ofx-import");
-    expect(isDuplicate(ofxRecords[0], "ofx-import", index)).toBe(true);
+    expect(markDuplicates(ofxRecords, "ofx-import", index)).toEqual([true]);
   });
 
   it("does not flag as duplicate when amounts differ", async () => {
@@ -467,6 +590,6 @@ describe("cross-format dedup scenario", () => {
     ];
 
     const index = await buildDedupIndex(backend, ofxRecords);
-    expect(isDuplicate(ofxRecords[0], undefined, index)).toBe(false);
+    expect(markDuplicates(ofxRecords, undefined, index)).toEqual([false]);
   });
 });

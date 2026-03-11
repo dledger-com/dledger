@@ -15,7 +15,7 @@
   import {
     enqueueRecordImport,
     buildDedupIndex,
-    isDuplicate,
+    markDuplicates,
     applyRuleTags,
     type CsvRecord,
     type CsvFileHeader,
@@ -250,7 +250,7 @@
     try {
       const backend = getBackend();
       const index = await buildDedupIndex(backend, records, "ofx-import");
-      duplicateFlags = records.map((rec) => isDuplicate(rec, "ofx-import", index));
+      duplicateFlags = markDuplicates(records, "ofx-import", index);
     } catch {
       duplicateFlags = records.map(() => false);
     }

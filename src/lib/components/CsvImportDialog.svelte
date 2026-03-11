@@ -19,7 +19,7 @@
     transformGeneric,
     enqueueRecordImport,
     buildDedupIndex,
-    isDuplicate,
+    markDuplicates,
     applyRuleTags,
     DATE_FORMATS,
     setBankStatementRules,
@@ -384,7 +384,7 @@
       const backend = getBackend();
       const presetId = usePreset && selectedPresetId ? selectedPresetId : undefined;
       const index = await buildDedupIndex(backend, records, presetId);
-      duplicateFlags = records.map((rec) => isDuplicate(rec, presetId, index));
+      duplicateFlags = markDuplicates(records, presetId, index);
     } catch {
       // Dedup detection is non-critical; proceed without it
       duplicateFlags = records.map(() => false);

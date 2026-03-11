@@ -7,7 +7,7 @@ export { parseAmount, detectNumberFormat } from "./parse-amount.js";
 export { detectColumns, type ColumnDetection } from "./detect.js";
 export { matchRule, applyRuleTags, type CsvCategorizationRule } from "./categorize.js";
 export { transformGeneric, importRecords, enqueueRecordImport, type TransformOptions, type TransformResult, type ImportOptions } from "./transform.js";
-export { buildDedupIndex, isDuplicate, computeRecordFingerprint, type DedupIndex } from "./dedup.js";
+export { buildDedupIndex, markDuplicates, computeRecordFingerprint, type DedupIndex } from "./dedup.js";
 export type { CsvPreset, CsvRecord, CsvFileHeader, PresetDetectionResult } from "./types.js";
 export { setBankStatementRules } from "./presets/bank-statement.js";
 export { setRevolutRules } from "./presets/revolut.js";

@@ -6,7 +6,7 @@ import type { CsvRecord } from "./types.js";
 
 import { parseDate, type DateFormatId } from "./parse-date.js";
 import { parseAmount } from "./parse-amount.js";
-import { buildDedupIndex, isDuplicate, computeRecordFingerprint, computeAmountFingerprint } from "./dedup.js";
+import { buildDedupIndex, markDuplicates } from "./dedup.js";
 import { ASSETS_IMPORT, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 import { getBackend } from "$lib/backend.js";
 import { taskQueue } from "$lib/task-queue.svelte.js";
@@ -236,14 +236,31 @@ export async function importRecords(
     }
   }
 
-  const totalCount = ungrouped.length + groups.size;
+  // Merge grouped records before dedup so we can mark all at once
+  const mergedGroups: CsvRecord[] = [];
+  for (const [, group] of groups) {
+    mergedGroups.push({
+      date: group[0].date,
+      description: group[0].description,
+      lines: group.flatMap((r) => r.lines),
+      sourceKey: group[0].sourceKey,
+      ...(group[0].metadata ? { metadata: group[0].metadata } : {}),
+    });
+  }
+
+  // Pre-compute duplicate flags against DB-only index (no intra-batch dedup)
+  const ungroupedDupFlags = markDuplicates(ungrouped, presetId, dedupIndex);
+  const groupedDupFlags = markDuplicates(mergedGroups, presetId, dedupIndex);
+
+  const totalCount = ungrouped.length + mergedGroups.length;
   let processed = 0;
   options?.onProgress?.({ current: 0, total: totalCount, message: "Importing records..." });
 
   // Process ungrouped records individually
-  for (const rec of ungrouped) {
+  for (let i = 0; i < ungrouped.length; i++) {
     if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
-    if (isDuplicate(rec, presetId, dedupIndex)) {
+    const rec = ungrouped[i];
+    if (ungroupedDupFlags[i]) {
       result.duplicates_skipped++;
       processed++;
       options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
@@ -255,9 +272,7 @@ export async function importRecords(
     );
     if (entryResult) {
       result.entries_created++;
-      // Add to index for intra-batch dedup
-      dedupIndex.fingerprints.add(computeRecordFingerprint(rec));
-      dedupIndex.amountFingerprints.add(computeAmountFingerprint(rec));
+      // Only add source keys for intra-batch dedup (unique identifiers, safe)
       if (rec.sourceKey && presetId) {
         dedupIndex.sources.add(`csv-import:${presetId}:${rec.sourceKey}`);
       }
@@ -269,17 +284,11 @@ export async function importRecords(
     if (processed % 10 === 0) await yieldToUI();
   }
 
-  // Process grouped records: merge lines into a single entry
-  for (const [, group] of groups) {
+  // Process grouped records (already merged)
+  for (let i = 0; i < mergedGroups.length; i++) {
     if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
-    const merged: CsvRecord = {
-      date: group[0].date,
-      description: group[0].description,
-      lines: group.flatMap((r) => r.lines),
-      sourceKey: group[0].sourceKey,
-      ...(group[0].metadata ? { metadata: group[0].metadata } : {}),
-    };
-    if (isDuplicate(merged, presetId, dedupIndex)) {
+    const merged = mergedGroups[i];
+    if (groupedDupFlags[i]) {
       result.duplicates_skipped++;
       processed++;
       options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
@@ -291,8 +300,6 @@ export async function importRecords(
     );
     if (entryResult) {
       result.entries_created++;
-      dedupIndex.fingerprints.add(computeRecordFingerprint(merged));
-      dedupIndex.amountFingerprints.add(computeAmountFingerprint(merged));
       if (merged.sourceKey && presetId) {
         dedupIndex.sources.add(`csv-import:${presetId}:${merged.sourceKey}`);
       }

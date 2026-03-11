@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { crossSourceAliases, cexSourceFromCsvPreset } from "./cross-source.js";
-import { buildDedupIndex, isDuplicate } from "./dedup.js";
+import { buildDedupIndex, markDuplicates } from "./dedup.js";
 import type { DedupIndex } from "./dedup.js";
 import { importRecords } from "./transform.js";
 import { createTestBackend } from "../../test/helpers.js";
@@ -81,12 +81,12 @@ describe("cexSourceFromCsvPreset", () => {
 });
 
 describe("cross-source dedup integration", () => {
-  it("isDuplicate catches CEX-sourced entry when importing CSV", () => {
+  it("markDuplicates catches CEX-sourced entry when importing CSV", () => {
     // Simulate: DB has an entry from CEX sync with source "kraken:D2FK3E"
     const index: DedupIndex = {
       sources: new Set(["kraken:D2FK3E"]),
-      fingerprints: new Set(),
-      amountFingerprints: new Set(),
+      fingerprints: new Map(),
+      amountFingerprints: new Map(),
     };
 
     const rec: CsvRecord = {
@@ -99,15 +99,15 @@ describe("cross-source dedup integration", () => {
       sourceKey: "D2FK3E",
     };
 
-    // isDuplicate should find it via cross-source check
-    expect(isDuplicate(rec, "kraken-ledger", index)).toBe(true);
+    // markDuplicates should find it via cross-source check
+    expect(markDuplicates([rec], "kraken-ledger", index)).toEqual([true]);
   });
 
-  it("isDuplicate does not false-positive for unrelated presets", () => {
+  it("markDuplicates does not false-positive for unrelated presets", () => {
     const index: DedupIndex = {
       sources: new Set(["kraken:D2FK3E"]),
-      fingerprints: new Set(),
-      amountFingerprints: new Set(),
+      fingerprints: new Map(),
+      amountFingerprints: new Map(),
     };
 
     const rec: CsvRecord = {
@@ -121,7 +121,7 @@ describe("cross-source dedup integration", () => {
     };
 
     // binance-trade has no mapping, should not match
-    expect(isDuplicate(rec, "binance-trade", index)).toBe(false);
+    expect(markDuplicates([rec], "binance-trade", index)).toEqual([false]);
   });
 
   it("buildDedupIndex includes cross-source aliases for CEX entries", async () => {

@@ -4,9 +4,9 @@ import type { CsvRecord } from "./types.js";
 import { crossSourceAliases, cexSourceFromCsvPreset } from "./cross-source.js";
 
 export interface DedupIndex {
-  sources: Set<string>;
-  fingerprints: Set<string>;
-  amountFingerprints: Set<string>;
+  sources: Set<string>;                    // source keys are unique — Set is fine
+  fingerprints: Map<string, number>;       // count of DB entries per fingerprint
+  amountFingerprints: Map<string, number>; // count of DB entries per amount fingerprint
 }
 
 /**
@@ -64,8 +64,8 @@ export async function buildDedupIndex(
   presetId?: string,
 ): Promise<DedupIndex> {
   const sources = new Set<string>();
-  const fingerprints = new Set<string>();
-  const amountFingerprints = new Set<string>();
+  const fingerprints = new Map<string, number>();
+  const amountFingerprints = new Map<string, number>();
 
   if (records.length === 0) return { sources, fingerprints, amountFingerprints };
 
@@ -95,39 +95,72 @@ export async function buildDedupIndex(
       }
     }
 
-    // Add fingerprint for fingerprint-based matching
-    fingerprints.add(computeEntryFingerprint(entry, items));
+    // Increment fingerprint count for fingerprint-based matching
+    const fp = computeEntryFingerprint(entry, items);
+    fingerprints.set(fp, (fingerprints.get(fp) ?? 0) + 1);
 
-    // Add amount fingerprint for cross-format matching
-    amountFingerprints.add(computeEntryAmountFingerprint(entry, items));
+    // Increment amount fingerprint count for cross-format matching
+    const afp = computeEntryAmountFingerprint(entry, items);
+    amountFingerprints.set(afp, (amountFingerprints.get(afp) ?? 0) + 1);
   }
 
   return { sources, fingerprints, amountFingerprints };
 }
 
 /**
- * Check if a record is a duplicate based on source match (fast, exact)
- * or fingerprint match (universal).
+ * Check if a single record is a duplicate based on source match or fingerprint
+ * match. Source matches don't consume fingerprint slots (orthogonal).
+ * A full fingerprint match also consumes one amount fingerprint slot since a
+ * single DB entry produces both fingerprints.
  */
-export function isDuplicate(
+function checkDuplicate(
   rec: CsvRecord,
   presetId: string | undefined,
   index: DedupIndex,
+  fpConsumed: Map<string, number>,
+  afpConsumed: Map<string, number>,
 ): boolean {
-  // Source-based check (fast, exact) — only when sourceKey is present
+  // Source-based check (fast, exact) — doesn't consume fingerprint slots
   if (rec.sourceKey && presetId) {
     const source = `csv-import:${presetId}:${rec.sourceKey}`;
     if (index.sources.has(source)) return true;
-    // Cross-source: also check CEX format directly (belt-and-suspenders)
     const cexSource = cexSourceFromCsvPreset(presetId, rec.sourceKey);
     if (cexSource && index.sources.has(cexSource)) return true;
   }
 
-  // Fingerprint-based check (universal)
   const fp = computeRecordFingerprint(rec);
-  if (index.fingerprints.has(fp)) return true;
+  const fpAvailable = (index.fingerprints.get(fp) ?? 0) - (fpConsumed.get(fp) ?? 0);
+  if (fpAvailable > 0) {
+    fpConsumed.set(fp, (fpConsumed.get(fp) ?? 0) + 1);
+    // Also consume one amount fingerprint slot (same DB entry produces both)
+    const afp = computeAmountFingerprint(rec);
+    afpConsumed.set(afp, (afpConsumed.get(afp) ?? 0) + 1);
+    return true;
+  }
 
-  // Amount-based check (cross-format — ignores description)
   const afp = computeAmountFingerprint(rec);
-  return index.amountFingerprints.has(afp);
+  const afpAvailable = (index.amountFingerprints.get(afp) ?? 0) - (afpConsumed.get(afp) ?? 0);
+  if (afpAvailable > 0) {
+    afpConsumed.set(afp, (afpConsumed.get(afp) ?? 0) + 1);
+    return true;
+  }
+
+  return false;
 }
+
+/**
+ * Batch duplicate detection for import dialog previews.
+ * Tracks consumed counts so multiplicity is respected: if the DB has 1 entry
+ * with a fingerprint and the batch has 2 matching records, only the first
+ * is flagged as duplicate.
+ */
+export function markDuplicates(
+  records: CsvRecord[],
+  presetId: string | undefined,
+  index: DedupIndex,
+): boolean[] {
+  const fpConsumed = new Map<string, number>();
+  const afpConsumed = new Map<string, number>();
+  return records.map((rec) => checkDuplicate(rec, presetId, index, fpConsumed, afpConsumed));
+}
+
