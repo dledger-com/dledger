@@ -4,6 +4,7 @@
 let _overrides = $state<Map<string, string>>(new Map());
 
 export function setBreadcrumbOverride(segment: string, label: string) {
+  if (_overrides.get(segment) === label) return;
   _overrides = new Map(_overrides).set(segment, label);
 }
 

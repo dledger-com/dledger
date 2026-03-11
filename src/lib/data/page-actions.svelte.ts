@@ -31,6 +31,7 @@ export type PageAction = PageActionButton | PageActionMenu;
 let _actions = $state<PageAction[]>([]);
 
 export function setTopBarActions(actions: PageAction[]) {
+	if (JSON.stringify(_actions) === JSON.stringify(actions)) return;
 	_actions = actions;
 }
 
