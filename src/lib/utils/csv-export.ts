@@ -10,6 +10,7 @@ import type { TaxSummary } from "./tax-summary.js";
 import type { PortfolioReport } from "./portfolio.js";
 import type { FrenchTaxReport } from "./french-tax.js";
 import { SUPPORTED_CHAINS } from "$lib/types/index.js";
+import { requiresDeclaration, getInstitution } from "$lib/cex/institution-registry.js";
 
 function escapeCsv(value: string | number): string {
   const str = String(value);
@@ -237,32 +238,28 @@ export function exportPortfolioCsv(report: PortfolioReport): void {
 
 export function exportForm3916bisCsv(
   accounts: import("$lib/cex/types.js").ExchangeAccount[],
+  taxYear: number,
 ): void {
-  const EXCHANGE_COUNTRIES: Record<string, { name: string; country: string; foreign: boolean }> = {
-    kraken: { name: "Kraken", country: "United States", foreign: true },
-    binance: { name: "Binance", country: "Cayman Islands", foreign: true },
-    coinbase: { name: "Coinbase", country: "United States", foreign: true },
-    bybit: { name: "Bybit", country: "UAE", foreign: true },
-    okx: { name: "OKX", country: "Seychelles", foreign: true },
-    bitstamp: { name: "Bitstamp", country: "Luxembourg", foreign: true },
-    cryptocom: { name: "Crypto.com", country: "Singapore", foreign: true },
-    volet: { name: "Volet", country: "France", foreign: false },
-  };
-
-  const rows: string[] = [toCsvRow(["Platform", "Label", "Country", "Declaration Required"])];
+  const rows: string[] = [
+    toCsvRow(["Legal Entity", "Label", "Address", "Country", "URL", "Declaration Required"]),
+  ];
 
   for (const account of accounts) {
-    const info = EXCHANGE_COUNTRIES[account.exchange] ?? {
-      name: account.exchange,
-      country: "Unknown",
-      foreign: true,
-    };
+    const info = getInstitution(account.exchange);
+    const mustDeclare = requiresDeclaration(account.exchange, taxYear);
     rows.push(
-      toCsvRow([info.name, account.label, info.country, info.foreign ? "Yes" : "No"]),
+      toCsvRow([
+        info?.legalEntity ?? account.exchange,
+        account.label,
+        info?.address ?? "",
+        info?.country ?? "Unknown",
+        info?.url ?? "",
+        mustDeclare ? "Yes" : "No",
+      ]),
     );
   }
 
-  downloadCsv("form-3916-bis-accounts.csv", rows.join("\n"));
+  downloadCsv(`form-3916-bis-accounts-${taxYear}.csv`, rows.join("\n"));
 }
 
 export function exportFrenchTaxCsv(report: FrenchTaxReport): void {

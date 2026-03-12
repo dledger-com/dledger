@@ -29,7 +29,8 @@
   import Form2042CTab from "./Form2042CTab.svelte";
   import Form3916bisTab from "./Form3916bisTab.svelte";
   import ChecklistTab from "./ChecklistTab.svelte";
-  import type { ExchangeAccount, ExchangeId } from "$lib/cex/types.js";
+  import type { ExchangeAccount } from "$lib/cex/types.js";
+  import { requiresDeclaration } from "$lib/cex/institution-registry.js";
   import { onMount, onDestroy } from "svelte";
 
   const settings = new SettingsStore();
@@ -56,13 +57,8 @@
   // Exchange accounts for 3916-bis
   let exchangeAccounts = $state<ExchangeAccount[]>([]);
 
-  const EXCHANGE_FOREIGN: Record<ExchangeId, boolean> = {
-    kraken: true, binance: true, coinbase: true, bybit: true,
-    okx: true, bitstamp: true, cryptocom: true, volet: false,
-  };
-
   const foreignAccountCount = $derived(
-    exchangeAccounts.filter((a) => EXCHANGE_FOREIGN[a.exchange] !== false).length,
+    exchangeAccounts.filter((a) => requiresDeclaration(a.exchange, taxYear)).length,
   );
 
   // Resolved prior cost for current year
@@ -311,7 +307,7 @@
             ? [
                 { label: "Export CSV (Form 2086)", onclick: () => exportFrenchTaxCsv(_report) },
                 ...(exchangeAccounts.length > 0
-                  ? [{ label: "Export CSV (3916-bis)", onclick: () => exportForm3916bisCsv(exchangeAccounts) }]
+                  ? [{ label: "Export CSV (3916-bis)", onclick: () => exportForm3916bisCsv(exchangeAccounts, taxYear) }]
                   : []),
                 { separator: true, label: "" },
               ]
@@ -482,7 +478,7 @@
       </Tabs.Content>
 
       <Tabs.Content value="form3916bis" class="mt-4">
-        <Form3916bisTab {exchangeAccounts} />
+        <Form3916bisTab {exchangeAccounts} {taxYear} />
       </Tabs.Content>
 
       <Tabs.Content value="checklist" class="mt-4">
