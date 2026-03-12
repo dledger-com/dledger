@@ -239,7 +239,7 @@ export interface Backend {
   mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }>;
 
   // French tax reports
-  saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void>;
+  saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport, checklist?: Record<string, boolean>): Promise<void>;
   getFrenchTaxReport(taxYear: number): Promise<PersistedFrenchTaxReport | null>;
   listFrenchTaxReportYears(): Promise<number[]>;
   deleteFrenchTaxReport(taxYear: number): Promise<void>;
@@ -629,10 +629,10 @@ class TauriBackend implements Backend {
   }
 
   // French tax reports
-  async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void> {
+  async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport, checklist?: Record<string, boolean>): Promise<void> {
     return this.invoke("save_french_tax_report", {
       taxYear,
-      reportJson: JSON.stringify(report),
+      reportJson: JSON.stringify({ report, checklist: checklist ?? {} }),
       finalAcquisitionCost: report.finalAcquisitionCost,
     });
   }
@@ -640,7 +640,12 @@ class TauriBackend implements Backend {
     const result = await this.invoke<[string, string, string] | null>("get_french_tax_report", { taxYear });
     if (!result) return null;
     const [generatedAt, finalAcquisitionCost, reportJson] = result;
-    return { generatedAt, finalAcquisitionCost, report: JSON.parse(reportJson) };
+    const parsed = JSON.parse(reportJson);
+    // Backward compat: old format stored bare FrenchTaxReport (has taxYear field)
+    if (parsed.taxYear !== undefined) {
+      return { generatedAt, finalAcquisitionCost, report: parsed, checklist: {} };
+    }
+    return { generatedAt, finalAcquisitionCost, report: parsed.report, checklist: parsed.checklist ?? {} };
   }
   async listFrenchTaxReportYears(): Promise<number[]> {
     return this.invoke("list_french_tax_report_years");

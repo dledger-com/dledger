@@ -93,6 +93,7 @@ export interface PersistedFrenchTaxReport {
   generatedAt: string;
   finalAcquisitionCost: string;
   report: FrenchTaxReport;
+  checklist: Record<string, boolean>;
 }
 
 export function resolvePriorAcquisitionCost(

@@ -8,11 +8,15 @@
     taxYear,
     hasSavedReport,
     foreignAccountCount,
+    checklist = {},
+    onChecklistChange,
   }: {
     report: FrenchTaxReport;
     taxYear: number;
     hasSavedReport: boolean;
     foreignAccountCount: number;
+    checklist?: Record<string, boolean>;
+    onChecklistChange?: (checklist: Record<string, boolean>) => void;
   } = $props();
 
   const box3AN = $derived(parseFloat(report.box3AN));
@@ -20,12 +24,20 @@
   const activeBox = $derived(box3AN > 0 ? "3AN" : "3BN");
   const finalA = $derived(parseFloat(report.finalAcquisitionCost));
 
-  // Local-only checkbox state (non-persisted)
-  let form2086Done = $state(false);
-  let form2042cDone = $state(false);
-  let form3916bisDone = $state(false);
-  let csvDownloaded = $state(false);
-  let acqCostNoted = $state(false);
+  let form2086Done = $state(checklist.form2086 ?? false);
+  let form2042cDone = $state(checklist.form2042c ?? false);
+  let form3916bisDone = $state(checklist.form3916bis ?? false);
+  let csvDownloaded = $state(checklist.csv ?? false);
+  let acqCostNoted = $state(checklist.acqCost ?? false);
+
+  // Re-sync when checklist prop changes (e.g. year switch)
+  $effect(() => {
+    form2086Done = checklist.form2086 ?? false;
+    form2042cDone = checklist.form2042c ?? false;
+    form3916bisDone = checklist.form3916bis ?? false;
+    csvDownloaded = checklist.csv ?? false;
+    acqCostNoted = checklist.acqCost ?? false;
+  });
 
   const items = $derived([
     { label: `Report generated for ${taxYear}`, checked: hasSavedReport, auto: true },
@@ -72,6 +84,13 @@
       case "csv": csvDownloaded = !csvDownloaded; break;
       case "acqCost": acqCostNoted = !acqCostNoted; break;
     }
+    onChecklistChange?.({
+      form2086: form2086Done,
+      form2042c: form2042cDone,
+      form3916bis: form3916bisDone,
+      csv: csvDownloaded,
+      acqCost: acqCostNoted,
+    });
   }
 </script>
 

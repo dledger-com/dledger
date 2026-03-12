@@ -4274,10 +4274,10 @@ PRAGMA foreign_keys = ON;
   }
 
   // French tax reports
-  async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport): Promise<void> {
+  async saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport, checklist?: Record<string, boolean>): Promise<void> {
     this.run(
       "INSERT OR REPLACE INTO french_tax_report (tax_year, generated_at, final_acquisition_cost, report_json) VALUES (?, ?, ?, ?)",
-      [taxYear, new Date().toISOString(), report.finalAcquisitionCost, JSON.stringify(report)]
+      [taxYear, new Date().toISOString(), report.finalAcquisitionCost, JSON.stringify({ report, checklist: checklist ?? {} })]
     );
     this.scheduleSave();
   }
@@ -4286,11 +4286,24 @@ PRAGMA foreign_keys = ON;
     return this.queryOne(
       "SELECT generated_at, final_acquisition_cost, report_json FROM french_tax_report WHERE tax_year = ?",
       [taxYear],
-      (row) => ({
-        generatedAt: row.generated_at as string,
-        finalAcquisitionCost: row.final_acquisition_cost as string,
-        report: JSON.parse(row.report_json as string),
-      }),
+      (row) => {
+        const parsed = JSON.parse(row.report_json as string);
+        // Backward compat: old format stored bare FrenchTaxReport (has taxYear field)
+        if (parsed.taxYear !== undefined) {
+          return {
+            generatedAt: row.generated_at as string,
+            finalAcquisitionCost: row.final_acquisition_cost as string,
+            report: parsed,
+            checklist: {},
+          };
+        }
+        return {
+          generatedAt: row.generated_at as string,
+          finalAcquisitionCost: row.final_acquisition_cost as string,
+          report: parsed.report,
+          checklist: parsed.checklist ?? {},
+        };
+      },
     );
   }
 

@@ -47,6 +47,7 @@
   // Chain data: persisted years → final acquisition cost
   let chainData = $state<Map<number, string>>(new Map());
   let savedReport = $state<PersistedFrenchTaxReport | null>(null);
+  let checklist = $state<Record<string, boolean>>({});
   let initialAcquisitionCost = $state(settings.settings.frenchTax?.initialAcquisitionCost ?? "0");
   let overridePriorCost = $state(false);
   let overrideValue = $state("");
@@ -114,8 +115,10 @@
     savedReport = await getBackend().getFrenchTaxReport(taxYear);
     if (savedReport) {
       report = savedReport.report;
+      checklist = savedReport.checklist;
     } else {
       report = null;
+      checklist = {};
     }
     missingRateRequests = [];
     error = null;
@@ -167,8 +170,8 @@
               fiatCurrencies: capturedFiatCurrencies,
             });
 
-            // Auto-save to DB
-            await getBackend().saveFrenchTaxReport(capturedYear, report);
+            // Auto-save to DB (preserve existing checklist on regenerate)
+            await getBackend().saveFrenchTaxReport(capturedYear, report, checklist);
             await loadChainData();
             savedReport = await getBackend().getFrenchTaxReport(capturedYear);
 
@@ -204,6 +207,13 @@
     });
   }
 
+  async function handleChecklistChange(newChecklist: Record<string, boolean>) {
+    checklist = newChecklist;
+    if (report) {
+      await getBackend().saveFrenchTaxReport(taxYear, report, newChecklist);
+    }
+  }
+
   async function deleteReport() {
     // Check if downstream reports depend on this
     const nextYearFinal = chainData.get(taxYear + 1);
@@ -214,6 +224,7 @@
     await loadChainData();
     savedReport = null;
     report = null;
+    checklist = {};
     staleWarning = null;
   }
 
@@ -475,7 +486,7 @@
       </Tabs.Content>
 
       <Tabs.Content value="checklist" class="mt-4">
-        <ChecklistTab {report} {taxYear} {hasSavedReport} {foreignAccountCount} />
+        <ChecklistTab {report} {taxYear} {hasSavedReport} {foreignAccountCount} {checklist} onChecklistChange={handleChecklistChange} />
       </Tabs.Content>
     </Tabs.Root>
   {:else}
