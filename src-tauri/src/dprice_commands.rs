@@ -221,6 +221,8 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let mut db = PriceDb::open(&db_path).map_err(|e| e.to_string())?;
+        let raw_path = dprice::raw::resolve_raw_db_path(None, &db_path);
+        let mut raw_db = dprice::raw::RawDb::open(&raw_path).map_err(|e| e.to_string())?;
         let _ = db.mark_sync_started();
         let start = std::time::Instant::now();
         let sync_result = {
@@ -228,7 +230,7 @@ pub async fn dprice_sync_latest(state: State<'_, DpriceState>) -> Result<String,
                 .enable_all()
                 .build()
                 .map_err(|e| format!("runtime error: {e}"))?;
-            rt.block_on(dprice::sync::run_sync(&mut db, &config, true, None, None, &CancellationToken::new(), false))
+            rt.block_on(dprice::sync::run_sync(&mut db, &mut raw_db, &config, true, None, None, &CancellationToken::new(), false))
         };
         let elapsed = start.elapsed();
         match sync_result {
@@ -364,6 +366,8 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let mut db = PriceDb::open(&db_path).map_err(|e| e.to_string())?;
+        let raw_path = dprice::raw::resolve_raw_db_path(None, &db_path);
+        let mut raw_db = dprice::raw::RawDb::open(&raw_path).map_err(|e| e.to_string())?;
         let _ = db.mark_sync_started();
         let start = std::time::Instant::now();
         let sync_result = {
@@ -371,7 +375,7 @@ pub async fn dprice_sync(state: State<'_, DpriceState>) -> Result<String, String
                 .enable_all()
                 .build()
                 .map_err(|e| format!("runtime error: {e}"))?;
-            rt.block_on(dprice::sync::run_sync(&mut db, &config, false, None, None, &CancellationToken::new(), false))
+            rt.block_on(dprice::sync::run_sync(&mut db, &mut raw_db, &config, false, None, None, &CancellationToken::new(), false))
         };
         let elapsed = start.elapsed();
         match sync_result {
