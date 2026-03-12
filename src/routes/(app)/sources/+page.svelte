@@ -195,17 +195,34 @@
         }
     }
 
+    function generateCexLabel(exchangeId: ExchangeId): string {
+        const name = EXCHANGE_NAMES[exchangeId];
+        const existing = cexAccounts
+            .filter((a) => a.exchange === exchangeId)
+            .map((a) => a.label);
+        if (!existing.includes(name)) return name;
+        for (let i = 2; ; i++) {
+            const candidate = `${name} ${i}`;
+            if (!existing.includes(candidate)) return candidate;
+        }
+    }
+
+    function ellipseAddress(addr: string): string {
+        return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    }
+
     async function addCexAccount() {
-        if (!cexNewLabel || !cexNewApiKey || !cexNewApiSecret) {
-            toast.error("Label, API Key, and API Secret are required");
+        if (!cexNewApiKey || !cexNewApiSecret) {
+            toast.error("API Key and API Secret are required");
             return;
         }
         cexAdding = true;
         try {
+            const label = cexNewLabel.trim() || generateCexLabel(addSourceExchangeId);
             const account: ExchangeAccount = {
                 id: uuidv7(),
                 exchange: addSourceExchangeId,
-                label: cexNewLabel,
+                label,
                 api_key: cexNewApiKey,
                 api_secret: cexNewApiSecret,
                 passphrase: cexNewPassphrase || null,
@@ -340,9 +357,9 @@
 
     async function handleAddEthAccount() {
         const addr = newAddress.trim();
-        const label = newLabel.trim();
-        if (!addr || !label) {
-            toast.error("Address and label are required");
+        const label = newLabel.trim() || ellipseAddress(addr);
+        if (!addr) {
+            toast.error("Address is required");
             return;
         }
         if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
@@ -772,7 +789,7 @@
                     </div>
                     <Input
                         class="w-full sm:w-60"
-                        placeholder="Label (e.g., Main)"
+                        placeholder="Label (optional)"
                         bind:value={cexNewLabel}
                     />
                     <div class="flex flex-wrap gap-2">
@@ -828,7 +845,7 @@
                             />
                         </div>
                         <div class="flex-1 space-y-1">
-                            <label for="new-eth-label" class="text-xs font-medium">Label</label>
+                            <label for="new-eth-label" class="text-xs font-medium">Label (optional)</label>
                             <Input
                                 id="new-eth-label"
                                 placeholder="My Wallet"
@@ -839,7 +856,6 @@
                             onclick={handleAddEthAccount}
                             disabled={addingAccount ||
                                 !newAddress.trim() ||
-                                !newLabel.trim() ||
                                 selectedChainIds.size === 0}
                         >
                             <Plus class="mr-1 h-4 w-4" />
