@@ -277,15 +277,7 @@
                     enqueueRateBackfill(
                         taskQueue,
                         getBackend(),
-                        {
-                            baseCurrency: settings.currency,
-                            coingeckoApiKey: settings.coingeckoApiKey,
-                            coingeckoPro: settings.settings.coingeckoPro,
-                            finnhubApiKey: settings.finnhubApiKey,
-                            cryptoCompareApiKey: settings.cryptoCompareApiKey,
-                            dpriceMode: settings.settings.dpriceMode,
-                            dpriceUrl: settings.settings.dpriceUrl,
-                        },
+                        settings.buildRateConfig(),
                         getHiddenCurrencySet(),
                     );
                 }
@@ -429,15 +421,7 @@
                     enqueueRateBackfill(
                         taskQueue,
                         getBackend(),
-                        {
-                            baseCurrency: settings.currency,
-                            coingeckoApiKey: settings.coingeckoApiKey,
-                            coingeckoPro: settings.settings.coingeckoPro,
-                            finnhubApiKey: settings.finnhubApiKey,
-                            cryptoCompareApiKey: settings.cryptoCompareApiKey,
-                            dpriceMode: settings.settings.dpriceMode,
-                            dpriceUrl: settings.settings.dpriceUrl,
-                        },
+                        settings.buildRateConfig(),
                         getHiddenCurrencySet(),
                     );
                 }

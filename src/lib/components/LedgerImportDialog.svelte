@@ -134,14 +134,7 @@
           enqueueRateBackfill(
             taskQueue,
             backend,
-            {
-              baseCurrency: settings.currency,
-              coingeckoApiKey: settings.coingeckoApiKey,
-              finnhubApiKey: settings.finnhubApiKey,
-              cryptoCompareApiKey: settings.cryptoCompareApiKey,
-              dpriceMode: settings.settings.dpriceMode,
-              dpriceUrl: settings.settings.dpriceUrl,
-            },
+            settings.buildRateConfig(),
             getHiddenCurrencySet(),
             importResult.transaction_currency_dates,
           );

@@ -7,7 +7,7 @@
   import { preWarmAccountCache } from "$lib/data/accounts.svelte.js";
   import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { initInvalidationChannel, disposeInvalidationChannel } from "$lib/data/invalidation.js";
-  import { enqueueRateBackfill, type HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
+  import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { createDpriceClient } from "$lib/dprice-client.js";
   import { isSpamCurrency } from "$lib/currency-validation.js";
@@ -95,33 +95,13 @@
         }
 
         // --- Unified auto-sync (replaces old daily syncExchangeRates) ---
-        const buildConfig = (): HistoricalFetchConfig => {
-          const disabled = new Set<string>();
-          if (settings.settings.frankfurterEnabled === false) disabled.add("frankfurter");
-          if (settings.settings.coingeckoEnabled === false) disabled.add("coingecko");
-          if (settings.settings.cryptoCompareEnabled === false) disabled.add("cryptocompare");
-          if (settings.settings.defillamaEnabled === false) disabled.add("defillama");
-          if (settings.settings.binanceRatesEnabled === false) disabled.add("binance");
-          if (settings.settings.finnhubEnabled === false) disabled.add("finnhub");
-          return {
-            baseCurrency: settings.currency,
-            coingeckoApiKey: settings.coingeckoApiKey,
-            coingeckoPro: settings.settings.coingeckoPro,
-            finnhubApiKey: settings.finnhubApiKey,
-            cryptoCompareApiKey: settings.cryptoCompareApiKey,
-            dpriceMode: settings.settings.dpriceMode,
-            dpriceUrl: settings.settings.dpriceUrl,
-            disabledSources: disabled.size > 0 ? disabled : undefined,
-          };
-        };
-
         // Startup auto-sync — findMissingRates is idempotent, no daily guard needed
-        enqueueRateBackfill(taskQueue, backend, buildConfig(), getHiddenCurrencySet());
+        enqueueRateBackfill(taskQueue, backend, settings.buildRateConfig(), getHiddenCurrencySet());
 
         // Periodic auto-sync every 30 minutes (only when tab is visible)
         syncIntervalId = setInterval(() => {
           if (document.visibilityState === "visible" && !taskQueue.isActive("rate-backfill")) {
-            enqueueRateBackfill(taskQueue, backend, buildConfig(), getHiddenCurrencySet());
+            enqueueRateBackfill(taskQueue, backend, settings.buildRateConfig(), getHiddenCurrencySet());
           }
         }, RATE_SYNC_INTERVAL_MS);
       } catch (e) {

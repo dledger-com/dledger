@@ -1,6 +1,7 @@
 import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { configureAccountPaths, type AccountPathConfig } from "$lib/accounts/paths.js";
 import type { ChartGranularity } from "$lib/utils/chart-granularity.js";
+import type { HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
 
 export type DpriceMode = "off" | "integrated" | "http" | "local";
 
@@ -202,6 +203,26 @@ export class SettingsStore {
 
   get holdingPeriodDays(): number {
     return this.settings.holdingPeriodDays;
+  }
+
+  buildRateConfig(): HistoricalFetchConfig {
+    const disabled = new Set<string>();
+    if (this.settings.frankfurterEnabled === false) disabled.add("frankfurter");
+    if (this.settings.coingeckoEnabled === false) disabled.add("coingecko");
+    if (this.settings.cryptoCompareEnabled === false) disabled.add("cryptocompare");
+    if (this.settings.defillamaEnabled === false) disabled.add("defillama");
+    if (this.settings.binanceRatesEnabled === false) disabled.add("binance");
+    if (this.settings.finnhubEnabled === false) disabled.add("finnhub");
+    return {
+      baseCurrency: this.currency,
+      coingeckoApiKey: this.coingeckoApiKey,
+      coingeckoPro: this.settings.coingeckoPro,
+      finnhubApiKey: this.finnhubApiKey,
+      cryptoCompareApiKey: this.cryptoCompareApiKey,
+      dpriceMode: this.settings.dpriceMode,
+      dpriceUrl: this.settings.dpriceUrl,
+      disabledSources: disabled.size > 0 ? disabled : undefined,
+    };
   }
 
   update(partial: Partial<AppSettings>) {

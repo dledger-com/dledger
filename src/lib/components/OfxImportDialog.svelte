@@ -314,14 +314,7 @@
           }
         }
       },
-      rateConfig: {
-        baseCurrency: settings.currency,
-        coingeckoApiKey: settings.coingeckoApiKey,
-        finnhubApiKey: settings.finnhubApiKey,
-        cryptoCompareApiKey: settings.cryptoCompareApiKey,
-        dpriceMode: settings.settings.dpriceMode,
-        dpriceUrl: settings.settings.dpriceUrl,
-      },
+      rateConfig: settings.buildRateConfig(),
       hiddenCurrencies: getHiddenCurrencySet(),
     });
 
