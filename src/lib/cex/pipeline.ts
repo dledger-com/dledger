@@ -286,9 +286,7 @@ export async function syncCexAccount(
     const date = new Date(group[0].timestamp * 1000).toISOString().slice(0, 10);
     const items: Array<{ account: string; currency: string; amount: Decimal }> = [];
     let spentAsset = "";
-    let spentAmount = "";
     let receivedAsset = "";
-    let receivedAmount = "";
 
     for (const record of group) {
       const amount = new Decimal(record.amount);
@@ -322,13 +320,13 @@ export async function syncCexAccount(
         });
       }
 
-      if (amount.lt(0)) { spentAsset = record.asset; spentAmount = amount.abs().toFixed(); }
-      else if (amount.gt(0)) { receivedAsset = record.asset; receivedAmount = amount.toFixed(); }
+      if (amount.lt(0)) { spentAsset = record.asset; }
+      else if (amount.gt(0)) { receivedAsset = record.asset; }
     }
 
     const description = spentAsset && receivedAsset
-      ? `${exchangeName} trade: ${spentAmount} ${spentAsset} → ${receivedAmount} ${receivedAsset}`
-      : `${exchangeName} trade: ${group.map(r => `${r.amount} ${r.asset}`).join(" / ")}`;
+      ? `${exchangeName} trade: ${spentAsset} → ${receivedAsset}`
+      : `${exchangeName} trade: ${group.map(r => r.asset).join(" / ")}`;
     const groupMeta: Record<string, string> = {};
     for (const record of group) {
       if (record.metadata) Object.assign(groupMeta, record.metadata);
@@ -374,8 +372,8 @@ export async function syncCexAccount(
       const etherscanSource = findEtherscanSourceByTxid(existingSources, record.txid);
       if (etherscanSource && registry) {
         const cexDescription = record.type === "withdrawal"
-          ? `${exchangeName} withdrawal: ${amount.abs().toFixed()} ${record.asset}`
-          : `${exchangeName} deposit: ${amount.toFixed()} ${record.asset}`;
+          ? `${exchangeName} withdrawal: ${record.asset}`
+          : `${exchangeName} deposit: ${record.asset}`;
         const consolidated = await consolidateWithEtherscan(
           backend,
           registry,
@@ -428,7 +426,7 @@ export async function syncCexAccount(
           { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
           { account: exchangeExternal(exchangeName), currency: record.asset, amount: amount.neg() },
         ];
-        await postEntry(date, `${exchangeName} deposit: ${amount.toFixed()} ${record.asset}`, source, items, {
+        await postEntry(date, `${exchangeName} deposit: ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
@@ -446,7 +444,7 @@ export async function syncCexAccount(
         if (fee.gt(0)) {
           items.push({ account: exchangeFees(exchangeName), currency: record.asset, amount: fee });
         }
-        await postEntry(date, `${exchangeName} withdrawal: ${absAmount.toFixed()} ${record.asset}`, source, items, {
+        await postEntry(date, `${exchangeName} withdrawal: ${record.asset}`, source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
@@ -461,7 +459,7 @@ export async function syncCexAccount(
             { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
             { account: exchangeStaking(exchangeName), currency: record.asset, amount: amount.neg() },
           ];
-          await postEntry(date, `${exchangeName} staking reward: ${amount.toFixed()} ${record.asset}`, source, items, {
+          await postEntry(date, `${exchangeName} staking reward: ${record.asset}`, source, items, {
             exchange: adapter.exchangeId,
             refid: record.refid,
             ...(record.metadata ?? {}),

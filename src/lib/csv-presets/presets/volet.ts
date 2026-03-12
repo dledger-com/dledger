@@ -95,15 +95,15 @@ export const voletPreset: CsvPreset = {
       if (direction === "INNER_TRANSACTION") {
         if (isNaN(credit) || isNaN(debit) || !creditCurr || !debitCurr) continue;
         lines.push(...makeTradeLines("Volet", creditCurr, debitCurr, "BUY", credit, debit));
-        desc = `Volet ${type.toLowerCase()}: ${debit} ${debitCurr} → ${credit} ${creditCurr}`;
+        desc = `Volet ${type.toLowerCase()}: ${debitCurr} → ${creditCurr}`;
       } else if (direction === "DEPOSIT") {
         if (isNaN(credit) || !creditCurr) continue;
         lines.push(...makeTransferLines("Volet", creditCurr, credit));
-        desc = `Volet deposit: ${credit} ${creditCurr}`;
+        desc = `Volet deposit: ${creditCurr}`;
       } else if (direction === "WITHDRAWAL") {
         if (isNaN(debit) || !debitCurr) continue;
         lines.push(...makeTransferLines("Volet", debitCurr, -debit));
-        desc = `Volet withdrawal: ${debit} ${debitCurr}`;
+        desc = `Volet withdrawal: ${debitCurr}`;
       } else {
         continue;
       }
