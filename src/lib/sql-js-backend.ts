@@ -3837,6 +3837,25 @@ PRAGMA foreign_keys = ON;
     }
   }
 
+  async syncTheGraph(
+    apiKey: string,
+    address: string,
+    label: string,
+    chainId: number,
+  ): Promise<EtherscanSyncResult> {
+    const { syncTheGraphWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    this.beginTransaction();
+    try {
+      const result = await syncTheGraphWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   // ---- Exchange accounts (CEX) ----
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {

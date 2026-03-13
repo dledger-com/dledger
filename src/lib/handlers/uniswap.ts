@@ -260,6 +260,7 @@ export const uniswapHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     // Currency hints: UNI-V2 LP tokens have no public rate source

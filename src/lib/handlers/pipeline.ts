@@ -677,17 +677,25 @@ export async function dryRunReprocess(
     currencyHints: {},
   };
 
-  // Fetch raw transactions
+  // Fetch raw transactions (both etherscan and thegraph sources)
   let rawTxns: Array<{ source: string; data: string }>;
   if (hashes && hashes.length > 0) {
     rawTxns = [];
     for (const hash of hashes) {
-      const source = `etherscan:${chainId}:${hash}`;
-      const data = await backend.getRawTransaction(source);
-      if (data) rawTxns.push({ source, data });
+      const ethSource = `etherscan:${chainId}:${hash}`;
+      const ethData = await backend.getRawTransaction(ethSource);
+      if (ethData) {
+        rawTxns.push({ source: ethSource, data: ethData });
+      } else {
+        const graphSource = `thegraph:${chainId}:${hash}`;
+        const graphData = await backend.getRawTransaction(graphSource);
+        if (graphData) rawTxns.push({ source: graphSource, data: graphData });
+      }
     }
   } else {
     rawTxns = await backend.queryRawTransactions(`etherscan:${chainId}:`);
+    const graphTxns = await backend.queryRawTransactions(`thegraph:${chainId}:`);
+    rawTxns.push(...graphTxns);
   }
 
   result.total = rawTxns.length;
@@ -724,6 +732,9 @@ export async function dryRunReprocess(
     const { source, data } = sorted[i];
     try {
       const group = JSON.parse(data) as TxHashGroup;
+
+      // Set sourcePrefix based on raw transaction source
+      ctx.sourcePrefix = source.startsWith("thegraph:") ? "thegraph" : undefined;
 
       // Run through current handler config
       const handlerResult = await registry.processGroup(group, ctx);
@@ -850,17 +861,25 @@ export async function applyReprocess(
   try {
     let processed = 0;
     for (const hash of changeHashes) {
-      const source = `etherscan:${chainId}:${hash}`;
+      // Try etherscan source first, then thegraph
+      let source = `etherscan:${chainId}:${hash}`;
+      let rawData = await backend.getRawTransaction(source);
+      if (!rawData) {
+        source = `thegraph:${chainId}:${hash}`;
+        rawData = await backend.getRawTransaction(source);
+      }
 
       try {
         // Get raw transaction data
-        const rawData = await backend.getRawTransaction(source);
         if (!rawData) {
           result.errors.push(`${hash}: raw transaction not found`);
           continue;
         }
 
         const group = JSON.parse(rawData) as TxHashGroup;
+
+        // Set sourcePrefix based on raw transaction source
+        ctx.sourcePrefix = source.startsWith("thegraph:") ? "thegraph" : undefined;
 
         // Void existing entry
         const existing = entryBySource.get(source);

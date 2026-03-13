@@ -152,6 +152,7 @@ export interface Backend {
   addEtherscanAccount(address: string, chainId: number, label: string): Promise<void>;
   removeEtherscanAccount(address: string, chainId: number): Promise<void>;
   syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
+  syncTheGraph(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -539,6 +540,11 @@ class TauriBackend implements Backend {
     const { syncEtherscanWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
     return syncEtherscanWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+  }
+  async syncTheGraph(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult> {
+    const { syncTheGraphWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    return syncTheGraphWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
   }
 
   // Exchange accounts (CEX)

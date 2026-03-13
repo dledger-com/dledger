@@ -35,6 +35,8 @@ export interface HandlerContext {
   settings: AppSettings;
   /** Whether API enrichment is enabled for the current handler */
   enrichment?: boolean;
+  /** Source prefix for journal entry source field ("etherscan" | "thegraph") */
+  sourcePrefix?: string;
   ensureAccount(fullName: string, date: string): Promise<string>;
   ensureCurrency(code: string, decimals: number, contractAddress?: string): Promise<void>;
 }

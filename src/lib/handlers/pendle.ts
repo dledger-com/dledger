@@ -281,6 +281,7 @@ export const pendleHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     const pendleTokens = allItems

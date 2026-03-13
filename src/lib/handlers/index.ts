@@ -3,6 +3,7 @@ import type { IndexedHandlerRegistry } from "../plugins/indexed-handler-registry
 
 export { HandlerRegistry } from "./registry.js";
 export { syncEtherscanWithHandlers, dryRunReprocess, applyReprocess } from "./pipeline.js";
+export { syncTheGraphWithHandlers } from "./thegraph-pipeline.js";
 export type {
   TransactionHandler,
   HandlerContext,

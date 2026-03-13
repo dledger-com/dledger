@@ -217,6 +217,7 @@ export const makerHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     // Currency hints: sDAI and spTokens should not fetch exchange rates

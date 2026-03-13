@@ -206,6 +206,7 @@ export const compoundHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     // Currency hints: cTokens should not fetch exchange rates

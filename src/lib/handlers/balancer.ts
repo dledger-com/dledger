@@ -255,6 +255,7 @@ export const balancerHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     // Currency hints: BPT tokens should not fetch exchange rates

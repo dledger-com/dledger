@@ -231,6 +231,7 @@ export const curveHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     // Currency hints: Curve LP tokens and gauge tokens should not have exchange rates

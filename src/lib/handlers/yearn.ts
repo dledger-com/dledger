@@ -206,6 +206,7 @@ export const yearnHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     // Currency hints: yvTokens should not fetch exchange rates

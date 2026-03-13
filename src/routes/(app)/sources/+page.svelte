@@ -34,6 +34,7 @@
         dryRunReprocess,
         type ReprocessResult,
     } from "$lib/handlers/index.js";
+    import { isTheGraphSupportedChain } from "$lib/thegraph-token-api.js";
     import { reprocessStore } from "$lib/data/reprocess-store.svelte.js";
     import RotateCw from "lucide-svelte/icons/rotate-cw";
     import { v7 as uuidv7 } from "uuid";
@@ -390,26 +391,42 @@
         }
     }
 
+    function pickSyncSource(chainId: number): { type: "etherscan"; apiKey: string } | { type: "thegraph"; apiKey: string } | null {
+        const ethKey = settings.etherscanApiKey;
+        if (ethKey && settings.settings.etherscanEnabled !== false) {
+            return { type: "etherscan", apiKey: ethKey };
+        }
+        const graphKey = settings.theGraphApiKey;
+        if (graphKey && settings.settings.theGraphEnabled !== false && isTheGraphSupportedChain(chainId)) {
+            return { type: "thegraph", apiKey: graphKey };
+        }
+        return null;
+    }
+
     function syncEthAccount(account: EtherscanAccount) {
-        if (settings.settings.etherscanEnabled === false) {
-            toast.error("Etherscan is disabled in Settings");
+        const source = pickSyncSource(account.chain_id);
+        if (!source) {
+            toast.error("No API key configured. Set an Etherscan or The Graph API key in Settings.");
             return;
         }
-        const apiKey = settings.etherscanApiKey;
-        if (!apiKey) {
-            toast.error("Etherscan API key is required");
-            return;
-        }
+        const viaLabel = source.type === "thegraph" ? " (via The Graph)" : "";
         taskQueue.enqueue({
             key: `etherscan-sync:${account.address}:${account.chain_id}`,
-            label: `Sync ${account.label} (${getChainName(account.chain_id)})`,
+            label: `Sync ${account.label} (${getChainName(account.chain_id)})${viaLabel}`,
             async run() {
-                const r = await getBackend().syncEtherscan(
-                    apiKey,
-                    account.address,
-                    account.label,
-                    account.chain_id,
-                );
+                const r = source.type === "thegraph"
+                    ? await getBackend().syncTheGraph(
+                        source.apiKey,
+                        account.address,
+                        account.label,
+                        account.chain_id,
+                    )
+                    : await getBackend().syncEtherscan(
+                        source.apiKey,
+                        account.address,
+                        account.label,
+                        account.chain_id,
+                    );
                 await loadEthAccounts();
                 if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
                 // Auto-trigger consolidation if entries were imported and CEX accounts exist
@@ -434,24 +451,28 @@
     }
 
     function handleSyncAll() {
-        const apiKey = settings.etherscanApiKey;
-        if (!apiKey) {
-            toast.error("Etherscan API key is required");
-            return;
-        }
         if (ethAccounts.length === 0) {
             toast.error("No tracked addresses to sync");
             return;
         }
+        let hasAnyKey = false;
         for (const account of ethAccounts) {
-            syncEthAccount(account);
+            if (pickSyncSource(account.chain_id)) {
+                hasAnyKey = true;
+                syncEthAccount(account);
+            }
+        }
+        if (!hasAnyKey) {
+            toast.error("No API key configured. Set an Etherscan or The Graph API key in Settings.");
         }
     }
 
     function syncAll() {
         for (const account of cexAccounts) syncCex(account);
-        if (settings.etherscanApiKey && ethAccounts.length > 0) {
-            for (const account of ethAccounts) syncEthAccount(account);
+        if (ethAccounts.length > 0) {
+            for (const account of ethAccounts) {
+                if (pickSyncSource(account.chain_id)) syncEthAccount(account);
+            }
         }
     }
 

@@ -492,13 +492,15 @@ export function buildHandlerEntry(opts: {
   hash: string;
   items: Omit<LineItem, "id" | "journal_entry_id">[];
   metadata: Record<string, string>;
+  sourcePrefix?: string;
 }): HandlerEntry {
+  const prefix = opts.sourcePrefix ?? "etherscan";
   return {
     entry: {
       date: opts.date,
       description: opts.description,
       status: "confirmed",
-      source: `etherscan:${opts.chainId}:${opts.hash}`,
+      source: `${prefix}:${opts.chainId}:${opts.hash}`,
       voided_by: null,
     },
     items: opts.items,

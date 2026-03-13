@@ -542,6 +542,7 @@ export const aaveHandler: TransactionHandler = {
       hash: group.hash,
       items: lineItems,
       metadata,
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     return { type: "entries", entries: [handlerEntry] };

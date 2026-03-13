@@ -52,6 +52,7 @@ export const GenericEtherscanHandler: TransactionHandler = {
       hash: group.hash,
       items,
       metadata: { handler: "generic-etherscan" },
+      sourcePrefix: ctx.sourcePrefix,
     });
 
     return { type: "entries", entries: [handlerEntry] };
