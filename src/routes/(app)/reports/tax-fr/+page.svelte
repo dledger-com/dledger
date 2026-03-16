@@ -151,6 +151,7 @@
 
     const capturedYear = taxYear;
     const capturedPriorCost = effectivePriorCost;
+    const capturedPriorSource = overridePriorCost ? 'initial' as const : resolved.source;
     const capturedFiatCurrencies = settings.settings.frenchTax?.fiatCurrencies;
     const capturedInitialCost = initialAcquisitionCost;
 
@@ -164,6 +165,7 @@
             report = await computeFrenchTaxReport(getBackend(), {
               taxYear: capturedYear,
               priorAcquisitionCost: capturedPriorCost,
+              priorCostSource: capturedPriorSource,
               fiatCurrencies: capturedFiatCurrencies,
             });
 
@@ -249,6 +251,7 @@
               const rpt = await computeFrenchTaxReport(getBackend(), {
                 taxYear: year,
                 priorAcquisitionCost: r.value,
+                priorCostSource: r.source,
                 fiatCurrencies: capturedFiatCurrencies,
               });
               await getBackend().saveFrenchTaxReport(year, rpt);

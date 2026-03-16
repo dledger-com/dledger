@@ -727,6 +727,187 @@ describe("computeFrenchTaxReport", () => {
   });
 });
 
+describe("priorCostSource chaining", () => {
+  it("chained prior cost does NOT double-count prior year acquisitions", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Buy 1 BTC for 10,000 EUR in 2023
+    const buy = makeEntry({ date: "2023-06-01", description: "Buy BTC 2023" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-10000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "10000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+
+    // BTC/EUR rate for 2024 sale
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    // Sell 1 BTC in 2024
+    const sell = makeEntry({ date: "2024-06-01", description: "Sell BTC 2024" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-50000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "50000"),
+    ]);
+
+    // Chained: priorAcquisitionCost already includes 2023 buy (10k)
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "10000",
+      priorCostSource: "chained",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    // A should be 10000 (NOT 20000), because the 2023 buy is already in the chained value
+    expect(report.dispositions[0].acquisitionCostBefore).toBe("10000.00");
+  });
+
+  it("priorCostSource 'initial' still processes prior-year entries (backward compat)", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Buy 1 BTC for 10,000 EUR in 2023
+    const buy = makeEntry({ date: "2023-06-01", description: "Buy BTC 2023" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-10000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "10000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+
+    // BTC/EUR rate for 2024 sale
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    // Sell 1 BTC in 2024
+    const sell = makeEntry({ date: "2024-06-01", description: "Sell BTC 2024" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-50000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "50000"),
+    ]);
+
+    // Initial: priorAcquisitionCost is pre-dledger data, journal entries also processed
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "10000",
+      priorCostSource: "initial",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    // A = 10000 (initial) + 10000 (2023 buy from journal) = 20000
+    expect(report.dispositions[0].acquisitionCostBefore).toBe("20000.00");
+  });
+
+  it("chained with pre-year disposition doesn't re-subtract", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Buy 2 BTC for 20,000 EUR in 2023
+    const buy = makeEntry({ date: "2023-03-01", description: "Buy 2 BTC 2023" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-20000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "20000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-2"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "2"),
+    ]);
+
+    // BTC/EUR rate for 2023 sale
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2023-09-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "15000", source: "manual",
+    });
+
+    // Sell 1 BTC for 15,000 EUR in 2023
+    const sell2023 = makeEntry({ date: "2023-09-01", description: "Sell BTC 2023" });
+    await backend.postJournalEntry(sell2023, [
+      makeLineItem(sell2023.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell2023.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell2023.id, accounts.tradingEUR.id, "EUR", "-15000"),
+      makeLineItem(sell2023.id, accounts.bank.id, "EUR", "15000"),
+    ]);
+
+    // Generate 2023 report to get finalA
+    const report2023 = await computeFrenchTaxReport(backend, {
+      taxYear: 2023,
+      priorAcquisitionCost: "0",
+    });
+
+    // 2023: A=20000, C=15000, V=2*15000=30000, costFraction=20000*15000/30000=10000
+    // finalA = 20000 - 10000 = 10000
+    expect(report2023.finalAcquisitionCost).toBe("10000.00");
+
+    // BTC/EUR rate for 2024 sale
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "40000", source: "manual",
+    });
+
+    // Sell remaining 1 BTC in 2024
+    const sell2024 = makeEntry({ date: "2024-06-01", description: "Sell BTC 2024" });
+    await backend.postJournalEntry(sell2024, [
+      makeLineItem(sell2024.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell2024.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell2024.id, accounts.tradingEUR.id, "EUR", "-40000"),
+      makeLineItem(sell2024.id, accounts.bank.id, "EUR", "40000"),
+    ]);
+
+    // Generate 2024 with chained finalA from 2023
+    const report2024 = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: report2023.finalAcquisitionCost,
+      priorCostSource: "chained",
+    });
+
+    expect(report2024.dispositions).toHaveLength(1);
+    // A should be exactly 10000 (from chain), NOT re-reduced by the 2023 sale
+    expect(report2024.dispositions[0].acquisitionCostBefore).toBe("10000.00");
+  });
+
+  it("undefined priorCostSource preserves existing behavior (processes all)", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Buy 1 BTC for 10,000 EUR in 2023
+    const buy = makeEntry({ date: "2023-06-01", description: "Buy BTC 2023" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-10000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "10000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+
+    // BTC/EUR rate for 2024 sale
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    const sell = makeEntry({ date: "2024-06-01", description: "Sell BTC 2024" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-50000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "50000"),
+    ]);
+
+    // No priorCostSource set — should process all entries (existing behavior)
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "5000",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    // A = 5000 (prior) + 10000 (2023 buy) = 15000
+    expect(report.dispositions[0].acquisitionCostBefore).toBe("15000.00");
+  });
+});
+
 describe("resolvePriorAcquisitionCost", () => {
   it("chains from previous year", () => {
     const persistedYears = new Map([[2023, "42350.00"]]);

@@ -29,6 +29,7 @@ export const DEFAULT_FIAT_CURRENCIES = new Set([
 export interface FrenchTaxOptions {
   taxYear: number;
   priorAcquisitionCost: string; // EUR — crypto bought before dledger data
+  priorCostSource?: 'chained' | 'initial' | 'none'; // how priorAcquisitionCost was resolved
   fiatCurrencies?: string[];     // override DEFAULT_FIAT_CURRENCIES
   baseCurrency?: string;         // for non-EUR fiat conversions, default "EUR"
 }
@@ -343,6 +344,7 @@ export async function computeFrenchTaxReport(
   // 4. Process entries: build running A, collect dispositions/acquisitions
   //    Use incremental trial balance instead of per-disposition DB queries
   let A = new Decimal(opts.priorAcquisitionCost || "0");
+  const skipPreYearA = opts.priorCostSource === 'chained';
   const dispositions: Disposition[] = [];
   const acquisitions: Acquisition[] = [];
 
@@ -385,7 +387,9 @@ export async function computeFrenchTaxReport(
         }
       }
 
-      A = A.plus(fiatEUR);
+      if (!(skipPreYearA && entry.date < yearStart)) {
+        A = A.plus(fiatEUR);
+      }
 
       if (entry.date >= yearStart) {
         acquisitions.push({
@@ -449,8 +453,9 @@ export async function computeFrenchTaxReport(
 
           A = newA;
         }
-      } else {
-        // Pre-year disposition: still update A
+      } else if (!skipPreYearA) {
+        // Pre-year disposition: only update A when NOT chained
+        // (chained priorAcquisitionCost already accounts for prior dispositions)
         if (!V.isZero()) {
           const costFraction = A.times(C).div(V);
           const cappedFraction = costFraction.gt(A) ? A : costFraction;
