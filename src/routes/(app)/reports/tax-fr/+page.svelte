@@ -17,6 +17,7 @@
   import { exportFrenchTaxCsv, exportForm3916bisCsv } from "$lib/utils/csv-export.js";
   import {
     findMissingRates,
+    resolveDpriceAssets,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
@@ -181,10 +182,15 @@
             }
 
             if (report.missingCurrencyDates.length > 0) {
+              const currencies = [...new Set(report.missingCurrencyDates.map((d) => d.currency))];
+              const dpriceAssets = await resolveDpriceAssets(settings.buildRateConfig(), currencies);
               missingRateRequests = await findMissingRates(
                 getBackend(),
                 "EUR",
                 report.missingCurrencyDates,
+                dpriceAssets,
+                undefined,
+                settings.buildRateConfig().disabledSources,
               );
             }
           } catch (e) {

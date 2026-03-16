@@ -16,6 +16,7 @@
   import { getBackend } from "$lib/backend.js";
   import {
     findMissingRates,
+    resolveDpriceAssets,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { exportBalanceSheetCsv } from "$lib/utils/csv-export.js";
@@ -57,10 +58,16 @@
       ...(equitySummary.missingDates || []),
     ];
     if (allMissing.length > 0) {
+      const currencies = [...new Set(allMissing.map((d) => d.currency))];
+      const rateConfig = settings.buildRateConfig();
+      const dpriceAssets = await resolveDpriceAssets(rateConfig, currencies);
       missingRateRequests = await findMissingRates(
         getBackend(),
         baseCurrency,
         allMissing,
+        dpriceAssets,
+        undefined,
+        rateConfig.disabledSources,
       );
     } else {
       missingRateRequests = [];

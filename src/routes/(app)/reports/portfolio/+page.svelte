@@ -16,6 +16,7 @@
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import {
     findMissingRates,
+    resolveDpriceAssets,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
@@ -47,10 +48,15 @@
       );
       if (report.missingCurrencies.length > 0) {
         const currencyDates = report.missingCurrencies.map((currency) => ({ currency, date: asOf }));
+        const rateConfig = settings.buildRateConfig();
+        const dpriceAssets = await resolveDpriceAssets(rateConfig, report.missingCurrencies);
         missingRateRequests = await findMissingRates(
           getBackend(),
           settings.currency,
           currencyDates,
+          dpriceAssets,
+          undefined,
+          rateConfig.disabledSources,
         );
       }
     } catch (e) {

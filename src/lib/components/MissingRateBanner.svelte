@@ -5,11 +5,10 @@
   import { getBackend } from "$lib/backend.js";
   import {
     fetchHistoricalRates,
+    resolveDpriceAssets,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
-  import { markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
-  import { showAutoHideToast } from "$lib/utils/auto-hide-toast.js";
 
   interface Props {
     requests: HistoricalRateRequest[];
@@ -25,33 +24,25 @@
   async function handleFetch() {
     fetchingRates = true;
     try {
+      const config = {
+        ...settings.buildRateConfig(),
+        baseCurrency: baseCurrency ?? settings.currency,
+      };
+
+      const currencies = [...new Set(requests.map((r) => r.currency))];
+      const dpriceAssets = await resolveDpriceAssets(config, currencies);
+
       const result = await fetchHistoricalRates(
         getBackend(),
         requests,
-        {
-          baseCurrency: baseCurrency ?? settings.currency,
-          coingeckoApiKey: settings.coingeckoApiKey,
-          coingeckoPro: settings.settings.coingeckoPro,
-          finnhubApiKey: settings.finnhubApiKey,
-          cryptoCompareApiKey: settings.cryptoCompareApiKey,
-          dpriceMode: settings.settings.dpriceMode,
-          dpriceUrl: settings.settings.dpriceUrl,
-        },
+        config,
+        dpriceAssets,
       );
-
-      if (result.failedCurrencies.length > 0) {
-        const backend = getBackend();
-        for (const code of result.failedCurrencies) {
-          await backend.setCurrencyRateSource(code, "none", "auto");
-          await markCurrencyHidden(backend, code);
-        }
-        showAutoHideToast(result.failedCurrencies);
-      }
 
       onFetched();
 
       if (result.failedCurrencies.length > 0) {
-        toast.success(`Fetched ${result.fetched} rate(s), auto-hid ${result.failedCurrencies.length} currency(ies)`);
+        toast.warning(`Fetched ${result.fetched} rate(s), could not find rates for: ${result.failedCurrencies.join(", ")}`);
       } else {
         toast.success("Missing rates fetched");
       }

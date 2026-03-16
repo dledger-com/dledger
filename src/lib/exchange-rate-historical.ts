@@ -72,6 +72,26 @@ export interface HistoricalFetchResult {
   failedCurrencies: string[];
 }
 
+// ---- dprice asset resolution helper ----
+
+/**
+ * Resolve which currencies are available in dprice.
+ * Returns undefined if dprice is not active or unavailable.
+ */
+export async function resolveDpriceAssets(
+  config: Pick<HistoricalFetchConfig, "dpriceMode" | "dpriceUrl">,
+  currencies: string[],
+): Promise<Set<string> | undefined> {
+  if (!isDpriceActive(config.dpriceMode)) return undefined;
+  try {
+    const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+    const entries = await client.getRates(currencies);
+    return new Set(entries.map((e) => e.from));
+  } catch {
+    return undefined;
+  }
+}
+
 // ---- Source classification ----
 
 function classifySource(
@@ -1296,15 +1316,7 @@ export function enqueueRateBackfill(
       label: `Backfill rates for ${new Set(currencyDates.map(([c]) => c)).size} imported currency(ies)`,
       async run(ctx) {
         // Auto-resolve dpriceAssets when dprice is active but caller didn't provide the set
-        let resolvedDpriceAssets = dpriceAssets;
-        if (!resolvedDpriceAssets && isDpriceActive(config.dpriceMode)) {
-          try {
-            const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
-            const codes = [...new Set(pairs.map((p) => p.currency))];
-            const entries = await client.getRates(codes);
-            resolvedDpriceAssets = new Set(entries.map((e) => e.from));
-          } catch { /* dprice unavailable */ }
-        }
+        const resolvedDpriceAssets = dpriceAssets ?? await resolveDpriceAssets(config, [...new Set(pairs.map((p) => p.currency))]);
         const missing = await findMissingRates(backend, config.baseCurrency, pairs, resolvedDpriceAssets, undefined, config.disabledSources);
         if (missing.length === 0) {
           return { summary: "All rates already available" };

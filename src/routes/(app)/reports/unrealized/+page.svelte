@@ -14,6 +14,7 @@
   import { exportUnrealizedGainLossCsv } from "$lib/utils/csv-export.js";
   import {
     findMissingRates,
+    resolveDpriceAssets,
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
@@ -83,10 +84,16 @@
       });
       report = result.report;
       if (result.missingCurrencyDates.length > 0) {
+        const currencies = [...new Set(result.missingCurrencyDates.map((d) => d.currency))];
+        const rateConfig = settings.buildRateConfig();
+        const dpriceAssets = await resolveDpriceAssets(rateConfig, currencies);
         missingRateRequests = await findMissingRates(
           getBackend(),
           settings.currency,
           result.missingCurrencyDates,
+          dpriceAssets,
+          undefined,
+          rateConfig.disabledSources,
         );
       }
     } catch (e) {
