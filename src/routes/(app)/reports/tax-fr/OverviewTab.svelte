@@ -7,15 +7,20 @@
   import type { ExchangeAccount } from "$lib/cex/types.js";
   import Info from "lucide-svelte/icons/info";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
+  import ChevronRight from "lucide-svelte/icons/chevron-right";
+
+  let expandedCurrencies = $state(new Set<string>());
 
   let {
     report,
     taxYear,
     foreignAccountCount,
+    debugMode = false,
   }: {
     report: FrenchTaxReport;
     taxYear: number;
     foreignAccountCount: number;
+    debugMode?: boolean;
   } = $props();
 
   const totalPV = $derived(parseFloat(report.totalPlusValue));
@@ -192,6 +197,116 @@
       At PFU 30%: {formatCurrency(report.taxDuePFU30, "EUR")}.
     {/if}
   </div>
+
+  <!-- Debug: Computation Details -->
+  {#if debugMode}
+    <Card.Root>
+      <Card.Header class="pb-2">
+        <Card.Title class="text-base">Computation Details</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt class="text-muted-foreground">Entries processed</dt>
+          <dd class="font-mono">{report.entriesProcessed}</dd>
+          <dt class="text-muted-foreground">Pre-year acquisitions</dt>
+          <dd class="font-mono">{report.preYearAcquisitionCount} ({formatCurrency(report.preYearAcquisitionTotal, "EUR")})</dd>
+          <dt class="text-muted-foreground">Pre-year dispositions</dt>
+          <dd class="font-mono">{report.preYearDispositionCount} ({formatCurrency(report.preYearDispositionTotal, "EUR")})</dd>
+          <dt class="text-muted-foreground">In-year acquisitions</dt>
+          <dd class="font-mono">{report.acquisitions.length}</dd>
+          <dt class="text-muted-foreground">In-year dispositions</dt>
+          <dd class="font-mono">{report.dispositions.length}</dd>
+        </dl>
+
+        <!-- Year-end crypto holdings (aggregated by currency) -->
+        {#if report.yearEndCryptoHoldings && report.yearEndCryptoHoldings.length > 0}
+          <div class="mt-4">
+            <h4 class="text-sm font-medium mb-2">Year-end Crypto Holdings</h4>
+            <div class="max-h-64 overflow-y-auto rounded border">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-muted">
+                  <tr>
+                    <th class="text-left px-2 py-1 font-medium">Currency</th>
+                    <th class="text-right px-2 py-1 font-medium">Net Amount</th>
+                    <th class="text-right px-2 py-1 font-medium">Accounts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each report.yearEndCryptoHoldings as h}
+                    {@const isNeg = parseFloat(h.amount) < 0}
+                    {@const hasMultiple = h.accounts.length > 1}
+                    {@const expanded = expandedCurrencies.has(h.currency)}
+                    <tr class="border-t {isNeg ? 'bg-red-50 dark:bg-red-950/20' : ''}">
+                      <td class="px-2 py-1 font-mono">
+                        {#if hasMultiple}
+                          <button
+                            class="flex items-center gap-1 hover:underline"
+                            onclick={() => {
+                              const next = new Set(expandedCurrencies);
+                              if (next.has(h.currency)) next.delete(h.currency);
+                              else next.add(h.currency);
+                              expandedCurrencies = next;
+                            }}
+                          >
+                            <ChevronRight class="h-3 w-3 transition-transform {expanded ? 'rotate-90' : ''}" />
+                            {h.currency}
+                          </button>
+                        {:else}
+                          {h.currency}
+                        {/if}
+                      </td>
+                      <td class="px-2 py-1 font-mono text-right {isNeg ? 'text-red-600 dark:text-red-400 font-semibold' : ''}">{h.amount}</td>
+                      <td class="px-2 py-1 text-right text-muted-foreground">{h.accounts.length}</td>
+                    </tr>
+                    {#if expanded}
+                      {#each h.accounts as acct}
+                        <tr class="border-t border-dashed bg-muted/30">
+                          <td class="px-2 py-0.5 pl-6 text-xs text-muted-foreground truncate max-w-64" title={acct.name}>{acct.name}</td>
+                          <td class="px-2 py-0.5 font-mono text-xs text-right {parseFloat(acct.amount) < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}">{acct.amount}</td>
+                          <td></td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {:else if report.yearEndCryptoHoldings}
+          <p class="mt-4 text-sm text-muted-foreground">No crypto holdings at year-end.</p>
+        {/if}
+
+        <!-- Pre-year disposition samples -->
+        {#if report.preYearDispositionSamples && report.preYearDispositionSamples.length > 0}
+          <div class="mt-4">
+            <h4 class="text-sm font-medium mb-2">Pre-year Disposition Samples (first {report.preYearDispositionSamples.length})</h4>
+            <div class="max-h-64 overflow-y-auto rounded border">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-muted">
+                  <tr>
+                    <th class="text-left px-2 py-1 font-medium">Date</th>
+                    <th class="text-left px-2 py-1 font-medium">Description</th>
+                    <th class="text-right px-2 py-1 font-medium">Fiat Received</th>
+                    <th class="text-left px-2 py-1 font-medium">Crypto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each report.preYearDispositionSamples as s}
+                    <tr class="border-t">
+                      <td class="px-2 py-1 font-mono whitespace-nowrap">{s.date}</td>
+                      <td class="px-2 py-1 truncate max-w-48" title={s.description}>{s.description}</td>
+                      <td class="px-2 py-1 font-mono text-right whitespace-nowrap">{formatCurrency(s.fiatReceived, "EUR")}</td>
+                      <td class="px-2 py-1 font-mono">{s.cryptoCurrencies.join(", ")}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+  {/if}
 
   <!-- Warnings -->
   {#if report.warnings.length > 0}

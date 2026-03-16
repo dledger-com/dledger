@@ -475,7 +475,7 @@
       </Tabs.List>
 
       <Tabs.Content value="overview" class="mt-4">
-        <OverviewTab {report} {taxYear} {foreignAccountCount} />
+        <OverviewTab {report} {taxYear} {foreignAccountCount} debugMode={settings.debugMode} />
       </Tabs.Content>
 
       <Tabs.Content value="form2086" class="mt-4">

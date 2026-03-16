@@ -88,6 +88,20 @@ export interface FrenchTaxReport {
   warnings: string[];
   /** Structured missing rate data for inline backfill. */
   missingCurrencyDates: { currency: string; date: string }[];
+  /** Number of entries processed from the journal. */
+  entriesProcessed: number;
+  /** Number of pre-year acquisitions detected (before taxYear). */
+  preYearAcquisitionCount: number;
+  /** Total EUR value of pre-year acquisitions. */
+  preYearAcquisitionTotal: string;
+  /** Number of pre-year dispositions detected. */
+  preYearDispositionCount: number;
+  /** Total EUR fiat received across pre-year dispositions. */
+  preYearDispositionTotal: string;
+  /** Sample pre-year dispositions for debug inspection (first 20). */
+  preYearDispositionSamples: { date: string; description: string; fiatReceived: string; cryptoCurrencies: string[] }[];
+  /** Year-end crypto holdings aggregated by currency (debug). */
+  yearEndCryptoHoldings: { currency: string; amount: string; accounts: { name: string; amount: string }[] }[];
 }
 
 export interface PersistedFrenchTaxReport {
@@ -348,6 +362,12 @@ export async function computeFrenchTaxReport(
   const dispositions: Disposition[] = [];
   const acquisitions: Acquisition[] = [];
 
+  let preYearAcqCount = 0;
+  let preYearAcqTotal = new Decimal(0);
+  let preYearDispCount = 0;
+  let preYearDispTotal = new Decimal(0);
+  const preYearDispSamples: { date: string; description: string; fiatReceived: string; cryptoCurrencies: string[] }[] = [];
+
   const incrementalBalance = new IncrementalBalance();
   let currentDate = "";
   let currentDateTB: TrialBalance | null = null;
@@ -389,6 +409,11 @@ export async function computeFrenchTaxReport(
 
       if (!(skipPreYearA && entry.date < yearStart)) {
         A = A.plus(fiatEUR);
+      }
+
+      if (entry.date < yearStart) {
+        preYearAcqCount++;
+        preYearAcqTotal = preYearAcqTotal.plus(fiatEUR);
       }
 
       if (entry.date >= yearStart) {
@@ -453,14 +478,26 @@ export async function computeFrenchTaxReport(
 
           A = newA;
         }
-      } else if (!skipPreYearA) {
-        // Pre-year disposition: only update A when NOT chained
-        // (chained priorAcquisitionCost already accounts for prior dispositions)
-        if (!V.isZero()) {
-          const costFraction = A.times(C).div(V);
-          const cappedFraction = costFraction.gt(A) ? A : costFraction;
-          const Aafter = A.minus(cappedFraction);
-          A = Aafter.lt(0) ? new Decimal(0) : Aafter;
+      } else {
+        preYearDispCount++;
+        preYearDispTotal = preYearDispTotal.plus(C);
+        if (preYearDispSamples.length < 20) {
+          preYearDispSamples.push({
+            date: entry.date,
+            description: entry.description,
+            fiatReceived: C.toFixed(2),
+            cryptoCurrencies: event.cryptoCurrencies,
+          });
+        }
+        if (!skipPreYearA) {
+          // Pre-year disposition: only update A when NOT chained
+          // (chained priorAcquisitionCost already accounts for prior dispositions)
+          if (!V.isZero()) {
+            const costFraction = A.times(C).div(V);
+            const cappedFraction = costFraction.gt(A) ? A : costFraction;
+            const Aafter = A.minus(cappedFraction);
+            A = Aafter.lt(0) ? new Decimal(0) : Aafter;
+          }
         }
       }
     }
@@ -489,6 +526,32 @@ export async function computeFrenchTaxReport(
     warnings.push(`Missing rate for year-end portfolio: ${mr}`);
   }
   missingCurrencyDates.push(...yearEndMissingCd);
+
+  // Collect year-end crypto holdings aggregated by currency
+  const holdingsMap = new Map<string, { net: Decimal; accounts: { name: string; amount: string }[] }>();
+  for (const line of yearEndTb.lines) {
+    if (line.account_type !== "asset") continue;
+    for (const bal of line.balances) {
+      if (fiatSet.has(bal.currency)) continue;
+      const amt = new Decimal(bal.amount);
+      if (amt.isZero()) continue;
+      let entry = holdingsMap.get(bal.currency);
+      if (!entry) {
+        entry = { net: new Decimal(0), accounts: [] };
+        holdingsMap.set(bal.currency, entry);
+      }
+      entry.net = entry.net.plus(amt);
+      entry.accounts.push({ name: line.account_name, amount: bal.amount });
+    }
+  }
+  const yearEndCryptoHoldings = [...holdingsMap.entries()]
+    .filter(([, v]) => !v.net.isZero())
+    .map(([currency, v]) => ({
+      currency,
+      amount: v.net.toString(),
+      accounts: v.accounts,
+    }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
 
   // 6. Deduplicate warnings and missing currency dates
   const uniqueWarnings = [...new Set(warnings)];
@@ -525,6 +588,13 @@ export async function computeFrenchTaxReport(
       : "0.00",
     warnings: uniqueWarnings,
     missingCurrencyDates: uniqueMissingCurrencyDates,
+    entriesProcessed: allEntries.length,
+    preYearAcquisitionCount: preYearAcqCount,
+    preYearAcquisitionTotal: preYearAcqTotal.toFixed(2),
+    preYearDispositionCount: preYearDispCount,
+    preYearDispositionTotal: preYearDispTotal.toFixed(2),
+    preYearDispositionSamples: preYearDispSamples,
+    yearEndCryptoHoldings,
   };
 }
 

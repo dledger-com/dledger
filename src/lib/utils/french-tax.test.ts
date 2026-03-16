@@ -961,6 +961,13 @@ describe("french tax report DB round-trip", () => {
       taxDuePFU314: "0.00",
       warnings: [],
       missingCurrencyDates: [],
+      entriesProcessed: 0,
+      preYearAcquisitionCount: 0,
+      preYearAcquisitionTotal: "0.00",
+      preYearDispositionCount: 0,
+      preYearDispositionTotal: "0.00",
+      preYearDispositionSamples: [],
+      yearEndCryptoHoldings: [] as { currency: string; amount: string; accounts: { name: string; amount: string }[] }[],
     };
   }
 
