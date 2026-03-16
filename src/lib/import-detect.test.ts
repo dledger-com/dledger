@@ -69,6 +69,17 @@ describe("detectFromContent", () => {
     expect(detectFromContent(content, null)).toBe("csv");
   });
 
+  it("does not detect CSV with date-prefixed rows as ledger (Poloniex-style)", () => {
+    const content = [
+      "Date,Market,Category,Type,Price,Amount,Total,Fee,Order Number,Base Total Less Fee,Quote Total Less Fee",
+      "2017-03-18 23:26:34,DASH/BTC,Settlement,Buy,0.11069111,0.00025142,0.00002782,0.25%,85801375761,-0.00002782,0.00025080",
+      "2017-03-18 23:26:34,DASH/BTC,Margin trade,Buy,0.11069111,0.10000000,0.01106911,0.25%,85801373763,-0.01106911,0.09975000",
+      "2017-03-18 23:15:54,DASH/BTC,Margin trade,Sell,0.11280000,0.10000000,0.01128000,0.25%,85797936204,0.01125180,-0.10000000",
+      "2017-03-14 01:34:09,NMC/BTC,Exchange,Sell,0.00064201,71.64897058,0.04599935,0.25%,4555710793,0.04588436,-71.64897058",
+    ].join("\n");
+    expect(detectFromContent(content, null)).toBe("csv");
+  });
+
   it("returns null for empty content and no bytes", () => {
     expect(detectFromContent(null, null)).toBeNull();
   });
@@ -133,6 +144,17 @@ describe("detectImportTarget", () => {
 
   it(".txt file with CSV content → csv (fallback)", async () => {
     const file = makeFile("data.txt", "date,amount,desc\n2024-01-01,42,Groceries\n");
+    const result = await detectImportTarget(file);
+    expect(result?.target).toBe("csv");
+  });
+
+  it(".csv file with date-prefixed rows → csv (not ledger)", async () => {
+    const content = [
+      "Date,Market,Category,Type,Price,Amount,Total,Fee,Order Number",
+      "2017-03-18 23:26:34,DASH/BTC,Settlement,Buy,0.11069111,0.00025142,0.00002782,0.25%,85801375761",
+      "2017-03-18 23:15:54,DASH/BTC,Margin trade,Sell,0.11280000,0.10000000,0.01128000,0.25%,85797936204",
+    ].join("\n");
+    const file = makeFile("poloniex-20170603.csv", content);
     const result = await detectImportTarget(file);
     expect(result?.target).toBe("csv");
   });

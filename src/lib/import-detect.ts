@@ -70,6 +70,9 @@ function looksLikeLedger(text: string): boolean {
     if (!line || line.startsWith(";") || line.startsWith("#")) continue;
     scanned++;
 
+    // CSV-like lines (3+ commas) are not ledger — skip scoring
+    if ((line.match(/,/g) || []).length >= 3) continue;
+
     // Date + payee header (e.g. "2024-01-15 Grocery Store")
     if (/^\d{4}[-/]\d{2}[-/]\d{2}\s/.test(line)) score += 2;
     // Indented Account:Path posting
@@ -113,9 +116,15 @@ export async function detectImportTarget(
   if (extGuess && contentGuess && extGuess === contentGuess) {
     return { target: extGuess, text };
   }
-  if (!extGuess || extGuess === "csv") {
-    // Unknown/txt or csv extension — trust content detection
+  if (!extGuess) {
+    // Unknown extension — trust content detection
     if (contentGuess) return { target: contentGuess, text };
+  }
+  if (extGuess === "csv") {
+    // CSV extension — trust content only for non-ledger overrides (e.g. OFX)
+    // Many CSV files have date-prefixed rows that fool the ledger heuristic
+    if (contentGuess && contentGuess !== "ledger") return { target: contentGuess, text };
+    return { target: "csv", text };
   }
   if (extGuess && contentGuess && extGuess !== contentGuess) {
     // Disagree — trust content
