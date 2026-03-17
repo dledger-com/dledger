@@ -590,13 +590,13 @@
                     {@const amount = parseFloat(item.amount)}
                     <tr class="border-b last:border-b-0">
                       <td class="px-3 py-2">
-                        <span class="block break-all" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
+                        <span class="block break-words" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {amount > 0 ? `${formatCurrency(amount, item.currency)} ${item.currency}` : ""}
+                        {amount > 0 ? formatCurrency(amount, item.currency) : ""}
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {amount < 0 ? `${formatCurrency(Math.abs(amount), item.currency)} ${item.currency}` : ""}
+                        {amount < 0 ? formatCurrency(Math.abs(amount), item.currency) : ""}
                       </td>
                     </tr>
                   {/each}
