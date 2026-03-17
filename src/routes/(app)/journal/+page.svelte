@@ -56,6 +56,7 @@
     import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
     import type { TransactionFilter } from "$lib/types/index.js";
     import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
+    import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
 
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -87,6 +88,17 @@
     const store = new JournalStore();
     const settings = new SettingsStore();
     let loadController: AbortController | undefined;
+
+    // ── Journal Entry Drawer ──
+    let drawerOpen = $state(false);
+    let drawerMode = $state<"view" | "new" | "edit">("view");
+    let drawerEntryId = $state<string | null>(null);
+
+    function openEntryDrawer(mode: "view" | "new" | "edit", entryId?: string) {
+        drawerMode = mode;
+        drawerEntryId = entryId ?? null;
+        drawerOpen = true;
+    }
 
     /** Helper to get line items for an entry from the store cache */
     function getItems(entryId: string): LineItem[] {
@@ -121,7 +133,7 @@
         const _fm = findingMatches;
         const _dd = detectingDuplicates;
         setTopBarActions([
-            { type: 'button', label: 'New Entry', href: '/journal/new', fab: true, fabIcon: Plus },
+            { type: 'button', label: 'New Entry', onclick: () => openEntryDrawer("new"), fab: true, fabIcon: Plus },
             {
                 type: 'menu',
                 items: [
@@ -1129,7 +1141,7 @@
                 if (multiSelectMode) {
                     row.toggleSelected(!row.getIsSelected());
                 } else {
-                    goto(`/journal/${entryId}`);
+                    openEntryDrawer("view", entryId);
                 }
             },
             onpointercancel() {
@@ -2522,11 +2534,11 @@
                                                         <div
                                                             class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
                                                         >
-                                                            <a
-                                                                href="/journal/{entry.id}"
-                                                                class="font-medium hover:underline truncate max-w-md"
+                                                            <button
+                                                                class="font-medium hover:underline truncate max-w-md text-left"
                                                                 title={entry.description}
-                                                                >{entry.description}</a
+                                                                onclick={() => openEntryDrawer("view", entry.id)}
+                                                                >{entry.description}</button
                                                             >
                                                             {#if columnVisibility.tags !== false}
                                                                 {#if entryTags.get(entry.id)?.length}
@@ -2817,10 +2829,10 @@
                                     <span class="text-muted-foreground w-24"
                                         >{entry.date}</span
                                     >
-                                    <a
-                                        href="/journal/{entry.id}"
-                                        class="hover:underline"
-                                        >{entry.description}</a
+                                    <button
+                                        class="hover:underline text-left"
+                                        onclick={() => openEntryDrawer("view", entry.id)}
+                                        >{entry.description}</button
                                     >
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -2873,6 +2885,16 @@
         {/if}
     </Dialog.Content>
 </Dialog.Root>
+
+<JournalEntryDrawer
+    bind:open={drawerOpen}
+    bind:mode={drawerMode}
+    bind:entryId={drawerEntryId}
+    onsaved={(newId) => {
+        drawerEntryId = newId;
+        drawerMode = "view";
+    }}
+/>
 
 <style>
     :global(tr[style*="--bar-width"]) {
