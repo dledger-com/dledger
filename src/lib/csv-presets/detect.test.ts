@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { detectColumns } from "./detect.js";
+import { bittrexPreset } from "./presets/bittrex.js";
+import { cryptoComExchangePreset } from "./presets/crypto-com-exchange.js";
+import { yieldAppPreset } from "./presets/yield-app.js";
 
 describe("detectColumns", () => {
   it("detects standard bank statement columns by header name", () => {
@@ -133,5 +136,14 @@ describe("detectColumns", () => {
 
     const result = detectColumns(headers, rows);
     expect(result.dateFormat).toBe("ISO8601");
+  });
+});
+
+describe("cross-preset detection", () => {
+  it("Yield App headers are not detected as Bittrex or Crypto.com Exchange", () => {
+    const yieldAppHeaders = ["Date", "Amount", "Currency", "Type", "Status", "Rewarded From", "Fund Price", "YLD Price", "Txid", "Address From", "Address To"];
+    expect(bittrexPreset.detect(yieldAppHeaders, [])).toBe(0);
+    expect(cryptoComExchangePreset.detect(yieldAppHeaders, [])).toBeLessThan(yieldAppPreset.detect(yieldAppHeaders, []));
+    expect(yieldAppPreset.detect(yieldAppHeaders, [])).toBe(90);
   });
 });

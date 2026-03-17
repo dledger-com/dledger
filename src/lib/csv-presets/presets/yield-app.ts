@@ -30,7 +30,7 @@ export const yieldAppPreset: CsvPreset = {
     const matched = REQUIRED_HEADERS.map((h) => h.toLowerCase()).filter((r) => lower.includes(r)).length;
     // Also check for Yield-specific columns
     const hasYieldSpecific = lower.includes("rewarded from") || lower.includes("fund price") || lower.includes("yld price");
-    if (matched >= 4 && hasYieldSpecific) return 85;
+    if (matched >= 4 && hasYieldSpecific) return 90;
     return matched >= 5 ? 85 : 0;
   },
 
