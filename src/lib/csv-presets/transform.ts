@@ -15,6 +15,7 @@ import { toast } from "svelte-sonner";
 import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
 import type { HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
 import { yieldToUI } from "$lib/utils/yield.js";
+import { deriveAndRecordTradeRate, type TradeRateItem } from "$lib/utils/derive-trade-rate.js";
 
 
 export interface ImportOptions {
@@ -372,6 +373,14 @@ async function postRecord(
   };
 
   await backend.postJournalEntry(entry, lineItems);
+
+  // Derive exchange rate from trade line items (e.g. crypto buy/sell)
+  const rateItems: TradeRateItem[] = rec.lines.map((line) => ({
+    account_name: line.account,
+    currency: line.currency,
+    amount: line.amount,
+  }));
+  await deriveAndRecordTradeRate(backend, rec.date, rateItems);
 
   // Store structured metadata if present
   if (rec.metadata && Object.keys(rec.metadata).length > 0) {
