@@ -1,8 +1,6 @@
 <script lang="ts">
   import { v7 as uuidv7 } from "uuid";
   import * as Drawer from "$lib/components/ui/drawer/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Table from "$lib/components/ui/table/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -454,8 +452,10 @@
     {#if mode === "view"}
       <!-- ═══ VIEW MODE ═══ -->
       <Drawer.Header class="flex items-center justify-between">
-        <Drawer.Title>Entry Details</Drawer.Title>
-        <div class="flex items-center gap-1">
+        <div class="min-w-0 flex-1">
+          <Drawer.Title class="truncate">{entry?.description || "Entry Details"}</Drawer.Title>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
           {#if entry && entry.status === "confirmed"}
             <Button variant="outline" size="sm" onclick={() => { mode = "edit"; }}>
               <Pencil class="h-3.5 w-3.5 mr-1" /> Edit
@@ -483,125 +483,124 @@
             </div>
           {/if}
 
-          <Card.Root>
-            <Card.Header class="py-3">
-              <Card.Title class="text-sm">Details</Card.Title>
-            </Card.Header>
-            <Card.Content class="pt-0">
-              <dl class="grid grid-cols-2 gap-3 text-sm">
+          <!-- Details -->
+          <section>
+            <h3 class="text-sm font-medium text-muted-foreground mb-2">Details</h3>
+            <dl class="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt class="text-muted-foreground">Date</dt>
+                <dd class="font-medium">{entry.date}</dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Status</dt>
+                <dd>
+                  <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
+                    {entry.status}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Source</dt>
+                <dd class="font-medium">{entry.source}</dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Created</dt>
+                <dd class="font-medium">{entry.created_at}</dd>
+              </div>
+              {#if viewMetadata["edit:original_id"]}
                 <div>
-                  <dt class="text-muted-foreground">Date</dt>
-                  <dd class="font-medium">{entry.date}</dd>
-                </div>
-                <div>
-                  <dt class="text-muted-foreground">Status</dt>
+                  <dt class="text-muted-foreground">Edit of</dt>
                   <dd>
-                    <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
-                      {entry.status}
-                    </Badge>
+                    <button
+                      class="text-blue-600 hover:underline dark:text-blue-400 text-left"
+                      onclick={() => { entryId = viewMetadata['edit:original_id']; }}
+                    >Original entry</button>
                   </dd>
                 </div>
-                <div>
-                  <dt class="text-muted-foreground">Source</dt>
-                  <dd class="font-medium">{entry.source}</dd>
-                </div>
-                <div>
-                  <dt class="text-muted-foreground">Created</dt>
-                  <dd class="font-medium">{entry.created_at}</dd>
-                </div>
-                {#if viewMetadata["edit:original_id"]}
-                  <div>
-                    <dt class="text-muted-foreground">Edit of</dt>
-                    <dd>
-                      <button
-                        class="text-blue-600 hover:underline dark:text-blue-400 text-left"
-                        onclick={() => { entryId = viewMetadata['edit:original_id']; }}
-                      >Original entry</button>
-                    </dd>
-                  </div>
-                {/if}
-                {#if entry.voided_by}
-                  <div>
-                    <dt class="text-muted-foreground">Voided by</dt>
-                    <dd>
-                      <button
-                        class="text-blue-600 hover:underline dark:text-blue-400 text-left"
-                        onclick={() => { entryId = entry!.voided_by; }}
-                      >Reversal entry</button>
-                    </dd>
-                  </div>
-                {/if}
-              </dl>
-            </Card.Content>
-          </Card.Root>
-
-          {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
-          <Card.Root>
-            <Card.Header class="py-3">
-              <Card.Title class="text-sm">Metadata</Card.Title>
-            </Card.Header>
-            <Card.Content class="pt-0 space-y-3">
-              <dl class="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt class="text-muted-foreground">Tags</dt>
-                  <dd><TagInput tags={viewTags} onchange={handleViewTagsChange} /></dd>
-                </div>
-                <div>
-                  <dt class="text-muted-foreground">Links</dt>
-                  <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
-                </div>
-              </dl>
-              {#if displayMeta.length > 0}
-                <dl class="grid grid-cols-2 gap-3 text-sm">
-                  {#each displayMeta as [key, value]}
-                    <div>
-                      <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
-                      <dd>
-                        {#if key === "handler"}
-                          <Badge variant="secondary">{value}</Badge>
-                        {:else}
-                          <span class="font-medium">{formatMetaValue(key, value)}</span>
-                        {/if}
-                      </dd>
-                    </div>
-                  {/each}
-                </dl>
               {/if}
-            </Card.Content>
-          </Card.Root>
+              {#if entry.voided_by}
+                <div>
+                  <dt class="text-muted-foreground">Voided by</dt>
+                  <dd>
+                    <button
+                      class="text-blue-600 hover:underline dark:text-blue-400 text-left"
+                      onclick={() => { entryId = entry!.voided_by; }}
+                    >Reversal entry</button>
+                  </dd>
+                </div>
+              {/if}
+            </dl>
+          </section>
 
-          <Card.Root>
-            <Card.Header class="py-3">
-              <Card.Title class="text-sm">Line Items</Card.Title>
-            </Card.Header>
-            <Table.Root>
-              <Table.Header>
-                <Table.Row>
-                  <Table.Head>Account</Table.Head>
-                  <Table.Head>Currency</Table.Head>
-                  <Table.Head class="text-right">Debit</Table.Head>
-                  <Table.Head class="text-right">Credit</Table.Head>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {#each viewItems as item (item.id)}
-                  {@const amount = parseFloat(item.amount)}
-                  <Table.Row>
-                    <Table.Cell>
-                      <span class="text-sm">{accountName(item.account_id)}</span>
-                    </Table.Cell>
-                    <Table.Cell>{item.currency}</Table.Cell>
-                    <Table.Cell class="text-right font-mono">
-                      {amount > 0 ? formatCurrency(amount, item.currency) : ""}
-                    </Table.Cell>
-                    <Table.Cell class="text-right font-mono">
-                      {amount < 0 ? formatCurrency(Math.abs(amount), item.currency) : ""}
-                    </Table.Cell>
-                  </Table.Row>
-                {/each}
-              </Table.Body>
-            </Table.Root>
-          </Card.Root>
+          <!-- Metadata -->
+          {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
+          {#if viewTags.length > 0 || viewEntryLinks.length > 0 || displayMeta.length > 0}
+            <section>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
+              <div class="space-y-3 text-sm">
+                {#if viewTags.length > 0 || viewEntryLinks.length > 0}
+                  <div class="space-y-2">
+                    <div>
+                      <dt class="text-muted-foreground">Tags</dt>
+                      <dd><TagInput tags={viewTags} onchange={handleViewTagsChange} /></dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted-foreground">Links</dt>
+                      <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
+                    </div>
+                  </div>
+                {/if}
+                {#if displayMeta.length > 0}
+                  <dl class="grid grid-cols-2 gap-3">
+                    {#each displayMeta as [key, value]}
+                      <div>
+                        <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
+                        <dd>
+                          {#if key === "handler"}
+                            <Badge variant="secondary">{value}</Badge>
+                          {:else}
+                            <span class="font-medium">{formatMetaValue(key, value)}</span>
+                          {/if}
+                        </dd>
+                      </div>
+                    {/each}
+                  </dl>
+                {/if}
+              </div>
+            </section>
+          {/if}
+
+          <!-- Line Items -->
+          <section>
+            <h3 class="text-sm font-medium text-muted-foreground mb-2">Line Items</h3>
+            <div class="border rounded-md overflow-hidden">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b bg-muted/50">
+                    <th class="text-left font-medium px-3 py-2">Account</th>
+                    <th class="text-right font-medium px-3 py-2 w-[120px]">Debit</th>
+                    <th class="text-right font-medium px-3 py-2 w-[120px]">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each viewItems as item (item.id)}
+                    {@const amount = parseFloat(item.amount)}
+                    <tr class="border-b last:border-b-0">
+                      <td class="px-3 py-2">
+                        <span class="block truncate max-w-[260px]" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
+                      </td>
+                      <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
+                        {amount > 0 ? `${formatCurrency(amount, item.currency)} ${item.currency}` : ""}
+                      </td>
+                      <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
+                        {amount < 0 ? `${formatCurrency(Math.abs(amount), item.currency)} ${item.currency}` : ""}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </section>
         {/if}
       </div>
 
@@ -637,20 +636,17 @@
           </div>
         {:else}
           <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-4">
-            <Card.Root>
-              <Card.Header class="py-3">
-                <Card.Title class="text-sm">Entry Details</Card.Title>
-              </Card.Header>
-              <Card.Content class="pt-0 space-y-3">
-                <div class="grid gap-3 sm:grid-cols-3">
-                  <div class="space-y-1">
-                    <label for="drawer-date" class="text-sm font-medium">Date</label>
-                    <Input id="drawer-date" type="date" bind:value={formDate} required />
-                  </div>
-                  <div class="space-y-1 sm:col-span-2">
-                    <label for="drawer-desc" class="text-sm font-medium">Description</label>
-                    <Input id="drawer-desc" bind:value={formDescription} placeholder="e.g. Monthly rent payment" required />
-                  </div>
+            <!-- Entry Details -->
+            <section>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">Entry Details</h3>
+              <div class="space-y-3">
+                <div class="space-y-1">
+                  <label for="drawer-date" class="text-sm font-medium">Date</label>
+                  <Input id="drawer-date" type="date" bind:value={formDate} required />
+                </div>
+                <div class="space-y-1">
+                  <label for="drawer-desc" class="text-sm font-medium">Description</label>
+                  <Input id="drawer-desc" bind:value={formDescription} placeholder="e.g. Monthly rent payment" required />
                 </div>
 
                 <div class="space-y-1">
@@ -671,15 +667,13 @@
                   </Select.Root>
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div class="space-y-1">
-                    <label class="text-sm font-medium">Tags</label>
-                    <TagInput tags={formTags} onchange={(t) => { formTags = t; }} suggestions={tagSuggestions} />
-                  </div>
-                  <div class="space-y-1">
-                    <label class="text-sm font-medium">Links</label>
-                    <LinkInput links={formLinks} onchange={(l) => { formLinks = l; }} suggestions={formLinkSuggestions} />
-                  </div>
+                <div class="space-y-1">
+                  <label class="text-sm font-medium">Tags</label>
+                  <TagInput tags={formTags} onchange={(t) => { formTags = t; }} suggestions={tagSuggestions} />
+                </div>
+                <div class="space-y-1">
+                  <label class="text-sm font-medium">Links</label>
+                  <LinkInput links={formLinks} onchange={(l) => { formLinks = l; }} suggestions={formLinkSuggestions} />
                 </div>
 
                 <details class="space-y-1">
@@ -691,85 +685,87 @@
                     class="mt-2"
                   />
                 </details>
-              </Card.Content>
-            </Card.Root>
+              </div>
+            </section>
 
-            <Card.Root>
-              <Card.Header class="py-3">
-                <Card.Title class="text-sm">Line Items</Card.Title>
-                <p class="text-xs text-muted-foreground">Debits must equal credits for the entry to balance.</p>
-              </Card.Header>
-              <Card.Content class="pt-0">
-                <div class="space-y-2">
-                  <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 text-sm font-medium text-muted-foreground">
-                    <span>Account</span>
-                    <span class="text-right">Debit</span>
-                    <span class="text-right">Credit</span>
-                    <span></span>
-                  </div>
+            <hr class="border-border" />
 
-                  {#each lines as line, i (line.key)}
-                    <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 items-center">
-                      <AccountCombobox
-                        value={line.accountPath}
-                        accounts={accountNames}
-                        variant="input"
-                        placeholder="Select account..."
-                        onchange={(v) => { line.accountPath = v; }}
-                      />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        bind:value={line.debit}
-                        class="text-right font-mono"
-                        oninput={() => handleDebitInput(i)}
-                      />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        bind:value={line.credit}
-                        class="text-right font-mono"
-                        oninput={() => handleCreditInput(i)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        type="button"
-                        disabled={lines.length <= 2}
-                        onclick={() => removeLine(line.key)}
-                      >
-                        <Trash2 class="h-4 w-4" />
-                      </Button>
+            <!-- Line Items -->
+            <section>
+              <h3 class="text-sm font-medium text-muted-foreground mb-1">Line Items</h3>
+              <p class="text-xs text-muted-foreground mb-3">Debits must equal credits for the entry to balance.</p>
+              <div class="space-y-3">
+                {#each lines as line, i (line.key)}
+                  <div class="rounded-md border p-2 space-y-2">
+                    <AccountCombobox
+                      value={line.accountPath}
+                      accounts={accountNames}
+                      variant="input"
+                      placeholder="Select account..."
+                      onchange={(v) => { line.accountPath = v; }}
+                    />
+                    <div class="grid grid-cols-[1fr_1fr_40px] gap-2 items-center">
+                      <div class="space-y-0.5">
+                        <span class="text-xs text-muted-foreground">Debit</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          bind:value={line.debit}
+                          class="text-right font-mono"
+                          oninput={() => handleDebitInput(i)}
+                        />
+                      </div>
+                      <div class="space-y-0.5">
+                        <span class="text-xs text-muted-foreground">Credit</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          bind:value={line.credit}
+                          class="text-right font-mono"
+                          oninput={() => handleCreditInput(i)}
+                        />
+                      </div>
+                      <div class="pt-4">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
+                          disabled={lines.length <= 2}
+                          onclick={() => removeLine(line.key)}
+                        >
+                          <Trash2 class="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  {/each}
+                  </div>
+                {/each}
 
-                  <Button variant="outline" size="sm" type="button" onclick={addLine} class="mt-2">
-                    <Plus class="h-4 w-4 mr-1" /> Add Line
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" type="button" onclick={addLine}>
+                  <Plus class="h-4 w-4 mr-1" /> Add Line
+                </Button>
+              </div>
 
-                <div class="mt-4 flex justify-end gap-6 border-t pt-3 text-sm">
-                  <div>
-                    <span class="text-muted-foreground">Debit:</span>
-                    <span class="ml-1 font-mono font-medium">{totalDebit.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span class="text-muted-foreground">Credit:</span>
-                    <span class="ml-1 font-mono font-medium">{totalCredit.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span class="text-muted-foreground">Diff:</span>
-                    <span class="ml-1 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-                      {Math.abs(totalDebit - totalCredit).toFixed(2)}
-                    </span>
-                  </div>
+              <div class="mt-4 flex justify-end gap-6 border-t pt-3 text-sm">
+                <div>
+                  <span class="text-muted-foreground">Debit:</span>
+                  <span class="ml-1 font-mono font-medium">{totalDebit.toFixed(2)}</span>
                 </div>
-              </Card.Content>
-            </Card.Root>
+                <div>
+                  <span class="text-muted-foreground">Credit:</span>
+                  <span class="ml-1 font-mono font-medium">{totalCredit.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span class="text-muted-foreground">Diff:</span>
+                  <span class="ml-1 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                    {Math.abs(totalDebit - totalCredit).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </section>
 
             <div class="flex justify-end gap-2 pt-2 pb-2">
               <Button variant="outline" type="button" onclick={() => { open = false; }}>Cancel</Button>
