@@ -451,20 +451,23 @@
   <Drawer.Content class={isMobile ? '' : 'sm:max-w-xl'}>
     {#if mode === "view"}
       <!-- ═══ VIEW MODE ═══ -->
-      <Drawer.Header class="flex items-center justify-between">
-        <div class="min-w-0 flex-1">
-          <Drawer.Title class="truncate">{entry?.description || "Entry Details"}</Drawer.Title>
-        </div>
-        <div class="flex items-center gap-1 shrink-0">
-          {#if entry && entry.status === "confirmed"}
-            <Button variant="outline" size="sm" onclick={() => { mode = "edit"; }}>
-              <Pencil class="h-3.5 w-3.5 mr-1" /> Edit
+      <Drawer.Header class="space-y-1">
+        <div class="flex items-center justify-between">
+          <Drawer.Title class="text-sm font-medium text-muted-foreground">Entry Details</Drawer.Title>
+          <div class="flex items-center gap-1">
+            {#if entry && entry.status === "confirmed"}
+              <Button variant="outline" size="sm" onclick={() => { mode = "edit"; }}>
+                <Pencil class="h-3.5 w-3.5 mr-1" /> Edit
+              </Button>
+            {/if}
+            <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { open = false; }}>
+              <X class="h-4 w-4" />
             </Button>
-          {/if}
-          <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { open = false; }}>
-            <X class="h-4 w-4" />
-          </Button>
+          </div>
         </div>
+        {#if entry}
+          <p class="text-base font-semibold leading-snug">{entry.description}</p>
+        {/if}
       </Drawer.Header>
 
       <div class="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
@@ -574,12 +577,12 @@
           <section>
             <h3 class="text-sm font-medium text-muted-foreground mb-2">Line Items</h3>
             <div class="border rounded-md overflow-hidden">
-              <table class="w-full text-sm">
+              <table class="w-full table-fixed text-sm">
                 <thead>
                   <tr class="border-b bg-muted/50">
                     <th class="text-left font-medium px-3 py-2">Account</th>
-                    <th class="text-right font-medium px-3 py-2 w-[120px]">Debit</th>
-                    <th class="text-right font-medium px-3 py-2 w-[120px]">Credit</th>
+                    <th class="text-right font-medium px-3 py-2 w-[100px]">Debit</th>
+                    <th class="text-right font-medium px-3 py-2 w-[100px]">Credit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -587,7 +590,7 @@
                     {@const amount = parseFloat(item.amount)}
                     <tr class="border-b last:border-b-0">
                       <td class="px-3 py-2">
-                        <span class="block truncate max-w-[260px]" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
+                        <span class="block break-all" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
                         {amount > 0 ? `${formatCurrency(amount, item.currency)} ${item.currency}` : ""}
