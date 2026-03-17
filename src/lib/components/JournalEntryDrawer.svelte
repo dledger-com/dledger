@@ -21,13 +21,17 @@
   import LinkInput from "$lib/components/LinkInput.svelte";
   import MetadataEditor from "$lib/components/MetadataEditor.svelte";
   import AccountCombobox from "$lib/components/AccountCombobox.svelte";
+  import FlowView from "$lib/components/FlowView.svelte";
   import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem, Account } from "$lib/types/index.js";
+  import type { AccountType } from "$lib/types/account.js";
   import { invalidate } from "$lib/data/invalidation.js";
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Plus from "lucide-svelte/icons/plus";
   import Pencil from "lucide-svelte/icons/pencil";
   import X from "lucide-svelte/icons/x";
+  import ArrowRightLeft from "lucide-svelte/icons/arrow-right-left";
+  import TableIcon from "lucide-svelte/icons/table";
 
   interface Props {
     open: boolean;
@@ -54,6 +58,7 @@
   });
 
   // ── View mode state ──
+  let lineItemView = $state<"table" | "flow">("table");
   let entry = $state<JournalEntry | null>(null);
   let viewItems = $state<LineItem[]>([]);
   let viewMetadata = $state<Record<string, string>>({});
@@ -94,6 +99,10 @@
 
   function accountName(id: string): string {
     return accountStore.byId.get(id)?.full_name ?? id;
+  }
+
+  function accountTypeLookup(id: string): AccountType | undefined {
+    return accountStore.byId.get(id)?.account_type;
   }
 
   async function loadEntry(id: string) {
@@ -575,34 +584,53 @@
 
           <!-- Line Items -->
           <section>
-            <h3 class="text-sm font-medium text-muted-foreground mb-2">Line Items</h3>
-            <div class="border rounded-md overflow-hidden">
-              <table class="w-full table-fixed text-sm">
-                <thead>
-                  <tr class="border-b bg-muted/50">
-                    <th class="text-left font-medium px-3 py-2">Account</th>
-                    <th class="text-right font-medium px-3 py-2 w-[100px]">Debit</th>
-                    <th class="text-right font-medium px-3 py-2 w-[100px]">Credit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each viewItems as item (item.id)}
-                    {@const amount = parseFloat(item.amount)}
-                    <tr class="border-b last:border-b-0">
-                      <td class="px-3 py-2">
-                        <span class="block break-words" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
-                      </td>
-                      <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {amount > 0 ? formatCurrency(amount, item.currency) : ""}
-                      </td>
-                      <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {amount < 0 ? formatCurrency(Math.abs(amount), item.currency) : ""}
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-medium text-muted-foreground">Line Items</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                title={lineItemView === "table" ? "Switch to flow view" : "Switch to table view"}
+                onclick={() => { lineItemView = lineItemView === "table" ? "flow" : "table"; }}
+              >
+                {#if lineItemView === "table"}
+                  <ArrowRightLeft class="h-3.5 w-3.5" />
+                {:else}
+                  <TableIcon class="h-3.5 w-3.5" />
+                {/if}
+              </Button>
             </div>
+            {#if lineItemView === "flow"}
+              <FlowView items={viewItems} {accountName} {accountTypeLookup} />
+            {:else}
+              <div class="border rounded-md overflow-hidden">
+                <table class="w-full table-fixed text-sm">
+                  <thead>
+                    <tr class="border-b bg-muted/50">
+                      <th class="text-left font-medium px-3 py-2">Account</th>
+                      <th class="text-right font-medium px-3 py-2 w-[100px]">Debit</th>
+                      <th class="text-right font-medium px-3 py-2 w-[100px]">Credit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each viewItems as item (item.id)}
+                      {@const amount = parseFloat(item.amount)}
+                      <tr class="border-b last:border-b-0">
+                        <td class="px-3 py-2">
+                          <span class="block break-words" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
+                        </td>
+                        <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
+                          {amount > 0 ? formatCurrency(amount, item.currency) : ""}
+                        </td>
+                        <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
+                          {amount < 0 ? formatCurrency(Math.abs(amount), item.currency) : ""}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
           </section>
         {/if}
       </div>
