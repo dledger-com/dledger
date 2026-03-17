@@ -14,7 +14,7 @@ function detectVariant(headers: string[]): Variant | null {
   const has = (n: string) => lower.includes(n.toLowerCase());
 
   if (has("Market") && has("Side") && has("Quantity")) return "orders-new";
-  if (has("Currency") && has("TxId") && has("Amount") && !has("Market")) return "transactions";
+  if (has("Currency") && has("TxId") && has("Amount") && !has("Market") && !has("Rewarded From") && !has("YLD Price")) return "transactions";
   if (has("OrderUuid") || has("Exchange")) return "orders-old";
 
   // Try UTF-16 decoded headers

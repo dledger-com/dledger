@@ -460,7 +460,7 @@
                 <Pencil class="h-3.5 w-3.5 mr-1" /> Edit
               </Button>
             {/if}
-            <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { open = false; }}>
+            <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }}>
               <X class="h-4 w-4" />
             </Button>
           </div>
@@ -627,7 +627,7 @@
       <!-- ═══ NEW / EDIT MODE ═══ -->
       <Drawer.Header class="flex items-center justify-between">
         <Drawer.Title>{mode === "edit" ? "Edit Entry" : "New Entry"}</Drawer.Title>
-        <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { open = false; }}>
+        <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }}>
           <X class="h-4 w-4" />
         </Button>
       </Drawer.Header>
@@ -771,7 +771,7 @@
             </section>
 
             <div class="flex justify-end gap-2 pt-2 pb-2">
-              <Button variant="outline" type="button" onclick={() => { open = false; }}>Cancel</Button>
+              <Button variant="outline" type="button" onclick={() => { onclose?.(); }}>Cancel</Button>
               <Button type="submit" disabled={!isBalanced || !formDescription.trim() || submitting}>
                 {#if submitting}
                   {mode === "edit" ? "Saving..." : "Posting..."}

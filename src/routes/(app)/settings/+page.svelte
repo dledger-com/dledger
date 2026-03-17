@@ -376,6 +376,26 @@
         settings.update({ fiscalYearStart: `${mm}-01` });
     }
 
+    const localeOptions = [
+        { value: "auto", label: `Auto (${typeof navigator !== "undefined" ? navigator.language : "en-US"})` },
+        { value: "en-US", label: "English (US)" },
+        { value: "en-GB", label: "English (UK)" },
+        { value: "fr-FR", label: "Français" },
+        { value: "de-DE", label: "Deutsch" },
+        { value: "es-ES", label: "Español" },
+        { value: "it-IT", label: "Italiano" },
+        { value: "pt-BR", label: "Português (BR)" },
+        { value: "ja-JP", label: "日本語" },
+        { value: "zh-CN", label: "中文 (简体)" },
+        { value: "ko-KR", label: "한국어" },
+    ];
+
+    const currentLocaleValue = $derived(settings.settings.locale ?? "auto");
+
+    function handleLocaleChange(val: string) {
+        settings.update({ locale: val === "auto" ? undefined : val });
+    }
+
     const clearing = $derived(
         taskQueue.isActive("clear-exchange-rates") ||
             taskQueue.isActive("clear-ledger-data") ||
@@ -676,6 +696,20 @@
                         <Select.Content>
                             {#each dateFormats as df (df.value)}
                                 <Select.Item value={df.value}>{df.label}</Select.Item>
+                            {/each}
+                        </Select.Content>
+                    </Select.Root>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-sm font-medium">Number & Currency Format</span>
+                    <Select.Root type="single" value={currentLocaleValue} onValueChange={handleLocaleChange}>
+                        <Select.Trigger class="w-full">
+                            {localeOptions.find((l) => l.value === currentLocaleValue)?.label ?? currentLocaleValue}
+                        </Select.Trigger>
+                        <Select.Content>
+                            {#each localeOptions as lo (lo.value)}
+                                <Select.Item value={lo.value}>{lo.label}</Select.Item>
                             {/each}
                         </Select.Content>
                     </Select.Root>

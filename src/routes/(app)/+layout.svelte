@@ -11,9 +11,17 @@
   import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
   import LedgerImportDialog from "$lib/components/LedgerImportDialog.svelte";
   import { importDrop } from "$lib/data/import-drop.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { setFormatLocale } from "$lib/utils/format.js";
   import { untrack } from "svelte";
 
   let { children } = $props();
+
+  const settings = new SettingsStore();
+
+  $effect(() => {
+    setFormatLocale(settings.locale);
+  });
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
 

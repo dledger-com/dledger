@@ -1,10 +1,20 @@
+let _locale: string = typeof navigator !== "undefined" ? navigator.language : "en-US";
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
+export function setFormatLocale(locale: string) {
+  _locale = locale;
+  currencyFormatters.clear();
+}
+
+export function getFormatLocale(): string {
+  return _locale;
+}
 
 export function formatCurrency(amount: string | number, currency = "USD"): string {
   let formatter = currencyFormatters.get(currency);
   if (!formatter) {
     try {
-      formatter = new Intl.NumberFormat("en-US", {
+      formatter = new Intl.NumberFormat(_locale, {
         style: "currency",
         currency,
         minimumFractionDigits: 2,
@@ -12,7 +22,7 @@ export function formatCurrency(amount: string | number, currency = "USD"): strin
       });
     } catch {
       // Non-ISO currency code (e.g. AAPL, BTC) — use plain decimal format
-      formatter = new Intl.NumberFormat("en-US", {
+      formatter = new Intl.NumberFormat(_locale, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });

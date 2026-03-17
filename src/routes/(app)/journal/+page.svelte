@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { onDestroy, tick } from "svelte";
+    import { onDestroy, onMount, tick } from "svelte";
     import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
     import { page } from "$app/state";
-    import { goto, replaceState } from "$app/navigation";
+    import { goto, pushState, replaceState } from "$app/navigation";
     import * as Card from "$lib/components/ui/card/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -93,12 +93,51 @@
     let drawerOpen = $state(false);
     let drawerMode = $state<"view" | "new" | "edit">("view");
     let drawerEntryId = $state<string | null>(null);
-
     function openEntryDrawer(mode: "view" | "new" | "edit", entryId?: string) {
         drawerMode = mode;
         drawerEntryId = entryId ?? null;
         drawerOpen = true;
+        if (entryId) {
+            const url = new URL(window.location.href);
+            if (url.searchParams.get("entry") !== entryId) {
+                url.searchParams.set("entry", entryId);
+                pushState(url, {});
+            }
+        }
     }
+
+    function closeEntryDrawer() {
+        drawerOpen = false;
+        drawerEntryId = null;
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("entry")) {
+            url.searchParams.delete("entry");
+            replaceState(url, {});
+        }
+    }
+
+    // Handle initial page load + browser back/forward for drawer URL state
+    onMount(() => {
+        const entryId = new URL(window.location.href).searchParams.get("entry");
+        if (entryId) {
+            drawerMode = "view";
+            drawerEntryId = entryId;
+            drawerOpen = true;
+        }
+        function handlePopstate() {
+            const id = new URL(window.location.href).searchParams.get("entry");
+            if (id && !drawerOpen) {
+                drawerMode = "view";
+                drawerEntryId = id;
+                drawerOpen = true;
+            } else if (!id && drawerOpen && drawerMode === "view") {
+                drawerOpen = false;
+                drawerEntryId = null;
+            }
+        }
+        window.addEventListener("popstate", handlePopstate);
+        return () => window.removeEventListener("popstate", handlePopstate);
+    });
 
     /** Helper to get line items for an entry from the store cache */
     function getItems(entryId: string): LineItem[] {
@@ -2890,9 +2929,13 @@
     bind:open={drawerOpen}
     bind:mode={drawerMode}
     bind:entryId={drawerEntryId}
+    onclose={closeEntryDrawer}
     onsaved={(newId) => {
         drawerEntryId = newId;
         drawerMode = "view";
+        const url = new URL(window.location.href);
+        url.searchParams.set("entry", newId);
+        replaceState(url, {});
     }}
 />
 

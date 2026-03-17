@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest";
-import { formatCurrency, formatDate, formatDateRelative } from "./format.js";
+import { describe, it, expect, beforeEach } from "vitest";
+import { formatCurrency, formatDate, formatDateRelative, setFormatLocale } from "./format.js";
 
 describe("formatCurrency", () => {
+  beforeEach(() => {
+    setFormatLocale("en-US");
+  });
+
   it("formats USD with symbol", () => {
     const result = formatCurrency("1000.50", "USD");
     expect(result).toContain("1,000.50");
@@ -29,6 +33,22 @@ describe("formatCurrency", () => {
   it("accepts numeric input", () => {
     const result = formatCurrency(42.5, "USD");
     expect(result).toContain("42.50");
+  });
+
+  it("formats with fr-FR locale", () => {
+    setFormatLocale("fr-FR");
+    const result = formatCurrency("1000", "EUR");
+    expect(result).toContain("€");
+    // French locale uses non-breaking space as thousands separator
+    expect(result).toMatch(/1[\s\u00a0\u202f]000/);
+  });
+
+  it("formats with de-DE locale", () => {
+    setFormatLocale("de-DE");
+    const result = formatCurrency("1000.50", "EUR");
+    expect(result).toContain("€");
+    // German locale uses dot as thousands separator and comma as decimal
+    expect(result).toMatch(/1\.000,50/);
   });
 });
 

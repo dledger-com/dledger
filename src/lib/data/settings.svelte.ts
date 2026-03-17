@@ -53,6 +53,7 @@ export interface AppSettings {
   journalShowChart?: boolean;
   journalColumnVisibility?: Record<string, boolean>;
   journalChartGranularity?: ChartGranularity | null;
+  locale?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -203,6 +204,10 @@ export class SettingsStore {
 
   get holdingPeriodDays(): number {
     return this.settings.holdingPeriodDays;
+  }
+
+  get locale(): string {
+    return this.settings.locale ?? (typeof navigator !== "undefined" ? navigator.language : "en-US");
   }
 
   buildRateConfig(): HistoricalFetchConfig {
