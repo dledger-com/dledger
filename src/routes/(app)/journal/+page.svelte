@@ -1148,6 +1148,9 @@
         return sorted[Math.min(idx, sorted.length - 1)];
     }
 
+    // Hover tracking for chart rule line
+    let hoveredEntryDate = $state<string | null>(null);
+
     // Virtual scrolling
     let scrollEl = $state<HTMLDivElement | null>(null);
 
@@ -1311,12 +1314,9 @@
         return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
     });
 
-    // Middle visible date bucketed (for chart cursor rule)
-    const middleChartBucketDate = $derived.by(() => {
-        if (virtualItems.length === 0) return null;
-        const midIdx = virtualItems[Math.floor(virtualItems.length / 2)]?.index;
-        const dateStr = sortedEntries[midIdx]?.date;
-        return dateStr ? dateToBucketDate(dateStr, effectiveGranularity) : null;
+    // Hovered entry date bucketed (for chart cursor rule)
+    const hoveredChartBucketDate = $derived.by(() => {
+        return hoveredEntryDate ? dateToBucketDate(hoveredEntryDate, effectiveGranularity) : null;
     });
 
     // Chart date pill label derived from visible bucket dates
@@ -1925,10 +1925,10 @@
                         <rect x={left} y={0} width={right - left} height={2} fill="currentColor" opacity={0.15} />
                         <rect x={left} y={h - 2} width={right - left} height={2} fill="currentColor" opacity={0.15} />
                     {/if}
-                    {#if Rule_imported && middleChartBucketDate}
+                    {#if Rule_imported && hoveredChartBucketDate}
                         {@const RuleComp = Rule_imported}
                         <RuleComp
-                            x={middleChartBucketDate}
+                            x={hoveredChartBucketDate}
                             class="stroke-foreground/50"
                             stroke-dasharray="4 3"
                             stroke-width={1.5}
@@ -2369,6 +2369,8 @@
                                             onpointermove={handlers.onpointermove}
                                             onpointerup={handlers.onpointerup}
                                             onpointercancel={handlers.onpointercancel}
+                                            onmouseenter={() => { hoveredEntryDate = entry.date; }}
+                                            onmouseleave={() => { hoveredEntryDate = null; }}
                                             oncontextmenu={(e) =>
                                                 e.preventDefault()}
                                         >
@@ -2490,6 +2492,8 @@
                                                 convertedBarSegments.get(entry.id) ?? entryBarSegments(items),
                                                 maxEntryAmount,
                                             )}
+                                            onmouseenter={() => { hoveredEntryDate = entry.date; }}
+                                            onmouseleave={() => { hoveredEntryDate = null; }}
                                         >
                                             {#each row.getVisibleCells() as cell}
                                                 {#if cell.column.id === "select"}
