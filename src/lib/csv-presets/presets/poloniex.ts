@@ -29,7 +29,10 @@ export const poloniexPreset: CsvPreset = {
   suggestedMainAccount: exchangeAssets("Poloniex"),
 
   detect(headers: string[]): number {
-    return detectVariant(headers) ? 85 : 0;
+    const variant = detectVariant(headers);
+    if (!variant) return 0;
+    // Deposits/withdrawals have unique Poloniex-specific ID columns → higher confidence
+    return variant === "trades" ? 85 : 90;
   },
 
   getDefaultMapping(): Partial<CsvImportOptions> {
@@ -108,6 +111,8 @@ function transformDeposits(headers: string[], rows: string[][]): CsvRecord[] {
   const amtIdx = colIdx(headers, "amount");
   const statusIdx = colIdx(headers, "status");
 
+  const idIdx = colIdx(headers, "depositNumber");
+
   if ([dateIdx, currIdx, amtIdx].some((i) => i === -1)) return [];
 
   const records: CsvRecord[] = [];
@@ -125,7 +130,8 @@ function transformDeposits(headers: string[], rows: string[][]): CsvRecord[] {
     if (!currency || isNaN(amount) || amount === 0) continue;
 
     const lines = makeTransferLines("Poloniex", currency, amount);
-    records.push({ date, description: `Poloniex deposit: ${currency}`, lines });
+    const sourceKey = idIdx >= 0 ? (row[idIdx] ?? "").trim() : undefined;
+    records.push({ date, description: `Poloniex deposit: ${currency}`, lines, sourceKey });
   }
 
   return records;
@@ -137,6 +143,8 @@ function transformWithdrawals(headers: string[], rows: string[][]): CsvRecord[] 
   const amtIdx = colIdx(headers, "amount");
   const feeIdx = colIdx(headers, "fee");
   const statusIdx = colIdx(headers, "status");
+
+  const idIdx = colIdx(headers, "withdrawalRequestsId");
 
   if ([dateIdx, currIdx, amtIdx].some((i) => i === -1)) return [];
 
@@ -159,7 +167,8 @@ function transformWithdrawals(headers: string[], rows: string[][]): CsvRecord[] 
     const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
     if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Poloniex", currency, fee));
 
-    records.push({ date, description: `Poloniex withdrawal: ${currency}`, lines });
+    const sourceKey = idIdx >= 0 ? (row[idIdx] ?? "").trim() : undefined;
+    records.push({ date, description: `Poloniex withdrawal: ${currency}`, lines, sourceKey });
   }
 
   return records;
