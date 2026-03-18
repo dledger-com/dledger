@@ -50,12 +50,14 @@ export const coinlistPreset: CsvPreset = {
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: exchangeStaking("CoinList"), currency: asset, amount: (-amount).toString() },
         );
-      } else if (descLower.startsWith("sold ")) {
-        // Trade: paired rows balance via Equity:Trading
+      } else if (descLower.startsWith("sold ") || descLower.startsWith("bought ")) {
+        // Trade: paired rows balance via Equity:Trading, groupKey merges both legs
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: EQUITY_TRADING, currency: asset, amount: (-amount).toString() },
         );
+        records.push({ date, description: `CoinList: ${desc.slice(0, 80)}`, lines, groupKey: `${date}|${desc}` });
+        continue;
       } else if (descLower.includes("deposit")) {
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
