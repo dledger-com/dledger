@@ -19,6 +19,9 @@
   import { AlertDialog } from "bits-ui";
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Plus from "lucide-svelte/icons/plus";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
+  import ExchangeEntryForm from "$lib/components/ExchangeEntryForm.svelte";
+  import { EQUITY_TRADING } from "$lib/accounts/paths.js";
 
   interface Props {
     open: boolean;
@@ -55,6 +58,15 @@
   let metaKeySuggestions = $state<string[]>([]);
   let editLoading = $state(false);
   let submitting = $state(false);
+
+  // ── Exchange mode state ──
+  let entryMode = $state<"simple" | "exchange">("simple");
+  let fromCurrency = $state("EUR");
+  let toCurrency = $state("BTC");
+  let fromAmount = $state("");
+  let toAmount = $state("");
+  let fromAccount = $state("");
+  let toAccount = $state("");
 
   // ── Dirty-state tracking ──
   let cleanSnapshot = $state("");
@@ -132,6 +144,20 @@
   const totalDebit = $derived(lines.reduce((sum, l) => sum + (parseFloat(l.debit) || 0), 0));
   const totalCredit = $derived(lines.reduce((sum, l) => sum + (parseFloat(l.credit) || 0), 0));
   const isBalanced = $derived(Math.abs(totalDebit - totalCredit) < 0.001 && totalDebit > 0);
+
+  const isExchangeValid = $derived(
+    fromCurrency !== toCurrency &&
+    parseFloat(fromAmount) > 0 &&
+    parseFloat(toAmount) > 0 &&
+    fromAccount.trim() !== "" &&
+    toAccount.trim() !== "",
+  );
+
+  const canPost = $derived(
+    (entryMode === "simple" ? isBalanced : isExchangeValid) &&
+    formDescription.trim() !== "" &&
+    !submitting,
+  );
 
   async function ensureAccountHierarchy(fullName: string): Promise<string> {
     const existing = accountStore.active.find((a) => a.full_name === fullName);
@@ -222,30 +248,55 @@
   }
 
   async function handleSubmit() {
-    if (!isBalanced) return;
+    if (!canPost) return;
     submitting = true;
 
     const newEntryId = uuidv7();
     const today = new Date().toISOString().slice(0, 10);
-    const validLines = lines.filter((l) => l.accountPath && (l.debit || l.credit));
 
     let needsReload = false;
     const items: LineItem[] = [];
-    for (const l of validLines) {
-      const existingBefore = accountStore.active.find((a) => a.full_name === l.accountPath);
-      const accountId = await ensureAccountHierarchy(l.accountPath);
-      if (!existingBefore) needsReload = true;
-      const debitAmount = parseFloat(l.debit) || 0;
-      const creditAmount = parseFloat(l.credit) || 0;
-      const amount = debitAmount > 0 ? debitAmount : -creditAmount;
-      items.push({
-        id: uuidv7(),
-        journal_entry_id: newEntryId,
-        account_id: accountId,
-        currency: formCurrency,
-        amount: amount.toString(),
-        lot_id: null,
-      });
+
+    if (entryMode === "exchange") {
+      const fAmt = parseFloat(fromAmount);
+      const tAmt = parseFloat(toAmount);
+      const rawLines = [
+        { account: fromAccount, currency: fromCurrency, amount: (-fAmt).toString() },
+        { account: toAccount, currency: toCurrency, amount: tAmt.toString() },
+        { account: EQUITY_TRADING, currency: fromCurrency, amount: fAmt.toString() },
+        { account: EQUITY_TRADING, currency: toCurrency, amount: (-tAmt).toString() },
+      ];
+      for (const l of rawLines) {
+        const existingBefore = accountStore.active.find((a) => a.full_name === l.account);
+        const accountId = await ensureAccountHierarchy(l.account);
+        if (!existingBefore) needsReload = true;
+        items.push({
+          id: uuidv7(),
+          journal_entry_id: newEntryId,
+          account_id: accountId,
+          currency: l.currency,
+          amount: l.amount,
+          lot_id: null,
+        });
+      }
+    } else {
+      const validLines = lines.filter((l) => l.accountPath && (l.debit || l.credit));
+      for (const l of validLines) {
+        const existingBefore = accountStore.active.find((a) => a.full_name === l.accountPath);
+        const accountId = await ensureAccountHierarchy(l.accountPath);
+        if (!existingBefore) needsReload = true;
+        const debitAmount = parseFloat(l.debit) || 0;
+        const creditAmount = parseFloat(l.credit) || 0;
+        const amount = debitAmount > 0 ? debitAmount : -creditAmount;
+        items.push({
+          id: uuidv7(),
+          journal_entry_id: newEntryId,
+          account_id: accountId,
+          currency: formCurrency,
+          amount: amount.toString(),
+          lot_id: null,
+        });
+      }
     }
 
     if (needsReload) await accountStore.load();
@@ -331,6 +382,13 @@
       formTags = [];
       formLinks = [];
       formMetadata = {};
+      entryMode = "simple";
+      fromCurrency = "EUR";
+      toCurrency = "BTC";
+      fromAmount = "";
+      toAmount = "";
+      fromAccount = "";
+      toAccount = "";
       resetFormLines();
       cleanSnapshot = takeSnapshot();
       const backend = getBackend();
@@ -351,6 +409,7 @@
     if (!open) {
       lastLoadedKey = "";
       cleanSnapshot = "";
+      entryMode = "simple";
     }
   });
 
@@ -436,88 +495,107 @@
           </section>
 
           <!-- Line Items -->
-          <section>
-            <h3 class="text-sm font-medium text-muted-foreground mb-1">Line Items</h3>
-            <p class="text-xs text-muted-foreground mb-3">Debits must equal credits for the entry to balance.</p>
-            <div class="space-y-3">
-              {#each lines as line, i (line.key)}
-                <div class="rounded-md border p-2 space-y-2">
-                  <AccountCombobox
-                    value={line.accountPath}
-                    accounts={accountNames}
-                    variant="input"
-                    placeholder="Select account..."
-                    onchange={(v) => { line.accountPath = v; }}
-                  />
-                  <div class="grid grid-cols-[1fr_1fr_40px] gap-2 items-center">
-                    <div class="space-y-0.5">
-                      <span class="text-xs text-muted-foreground">Debit</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        bind:value={line.debit}
-                        class="text-right font-mono"
-                        oninput={() => handleDebitInput(i)}
+          <Tabs.Root bind:value={entryMode}>
+            <section>
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-medium text-muted-foreground">Line Items</h3>
+                <Tabs.List>
+                  <Tabs.Trigger value="simple">Simple</Tabs.Trigger>
+                  <Tabs.Trigger value="exchange">Exchange</Tabs.Trigger>
+                </Tabs.List>
+              </div>
+
+              {#if entryMode === "simple"}
+                <p class="text-xs text-muted-foreground mb-3">Debits must equal credits for the entry to balance.</p>
+                <div class="space-y-3">
+                  {#each lines as line, i (line.key)}
+                    <div class="rounded-md border p-2 space-y-2">
+                      <AccountCombobox
+                        value={line.accountPath}
+                        accounts={accountNames}
+                        variant="input"
+                        placeholder="Select account..."
+                        onchange={(v) => { line.accountPath = v; }}
                       />
+                      <div class="grid grid-cols-[1fr_1fr_40px] gap-2 items-center">
+                        <div class="space-y-0.5">
+                          <span class="text-xs text-muted-foreground">Debit</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            bind:value={line.debit}
+                            class="text-right font-mono"
+                            oninput={() => handleDebitInput(i)}
+                          />
+                        </div>
+                        <div class="space-y-0.5">
+                          <span class="text-xs text-muted-foreground">Credit</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            bind:value={line.credit}
+                            class="text-right font-mono"
+                            oninput={() => handleCreditInput(i)}
+                          />
+                        </div>
+                        <div class="pt-4">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            type="button"
+                            disabled={lines.length <= 2}
+                            onclick={() => removeLine(line.key)}
+                          >
+                            <Trash2 class="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                    <div class="space-y-0.5">
-                      <span class="text-xs text-muted-foreground">Credit</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        bind:value={line.credit}
-                        class="text-right font-mono"
-                        oninput={() => handleCreditInput(i)}
-                      />
-                    </div>
-                    <div class="pt-4">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        type="button"
-                        disabled={lines.length <= 2}
-                        onclick={() => removeLine(line.key)}
-                      >
-                        <Trash2 class="h-4 w-4" />
-                      </Button>
-                    </div>
+                  {/each}
+
+                  <Button variant="outline" size="sm" type="button" onclick={addLine}>
+                    <Plus class="h-4 w-4 mr-1" /> Add Line
+                  </Button>
+                </div>
+
+                <div class="mt-4 flex justify-end gap-6 border-t pt-3 text-sm">
+                  <div>
+                    <span class="text-muted-foreground">Debit:</span>
+                    <span class="ml-1 font-mono font-medium">{totalDebit.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span class="text-muted-foreground">Credit:</span>
+                    <span class="ml-1 font-mono font-medium">{totalCredit.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span class="text-muted-foreground">Diff:</span>
+                    <span class="ml-1 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                      {Math.abs(totalDebit - totalCredit).toFixed(2)}
+                    </span>
                   </div>
                 </div>
-              {/each}
-
-              <Button variant="outline" size="sm" type="button" onclick={addLine}>
-                <Plus class="h-4 w-4 mr-1" /> Add Line
-              </Button>
-            </div>
-
-            <div class="mt-4 flex justify-end gap-6 border-t pt-3 text-sm">
-              <div>
-                <span class="text-muted-foreground">Debit:</span>
-                <span class="ml-1 font-mono font-medium">{totalDebit.toFixed(2)}</span>
-              </div>
-              <div>
-                <span class="text-muted-foreground">Credit:</span>
-                <span class="ml-1 font-mono font-medium">{totalCredit.toFixed(2)}</span>
-              </div>
-              <div>
-                <span class="text-muted-foreground">Diff:</span>
-                <span class="ml-1 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-                  {Math.abs(totalDebit - totalCredit).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </section>
+              {:else}
+                <ExchangeEntryForm
+                  currencies={accountStore.currencies}
+                  accountNames={accountNames}
+                  bind:fromCurrency bind:toCurrency
+                  bind:fromAmount bind:toAmount
+                  bind:fromAccount bind:toAccount
+                />
+              {/if}
+            </section>
+          </Tabs.Root>
         </form>
       {/if}
     </div>
 
     <Dialog.Footer class="px-6 pb-6 pt-2 border-t">
       <Button variant="outline" type="button" onclick={() => { if (isDirty) { confirmDiscardOpen = true; return; } open = false; onclose?.(); }}>Cancel</Button>
-      <Button type="submit" form="journal-entry-form" disabled={!isBalanced || !formDescription.trim() || submitting}>
+      <Button type="submit" form="journal-entry-form" disabled={!canPost}>
         {#if submitting}
           {mode === "edit" ? "Saving..." : "Posting..."}
         {:else}

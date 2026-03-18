@@ -16,10 +16,13 @@
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Plus from "lucide-svelte/icons/plus";
   import AccountCombobox from "$lib/components/AccountCombobox.svelte";
+  import ExchangeEntryForm from "$lib/components/ExchangeEntryForm.svelte";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   import TagInput from "$lib/components/TagInput.svelte";
   import LinkInput from "$lib/components/LinkInput.svelte";
   import MetadataEditor from "$lib/components/MetadataEditor.svelte";
   import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
+  import { EQUITY_TRADING } from "$lib/accounts/paths.js";
 
   const accountStore = new AccountStore();
   const journalStore = new JournalStore();
@@ -37,6 +40,15 @@
   let linkSuggestions = $state<string[]>([]);
   let metaKeySuggestions = $state<string[]>([]);
   let editLoading = $state(false);
+
+  type EntryMode = "simple" | "exchange";
+  let entryMode = $state<EntryMode>("simple");
+  let fromCurrency = $state("EUR");
+  let toCurrency = $state("BTC");
+  let fromAmount = $state("");
+  let toAmount = $state("");
+  let fromAccount = $state("");
+  let toAccount = $state("");
 
   interface FormLine {
     key: string;
@@ -140,7 +152,40 @@
     Math.abs(totalDebit - totalCredit) < 0.001 && totalDebit > 0,
   );
 
+  const isExchangeValid = $derived(
+    fromCurrency !== toCurrency &&
+    parseFloat(fromAmount) > 0 &&
+    parseFloat(toAmount) > 0 &&
+    fromAccount.trim() !== "" &&
+    toAccount.trim() !== "",
+  );
+
+  const exchangePreviewLines = $derived.by(() => {
+    const fAmt = parseFloat(fromAmount);
+    const tAmt = parseFloat(toAmount);
+    if (!fAmt || !tAmt || fAmt <= 0 || tAmt <= 0) return [];
+    return [
+      { account: fromAccount || "?", currency: fromCurrency, amount: -fAmt },
+      { account: toAccount || "?", currency: toCurrency, amount: tAmt },
+      { account: EQUITY_TRADING, currency: fromCurrency, amount: fAmt },
+      { account: EQUITY_TRADING, currency: toCurrency, amount: -tAmt },
+    ];
+  });
+
+  const exchangeBalances = $derived(
+    exchangePreviewLines.reduce((acc, l) => {
+      acc[l.currency] = (acc[l.currency] ?? 0) + l.amount;
+      return acc;
+    }, {} as Record<string, number>),
+  );
+
   let submitting = $state(false);
+
+  const canSubmit = $derived(
+    (entryMode === "simple" ? isBalanced : isExchangeValid) &&
+    description.trim() !== "" &&
+    !submitting,
+  );
 
   async function prefillFromEntry(entryId: string) {
     editLoading = true;
@@ -167,30 +212,61 @@
       date = origEntry.date;
       description = origEntry.description;
 
-      // Determine currency from first line item
-      if (origItems.length > 0) {
-        currency = origItems[0].currency;
-      }
-
-      // Convert line items to form lines
-      const formLines: FormLine[] = origItems.map((item) => {
-        const amount = parseFloat(item.amount);
-        const acct = accountStore.accounts.find((a) => a.id === item.account_id);
-        return {
-          key: uuidv7(),
-          accountPath: acct?.full_name ?? item.account_id,
-          debit: amount > 0 ? Math.abs(amount).toString() : "",
-          credit: amount < 0 ? Math.abs(amount).toString() : "",
-          _autoDebit: false,
-          _autoCredit: false,
-        };
+      // Detect exchange entries: exactly 4 items, 2 currencies, Equity:Trading lines
+      const uniqueCurrencies = new Set(origItems.map((i) => i.currency));
+      const equityLines = origItems.filter((i) => {
+        const acct = accountStore.accounts.find((a) => a.id === i.account_id);
+        return acct?.full_name === EQUITY_TRADING || acct?.full_name?.startsWith("Equity:Trading:");
       });
-      lines = formLines.length >= 2 ? formLines : [
-        ...formLines,
-        ...Array.from({ length: 2 - formLines.length }, () => ({
-          key: uuidv7(), accountPath: "", debit: "", credit: "", _autoDebit: false, _autoCredit: false,
-        })),
-      ];
+      const nonEquityLines = origItems.filter((i) => {
+        const acct = accountStore.accounts.find((a) => a.id === i.account_id);
+        return acct?.full_name !== EQUITY_TRADING && !acct?.full_name?.startsWith("Equity:Trading:");
+      });
+
+      if (origItems.length === 4 && uniqueCurrencies.size === 2 && equityLines.length === 2 && nonEquityLines.length === 2) {
+        // Exchange entry detected — populate exchange mode
+        entryMode = "exchange";
+        const spent = nonEquityLines.find((i) => parseFloat(i.amount) < 0);
+        const received = nonEquityLines.find((i) => parseFloat(i.amount) > 0);
+        if (spent && received) {
+          const spentAcct = accountStore.accounts.find((a) => a.id === spent.account_id);
+          const rcvdAcct = accountStore.accounts.find((a) => a.id === received.account_id);
+          fromCurrency = spent.currency;
+          fromAmount = Math.abs(parseFloat(spent.amount)).toString();
+          fromAccount = spentAcct?.full_name ?? spent.account_id;
+          toCurrency = received.currency;
+          toAmount = parseFloat(received.amount).toString();
+          toAccount = rcvdAcct?.full_name ?? received.account_id;
+        }
+      } else {
+        // Simple entry — use existing logic
+        entryMode = "simple";
+
+        // Determine currency from first line item
+        if (origItems.length > 0) {
+          currency = origItems[0].currency;
+        }
+
+        // Convert line items to form lines
+        const formLines: FormLine[] = origItems.map((item) => {
+          const amount = parseFloat(item.amount);
+          const acct = accountStore.accounts.find((a) => a.id === item.account_id);
+          return {
+            key: uuidv7(),
+            accountPath: acct?.full_name ?? item.account_id,
+            debit: amount > 0 ? Math.abs(amount).toString() : "",
+            credit: amount < 0 ? Math.abs(amount).toString() : "",
+            _autoDebit: false,
+            _autoCredit: false,
+          };
+        });
+        lines = formLines.length >= 2 ? formLines : [
+          ...formLines,
+          ...Array.from({ length: 2 - formLines.length }, () => ({
+            key: uuidv7(), accountPath: "", debit: "", credit: "", _autoDebit: false, _autoCredit: false,
+          })),
+        ];
+      }
 
       // Set metadata (excluding edit provenance keys from original)
       const filteredMeta: Record<string, string> = {};
@@ -210,34 +286,59 @@
   }
 
   async function handleSubmit() {
-    if (!isBalanced) return;
+    if (!canSubmit) return;
     submitting = true;
 
     const entryId = uuidv7();
     const today = new Date().toISOString().slice(0, 10);
 
-    const validLines = lines.filter((l) => l.accountPath && (l.debit || l.credit));
-
-    // Resolve account paths to IDs (creating new accounts as needed)
     let needsReload = false;
     const items: LineItem[] = [];
-    for (const l of validLines) {
-      const existingBefore = accountStore.active.find((a) => a.full_name === l.accountPath);
-      const accountId = await ensureAccountHierarchy(l.accountPath);
-      if (!existingBefore) needsReload = true;
 
-      const debitAmount = parseFloat(l.debit) || 0;
-      const creditAmount = parseFloat(l.credit) || 0;
-      // Positive = debit, negative = credit
-      const amount = debitAmount > 0 ? debitAmount : -creditAmount;
-      items.push({
-        id: uuidv7(),
-        journal_entry_id: entryId,
-        account_id: accountId,
-        currency,
-        amount: amount.toString(),
-        lot_id: null,
-      });
+    if (entryMode === "exchange") {
+      const fAmt = parseFloat(fromAmount);
+      const tAmt = parseFloat(toAmount);
+      const rawLines = [
+        { account: fromAccount, currency: fromCurrency, amount: (-fAmt).toString() },
+        { account: toAccount, currency: toCurrency, amount: tAmt.toString() },
+        { account: EQUITY_TRADING, currency: fromCurrency, amount: fAmt.toString() },
+        { account: EQUITY_TRADING, currency: toCurrency, amount: (-tAmt).toString() },
+      ];
+
+      for (const l of rawLines) {
+        const existingBefore = accountStore.active.find((a) => a.full_name === l.account);
+        const accountId = await ensureAccountHierarchy(l.account);
+        if (!existingBefore) needsReload = true;
+        items.push({
+          id: uuidv7(),
+          journal_entry_id: entryId,
+          account_id: accountId,
+          currency: l.currency,
+          amount: l.amount,
+          lot_id: null,
+        });
+      }
+    } else {
+      const validLines = lines.filter((l) => l.accountPath && (l.debit || l.credit));
+
+      for (const l of validLines) {
+        const existingBefore = accountStore.active.find((a) => a.full_name === l.accountPath);
+        const accountId = await ensureAccountHierarchy(l.accountPath);
+        if (!existingBefore) needsReload = true;
+
+        const debitAmount = parseFloat(l.debit) || 0;
+        const creditAmount = parseFloat(l.credit) || 0;
+        // Positive = debit, negative = credit
+        const amount = debitAmount > 0 ? debitAmount : -creditAmount;
+        items.push({
+          id: uuidv7(),
+          journal_entry_id: entryId,
+          account_id: accountId,
+          currency,
+          amount: amount.toString(),
+          lot_id: null,
+        });
+      }
     }
 
     if (needsReload) await accountStore.load();
@@ -352,23 +453,25 @@
             </div>
           </div>
 
-          <div class="space-y-2">
-            <span class="text-sm font-medium">Currency</span>
-            <Select.Root type="single" bind:value={currency}>
-              <Select.Trigger class="w-full max-w-[200px]">
-                {@const cur = accountStore.currencies.find((c) => c.code === currency)}
-                {cur ? `${cur.code} - ${cur.name}` : currency}
-              </Select.Trigger>
-              <Select.Content>
-                {#each accountStore.currencies as c (c.code)}
-                  <Select.Item value={c.code}>{c.code} - {c.name}</Select.Item>
-                {/each}
-                {#if accountStore.currencies.length === 0}
-                  <Select.Item value="EUR">EUR</Select.Item>
-                {/if}
-              </Select.Content>
-            </Select.Root>
-          </div>
+          {#if entryMode === "simple"}
+            <div class="space-y-2">
+              <span class="text-sm font-medium">Currency</span>
+              <Select.Root type="single" bind:value={currency}>
+                <Select.Trigger class="w-full max-w-[200px]">
+                  {@const cur = accountStore.currencies.find((c) => c.code === currency)}
+                  {cur ? `${cur.code} - ${cur.name}` : currency}
+                </Select.Trigger>
+                <Select.Content>
+                  {#each accountStore.currencies as c (c.code)}
+                    <Select.Item value={c.code}>{c.code} - {c.name}</Select.Item>
+                  {/each}
+                  {#if accountStore.currencies.length === 0}
+                    <Select.Item value="EUR">EUR</Select.Item>
+                  {/if}
+                </Select.Content>
+              </Select.Root>
+            </div>
+          {/if}
 
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="space-y-2">
@@ -394,83 +497,146 @@
       </Card.Root>
 
       <Card.Root class="mt-4">
-        <Card.Header>
-          <Card.Title>Line Items</Card.Title>
-          <Card.Description>Debits must equal credits for the entry to balance.</Card.Description>
-        </Card.Header>
+        <Tabs.Root bind:value={entryMode}>
+        <div class="flex items-start justify-between gap-4 px-6">
+          <div class="space-y-1.5">
+            <div class="leading-none font-semibold">Line Items</div>
+            <p class="text-muted-foreground text-sm">
+              {entryMode === "simple"
+                ? "Debits must equal credits for the entry to balance."
+                : "Define a currency exchange — 4 balanced line items will be generated."}
+            </p>
+          </div>
+          <Tabs.List class="shrink-0">
+            <Tabs.Trigger value="simple">Simple</Tabs.Trigger>
+            <Tabs.Trigger value="exchange">Exchange</Tabs.Trigger>
+          </Tabs.List>
+        </div>
         <Card.Content>
-          <div class="space-y-2">
-            <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 text-sm font-medium text-muted-foreground">
-              <span>Account</span>
-              <span class="text-right">Debit</span>
-              <span class="text-right">Credit</span>
-              <span></span>
-            </div>
-
-            {#each lines as line, i (line.key)}
-              <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 items-center">
-                <AccountCombobox
-                  value={line.accountPath}
-                  accounts={accountNames}
-                  variant="input"
-                  placeholder="Select account..."
-                  onchange={(v) => { line.accountPath = v; }}
-                />
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  bind:value={line.debit}
-                  class="text-right font-mono"
-                  oninput={() => handleDebitInput(i)}
-                />
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  bind:value={line.credit}
-                  class="text-right font-mono"
-                  oninput={() => handleCreditInput(i)}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="button"
-                  disabled={lines.length <= 2}
-                  onclick={() => removeLine(line.key)}
-                >
-                  <Trash2 class="h-4 w-4" />
-                </Button>
+          {#if entryMode === "simple"}
+            <div class="space-y-2">
+              <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 text-sm font-medium text-muted-foreground">
+                <span>Account</span>
+                <span class="text-right">Debit</span>
+                <span class="text-right">Credit</span>
+                <span></span>
               </div>
-            {/each}
 
-            <Button variant="outline" size="sm" type="button" onclick={addLine} class="mt-2">
-              <Plus class="h-4 w-4 mr-1" /> Add Line
-            </Button>
-          </div>
+              {#each lines as line, i (line.key)}
+                <div class="grid grid-cols-[1fr_100px_100px_40px] gap-2 items-center">
+                  <AccountCombobox
+                    value={line.accountPath}
+                    accounts={accountNames}
+                    variant="input"
+                    placeholder="Select account..."
+                    onchange={(v) => { line.accountPath = v; }}
+                  />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    bind:value={line.debit}
+                    class="text-right font-mono"
+                    oninput={() => handleDebitInput(i)}
+                  />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    bind:value={line.credit}
+                    class="text-right font-mono"
+                    oninput={() => handleCreditInput(i)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    disabled={lines.length <= 2}
+                    onclick={() => removeLine(line.key)}
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </Button>
+                </div>
+              {/each}
 
-          <div class="mt-4 flex justify-end gap-6 border-t pt-4 text-sm">
-            <div>
-              <span class="text-muted-foreground">Total Debit:</span>
-              <span class="ml-2 font-mono font-medium">{totalDebit.toFixed(2)}</span>
+              <Button variant="outline" size="sm" type="button" onclick={addLine} class="mt-2">
+                <Plus class="h-4 w-4 mr-1" /> Add Line
+              </Button>
             </div>
-            <div>
-              <span class="text-muted-foreground">Total Credit:</span>
-              <span class="ml-2 font-mono font-medium">{totalCredit.toFixed(2)}</span>
+
+            <div class="mt-4 flex justify-end gap-6 border-t pt-4 text-sm">
+              <div>
+                <span class="text-muted-foreground">Total Debit:</span>
+                <span class="ml-2 font-mono font-medium">{totalDebit.toFixed(2)}</span>
+              </div>
+              <div>
+                <span class="text-muted-foreground">Total Credit:</span>
+                <span class="ml-2 font-mono font-medium">{totalCredit.toFixed(2)}</span>
+              </div>
+              <div>
+                <span class="text-muted-foreground">Difference:</span>
+                <span class="ml-2 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                  {Math.abs(totalDebit - totalCredit).toFixed(2)}
+                </span>
+              </div>
             </div>
-            <div>
-              <span class="text-muted-foreground">Difference:</span>
-              <span class="ml-2 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
-                {Math.abs(totalDebit - totalCredit).toFixed(2)}
-              </span>
-            </div>
-          </div>
+          {:else}
+            <ExchangeEntryForm
+              currencies={accountStore.currencies}
+              accountNames={accountNames}
+              bind:fromCurrency
+              bind:toCurrency
+              bind:fromAmount
+              bind:toAmount
+              bind:fromAccount
+              bind:toAccount
+            />
+
+            {#if exchangePreviewLines.length > 0}
+              <div class="mt-4 border-t pt-4 space-y-2">
+                <span class="text-sm font-medium text-muted-foreground">Generated line items</span>
+                <div class="rounded-md border">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b text-muted-foreground">
+                        <th class="text-left px-3 py-2 font-medium">Account</th>
+                        <th class="text-left px-3 py-2 font-medium">Currency</th>
+                        <th class="text-right px-3 py-2 font-medium">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each exchangePreviewLines as line}
+                        <tr class="border-b last:border-b-0">
+                          <td class="px-3 py-2 font-mono text-xs">{line.account}</td>
+                          <td class="px-3 py-2">{line.currency}</td>
+                          <td class="px-3 py-2 text-right font-mono {line.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">
+                            {line.amount < 0 ? "" : "+"}{line.amount}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="flex gap-4 text-xs text-muted-foreground">
+                  {#each Object.entries(exchangeBalances) as [cur, bal]}
+                    <span>
+                      {cur}: {bal.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")}
+                      <span class="{Math.abs(bal) < 0.0001 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                        {Math.abs(bal) < 0.0001 ? "✓" : "✗"}
+                      </span>
+                    </span>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          {/if}
         </Card.Content>
+        </Tabs.Root>
         <Card.Footer class="flex justify-end gap-2">
           <Button variant="outline" type="button" href="/journal">Cancel</Button>
-          <Button type="submit" disabled={!isBalanced || !description.trim() || submitting}>
+          <Button type="submit" disabled={!canSubmit}>
             {#if submitting}
               {isEditMode ? "Saving..." : "Posting..."}
             {:else}
