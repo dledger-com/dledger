@@ -6,6 +6,14 @@ import { exchangeAssets } from "$lib/accounts/paths.js";
 const TRADE_HEADERS = ["Trade ID", "Date/Time", "Market", "Price", "Amount in BTC", "Offer type", "Status"];
 const TX_HEADERS = ["Date/Time", "Details", "Transaction ID", "Amount in BTC"];
 
+function parseBisqDate(raw: string): string | null {
+  const named = parseNamedMonthDate(raw);
+  if (named) return named;
+  const m = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+
 function parseEurNum(raw: string): number {
   const s = raw.trim();
   if (s.includes(",") && !s.includes(".")) return parseFloat(s.replace(",", "."));
@@ -62,7 +70,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 
     if (statusIdx >= 0 && (row[statusIdx] ?? "").trim().toLowerCase() !== "completed") continue;
 
-    const date = parseNamedMonthDate(row[dateIdx] ?? "");
+    const date = parseBisqDate(row[dateIdx] ?? "");
     if (!date) continue;
 
     const market = (row[marketIdx] ?? "").trim();
@@ -104,7 +112,7 @@ function transformTx(headers: string[], rows: string[][]): CsvRecord[] {
   for (const row of rows) {
     if (row.length <= 1 && (row[0] ?? "") === "") continue;
 
-    const date = parseNamedMonthDate(row[dateIdx] ?? "");
+    const date = parseBisqDate(row[dateIdx] ?? "");
     if (!date) continue;
 
     const amount = parseFloat((row[amtIdx] ?? "0").replace(/,/g, ""));
