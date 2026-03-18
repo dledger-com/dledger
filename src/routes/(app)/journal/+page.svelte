@@ -2532,9 +2532,9 @@
                                         </tr>
                                     {:else}
                                         <Table.Row
-                                            class={entry.status === "voided"
+                                            class="cursor-pointer {entry.status === "voided"
                                                 ? "line-through opacity-50"
-                                                : ""}
+                                                : ""}"
                                             data-state={row.getIsSelected()
                                                 ? "selected"
                                                 : undefined}
@@ -2542,6 +2542,7 @@
                                                 convertedBarSegments.get(entry.id) ?? entryBarSegments(items),
                                                 maxEntryAmount,
                                             )}
+                                            onclick={() => openEntryDrawer("view", entry.id)}
                                             onmouseenter={() => { hoveredEntryDate = entry.date; }}
                                             onmouseleave={() => { hoveredEntryDate = null; }}
                                         >
@@ -2549,6 +2550,7 @@
                                                 {#if cell.column.id === "select"}
                                                     <Table.Cell
                                                         class="py-2 px-2 w-12"
+                                                        onclick={(e) => e.stopPropagation()}
                                                     >
                                                         <Checkbox
                                                             checked={row.getIsSelected()}
@@ -2572,32 +2574,37 @@
                                                         <div
                                                             class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0"
                                                         >
-                                                            <button
-                                                                class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap max-w-md text-left"
+                                                            <span
+                                                                class="font-medium overflow-clip text-ellipsis whitespace-nowrap max-w-md"
                                                                 title={entry.description}
-                                                                onclick={() => openEntryDrawer("view", entry.id)}
-                                                                >{entry.description}</button
+                                                                >{entry.description}</span
                                                             >
                                                             {#if columnVisibility.tags !== false}
                                                                 {#if entryTags.get(entry.id)?.length}
-                                                                    <TagDisplay
-                                                                        tags={entryTags.get(
-                                                                            entry.id,
-                                                                        )!}
-                                                                        class="shrink-0"
-                                                                        onclick={addTagFilter}
-                                                                    />
+                                                                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                                    <span onclick={(e) => e.stopPropagation()}>
+                                                                        <TagDisplay
+                                                                            tags={entryTags.get(
+                                                                                entry.id,
+                                                                            )!}
+                                                                            class="shrink-0"
+                                                                            onclick={addTagFilter}
+                                                                        />
+                                                                    </span>
                                                                 {/if}
                                                             {/if}
                                                             {#if columnVisibility.links !== false}
                                                                 {#if entryLinks.get(entry.id)?.length}
-                                                                    <LinkDisplay
-                                                                        links={entryLinks.get(
-                                                                            entry.id,
-                                                                        )!}
-                                                                        class="shrink-0"
-                                                                        onclick={addLinkFilter}
-                                                                    />
+                                                                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                                                    <span onclick={(e) => e.stopPropagation()}>
+                                                                        <LinkDisplay
+                                                                            links={entryLinks.get(
+                                                                                entry.id,
+                                                                            )!}
+                                                                            class="shrink-0"
+                                                                            onclick={addLinkFilter}
+                                                                        />
+                                                                    </span>
                                                                 {/if}
                                                             {/if}
                                                         </div>
