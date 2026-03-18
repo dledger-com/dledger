@@ -511,47 +511,50 @@
                   </Badge>
                 </dd>
               </div>
-              <div>
-                <dt class="text-muted-foreground">Source</dt>
-                <dd class="font-medium">{entry.source}</dd>
-              </div>
-              <div>
-                <dt class="text-muted-foreground">Created</dt>
-                <dd class="font-medium">{entry.created_at}</dd>
-              </div>
-              {#if viewMetadata["edit:original_id"]}
-                <div>
-                  <dt class="text-muted-foreground">Edit of</dt>
-                  <dd>
-                    <button
-                      class="text-blue-600 hover:underline dark:text-blue-400 text-left"
-                      onclick={() => { entryId = viewMetadata['edit:original_id']; }}
-                    >Original entry</button>
-                  </dd>
-                </div>
-              {/if}
-              {#if entry.voided_by}
-                <div>
-                  <dt class="text-muted-foreground">Voided by</dt>
-                  <dd>
-                    <button
-                      class="text-blue-600 hover:underline dark:text-blue-400 text-left"
-                      onclick={() => { entryId = entry!.voided_by; }}
-                    >Reversal entry</button>
-                  </dd>
-                </div>
-              {/if}
             </dl>
+            <details class="mt-2">
+              <summary class="text-xs text-muted-foreground cursor-pointer">More details</summary>
+              <dl class="grid grid-cols-2 gap-3 text-sm mt-2">
+                <div>
+                  <dt class="text-muted-foreground">Source</dt>
+                  <dd class="font-medium">{entry.source}</dd>
+                </div>
+                <div>
+                  <dt class="text-muted-foreground">Created</dt>
+                  <dd class="font-medium">{entry.created_at}</dd>
+                </div>
+                {#if viewMetadata["edit:original_id"]}
+                  <div>
+                    <dt class="text-muted-foreground">Edit of</dt>
+                    <dd>
+                      <button
+                        class="text-blue-600 hover:underline dark:text-blue-400 text-left"
+                        onclick={() => { entryId = viewMetadata['edit:original_id']; }}
+                      >Original entry</button>
+                    </dd>
+                  </div>
+                {/if}
+                {#if entry.voided_by}
+                  <div>
+                    <dt class="text-muted-foreground">Voided by</dt>
+                    <dd>
+                      <button
+                        class="text-blue-600 hover:underline dark:text-blue-400 text-left"
+                        onclick={() => { entryId = entry!.voided_by; }}
+                      >Reversal entry</button>
+                    </dd>
+                  </div>
+                {/if}
+              </dl>
+            </details>
           </section>
 
           <!-- Metadata -->
           {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
-          {#if viewTags.length > 0 || viewEntryLinks.length > 0 || displayMeta.length > 0}
-            <section>
+          <section>
               <h3 class="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
               <div class="space-y-3 text-sm">
-                {#if viewTags.length > 0 || viewEntryLinks.length > 0}
-                  <div class="space-y-2">
+                <div class="space-y-2">
                     <div>
                       <dt class="text-muted-foreground">Tags</dt>
                       <dd><TagInput tags={viewTags} onchange={handleViewTagsChange} /></dd>
@@ -560,8 +563,7 @@
                       <dt class="text-muted-foreground">Links</dt>
                       <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
                     </div>
-                  </div>
-                {/if}
+                </div>
                 {#if displayMeta.length > 0}
                   <dl class="grid grid-cols-2 gap-3">
                     {#each displayMeta as [key, value]}
@@ -580,7 +582,6 @@
                 {/if}
               </div>
             </section>
-          {/if}
 
           <!-- Line Items -->
           <section>
