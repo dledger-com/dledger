@@ -2,7 +2,7 @@
   import type { LineItem } from "$lib/types/index.js";
   import type { AccountType } from "$lib/types/account.js";
   import { pairLineItems, type FlowType } from "$lib/utils/flow-pairing.js";
-  import { formatCurrency } from "$lib/utils/format.js";
+  import { formatCurrencyFull } from "$lib/utils/format.js";
   import ArrowDown from "lucide-svelte/icons/arrow-down";
 
   interface Props {
@@ -58,7 +58,7 @@
         <div class="flex items-center gap-2 my-2 pl-4">
           <ArrowDown class="h-4 w-4 shrink-0 {arrowClasses[flow.flowType]}" />
           <span class="font-mono text-sm font-semibold">
-            {formatCurrency(flow.amount, flow.currency)}
+            {formatCurrencyFull(flow.amount, flow.currency)}
           </span>
           <span class="text-xs capitalize {labelClasses[flow.flowType]}">{flow.flowType}</span>
         </div>

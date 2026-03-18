@@ -10,7 +10,7 @@
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { formatCurrency } from "$lib/utils/format.js";
+  import { formatCurrencyFull } from "$lib/utils/format.js";
   import { entryInvolvesHidden } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
@@ -280,10 +280,10 @@
               </Table.Cell>
               <Table.Cell>{item.currency}</Table.Cell>
               <Table.Cell class="text-right font-mono">
-                {amount > 0 ? formatCurrency(amount, item.currency) : ""}
+                {amount > 0 ? formatCurrencyFull(item.amount, item.currency) : ""}
               </Table.Cell>
               <Table.Cell class="text-right font-mono">
-                {amount < 0 ? formatCurrency(Math.abs(amount), item.currency) : ""}
+                {amount < 0 ? formatCurrencyFull(item.amount.replace(/^-/, ""), item.currency) : ""}
               </Table.Cell>
             </Table.Row>
           {/each}

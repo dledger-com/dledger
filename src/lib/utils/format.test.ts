@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { formatCurrency, formatDate, formatDateRelative, setFormatLocale } from "./format.js";
+import { formatCurrency, formatCurrencyFull, formatDate, formatDateRelative, setFormatLocale } from "./format.js";
 
 describe("formatCurrency", () => {
   beforeEach(() => {
@@ -49,6 +49,97 @@ describe("formatCurrency", () => {
     expect(result).toContain("€");
     // German locale uses dot as thousands separator and comma as decimal
     expect(result).toMatch(/1\.000,50/);
+  });
+
+  it("expands precision for small crypto amounts", () => {
+    const result = formatCurrency("0.001", "BTC");
+    expect(result).toContain("0.001");
+    expect(result).toContain("BTC");
+  });
+
+  it("expands precision for very small amounts", () => {
+    const result = formatCurrency("0.00000123", "ETH");
+    expect(result).toContain("ETH");
+    // Should show enough digits to see non-zero value
+    expect(result).not.toMatch(/^0\.0+ /);
+  });
+
+  it("does not expand precision for actual zero", () => {
+    const result = formatCurrency("0", "BTC");
+    expect(result).toContain("0.00");
+    expect(result).toContain("BTC");
+  });
+
+  it("does not expand precision for normal amounts", () => {
+    const result = formatCurrency("1.50", "BTC");
+    expect(result).toContain("1.50");
+    expect(result).toContain("BTC");
+  });
+
+  it("expands precision with fr-FR locale", () => {
+    setFormatLocale("fr-FR");
+    const result = formatCurrency("0.001", "BTC");
+    expect(result).toContain("BTC");
+    expect(result).toContain("0,001");
+  });
+});
+
+describe("formatCurrencyFull", () => {
+  beforeEach(() => {
+    setFormatLocale("en-US");
+  });
+
+  it("preserves full precision for crypto amounts", () => {
+    const result = formatCurrencyFull("1.23456789", "BTC");
+    expect(result).toContain("1.23456789");
+    expect(result).toContain("BTC");
+  });
+
+  it("keeps 2 decimals for round amounts", () => {
+    const result = formatCurrencyFull("100.50", "BTC");
+    expect(result).toContain("100.50");
+    expect(result).toContain("BTC");
+  });
+
+  it("shows small decimal amounts", () => {
+    const result = formatCurrencyFull("0.001", "ETH");
+    expect(result).toContain("0.001");
+    expect(result).toContain("ETH");
+  });
+
+  it("handles negative amounts", () => {
+    const result = formatCurrencyFull("-5.12345", "BTC");
+    expect(result).toContain("5.12345");
+    expect(result).toContain("BTC");
+  });
+
+  it("appends code for non-ISO currencies", () => {
+    const result = formatCurrencyFull("1.5", "AAPL");
+    expect(result).toContain("1.50");
+    expect(result).toContain("AAPL");
+  });
+
+  it("formats ISO currencies with symbol", () => {
+    const result = formatCurrencyFull("1234.5678", "USD");
+    expect(result).toContain("$");
+    expect(result).toContain("1,234.5678");
+  });
+
+  it("accepts numeric input", () => {
+    const result = formatCurrencyFull(42.123, "BTC");
+    expect(result).toContain("42.123");
+    expect(result).toContain("BTC");
+  });
+
+  it("strips trailing zeros beyond 2 decimals", () => {
+    const result = formatCurrencyFull("1.50000000", "BTC");
+    expect(result).toContain("1.50");
+    expect(result).not.toContain("1.50000000");
+  });
+
+  it("handles integer amounts", () => {
+    const result = formatCurrencyFull("100", "USD");
+    expect(result).toContain("100.00");
   });
 });
 
