@@ -72,9 +72,10 @@ export function makeTradeLines(
   const lines: CsvRecord["lines"] = [];
 
   if (side === "BUY") {
+    // BUY: spend quote, receive base → quote line first
     lines.push(
-      { account: exchangeAssetsCurrency(exchange, base), currency: base, amount: baseAmt.toString() },
       { account: exchangeAssetsCurrency(exchange, quote), currency: quote, amount: (-quoteAmt).toString() },
+      { account: exchangeAssetsCurrency(exchange, base), currency: base, amount: baseAmt.toString() },
     );
   } else {
     lines.push(

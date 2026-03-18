@@ -71,9 +71,10 @@ export const bybitTradePreset: CsvPreset = {
       const lines: CsvRecord["lines"] = [];
 
       if (side === "BUY") {
+        // Buy: spend quote, receive base → quote line first
         lines.push(
-          { account: exchangeAssetsCurrency("Bybit", pair.base), currency: pair.base, amount: filled.toString() },
           { account: exchangeAssetsCurrency("Bybit", pair.quote), currency: pair.quote, amount: (-total).toString() },
+          { account: exchangeAssetsCurrency("Bybit", pair.base), currency: pair.base, amount: filled.toString() },
         );
       } else {
         lines.push(

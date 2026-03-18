@@ -90,17 +90,17 @@ export const coinbaseTransactionsPreset: CsvPreset = {
       const typeUpper = txType.toUpperCase();
 
       if (typeUpper === "BUY") {
-        // Buy: receive crypto, spend fiat
-        lines.push(
-          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
-          { account: EQUITY_TRADING, currency: asset, amount: (-qty).toString() },
-        );
+        // Buy: spend fiat, receive crypto → fiat lines first
         if (!isNaN(total) && total > 0) {
           lines.push(
             { account: exchangeAssetsCurrency("Coinbase", quoteCurrency), currency: quoteCurrency, amount: (-total).toString() },
             { account: EQUITY_TRADING, currency: quoteCurrency, amount: total.toString() },
           );
         }
+        lines.push(
+          { account: exchangeAssetsCurrency("Coinbase", asset), currency: asset, amount: qty.toString() },
+          { account: EQUITY_TRADING, currency: asset, amount: (-qty).toString() },
+        );
       } else if (typeUpper === "SELL") {
         // Sell: spend crypto, receive fiat
         lines.push(

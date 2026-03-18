@@ -72,10 +72,10 @@ export const binanceTradePreset: CsvPreset = {
       const lines: CsvRecord["lines"] = [];
 
       if (side === "BUY") {
-        // Buy: receive base, spend quote
+        // Buy: spend quote, receive base → quote line first
         lines.push(
-          { account: exchangeAssetsCurrency("Binance", pair.base), currency: pair.base, amount: filled.toString() },
           { account: exchangeAssetsCurrency("Binance", pair.quote), currency: pair.quote, amount: (-total).toString() },
+          { account: exchangeAssetsCurrency("Binance", pair.base), currency: pair.base, amount: filled.toString() },
         );
       } else {
         // Sell: spend base, receive quote
