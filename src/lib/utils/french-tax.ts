@@ -86,6 +86,8 @@ export interface FrenchTaxReport {
   /** Tax at PFU 31.4% (social contributions included). */
   taxDuePFU314: string;
   warnings: string[];
+  /** Number of in-year dispositions skipped because portfolio value was 0. */
+  skippedDispositionCount: number;
   /** Structured missing rate data for inline backfill. */
   missingCurrencyDates: { currency: string; date: string }[];
   /** Number of entries processed from the journal. */
@@ -366,6 +368,7 @@ export async function computeFrenchTaxReport(
   let preYearAcqTotal = new Decimal(0);
   let preYearDispCount = 0;
   let preYearDispTotal = new Decimal(0);
+  let skippedDispositionCount = 0;
   const preYearDispSamples: { date: string; description: string; fiatReceived: string; cryptoCurrencies: string[] }[] = [];
 
   const incrementalBalance = new IncrementalBalance();
@@ -452,7 +455,8 @@ export async function computeFrenchTaxReport(
       // Only record dispositions within the tax year
       if (entry.date >= yearStart) {
         if (V.isZero()) {
-          warnings.push(`Portfolio value is 0 on ${entry.date} — cannot compute plus-value for entry ${entry.description}`);
+          skippedDispositionCount++;
+          warnings.push(`Portfolio value is 0 on ${entry.date} — cannot compute plus-value for entry "${entry.description}". You may need to add opening balance entries for your crypto holdings.`);
         } else {
           // Apply formula: PV = C - (A * C / V)
           const costFraction = V.gt(0) ? A.times(C).div(V) : new Decimal(0);
@@ -587,6 +591,7 @@ export async function computeFrenchTaxReport(
       ? totalPlusValue.times(new Decimal("0.314")).toFixed(2)
       : "0.00",
     warnings: uniqueWarnings,
+    skippedDispositionCount,
     missingCurrencyDates: uniqueMissingCurrencyDates,
     entriesProcessed: allEntries.length,
     preYearAcquisitionCount: preYearAcqCount,

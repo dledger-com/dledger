@@ -5,6 +5,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import Decimal from "decimal.js-light";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend } from "$lib/backend.js";
   import { formatCurrency } from "$lib/utils/format.js";
@@ -78,6 +79,37 @@
   const effectivePriorCost = $derived(overridePriorCost ? overrideValue : resolved.value);
 
   const hasSavedReport = $derived(chainData.has(taxYear));
+
+  // Detect stale earliest report when initialAcquisitionCost changes.
+  // When the earliest persisted year uses 'initial' source (no prior year in chain),
+  // compare what the report was generated with vs the current setting.
+  const staleInitialCostBanner = $derived.by(() => {
+    if (!savedReport || !chainData.size) return null;
+    const years = [...chainData.keys()].sort((a, b) => a - b);
+    const earliestYear = years[0];
+    // Only relevant when viewing the earliest year and it uses initial source
+    if (taxYear !== earliestYear) return null;
+    if (chainData.has(earliestYear - 1)) return null; // chained, not initial
+    // Compare: expected A before first event = initialAcquisitionCost + pre-year acquisitions
+    const currentInitial = initialAcquisitionCost || '0';
+    const rpt = savedReport.report;
+    const expectedStartingA = new Decimal(currentInitial).plus(new Decimal(rpt.preYearAcquisitionTotal));
+    // Recover actual starting A from report data
+    let actualStartingA: Decimal;
+    if (rpt.dispositions.length > 0) {
+      actualStartingA = new Decimal(rpt.dispositions[0].acquisitionCostBefore);
+    } else {
+      // No dispositions recorded — finalA = startingA + in-year acquisitions
+      const inYearAcqTotal = rpt.acquisitions.reduce(
+        (sum, a) => sum.plus(new Decimal(a.fiatSpent)), new Decimal(0),
+      );
+      actualStartingA = new Decimal(rpt.finalAcquisitionCost).minus(inYearAcqTotal);
+    }
+    if (!expectedStartingA.eq(actualStartingA)) {
+      return `The initial acquisition cost has changed since the ${earliestYear} report was generated — consider regenerating.`;
+    }
+    return null;
+  });
 
   // Chain visualization
   const chainSummary = $derived.by(() => {
@@ -351,6 +383,14 @@
         {#if i > 0}<span class="text-muted-foreground/50">&rarr;</span>{/if}
         <span class="font-mono"><span class="text-xs opacity-60">{part.label}:</span> {part.value}</span>
       {/each}
+    </div>
+  {/if}
+
+  <!-- Stale initial cost warning -->
+  {#if staleInitialCostBanner}
+    <div class="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+      <AlertTriangle class="h-4 w-4 shrink-0" />
+      <span>{staleInitialCostBanner}</span>
     </div>
   {/if}
 

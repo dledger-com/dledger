@@ -960,6 +960,7 @@ describe("french tax report DB round-trip", () => {
       taxDuePFU30: "0.00",
       taxDuePFU314: "0.00",
       warnings: [],
+      skippedDispositionCount: 0,
       missingCurrencyDates: [],
       entriesProcessed: 0,
       preYearAcquisitionCount: 0,

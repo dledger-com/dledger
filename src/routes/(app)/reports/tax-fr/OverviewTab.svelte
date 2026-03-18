@@ -34,6 +34,21 @@
 </script>
 
 <div class="space-y-6">
+  <!-- Skipped dispositions banner -->
+  {#if report.skippedDispositionCount > 0}
+    <div class="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+      <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" />
+      <div>
+        <p class="font-medium">
+          {report.skippedDispositionCount} sale{report.skippedDispositionCount > 1 ? 's' : ''} skipped because portfolio value was 0
+        </p>
+        <p class="mt-1 text-yellow-700 dark:text-yellow-300">
+          If you held crypto before using dledger, add opening balance entries to establish your holdings before the first sale date. Without positive holdings, the tax formula cannot compute the cost fraction.
+        </p>
+      </div>
+    </div>
+  {/if}
+
   <!-- Declaration Roadmap -->
   <Card.Root>
     <Card.Header class="pb-3">
