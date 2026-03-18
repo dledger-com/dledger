@@ -58,7 +58,7 @@
   });
 
   // ── View mode state ──
-  let lineItemView = $state<"table" | "flow">("table");
+  let lineItemView = $state<"table" | "flow">(settings.settings.journalLineItemView ?? "flow");
   let entry = $state<JournalEntry | null>(null);
   let viewItems = $state<LineItem[]>([]);
   let viewMetadata = $state<Record<string, string>>({});
@@ -591,7 +591,7 @@
                 size="icon"
                 class="h-7 w-7"
                 title={lineItemView === "table" ? "Switch to flow view" : "Switch to table view"}
-                onclick={() => { lineItemView = lineItemView === "table" ? "flow" : "table"; }}
+                onclick={() => { const v = lineItemView === "table" ? "flow" : "table"; lineItemView = v; settings.update({ journalLineItemView: v }); }}
               >
                 {#if lineItemView === "table"}
                   <ArrowRightLeft class="h-3.5 w-3.5" />
