@@ -290,6 +290,8 @@ CREATE TABLE IF NOT EXISTS exchange_account (
     api_secret TEXT NOT NULL,
     linked_etherscan_account_id TEXT,
     passphrase TEXT,
+    opened_at TEXT,
+    closed_at TEXT,
     last_sync TEXT,
     created_at TEXT NOT NULL
 );
@@ -499,7 +501,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (20)");
+    db.exec("INSERT INTO schema_version (version) VALUES (21)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -915,6 +917,12 @@ PRAGMA foreign_keys = ON;
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (20)");
         }
+        if (currentVersion < 21) {
+          try { db.exec("ALTER TABLE exchange_account ADD COLUMN opened_at TEXT"); } catch { /* already exists */ }
+          try { db.exec("ALTER TABLE exchange_account ADD COLUMN closed_at TEXT"); } catch { /* already exists */ }
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (21)");
+        }
       }
     }
     // Idempotent cleanup: ensure is_reconciled exists on line_item
@@ -923,6 +931,9 @@ PRAGMA foreign_keys = ON;
     // but lack the new v18 column (opened_at).
     try { db.exec("ALTER TABLE account ADD COLUMN opened_at TEXT"); } catch { /* already exists */ }
     try { db.exec("DROP TABLE IF EXISTS opening_balance"); } catch { /* ignore */ }
+    // Ensure exchange_account has opened_at/closed_at columns (v21)
+    try { db.exec("ALTER TABLE exchange_account ADD COLUMN opened_at TEXT"); } catch { /* already exists */ }
+    try { db.exec("ALTER TABLE exchange_account ADD COLUMN closed_at TEXT"); } catch { /* already exists */ }
     // Ensure raw_transaction table exists (added post-v2)
     try {
       db.exec("CREATE TABLE IF NOT EXISTS raw_transaction (source TEXT PRIMARY KEY, data TEXT NOT NULL)");
@@ -3860,7 +3871,7 @@ PRAGMA foreign_keys = ON;
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
     return this.query(
-      "SELECT id, exchange, label, api_key, api_secret, passphrase, last_sync, created_at FROM exchange_account ORDER BY created_at",
+      "SELECT id, exchange, label, api_key, api_secret, passphrase, opened_at, closed_at, last_sync, created_at FROM exchange_account ORDER BY created_at",
       [],
       (row) => ({
         id: row.id as string,
@@ -3869,6 +3880,8 @@ PRAGMA foreign_keys = ON;
         api_key: row.api_key as string,
         api_secret: row.api_secret as string,
         passphrase: (row.passphrase as string) ?? null,
+        opened_at: (row.opened_at as string) ?? null,
+        closed_at: (row.closed_at as string) ?? null,
         last_sync: (row.last_sync as string) ?? null,
         created_at: row.created_at as string,
       }),
@@ -3877,10 +3890,10 @@ PRAGMA foreign_keys = ON;
 
   async addExchangeAccount(account: import("./cex/types.js").ExchangeAccount): Promise<void> {
     this.run(
-      `INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, passphrase, last_sync, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, passphrase, opened_at, closed_at, last_sync, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [account.id, account.exchange, account.label, account.api_key, account.api_secret,
-       null, account.passphrase ?? null, account.last_sync, account.created_at],
+       null, account.passphrase ?? null, account.opened_at ?? null, account.closed_at ?? null, account.last_sync, account.created_at],
     );
     this.scheduleSave();
   }
@@ -3892,6 +3905,8 @@ PRAGMA foreign_keys = ON;
     if (updates.api_key !== undefined) { sets.push("api_key = ?"); params.push(updates.api_key); }
     if (updates.api_secret !== undefined) { sets.push("api_secret = ?"); params.push(updates.api_secret); }
     if (updates.passphrase !== undefined) { sets.push("passphrase = ?"); params.push(updates.passphrase); }
+    if (updates.opened_at !== undefined) { sets.push("opened_at = ?"); params.push(updates.opened_at); }
+    if (updates.closed_at !== undefined) { sets.push("closed_at = ?"); params.push(updates.closed_at); }
     if (updates.last_sync !== undefined) { sets.push("last_sync = ?"); params.push(updates.last_sync); }
     if (sets.length === 0) return;
     params.push(id);

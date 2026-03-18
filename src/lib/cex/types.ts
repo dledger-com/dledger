@@ -7,6 +7,8 @@ export interface ExchangeAccount {
   api_key: string;
   api_secret: string;
   passphrase?: string | null;
+  opened_at?: string | null;  // ISO date YYYY-MM-DD
+  closed_at?: string | null;  // ISO date YYYY-MM-DD
   last_sync: string | null;
   created_at: string;
 }

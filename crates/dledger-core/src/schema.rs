@@ -1,7 +1,7 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
 
-pub const SCHEMA_VERSION: u32 = 19;
+pub const SCHEMA_VERSION: u32 = 20;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -239,6 +239,8 @@ CREATE TABLE IF NOT EXISTS exchange_account (
     api_secret TEXT NOT NULL,
     linked_etherscan_account_id TEXT,
     passphrase TEXT,
+    opened_at TEXT,
+    closed_at TEXT,
     last_sync TEXT,
     created_at TEXT NOT NULL
 );
@@ -295,6 +297,11 @@ CREATE TABLE IF NOT EXISTS budget (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key, value);
+"#;
+
+pub const MIGRATION_V20: &str = r#"
+ALTER TABLE exchange_account ADD COLUMN opened_at TEXT;
+ALTER TABLE exchange_account ADD COLUMN closed_at TEXT;
 "#;
 
 pub const MIGRATION_V19: &str = r#"

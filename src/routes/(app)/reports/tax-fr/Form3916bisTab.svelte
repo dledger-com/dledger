@@ -120,8 +120,13 @@
                   <Table.Cell class="text-muted-foreground">{info?.url ?? ""}</Table.Cell>
                   <Table.Cell class="text-right">
                     <Badge variant="destructive">Must declare</Badge>
-                    {#if info?.closedDate}
+                    {#if account.closed_at && parseInt(account.closed_at.slice(0, 4), 10) < taxYear}
                       <Badge variant="outline" class="ml-1">Closed</Badge>
+                    {:else if info?.closedDate}
+                      <Badge variant="outline" class="ml-1">Closed</Badge>
+                    {/if}
+                    {#if account.opened_at}
+                      <span class="ml-1 text-xs text-muted-foreground">since {account.opened_at.slice(0, 4)}</span>
                     {/if}
                   </Table.Cell>
                 </Table.Row>

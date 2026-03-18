@@ -56,7 +56,18 @@
   let staleWarning = $state<string | null>(null);
 
   // Exchange accounts for 3916-bis
-  let exchangeAccounts = $state<ExchangeAccount[]>([]);
+  let allExchangeAccounts = $state<ExchangeAccount[]>([]);
+
+  /** Filter to accounts active during the tax year (open/close range overlaps) */
+  const exchangeAccounts = $derived(
+    allExchangeAccounts.filter((a) => {
+      const openYear = a.opened_at ? parseInt(a.opened_at.slice(0, 4), 10) : null;
+      const closeYear = a.closed_at ? parseInt(a.closed_at.slice(0, 4), 10) : null;
+      if (openYear !== null && openYear > taxYear) return false;
+      if (closeYear !== null && closeYear < taxYear) return false;
+      return true;
+    }),
+  );
 
   const foreignAccountCount = $derived(
     exchangeAccounts.filter((a) => requiresDeclaration(a.exchange, taxYear)).length,
@@ -126,9 +137,9 @@
 
   async function loadExchangeAccounts() {
     try {
-      exchangeAccounts = await getBackend().listExchangeAccounts();
+      allExchangeAccounts = await getBackend().listExchangeAccounts();
     } catch {
-      exchangeAccounts = [];
+      allExchangeAccounts = [];
     }
   }
 

@@ -169,6 +169,8 @@
     let cexNewApiKey = $state("");
     let cexNewApiSecret = $state("");
     let cexNewPassphrase = $state("");
+    let cexNewOpenedAt = $state("");
+    let cexNewClosedAt = $state("");
     let cexAdding = $state(false);
     const cexBusy = $derived(taskQueue.isActive("cex-sync"));
     const cexConsolidating = $derived(taskQueue.isActive("cex-consolidate"));
@@ -195,6 +197,8 @@
         cexNewApiKey = "";
         cexNewApiSecret = "";
         cexNewPassphrase = "";
+        cexNewOpenedAt = "";
+        cexNewClosedAt = "";
         newAddress = "";
         newLabel = "";
         selectedChainIds = new Set([1]);
@@ -241,6 +245,8 @@
                 api_key: cexNewApiKey,
                 api_secret: cexNewApiSecret,
                 passphrase: cexNewPassphrase || null,
+                opened_at: cexNewOpenedAt || null,
+                closed_at: cexNewClosedAt || null,
                 last_sync: null,
                 created_at: new Date().toISOString(),
             };
@@ -841,6 +847,16 @@
                             bind:value={cexNewPassphrase}
                         />
                     {/if}
+                    <div class="flex flex-wrap gap-2">
+                        <div class="space-y-1">
+                            <label for="cex-opened-at" class="text-xs font-medium text-muted-foreground">Opened (optional)</label>
+                            <Input id="cex-opened-at" class="w-40" type="date" bind:value={cexNewOpenedAt} />
+                        </div>
+                        <div class="space-y-1">
+                            <label for="cex-closed-at" class="text-xs font-medium text-muted-foreground">Closed (optional)</label>
+                            <Input id="cex-closed-at" class="w-40" type="date" bind:value={cexNewClosedAt} />
+                        </div>
+                    </div>
                     <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
                         <Plus class="mr-1 h-4 w-4" />
                         Add Account
@@ -955,6 +971,7 @@
                             <Table.Row>
                                 <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>Exchange</SortableHeader>
                                 <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>Label</SortableHeader>
+                                <Table.Head class="hidden md:table-cell">Opened / Closed</Table.Head>
                                 <SortableHeader active={sortCex.key === "lastSync"} direction={sortCex.direction} onclick={() => sortCex.toggle("lastSync")} class="hidden sm:table-cell">Last Sync</SortableHeader>
                                 <Table.Head class="text-right">Actions</Table.Head>
                             </Table.Row>
@@ -967,6 +984,33 @@
                                         <Badge variant="secondary">{account.exchange}</Badge>
                                     </Table.Cell>
                                     <Table.Cell class="font-medium">{account.label}</Table.Cell>
+                                    <Table.Cell class="hidden md:table-cell">
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="date"
+                                                class="h-7 w-32 rounded border bg-transparent px-1 text-xs text-muted-foreground"
+                                                value={account.opened_at ?? ""}
+                                                onchange={(e) => {
+                                                    const val = (e.target as HTMLInputElement).value || null;
+                                                    getBackend().updateExchangeAccount(account.id, { opened_at: val });
+                                                    account.opened_at = val;
+                                                }}
+                                                title="Opened date"
+                                            />
+                                            <span class="text-muted-foreground">—</span>
+                                            <input
+                                                type="date"
+                                                class="h-7 w-32 rounded border bg-transparent px-1 text-xs text-muted-foreground"
+                                                value={account.closed_at ?? ""}
+                                                onchange={(e) => {
+                                                    const val = (e.target as HTMLInputElement).value || null;
+                                                    getBackend().updateExchangeAccount(account.id, { closed_at: val });
+                                                    account.closed_at = val;
+                                                }}
+                                                title="Closed date"
+                                            />
+                                        </div>
+                                    </Table.Cell>
                                     <Table.Cell class="hidden sm:table-cell">
                                         {#if account.last_sync}
                                             <span class="text-xs text-muted-foreground">{new Date(account.last_sync).toLocaleDateString()}</span>
