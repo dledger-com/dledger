@@ -12,15 +12,15 @@
     {#each links as link (link)}
       {#if onclick}
         <button type="button" onclick={(e) => { e.preventDefault(); e.stopPropagation(); onclick(link); }}>
-          <Badge variant="outline" class={cn(linkColor(link), "border-transparent text-[11px] px-1.5 py-0 gap-0.5 cursor-pointer hover:opacity-80")}>
-            <Link2 class="h-2.5 w-2.5" />
+          <Badge variant="outline" class={cn(linkColor(link), "border-transparent text-[11px] px-1.5 py-0 gap-0.5 items-baseline cursor-pointer hover:opacity-80")}>
+            <Link2 class="h-2.5 w-2.5 self-center" />
             {link}
           </Badge>
         </button>
       {:else}
         <a href="/journal?q={encodeURIComponent('^' + link)}">
-          <Badge variant="outline" class={cn(linkColor(link), "border-transparent text-[11px] px-1.5 py-0 gap-0.5 cursor-pointer hover:opacity-80")}>
-            <Link2 class="h-2.5 w-2.5" />
+          <Badge variant="outline" class={cn(linkColor(link), "border-transparent text-[11px] px-1.5 py-0 gap-0.5 items-baseline cursor-pointer hover:opacity-80")}>
+            <Link2 class="h-2.5 w-2.5 self-center" />
             {link}
           </Badge>
         </a>

@@ -2482,11 +2482,11 @@
                                                     {/if}
                                                 </div>
                                                 <div
-                                                    class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5"
+                                                    class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5"
                                                 >
                                                     {#if columnVisibility.description !== false}
                                                         <span
-                                                            class="font-medium truncate"
+                                                            class="font-medium overflow-clip text-ellipsis whitespace-nowrap"
                                                             title={entry.description}
                                                             >{entry.description}</span
                                                         >
@@ -2570,10 +2570,10 @@
                                                 {:else if cell.column.id === "description"}
                                                     <Table.Cell class="p-2">
                                                         <div
-                                                            class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
+                                                            class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0"
                                                         >
                                                             <button
-                                                                class="font-medium hover:underline truncate max-w-md text-left"
+                                                                class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap max-w-md text-left"
                                                                 title={entry.description}
                                                                 onclick={() => openEntryDrawer("view", entry.id)}
                                                                 >{entry.description}</button

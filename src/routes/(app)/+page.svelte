@@ -583,8 +583,8 @@
             <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
               <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm w-auto shrink-0 py-2 pr-2 sm:p-2">{entry.date}</Table.Cell>
               <Table.Cell class="order-3 w-full sm:w-auto sm:max-w-[300px] whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
-                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
-                  <a href="/journal/{entry.id}" class="font-medium hover:underline truncate" title={entry.description}>{entry.description}</a>
+                <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0">
+                  <a href="/journal/{entry.id}" class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
                     <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
                   {/if}
