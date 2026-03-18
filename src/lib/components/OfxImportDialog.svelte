@@ -35,12 +35,10 @@
   import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
   import AccountCombobox from "./AccountCombobox.svelte";
   import TagInput from "./TagInput.svelte";
+  import CategorizationRulesEditor from "./CategorizationRulesEditor.svelte";
   import { serializeTags, parseTags, TAGS_META_KEY, tagColor } from "$lib/utils/tags.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
-  import Trash2 from "lucide-svelte/icons/trash-2";
-  import GripVertical from "lucide-svelte/icons/grip-vertical";
-  import Plus from "lucide-svelte/icons/plus";
   import Check from "lucide-svelte/icons/check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import BrainCircuit from "lucide-svelte/icons/brain-circuit";
@@ -72,10 +70,6 @@
 
   // -- Categorization rules --
   let rules = $state<CsvCategorizationRule[]>([]);
-  let newPattern = $state("");
-  let newAccount = $state("");
-  let newRuleTags = $state<string[]>([]);
-  let showRules = $state(false);
 
   // -- Batch tags for import --
   let importTags = $state<string[]>([]);
@@ -325,34 +319,6 @@
     }
   }
 
-  let dragIdx = $state<number | null>(null);
-  let dropIdx = $state<number | null>(null);
-
-  function moveRule(from: number, to: number) {
-    if (from === to) return;
-    const updated = [...rules];
-    const [moved] = updated.splice(from, 1);
-    updated.splice(to, 0, moved);
-    rules = updated;
-    saveRules();
-  }
-
-  function addRule() {
-    if (!newPattern.trim() || !newAccount.trim()) return;
-    const rule: CsvCategorizationRule = { id: uuidv7(), pattern: newPattern.trim(), account: newAccount.trim() };
-    if (newRuleTags.length > 0) rule.tags = [...newRuleTags];
-    rules = [...rules, rule];
-    newPattern = "";
-    newAccount = "";
-    newRuleTags = [];
-    saveRules();
-  }
-
-  function removeRule(id: string) {
-    rules = rules.filter((r) => r.id !== id);
-    saveRules();
-  }
-
   function resetDialog() {
     step = 1;
     rawContent = "";
@@ -496,83 +462,10 @@
           </div>
 
           <!-- Categorization Rules -->
-          <div class="rounded-md border p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-semibold">Categorization Rules</h4>
-              <Button size="sm" variant="ghost" onclick={() => { showRules = !showRules; }}>
-                {showRules ? "Hide" : "Show"} ({rules.length} rules)
-              </Button>
-            </div>
-            {#if showRules}
-              <p class="text-xs text-muted-foreground">
-                Match keywords in descriptions to auto-assign counterparty accounts. First match wins.
-              </p>
-              {#if rules.length > 0}
-                <div class="space-y-0 max-h-40 overflow-y-auto">
-                  {#each rules as rule, index}
-                    <div
-                      role="listitem"
-                      class="flex items-center gap-2 text-sm py-1 {dragIdx === index ? 'opacity-50' : ''}"
-                      style={dropIdx === index ? "border-top: 2px solid hsl(var(--primary))" : ""}
-                      draggable="true"
-                      ondragstart={(e) => {
-                        dragIdx = index;
-                        if (e.dataTransfer) {
-                          e.dataTransfer.effectAllowed = "move";
-                        }
-                      }}
-                      ondragover={(e) => {
-                        e.preventDefault();
-                        dropIdx = index;
-                      }}
-                      ondragleave={() => {
-                        if (dropIdx === index) dropIdx = null;
-                      }}
-                      ondrop={(e) => {
-                        e.preventDefault();
-                        if (dragIdx !== null) moveRule(dragIdx, index);
-                        dragIdx = null;
-                        dropIdx = null;
-                      }}
-                      ondragend={() => {
-                        dragIdx = null;
-                        dropIdx = null;
-                      }}
-                    >
-                      <GripVertical class="h-3 w-3 text-muted-foreground cursor-grab shrink-0" />
-                      <Badge variant="outline" class="font-mono">{rule.pattern}</Badge>
-                      <span class="text-muted-foreground">&rarr;</span>
-                      <span class="font-mono text-xs">{rule.account}</span>
-                      {#if rule.tags && rule.tags.length > 0}
-                        {#each rule.tags as tag}
-                          <Badge variant="outline" class={tagColor(tag) + " border-transparent text-[10px] px-1 py-0"}>{tag}</Badge>
-                        {/each}
-                      {/if}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        class="h-6 w-6 p-0 ml-auto"
-                        onclick={() => removeRule(rule.id)}
-                      >
-                        <Trash2 class="h-3 w-3" />
-                      </Button>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-              <div class="flex gap-2">
-                <Input bind:value={newPattern} placeholder="Keyword (e.g. coffee)" class="flex-1 h-8 text-sm" />
-                <Input bind:value={newAccount} placeholder="Account (e.g. Expenses:Coffee)" class="flex-1 h-8 text-sm" />
-                <Button size="sm" class="h-8" onclick={addRule} disabled={!newPattern.trim() || !newAccount.trim()}>
-                  <Plus class="h-3 w-3 mr-1" /> Add
-                </Button>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-muted-foreground shrink-0">Rule tags:</span>
-                <TagInput tags={newRuleTags} onchange={(t) => { newRuleTags = t; }} class="flex-1" />
-              </div>
-            {/if}
-          </div>
+          <CategorizationRulesEditor
+            {rules}
+            onchange={(updated) => { rules = updated; saveRules(); }}
+          />
 
           <!-- Parse warnings -->
           {#if parseResult.warnings.length > 0}

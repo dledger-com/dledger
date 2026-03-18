@@ -49,7 +49,15 @@
     import SortableHeader from "$lib/components/SortableHeader.svelte";
     import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
     import AddSourceInput from "$lib/components/AddSourceInput.svelte";
+    import CategorizationRulesEditor from "$lib/components/CategorizationRulesEditor.svelte";
     import type { ExchangeId } from "$lib/cex/types.js";
+    import {
+        setBankStatementRules,
+        setRevolutRules,
+        setLaBanquePostaleRules,
+        setN26Rules,
+        type CsvCategorizationRule,
+    } from "$lib/csv-presets/index.js";
 
     let fileInputEl = $state<HTMLInputElement | null>(null);
 
@@ -70,6 +78,12 @@
     const handlers = handlerRegistry.getAll();
 
     const settings = new SettingsStore();
+
+    // -- Categorization rules --
+    let categorizationRules = $state<CsvCategorizationRule[]>([]);
+    $effect(() => {
+        categorizationRules = settings.settings.csvCategorizationRules ?? [];
+    });
 
     // -- Etherscan state --
     let ethAccounts = $state<EtherscanAccount[]>([]);
@@ -1210,6 +1224,31 @@
                 </Button>
             </Card.Footer>
         {/if}
+    </Card.Root>
+
+    <!-- Categorization Rules -->
+    <Card.Root>
+        <Card.Header>
+            <Card.Title>Categorization Rules</Card.Title>
+            <Card.Description>
+                Match keywords in descriptions to auto-assign accounts during import. First match wins.
+            </Card.Description>
+        </Card.Header>
+        <Card.Content>
+            <CategorizationRulesEditor
+                rules={categorizationRules}
+                onchange={(updated) => {
+                    categorizationRules = updated;
+                    settings.update({ csvCategorizationRules: updated });
+                    setBankStatementRules(updated);
+                    setRevolutRules(updated);
+                    setLaBanquePostaleRules(updated);
+                    setN26Rules(updated);
+                }}
+                collapsible={false}
+                maxHeight="max-h-80"
+            />
+        </Card.Content>
     </Card.Root>
 
     <!-- Transaction Handlers -->
