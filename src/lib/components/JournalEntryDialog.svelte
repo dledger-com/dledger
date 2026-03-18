@@ -16,6 +16,7 @@
   import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem, Account } from "$lib/types/index.js";
   import { invalidate } from "$lib/data/invalidation.js";
+  import { AlertDialog } from "bits-ui";
   import Trash2 from "lucide-svelte/icons/trash-2";
   import Plus from "lucide-svelte/icons/plus";
 
@@ -54,6 +55,19 @@
   let metaKeySuggestions = $state<string[]>([]);
   let editLoading = $state(false);
   let submitting = $state(false);
+
+  // ── Dirty-state tracking ──
+  let cleanSnapshot = $state("");
+  let confirmDiscardOpen = $state(false);
+
+  function takeSnapshot(): string {
+    return JSON.stringify({
+      formDate, formDescription, formCurrency, formTags, formLinks, formMetadata,
+      lines: lines.map(l => ({ accountPath: l.accountPath, debit: l.debit, credit: l.credit })),
+    });
+  }
+
+  const isDirty = $derived(cleanSnapshot !== "" && cleanSnapshot !== takeSnapshot());
 
   interface FormLine {
     key: string;
@@ -201,6 +215,7 @@
       }
       formMetadata = filteredMeta;
       formLinks = linksResult;
+      cleanSnapshot = takeSnapshot();
     } finally {
       editLoading = false;
     }
@@ -317,6 +332,7 @@
       formLinks = [];
       formMetadata = {};
       resetFormLines();
+      cleanSnapshot = takeSnapshot();
       const backend = getBackend();
       Promise.all([
         backend.getAllTagValues().catch(() => [] as string[]),
@@ -332,10 +348,17 @@
 
   // Reset key when dialog closes
   $effect(() => {
-    if (!open) lastLoadedKey = "";
+    if (!open) {
+      lastLoadedKey = "";
+      cleanSnapshot = "";
+    }
   });
 
   function handleOpenChange(newOpen: boolean) {
+    if (!newOpen && isDirty) {
+      confirmDiscardOpen = true;
+      return;
+    }
     open = newOpen;
     if (!newOpen) onclose?.();
   }
@@ -493,7 +516,7 @@
     </div>
 
     <Dialog.Footer class="px-6 pb-6 pt-2 border-t">
-      <Button variant="outline" type="button" onclick={() => { onclose?.(); }}>Cancel</Button>
+      <Button variant="outline" type="button" onclick={() => { if (isDirty) { confirmDiscardOpen = true; return; } open = false; onclose?.(); }}>Cancel</Button>
       <Button type="submit" form="journal-entry-form" disabled={!isBalanced || !formDescription.trim() || submitting}>
         {#if submitting}
           {mode === "edit" ? "Saving..." : "Posting..."}
@@ -503,4 +526,31 @@
       </Button>
     </Dialog.Footer>
   </Dialog.Content>
+
+  {#if confirmDiscardOpen}
+    <AlertDialog.Root bind:open={confirmDiscardOpen}>
+      <AlertDialog.Portal>
+        <AlertDialog.Overlay class="fixed inset-0 z-[60] bg-black/50" />
+        <AlertDialog.Content class="fixed top-1/2 left-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 bg-background rounded-lg border p-6 shadow-lg max-w-sm w-full">
+          <AlertDialog.Title class="text-lg font-semibold">Discard changes?</AlertDialog.Title>
+          <AlertDialog.Description class="text-sm text-muted-foreground mt-2">
+            You have unsaved changes. Are you sure you want to discard them?
+          </AlertDialog.Description>
+          <div class="flex justify-end gap-2 mt-4">
+            <AlertDialog.Cancel
+              class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            >
+              Keep Editing
+            </AlertDialog.Cancel>
+            <AlertDialog.Action
+              class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onclick={() => { confirmDiscardOpen = false; open = false; onclose?.(); }}
+            >
+              Discard
+            </AlertDialog.Action>
+          </div>
+        </AlertDialog.Content>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
+  {/if}
 </Dialog.Root>
