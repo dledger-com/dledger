@@ -68,11 +68,15 @@ export const yieldAppPreset: CsvPreset = {
       const type = (row[typeIdx] ?? "").trim().toLowerCase();
       const lines: CsvRecord["lines"] = [];
 
-      if (type === "interest" || type === "referral reward") {
+      if (type === "interest" || type === "referral reward" || type === "bonus" || type === "reward") {
         // Income
+        const incomeLabel =
+          type === "interest" ? "Interest" :
+          type === "referral reward" ? "Referral" :
+          type === "bonus" ? "Bonus" : "Rewards";
         lines.push(
           { account: exchangeAssetsCurrency("YieldApp", currency), currency, amount: amount.toString() },
-          { account: exchangeIncome("YieldApp", type === "interest" ? "Interest" : "Referral"), currency, amount: (-amount).toString() },
+          { account: exchangeIncome("YieldApp", incomeLabel), currency, amount: (-amount).toString() },
         );
         records.push({ date, description: `Yield App ${type}: ${currency}`, lines });
       } else if (type === "withdrawal") {
