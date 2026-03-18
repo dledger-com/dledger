@@ -1957,11 +1957,10 @@
                 {#snippet aboveMarks()}
                     {#if chartContext?.xScale && currentChartBucketDate && lastChartBucketDate}
                         {@const xScale = chartContext.xScale}
-                        {@const step = xScale.step?.() ?? 0}
                         {@const p1 = xScale(currentChartBucketDate) ?? 0}
                         {@const p2 = xScale(lastChartBucketDate) ?? 0}
                         {@const left = Math.min(p1, p2)}
-                        {@const right = Math.max(p1, p2) + step}
+                        {@const right = Math.max(p1, p2)}
                         {@const h = chartContext.height ?? 0}
                         <rect
                             x={left}
