@@ -59,6 +59,7 @@
     import type { TransactionFilter } from "$lib/types/index.js";
     import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
     import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
+    import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
 
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -91,20 +92,29 @@
     const settings = new SettingsStore();
     let loadController: AbortController | undefined;
 
-    // ── Journal Entry Drawer ──
+    // ── Journal Entry Drawer (view) & Dialog (new/edit) ──
     let drawerOpen = $state(false);
-    let drawerMode = $state<"view" | "new" | "edit">("view");
     let drawerEntryId = $state<string | null>(null);
+
+    let dialogOpen = $state(false);
+    let dialogMode = $state<"new" | "edit">("new");
+    let dialogEntryId = $state<string | null>(null);
+
     function openEntryDrawer(mode: "view" | "new" | "edit", entryId?: string) {
-        drawerMode = mode;
-        drawerEntryId = entryId ?? null;
-        drawerOpen = true;
-        if (entryId) {
-            const url = new URL(window.location.href);
-            if (url.searchParams.get("entry") !== entryId) {
-                url.searchParams.set("entry", entryId);
-                pushState(url, {});
+        if (mode === "view") {
+            drawerEntryId = entryId ?? null;
+            drawerOpen = true;
+            if (entryId) {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get("entry") !== entryId) {
+                    url.searchParams.set("entry", entryId);
+                    pushState(url, {});
+                }
             }
+        } else {
+            dialogMode = mode;
+            dialogEntryId = entryId ?? null;
+            dialogOpen = true;
         }
     }
 
@@ -122,17 +132,15 @@
     onMount(() => {
         const entryId = new URL(window.location.href).searchParams.get("entry");
         if (entryId) {
-            drawerMode = "view";
             drawerEntryId = entryId;
             drawerOpen = true;
         }
         function handlePopstate() {
             const id = new URL(window.location.href).searchParams.get("entry");
             if (id && !drawerOpen) {
-                drawerMode = "view";
                 drawerEntryId = id;
                 drawerOpen = true;
-            } else if (!id && drawerOpen && drawerMode === "view") {
+            } else if (!id && drawerOpen) {
                 drawerOpen = false;
                 drawerEntryId = null;
             }
@@ -2973,16 +2981,23 @@
 
 <JournalEntryDrawer
     bind:open={drawerOpen}
-    bind:mode={drawerMode}
     bind:entryId={drawerEntryId}
+    onedit={() => { drawerOpen = false; openEntryDrawer("edit", drawerEntryId ?? undefined); }}
     onclose={closeEntryDrawer}
     onsaved={(newId) => {
         drawerEntryId = newId;
-        drawerMode = "view";
         const url = new URL(window.location.href);
         url.searchParams.set("entry", newId);
         replaceState(url, {});
     }}
+/>
+
+<JournalEntryDialog
+    bind:open={dialogOpen}
+    mode={dialogMode}
+    bind:entryId={dialogEntryId}
+    onsaved={(newId) => { dialogOpen = false; openEntryDrawer("view", newId); }}
+    onclose={() => { dialogOpen = false; }}
 />
 
 <style>
