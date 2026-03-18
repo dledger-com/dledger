@@ -148,25 +148,34 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
   if ([descIdx, currIdx, amtIdx, dateIdx].some((i) => i === -1)) return [];
 
   const records: CsvRecord[] = [];
+  const feeRecords: CsvRecord[] = [];
 
   for (const row of rows) {
     if (row.length <= 1 && (row[0] ?? "") === "") continue;
 
-    const date = extractDate(row[dateIdx] ?? "");
+    const rawDate = (row[dateIdx] ?? "").trim();
+    const date = extractDate(rawDate);
     if (!date) continue;
 
     const currency = (row[currIdx] ?? "").trim().toUpperCase();
     const amount = parseFloat((row[amtIdx] ?? "0").replace(/,/g, ""));
     if (!currency || isNaN(amount) || amount === 0) continue;
 
-    const desc = (row[descIdx] ?? "").toLowerCase();
+    const descRaw = (row[descIdx] ?? "").trim();
+    const descLower = descRaw.toLowerCase();
+
+    const isExchangeRow = descLower.startsWith("exchange ");
+    const isTradeFee = descLower.startsWith("trading fees ");
+    const isPairedEvent =
+      descLower.startsWith("bfx token redemption") ||
+      descLower.startsWith("extraordinary loss adj");
 
     let counterAccount = EQUITY_EXTERNAL;
-    if (desc.includes("exchange") || desc.includes("trading")) {
+    if (descLower.includes("exchange") || descLower.includes("trading")) {
       counterAccount = EQUITY_TRADING;
     }
 
-    const isFee = desc.includes("fee") && amount < 0;
+    const isFee = descLower.includes("fee") && amount < 0;
     const lines: CsvRecord["lines"] = isFee
       ? [
           { account: exchangeFees("Bitfinex"), currency, amount: Math.abs(amount).toString() },
@@ -177,14 +186,36 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
           { account: counterAccount, currency, amount: (-amount).toString() },
         ];
 
-    records.push({
-      date,
-      description: `Bitfinex: ${(row[descIdx] ?? "").trim().slice(0, 80)}`,
-      lines,
-    });
+    // Group exchange legs and their trading fees together using normalized amount+currency
+    // Fee descriptions use rounded amounts (4dp) vs full precision in exchange descriptions,
+    // so we normalize both to 4dp for matching.
+    let groupKey: string | undefined;
+    if (isExchangeRow) {
+      const m = descRaw.match(/^Exchange (\S+) (\S+)/);
+      if (m) groupKey = `${date}|${parseFloat(m[1]).toFixed(4)}|${m[2]}`;
+    } else if (isTradeFee) {
+      const m = descRaw.match(/^Trading fees for (\S+) (\S+)/);
+      if (m) groupKey = `${date}|${parseFloat(m[1]).toFixed(4)}|${m[2]}`;
+    } else if (isPairedEvent) {
+      groupKey = `${date}|${descRaw}`;
+    }
+
+    let description = `Bitfinex: ${descRaw.slice(0, 80)}`;
+    if (isExchangeRow) {
+      const m = descRaw.match(/^Exchange \S+ (\S+) for (\S+) @/);
+      if (m) description = `Bitfinex trade: ${m[1]} \u2192 ${m[2]}`;
+    }
+
+    // Collect fee records separately so they appear after exchange records,
+    // ensuring the exchange description is used when groups are merged.
+    if (isTradeFee) {
+      feeRecords.push({ date, description, lines, groupKey });
+    } else {
+      records.push({ date, description, lines, groupKey });
+    }
   }
 
-  return records;
+  return [...records, ...feeRecords];
 }
 
 function transformMovements(headers: string[], rows: string[][]): CsvRecord[] {
