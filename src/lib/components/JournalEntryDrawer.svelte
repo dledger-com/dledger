@@ -654,11 +654,17 @@
 
     {:else}
       <!-- ═══ NEW / EDIT MODE ═══ -->
-      <Drawer.Header class="flex items-center justify-between">
-        <Drawer.Title>{mode === "edit" ? "Edit Entry" : "New Entry"}</Drawer.Title>
-        <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }}>
-          <X class="h-4 w-4" />
-        </Button>
+      <Drawer.Header class="space-y-1">
+        <div class="flex items-center justify-between">
+          <Drawer.Title class="text-sm font-medium text-muted-foreground">
+            {mode === "edit" ? "Edit Entry" : "New Entry"}
+          </Drawer.Title>
+          <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }}>
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+        <Input id="drawer-desc" bind:value={formDescription} placeholder="e.g. Monthly rent payment"
+               class="text-base font-semibold border-none shadow-none px-0 h-auto focus-visible:ring-0" required />
       </Drawer.Header>
 
       <div class="flex-1 overflow-y-auto px-4 pb-4">
@@ -668,17 +674,13 @@
           </div>
         {:else}
           <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-4">
-            <!-- Entry Details -->
+            <!-- Details -->
             <section>
-              <h3 class="text-sm font-medium text-muted-foreground mb-2">Entry Details</h3>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">Details</h3>
               <div class="space-y-3">
                 <div class="space-y-1">
                   <label for="drawer-date" class="text-sm font-medium">Date</label>
                   <Input id="drawer-date" type="date" bind:value={formDate} required />
-                </div>
-                <div class="space-y-1">
-                  <label for="drawer-desc" class="text-sm font-medium">Description</label>
-                  <Input id="drawer-desc" bind:value={formDescription} placeholder="e.g. Monthly rent payment" required />
                 </div>
 
                 <div class="space-y-1">
@@ -698,29 +700,28 @@
                     </Select.Content>
                   </Select.Root>
                 </div>
-
-                <div class="space-y-1">
-                  <label class="text-sm font-medium">Tags</label>
-                  <TagInput tags={formTags} onchange={(t) => { formTags = t; }} suggestions={tagSuggestions} />
-                </div>
-                <div class="space-y-1">
-                  <label class="text-sm font-medium">Links</label>
-                  <LinkInput links={formLinks} onchange={(l) => { formLinks = l; }} suggestions={formLinkSuggestions} />
-                </div>
-
-                <details class="space-y-1">
-                  <summary class="text-sm font-medium cursor-pointer text-muted-foreground">Metadata</summary>
-                  <MetadataEditor
-                    metadata={formMetadata}
-                    onchange={(m) => { formMetadata = m; }}
-                    keySuggestions={metaKeySuggestions}
-                    class="mt-2"
-                  />
-                </details>
               </div>
             </section>
 
-            <hr class="border-border" />
+            <!-- Metadata -->
+            <section>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
+              <div class="space-y-3">
+                <div class="space-y-1">
+                  <dt class="text-muted-foreground">Tags</dt>
+                  <dd><TagInput tags={formTags} onchange={(t) => { formTags = t; }} suggestions={tagSuggestions} /></dd>
+                </div>
+                <div class="space-y-1">
+                  <dt class="text-muted-foreground">Links</dt>
+                  <dd><LinkInput links={formLinks} onchange={(l) => { formLinks = l; }} suggestions={formLinkSuggestions} /></dd>
+                </div>
+                <MetadataEditor
+                  metadata={formMetadata}
+                  onchange={(m) => { formMetadata = m; }}
+                  keySuggestions={metaKeySuggestions}
+                />
+              </div>
+            </section>
 
             <!-- Line Items -->
             <section>
