@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parseNamedMonthDate, makeTradeLines, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, parseNamedMonthDate, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
 const EXPORT_HEADERS = ["ID", "Account", "Type", "Subtype", "Datetime", "Amount", "Amount currency"];
@@ -94,7 +94,7 @@ function transformExport(headers: string[], rows: string[][]): CsvRecord[] {
       }
       if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
 
-      records.push({ date, description: `Bitstamp ${side.toLowerCase()} ${currency}${valueCurr ? `/${valueCurr}` : ""}`, lines });
+      records.push({ date, description: valueCurr ? makeTradeDescription("Bitstamp", currency, valueCurr, side) : `Bitstamp ${side.toLowerCase()} ${currency}`, lines });
     } else if (typeUpper === "DEPOSIT") {
       lines.push(...makeTransferLines("Bitstamp", currency, amount));
       if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
@@ -162,7 +162,7 @@ function transformAll(headers: string[], rows: string[][]): CsvRecord[] {
         );
       }
       if (feeParsed && feeParsed.amount > 0) lines.push(...makeFeeLines("Bitstamp", feeParsed.currency, feeParsed.amount));
-      records.push({ date, description: `Bitstamp ${side.toLowerCase()} ${amtParsed.currency}${valParsed ? `/${valParsed.currency}` : ""}`, lines });
+      records.push({ date, description: valParsed ? makeTradeDescription("Bitstamp", amtParsed.currency, valParsed.currency, side) : `Bitstamp ${side.toLowerCase()} ${amtParsed.currency}`, lines });
     } else if (type === "DEPOSIT") {
       lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, amtParsed.amount));
       records.push({ date, description: `Bitstamp deposit: ${amtParsed.currency}`, lines });
@@ -207,7 +207,7 @@ function transformOrders(headers: string[], rows: string[][]): CsvRecord[] {
 
     const lines = makeTradeLines("Bitstamp", base, quote, side, amount, value);
 
-    records.push({ date, description: `Bitstamp ${side.toLowerCase()} ${base}/${quote}`, lines });
+    records.push({ date, description: makeTradeDescription("Bitstamp", base, quote, side), lines });
   }
 
   return records;

@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, makeTradeLines, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const MONTH_MAP: Record<string, string> = {
@@ -95,7 +95,7 @@ export const voletPreset: CsvPreset = {
       if (direction === "INNER_TRANSACTION") {
         if (isNaN(credit) || isNaN(debit) || !creditCurr || !debitCurr) continue;
         lines.push(...makeTradeLines("Volet", creditCurr, debitCurr, "BUY", credit, debit));
-        desc = `Volet ${type.toLowerCase()}: ${debitCurr} → ${creditCurr}`;
+        desc = makeTradeDescription("Volet", creditCurr, debitCurr, "BUY");
       } else if (direction === "DEPOSIT") {
         if (isNaN(credit) || !creditCurr) continue;
         lines.push(...makeTransferLines("Volet", creditCurr, credit));

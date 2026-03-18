@@ -151,8 +151,7 @@ describe("poloniexPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2019-04-21");
-      expect(r.description).toContain("buy");
-      expect(r.description).toContain("ETH/BTC");
+      expect(r.description).toBe("Poloniex trade: BTC → ETH");
 
       // Buy: receive base (ETH), spend quote (BTC)
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Poloniex", "ETH") && parseFloat(l.amount) === 10)).toBe(true);
@@ -169,8 +168,7 @@ describe("poloniexPreset", () => {
       expect(records!).toHaveLength(1);
 
       const r = records![0];
-      expect(r.description).toContain("sell");
-      expect(r.description).toContain("ETH/USDT");
+      expect(r.description).toBe("Poloniex trade: ETH → USDT");
     });
 
     it("applies percentage fee on buy (fee on base)", () => {

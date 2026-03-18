@@ -119,6 +119,15 @@ export function makeFeeLines(
   ];
 }
 
+/** Build consistent trade description: "Exchange trade: spent → received" */
+export function makeTradeDescription(
+  exchange: string, base: string, quote: string, side: "BUY" | "SELL",
+): string {
+  return side === "BUY"
+    ? `${exchange} trade: ${quote} → ${base}`
+    : `${exchange} trade: ${base} → ${quote}`;
+}
+
 /** Case-insensitive column index lookup */
 export function colIdx(headers: string[], name: string): number {
   const lower = headers.map((h) => h.trim().toLowerCase());

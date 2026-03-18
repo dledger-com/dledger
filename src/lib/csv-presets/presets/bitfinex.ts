@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parsePair, makeTradeLines, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, parsePair, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
 import {
   exchangeAssets,
   exchangeAssetsCurrency,
@@ -92,7 +92,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 
     records.push({
       date,
-      description: `Bitfinex ${side.toLowerCase()} ${pair.base}/${pair.quote}`,
+      description: makeTradeDescription("Bitfinex", pair.base, pair.quote, side),
       lines,
     });
   }
@@ -131,7 +131,7 @@ function transformTradesOld(headers: string[], rows: string[][]): CsvRecord[] {
 
     records.push({
       date,
-      description: `Bitfinex ${side.toLowerCase()} ${pair.base}/${pair.quote}`,
+      description: makeTradeDescription("Bitfinex", pair.base, pair.quote, side),
       lines,
     });
   }

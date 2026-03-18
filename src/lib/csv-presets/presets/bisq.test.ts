@@ -78,7 +78,7 @@ describe("bisqPreset", () => {
       ];
       const records = bisqPreset.transform(TRADE_HEADERS, rows);
       expect(records).toHaveLength(1);
-      expect(records![0].description).toContain("sell");
+      expect(records![0].description).toContain("trade:");
     });
   });
 

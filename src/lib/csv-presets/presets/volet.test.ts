@@ -83,7 +83,7 @@ describe("voletPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2023-04-01");
-      expect(r.description).toContain("currency exchange");
+      expect(r.description).toContain("trade:");
 
       // BUY side: credit currency (EUR) is base, debit currency (USD) is quote
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Volet", "EUR") && parseFloat(l.amount) === 90.24)).toBe(true);

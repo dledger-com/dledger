@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { makeTradeDescription } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, exchangeRewards, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS = [
@@ -149,9 +150,13 @@ export const coinbaseTransactionsPreset: CsvPreset = {
         );
       }
 
+      const description = (typeUpper === "BUY" || typeUpper === "SELL")
+        ? makeTradeDescription("Coinbase", asset, quoteCurrency, typeUpper)
+        : `Coinbase ${txType.toLowerCase()}: ${asset}`;
+
       records.push({
         date,
-        description: `Coinbase ${txType.toLowerCase()}: ${asset}`,
+        description,
         lines,
       });
     }
