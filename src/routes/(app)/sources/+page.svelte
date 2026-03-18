@@ -162,6 +162,11 @@
         lastSync: (a) => a.last_sync || "",
     };
 
+    function isAccountClosed(account: ExchangeAccount): boolean {
+        if (!account.closed_at) return false;
+        return account.closed_at < new Date().toISOString().slice(0, 10);
+    }
+
     type AddSourceMode = "idle" | "cex" | "blockchain";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
@@ -272,6 +277,7 @@
     }
 
     function syncCex(account: ExchangeAccount) {
+        if (isAccountClosed(account)) return;
         const adapter = getCexAdapter(account.exchange);
         taskQueue.enqueue({
             key: `cex-sync:${account.id}`,
@@ -1009,6 +1015,9 @@
                                                 }}
                                                 title="Closed date"
                                             />
+                                            {#if isAccountClosed(account)}
+                                                <Badge variant="outline" class="text-muted-foreground">Closed</Badge>
+                                            {/if}
                                         </div>
                                     </Table.Cell>
                                     <Table.Cell class="hidden sm:table-cell">
@@ -1023,7 +1032,7 @@
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                disabled={cexBusy}
+                                                disabled={cexBusy || isAccountClosed(account)}
                                                 onclick={() => syncCex(account)}
                                             >
                                                 <RefreshCw
