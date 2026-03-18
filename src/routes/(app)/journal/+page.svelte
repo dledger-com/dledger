@@ -41,10 +41,12 @@
     } from "$lib/utils/chart-granularity.js";
 
     import MatchDialog from "$lib/components/MatchDialog.svelte";
+    import ReinterpretPreviewDialog from "$lib/components/ReinterpretPreviewDialog.svelte";
     import { extractAllCandidates } from "$lib/matching/extract.js";
     import { findMatches } from "$lib/matching/score.js";
     import type { MatchCandidate } from "$lib/matching/types.js";
     import type { Account } from "$lib/types/index.js";
+    import { findReinterpretCandidates, type ReinterpretCandidate } from "$lib/reinterpret.js";
 
     import ListFilter from "$lib/components/ListFilter.svelte";
     import TagDisplay from "$lib/components/TagDisplay.svelte";
@@ -171,6 +173,7 @@
         // Read reactive deps so $effect re-runs when they change
         const _fm = findingMatches;
         const _dd = detectingDuplicates;
+        const _ri = reinterpreting;
         setTopBarActions([
             { type: 'button', label: 'New Entry', onclick: () => openEntryDrawer("new"), fab: true, fabIcon: Plus },
             {
@@ -187,6 +190,11 @@
                         label: _dd ? 'Detecting...' : 'Detect Duplicates',
                         disabled: _dd,
                         onclick: handleDetectDuplicates,
+                    },
+                    {
+                        label: _ri ? 'Reinterpreting...' : 'Reinterpret',
+                        disabled: _ri,
+                        onclick: handleReinterpret,
                     },
                     { label: '', separator: true },
                     { label: 'Export', header: true },
@@ -376,6 +384,9 @@
     let showMatches = $state(false);
     let matchCandidates = $state<MatchCandidate[]>([]);
     let matchAccountMap = $state<Map<string, Account>>(new Map());
+    let reinterpreting = $state(false);
+    let showReinterpret = $state(false);
+    let reinterpretCandidates = $state<ReinterpretCandidate[]>([]);
 
     function findDuplicateGroups(
         entries: [JournalEntry, LineItem[]][],
@@ -1826,6 +1837,28 @@
         }
     }
 
+    async function handleReinterpret() {
+        reinterpreting = true;
+        try {
+            const rules = settings.settings.csvCategorizationRules ?? [];
+            if (rules.length === 0) {
+                toast.info("No categorization rules defined");
+                return;
+            }
+            const result = await findReinterpretCandidates(getBackend(), rules);
+            if (result.candidates.length === 0) {
+                toast.info("No transactions to reinterpret");
+                return;
+            }
+            reinterpretCandidates = result.candidates;
+            showReinterpret = true;
+        } catch (e) {
+            toast.error(String(e));
+        } finally {
+            reinterpreting = false;
+        }
+    }
+
     async function handleExport(format: LedgerFormat) {
         exporting = true;
         try {
@@ -2824,6 +2857,13 @@
         {/if}
     {/if}
 </div>
+
+<!-- Reinterpret Preview Dialog -->
+<ReinterpretPreviewDialog
+    bind:open={showReinterpret}
+    candidates={reinterpretCandidates}
+    onApplied={() => store.load()}
+/>
 
 <!-- Cross-Source Match Dialog -->
 <MatchDialog
