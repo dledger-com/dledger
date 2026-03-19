@@ -243,7 +243,7 @@
 
     async function handleAddBtcAccount() {
         let input = btcNewAddressOrXpub.trim();
-        const label = btcNewLabel.trim() || ellipseAddress(input);
+        let label = btcNewLabel.trim();
         if (!input) {
             toast.error("Input is required");
             return;
@@ -300,6 +300,9 @@
                 accountType = det.input_type as "xpub" | "ypub" | "zpub";
                 derivationBip = det.suggested_bip ?? undefined;
             }
+
+            // Compute label fallback after conversion so it uses the public key, not the private input
+            label = label || ellipseAddress(input);
 
             await getBackend().addBitcoinAccount({
                 id: uuidv7(),
