@@ -100,6 +100,7 @@
     let evmSeedPassphrase = $state("");
     let evmDeriveCount = $state(5);
     let evmSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let evmItemLabels = $state<Map<number, string>>(new Map());
     const ethBusy = $derived(taskQueue.isActive("etherscan-sync"));
 
     // -- Inline edit state --
@@ -228,6 +229,8 @@
         evmSeedPassphrase = "";
         evmDeriveCount = 5;
         evmSelectedIndexes = new Set([0]);
+        evmItemLabels = new Map();
+        btcItemLabels = new Map();
     }
 
     // -- Bitcoin state --
@@ -240,6 +243,7 @@
     let btcAddingAccount = $state(false);
     let btcDeriveCount = $state(5);
     let btcSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let btcItemLabels = $state<Map<number, string>>(new Map());
     let btcDerivedXpubs = $state<import("$lib/bitcoin/derive-js.js").DerivedBtcXpub[]>([]);
     let btcDeriving = $state(false);
 
@@ -334,7 +338,7 @@
                 // Clear private material immediately
                 btcNewAddressOrXpub = "";
                 for (const { index, xpub, keyType } of selected) {
-                    const label = baseLabel ? `${baseLabel} #${index}` : ellipseAddress(xpub);
+                    const label = btcItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : ellipseAddress(xpub));
                     await getBackend().addBitcoinAccount({
                         id: uuidv7(),
                         address_or_xpub: xpub,
@@ -681,7 +685,7 @@
                 if (detection.type === "seed") newAddress = "";
                 const baseLabel = newLabel.trim();
                 for (const { index, address } of selected) {
-                    const label = baseLabel ? `${baseLabel} #${index}` : ellipseAddress(address);
+                    const label = evmItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : ellipseAddress(address));
                     for (const chainId of selectedChainIds) {
                         await getBackend().addEtherscanAccount(address, chainId, label);
                     }
@@ -1268,6 +1272,18 @@
                                         />
                                         <span class="font-mono text-xs">{address}</span>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
+                                        <input
+                                            type="text"
+                                            class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
+                                            placeholder="Label"
+                                            value={evmItemLabels.get(index) ?? ""}
+                                            oninput={(e) => {
+                                                const next = new Map(evmItemLabels);
+                                                next.set(index, e.currentTarget.value);
+                                                evmItemLabels = next;
+                                            }}
+                                            onclick={(e) => e.stopPropagation()}
+                                        />
                                     </label>
                                 {/each}
                             </div>
@@ -1440,6 +1456,18 @@
                                         <span class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</span>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
                                         <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
+                                        <input
+                                            type="text"
+                                            class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
+                                            placeholder="Label"
+                                            value={btcItemLabels.get(index) ?? ""}
+                                            oninput={(e) => {
+                                                const next = new Map(btcItemLabels);
+                                                next.set(index, e.currentTarget.value);
+                                                btcItemLabels = next;
+                                            }}
+                                            onclick={(e) => e.stopPropagation()}
+                                        />
                                     </label>
                                 {/each}
                             </div>
