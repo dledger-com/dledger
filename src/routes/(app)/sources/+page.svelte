@@ -243,9 +243,9 @@
 
     async function handleAddBtcAccount() {
         let input = btcNewAddressOrXpub.trim();
-        const label = btcNewLabel.trim();
-        if (!input || !label) {
-            toast.error("Input and label are required");
+        const label = btcNewLabel.trim() || ellipseAddress(input);
+        if (!input) {
+            toast.error("Input is required");
             return;
         }
 
@@ -1136,7 +1136,7 @@
                             />
                         </div>
                         <div class="w-40 space-y-1">
-                            <label for="new-btc-label" class="text-xs font-medium">Label</label>
+                            <label for="new-btc-label" class="text-xs font-medium">Label (optional)</label>
                             <Input
                                 id="new-btc-label"
                                 placeholder="My BTC Wallet"
@@ -1145,7 +1145,7 @@
                         </div>
                         <Button
                             onclick={handleAddBtcAccount}
-                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || !btcNewLabel.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck)}
+                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck)}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
