@@ -39,6 +39,7 @@
     import RotateCw from "lucide-svelte/icons/rotate-cw";
     import { v7 as uuidv7 } from "uuid";
     import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
+    import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase } from "$lib/evm/derive.js";
     import { detectBtcInputType, convertPrivateKey } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
@@ -94,6 +95,8 @@
     let newAddress = $state("");
     let newLabel = $state("");
     let addingAccount = $state(false);
+    let evmPrivateKeyAck = $state(false);
+    let evmSeedPassphrase = $state("");
     const ethBusy = $derived(taskQueue.isActive("etherscan-sync"));
 
     // -- Inline edit state --
@@ -214,6 +217,8 @@
         btcPrivateKeyAck = false;
         btcSeedBip = 84;
         btcSeedPassphrase = "";
+        evmPrivateKeyAck = false;
+        evmSeedPassphrase = "";
     }
 
     // -- Bitcoin state --
@@ -226,6 +231,7 @@
     let btcAddingAccount = $state(false);
 
     const btcDetection: QuickDetection = $derived.by(() => detectInputType(btcNewAddressOrXpub));
+    const evmDetection = $derived.by(() => detectEvmInputType(newAddress));
     const btcBusy = $derived(taskQueue.isActive("btc-sync"));
 
     function startAddBitcoin(prefillInput?: string) {
@@ -535,22 +541,48 @@
     }
 
     async function handleAddEthAccount() {
-        const addr = newAddress.trim();
-        const label = newLabel.trim() || ellipseAddress(addr);
+        let addr = newAddress.trim();
         if (!addr) {
             toast.error("Address is required");
             return;
         }
-        if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-            toast.error("Invalid Ethereum address");
+
+        const detection = detectEvmInputType(addr);
+        if (detection.type === "unknown") {
+            toast.error("Unrecognized input — enter an 0x address, private key, or seed phrase");
             return;
         }
+
         if (selectedChainIds.size === 0) {
             toast.error("Select at least one chain");
             return;
         }
+
         addingAccount = true;
         try {
+            if (detection.isPrivate) {
+                if (detection.type === "seed") {
+                    const v = validateEvmSeedPhrase(addr);
+                    if (v.invalidWords.length > 0) {
+                        toast.error(`Invalid BIP39 words: ${v.invalidWords.join(", ")}`);
+                        return;
+                    }
+                    if (!v.valid) {
+                        toast.error("Invalid seed phrase checksum");
+                        return;
+                    }
+                }
+                addr = deriveEvmAddress(addr, detection.type === "seed" ? evmSeedPassphrase : undefined);
+                // Clear private material immediately
+                newAddress = "";
+            }
+
+            if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+                toast.error("Invalid Ethereum address");
+                return;
+            }
+
+            const label = newLabel.trim() || ellipseAddress(addr);
             for (const chainId of selectedChainIds) {
                 await getBackend().addEtherscanAccount(addr, chainId, label);
             }
@@ -1043,7 +1075,8 @@
                             <label for="new-eth-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-eth-address"
-                                placeholder="0x..."
+                                placeholder="0x address, private key, or seed phrase..."
+                                autocomplete="off"
                                 bind:value={newAddress}
                             />
                         </div>
@@ -1059,12 +1092,42 @@
                             onclick={handleAddEthAccount}
                             disabled={addingAccount ||
                                 !newAddress.trim() ||
-                                selectedChainIds.size === 0}
+                                selectedChainIds.size === 0 ||
+                                (evmDetection.isPrivate && !evmPrivateKeyAck)}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
                         </Button>
                     </div>
+
+                    {#if evmDetection.type !== "unknown" && newAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if evmDetection.isPrivate}
+                                <Badge variant="outline" class="border-amber-500 text-amber-600">{evmDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-600">{evmDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+                    {#if evmDetection.isPrivate}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">Private Key Detected</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">
+                                dledger will derive the EVM address from it and discard the private material immediately.
+                                Your private key will NOT be stored.
+                            </p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={evmPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">I understand — derive address and continue</span>
+                            </label>
+                        </div>
+                        {#if evmDetection.type === "seed"}
+                            <div class="flex-1 space-y-1">
+                                <label for="evm-seed-pass" class="text-xs font-medium">Passphrase (optional)</label>
+                                <Input id="evm-seed-pass" type="password" placeholder="Usually empty" autocomplete="off" bind:value={evmSeedPassphrase} />
+                            </div>
+                        {/if}
+                    {/if}
 
                     <!-- Chain selector -->
                     <div class="space-y-2">
