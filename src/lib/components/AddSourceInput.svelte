@@ -103,16 +103,6 @@
             </Command.Item>
           </Command.Group>
         {/if}
-        <Command.Group heading="Exchanges">
-          {#each EXCHANGES as exchange}
-            <Command.Item
-              value={exchange.name}
-              onSelect={() => selectCex(exchange.id)}
-            >
-              {exchange.name}
-            </Command.Item>
-          {/each}
-        </Command.Group>
         <Command.Group heading="Blockchain">
           <Command.Item
             value="EVM Address"
@@ -130,6 +120,16 @@
               Bitcoin Address / HD Wallet
             </Command.Item>
           {/if}
+        </Command.Group>
+        <Command.Group heading="Exchanges">
+          {#each EXCHANGES as exchange}
+            <Command.Item
+              value={exchange.name}
+              onSelect={() => selectCex(exchange.id)}
+            >
+              {exchange.name}
+            </Command.Item>
+          {/each}
         </Command.Group>
       </Command.List>
     </Command.Root>
