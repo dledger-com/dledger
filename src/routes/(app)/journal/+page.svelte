@@ -157,8 +157,19 @@
     // Reload when journal data changes elsewhere (imports, cross-tab)
     const unsubJournal = onInvalidate("journal", () => {
         store.loadAll();
-        // Refresh tag/link options (new tags/links may have been added via import)
+        // Refresh account map + tag/link options (new accounts/tags/links may have been added via import)
         const b = getBackend();
+        b.listAccounts().then((accounts) => {
+            accountOptions = accounts
+                .filter((a: Account) => !a.is_archived)
+                .map((a: Account) => ({ value: a.id, label: a.full_name }))
+                .sort((a: { label: string }, b: { label: string }) =>
+                    a.label.localeCompare(b.label),
+                );
+            const map = new Map<string, string>();
+            for (const a of accounts) map.set(a.id, a.full_name);
+            accountIdToName = map;
+        });
         tagOptionsLoading = true;
         linkOptionsLoading = true;
         b.getAllTagValues().then((tags) => {
