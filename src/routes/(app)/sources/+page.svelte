@@ -1075,7 +1075,7 @@
                             <label for="new-eth-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-eth-address"
-                                placeholder="0x address, private key, or seed phrase..."
+                                placeholder="0x..."
                                 autocomplete="off"
                                 bind:value={newAddress}
                             />
