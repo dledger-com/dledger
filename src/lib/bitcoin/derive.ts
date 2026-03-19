@@ -144,13 +144,14 @@ export async function detectBtcInputType(
   if (BTC_SEED_RE.test(input)) {
     const words = input.trim().split(/\s+/);
     const wordCount = words.length;
+    const validCounts = [12, 15, 18, 21, 24];
     return {
       input_type: "seed",
       is_private: true,
       network: "unknown",
       suggested_bip: 84,
       description: `BIP39 Seed Phrase (${wordCount} words)`,
-      valid: false,
+      valid: validCounts.includes(wordCount),
       word_count: wordCount,
       invalid_words: null,
     };
