@@ -138,6 +138,18 @@
         return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
     });
 
+    // Merged blockchain rows (BTC + EVM)
+    type BlockchainRow =
+        | { kind: "btc"; data: import("$lib/bitcoin/types.js").BitcoinAccount }
+        | { kind: "evm"; data: GroupedAddress };
+
+    const blockchainRows = $derived.by((): BlockchainRow[] => {
+        const rows: BlockchainRow[] = [];
+        for (const account of btcAccounts) rows.push({ kind: "btc", data: account });
+        for (const group of groupedAddresses) rows.push({ kind: "evm", data: group });
+        return rows;
+    });
+
     // -- Handler change suggestion state --
     let reprocessSuggested = $state(false);
 
@@ -171,6 +183,21 @@
         exchange: (a) => a.exchange,
         label: (a) => a.label,
         lastSync: (a) => a.last_sync || "",
+    };
+
+    // Sort state for Blockchain Accounts table
+    type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
+    const sortBlockchain = createSortState<BlockchainSortKey>();
+    const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
+        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.data.address,
+        label: (r) => r.data.label,
+        type: (r) => r.kind === "btc"
+            ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
+            : "EVM",
+        networks: (r) => r.kind === "btc"
+            ? "Bitcoin"
+            : r.data.chainIds.map((id) => getChainName(id)).join(", "),
+        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : "",
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -1578,75 +1605,256 @@
                 </div>
             {/if}
 
-            <!-- Bitcoin Wallets sub-section -->
-            {#if btcAccounts.length > 0}
+            <!-- Blockchain Accounts sub-section (merged BTC + EVM) -->
+            {#if blockchainRows.length > 0}
                 <div class="space-y-2">
                     <div class="flex items-center justify-between">
-                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Bitcoin Wallets</h4>
-                        <span class="text-xs text-muted-foreground">No API key needed</span>
+                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Blockchain Accounts</h4>
+                        <span class="text-xs text-muted-foreground">
+                            API keys: <a href="/settings" class="underline hover:text-foreground">Settings</a>
+                            {#if groupedAddresses.length > 0 && !settings.etherscanApiKey}
+                                <span class="text-amber-600 dark:text-amber-400 ml-1">(not set)</span>
+                            {/if}
+                        </span>
                     </div>
                     <Table.Root>
                         <Table.Header>
                             <Table.Row>
-                                <Table.Head>Address / Key</Table.Head>
-                                <Table.Head>Label</Table.Head>
-                                <Table.Head>Type</Table.Head>
-                                <Table.Head>Last Sync</Table.Head>
+                                <SortableHeader active={sortBlockchain.key === "address"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("address")}>Address / Key</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "label"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("label")}>Label</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "type"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("type")}>Type</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "networks"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("networks")}>Networks</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "lastSync"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("lastSync")}>Last Sync</SortableHeader>
                                 <Table.Head class="text-right">Actions</Table.Head>
                             </Table.Row>
                         </Table.Header>
                         <Table.Body>
-                            {#each btcAccounts as account}
-                                {@const isSyncing = taskQueue.isActive(`btc-sync:${account.id}`)}
-                                <Table.Row>
-                                    <Table.Cell class="font-mono text-sm">
-                                        <div class="flex items-center gap-1">
-                                            <Tooltip.Root>
-                                                <Tooltip.Trigger class="truncate">
-                                                    {account.address_or_xpub.length > 20
-                                                        ? `${account.address_or_xpub.slice(0, 12)}...${account.address_or_xpub.slice(-8)}`
-                                                        : account.address_or_xpub}
-                                                </Tooltip.Trigger>
-                                                <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{account.address_or_xpub}</p></Tooltip.Content>
-                                            </Tooltip.Root>
-                                            <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
-                                                <Copy class="h-3 w-3" />
-                                            </button>
-                                        </div>
-                                    </Table.Cell>
-                                    <Table.Cell>{account.label}</Table.Cell>
-                                    <Table.Cell>
-                                        <Badge variant="secondary">
-                                            {account.account_type === "address" ? "Address" : "HD Wallet"}
-                                        </Badge>
-                                    </Table.Cell>
-                                    <Table.Cell class="text-sm text-muted-foreground">
-                                        {account.last_sync
-                                            ? new Date(account.last_sync).toLocaleDateString()
-                                            : "Never"}
-                                    </Table.Cell>
-                                    <Table.Cell class="text-right">
-                                        <div class="flex justify-end gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onclick={() => syncBtcAccount(account)}
-                                                disabled={btcBusy}
-                                            >
-                                                <RefreshCw class="mr-1 h-3 w-3" />
-                                                {isSyncing ? "Syncing..." : "Sync"}
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onclick={() => handleRemoveBtcAccount(account.id)}
-                                                disabled={btcBusy}
-                                            >
-                                                <Trash2 class="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                    </Table.Cell>
-                                </Table.Row>
+                            {@const sortedBlockchainRows = sortBlockchain.key && sortBlockchain.direction ? sortItems(blockchainRows, blockchainAccessors[sortBlockchain.key], sortBlockchain.direction) : blockchainRows}
+                            {#each sortedBlockchainRows as row}
+                                {#if row.kind === "btc"}
+                                    {@const account = row.data}
+                                    {@const isSyncing = taskQueue.isActive(`btc-sync:${account.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {account.address_or_xpub.length > 20
+                                                            ? `${account.address_or_xpub.slice(0, 12)}...${account.address_or_xpub.slice(-8)}`
+                                                            : account.address_or_xpub}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{account.address_or_xpub}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>{account.label}</Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">
+                                                {account.account_type === "address" ? "BTC Address" : "HD Wallet"}
+                                            </Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Bitcoin</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {account.last_sync
+                                                ? new Date(account.last_sync).toLocaleDateString()
+                                                : "Never"}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncBtcAccount(account)}
+                                                    disabled={btcBusy}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isSyncing ? "Syncing..." : "Sync"}
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveBtcAccount(account.id)}
+                                                    disabled={btcBusy}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else}
+                                    {@const group = row.data}
+                                    {#if editingAddress === group.address}
+                                        <!-- EVM Edit mode -->
+                                        <Table.Row>
+                                            <Table.Cell colspan={6}>
+                                                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                                                <div
+                                                    class="space-y-3 py-2"
+                                                    role="form"
+                                                    onkeydown={(e: KeyboardEvent) => {
+                                                        if (e.key === "Escape") cancelEdit();
+                                                    }}
+                                                >
+                                                    <div class="flex items-center gap-3">
+                                                        <Tooltip.Root>
+                                                            <Tooltip.Trigger class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</Tooltip.Trigger>
+                                                            <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
+                                                        </Tooltip.Root>
+                                                        <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
+                                                            <Copy class="h-3 w-3" />
+                                                        </button>
+                                                        <div class="flex-1">
+                                                            <Input placeholder="Label" bind:value={editLabel} />
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Chain multi-select -->
+                                                    <div class="space-y-2">
+                                                        <span class="text-xs font-medium">Chains</span>
+                                                        <Popover.Root bind:open={editChainPopoverOpen}>
+                                                            <Popover.Trigger>
+                                                                <Button variant="outline" class="w-[300px] justify-between">
+                                                                    {#if editChainIds.size === 0}
+                                                                        Select chains...
+                                                                    {:else}
+                                                                        {editChainIds.size} chain{editChainIds.size === 1 ? "" : "s"} selected
+                                                                    {/if}
+                                                                    <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                </Button>
+                                                            </Popover.Trigger>
+                                                            <Popover.Content class="w-[300px] p-0">
+                                                                <Command.Root>
+                                                                    <Command.Input placeholder="Search chains..." />
+                                                                    <Command.List>
+                                                                        <Command.Empty>No chain found.</Command.Empty>
+                                                                        <Command.Group>
+                                                                            {#each SUPPORTED_CHAINS as chain}
+                                                                                <Command.Item
+                                                                                    value={chain.name}
+                                                                                    onSelect={() => toggleEditChain(chain.chain_id)}
+                                                                                >
+                                                                                    <Check
+                                                                                        class={cn(
+                                                                                            "mr-2 h-4 w-4",
+                                                                                            editChainIds.has(chain.chain_id)
+                                                                                                ? "opacity-100"
+                                                                                                : "opacity-0",
+                                                                                        )}
+                                                                                    />
+                                                                                    {chain.name} ({chain.native_currency})
+                                                                                </Command.Item>
+                                                                            {/each}
+                                                                        </Command.Group>
+                                                                    </Command.List>
+                                                                </Command.Root>
+                                                            </Popover.Content>
+                                                        </Popover.Root>
+
+                                                        {#if editChainIds.size > 0}
+                                                            <div class="flex flex-wrap gap-1">
+                                                                {#each SUPPORTED_CHAINS.filter((c) => editChainIds.has(c.chain_id)) as chain}
+                                                                    <Badge variant="secondary" class="gap-1">
+                                                                        {chain.name}
+                                                                        <button
+                                                                            onclick={() => toggleEditChain(chain.chain_id)}
+                                                                            class="ml-0.5 rounded-full outline-none hover:bg-muted"
+                                                                        >
+                                                                            <X class="h-3 w-3" />
+                                                                        </button>
+                                                                    </Badge>
+                                                                {/each}
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+
+                                                    {#if editError}
+                                                        <p class="text-sm text-destructive">{editError}</p>
+                                                    {/if}
+
+                                                    <div class="flex gap-2">
+                                                        <Button size="sm" onclick={saveEdit} disabled={savingEdit}>
+                                                            {savingEdit ? "Saving..." : "Save"}
+                                                        </Button>
+                                                        <Button variant="outline" size="sm" onclick={cancelEdit} disabled={savingEdit}>
+                                                            Cancel
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </Table.Cell>
+                                        </Table.Row>
+                                    {:else}
+                                        <!-- EVM Display mode -->
+                                        {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
+                                        <Table.Row>
+                                            <Table.Cell class="font-mono text-sm">
+                                                <div class="flex items-center gap-1">
+                                                    <Tooltip.Root>
+                                                        <Tooltip.Trigger class="truncate">{formatAddress(group.address)}</Tooltip.Trigger>
+                                                        <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
+                                                    </Tooltip.Root>
+                                                    <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
+                                                        <Copy class="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                            </Table.Cell>
+                                            <Table.Cell>{group.label}</Table.Cell>
+                                            <Table.Cell>
+                                                <Badge variant="secondary">EVM</Badge>
+                                            </Table.Cell>
+                                            <Table.Cell>
+                                                <div class="flex flex-wrap gap-1">
+                                                    {#each group.chainIds as chainId}
+                                                        <Badge variant="secondary">{getChainName(chainId)}</Badge>
+                                                    {/each}
+                                                </div>
+                                            </Table.Cell>
+                                            <Table.Cell class="text-sm text-muted-foreground">--</Table.Cell>
+                                            <Table.Cell class="text-right">
+                                                <div class="flex justify-end gap-1">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onclick={() => handleSyncGroup(group)}
+                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                    >
+                                                        <RefreshCw class="mr-1 h-3 w-3" />
+                                                        {isSyncingGroup ? "Syncing..." : "Sync"}
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onclick={() => handleReprocessGroup(group)}
+                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                    >
+                                                        <RotateCw class="mr-1 h-3 w-3" />
+                                                        Reprocess
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onclick={() => startEditAddress(group)}
+                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                    >
+                                                        <Pencil class="h-3 w-3" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onclick={() => handleRemoveGroup(group)}
+                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                    >
+                                                        <Trash2 class="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            </Table.Cell>
+                                        </Table.Row>
+                                    {/if}
+                                {/if}
                             {/each}
                         </Table.Body>
                     </Table.Root>
@@ -1746,199 +1954,8 @@
                 </div>
             {/if}
 
-            <!-- Blockchain Addresses sub-section -->
-            {#if groupedAddresses.length > 0}
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Blockchain Addresses</h4>
-                        <span class="text-xs text-muted-foreground">
-                            API keys: <a href="/settings" class="underline hover:text-foreground">Settings</a>
-                            {#if !settings.etherscanApiKey}
-                                <span class="text-amber-600 dark:text-amber-400 ml-1">(not set)</span>
-                            {/if}
-                        </span>
-                    </div>
-                    <Table.Root>
-                        <Table.Header>
-                            <Table.Row>
-                                <Table.Head>Address</Table.Head>
-                                <Table.Head>Label</Table.Head>
-                                <Table.Head>Chains</Table.Head>
-                                <Table.Head class="text-right">Actions</Table.Head>
-                            </Table.Row>
-                        </Table.Header>
-                        <Table.Body>
-                            {#each groupedAddresses as group}
-                                {#if editingAddress === group.address}
-                                    <!-- Edit mode -->
-                                    <Table.Row>
-                                        <Table.Cell colspan={4}>
-                                            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                                            <div
-                                                class="space-y-3 py-2"
-                                                role="form"
-                                                onkeydown={(e: KeyboardEvent) => {
-                                                    if (e.key === "Escape") cancelEdit();
-                                                }}
-                                            >
-                                                <div class="flex items-center gap-3">
-                                                    <Tooltip.Root>
-                                                        <Tooltip.Trigger class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</Tooltip.Trigger>
-                                                        <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
-                                                    </Tooltip.Root>
-                                                    <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
-                                                        <Copy class="h-3 w-3" />
-                                                    </button>
-                                                    <div class="flex-1">
-                                                        <Input placeholder="Label" bind:value={editLabel} />
-                                                    </div>
-                                                </div>
-
-                                                <!-- Chain multi-select -->
-                                                <div class="space-y-2">
-                                                    <span class="text-xs font-medium">Chains</span>
-                                                    <Popover.Root bind:open={editChainPopoverOpen}>
-                                                        <Popover.Trigger>
-                                                            <Button variant="outline" class="w-[300px] justify-between">
-                                                                {#if editChainIds.size === 0}
-                                                                    Select chains...
-                                                                {:else}
-                                                                    {editChainIds.size} chain{editChainIds.size === 1 ? "" : "s"} selected
-                                                                {/if}
-                                                                <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                            </Button>
-                                                        </Popover.Trigger>
-                                                        <Popover.Content class="w-[300px] p-0">
-                                                            <Command.Root>
-                                                                <Command.Input placeholder="Search chains..." />
-                                                                <Command.List>
-                                                                    <Command.Empty>No chain found.</Command.Empty>
-                                                                    <Command.Group>
-                                                                        {#each SUPPORTED_CHAINS as chain}
-                                                                            <Command.Item
-                                                                                value={chain.name}
-                                                                                onSelect={() => toggleEditChain(chain.chain_id)}
-                                                                            >
-                                                                                <Check
-                                                                                    class={cn(
-                                                                                        "mr-2 h-4 w-4",
-                                                                                        editChainIds.has(chain.chain_id)
-                                                                                            ? "opacity-100"
-                                                                                            : "opacity-0",
-                                                                                    )}
-                                                                                />
-                                                                                {chain.name} ({chain.native_currency})
-                                                                            </Command.Item>
-                                                                        {/each}
-                                                                    </Command.Group>
-                                                                </Command.List>
-                                                            </Command.Root>
-                                                        </Popover.Content>
-                                                    </Popover.Root>
-
-                                                    {#if editChainIds.size > 0}
-                                                        <div class="flex flex-wrap gap-1">
-                                                            {#each SUPPORTED_CHAINS.filter((c) => editChainIds.has(c.chain_id)) as chain}
-                                                                <Badge variant="secondary" class="gap-1">
-                                                                    {chain.name}
-                                                                    <button
-                                                                        onclick={() => toggleEditChain(chain.chain_id)}
-                                                                        class="ml-0.5 rounded-full outline-none hover:bg-muted"
-                                                                    >
-                                                                        <X class="h-3 w-3" />
-                                                                    </button>
-                                                                </Badge>
-                                                            {/each}
-                                                        </div>
-                                                    {/if}
-                                                </div>
-
-                                                {#if editError}
-                                                    <p class="text-sm text-destructive">{editError}</p>
-                                                {/if}
-
-                                                <div class="flex gap-2">
-                                                    <Button size="sm" onclick={saveEdit} disabled={savingEdit}>
-                                                        {savingEdit ? "Saving..." : "Save"}
-                                                    </Button>
-                                                    <Button variant="outline" size="sm" onclick={cancelEdit} disabled={savingEdit}>
-                                                        Cancel
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </Table.Cell>
-                                    </Table.Row>
-                                {:else}
-                                    <!-- Display mode -->
-                                    {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
-                                    <Table.Row>
-                                        <Table.Cell class="font-mono text-sm">
-                                            <div class="flex items-center gap-1">
-                                                <Tooltip.Root>
-                                                    <Tooltip.Trigger class="truncate">{formatAddress(group.address)}</Tooltip.Trigger>
-                                                    <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
-                                                </Tooltip.Root>
-                                                <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
-                                                    <Copy class="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        </Table.Cell>
-                                        <Table.Cell>{group.label}</Table.Cell>
-                                        <Table.Cell>
-                                            <div class="flex flex-wrap gap-1">
-                                                {#each group.chainIds as chainId}
-                                                    <Badge variant="secondary">{getChainName(chainId)}</Badge>
-                                                {/each}
-                                            </div>
-                                        </Table.Cell>
-                                        <Table.Cell class="text-right">
-                                            <div class="flex justify-end gap-1">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onclick={() => handleSyncGroup(group)}
-                                                    disabled={ethBusy || reprocessing || applyingReprocess}
-                                                >
-                                                    <RefreshCw class="mr-1 h-3 w-3" />
-                                                    {isSyncingGroup ? "Syncing..." : "Sync"}
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onclick={() => handleReprocessGroup(group)}
-                                                    disabled={ethBusy || reprocessing || applyingReprocess}
-                                                >
-                                                    <RotateCw class="mr-1 h-3 w-3" />
-                                                    Reprocess
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onclick={() => startEditAddress(group)}
-                                                    disabled={ethBusy || reprocessing || applyingReprocess}
-                                                >
-                                                    <Pencil class="h-3 w-3" />
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onclick={() => handleRemoveGroup(group)}
-                                                    disabled={ethBusy || reprocessing || applyingReprocess}
-                                                >
-                                                    <Trash2 class="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        </Table.Cell>
-                                    </Table.Row>
-                                {/if}
-                            {/each}
-                        </Table.Body>
-                    </Table.Root>
-                </div>
-            {/if}
-
             <!-- Empty state -->
-            {#if cexAccounts.length === 0 && groupedAddresses.length === 0 && btcAccounts.length === 0 && addSourceMode === "idle"}
+            {#if cexAccounts.length === 0 && blockchainRows.length === 0 && addSourceMode === "idle"}
                 <p class="text-sm text-muted-foreground">No online sources configured yet.</p>
             {/if}
         </Card.Content>
