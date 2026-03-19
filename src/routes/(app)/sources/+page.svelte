@@ -476,6 +476,11 @@
                     derivationBip = conv.suggested_bip;
                 }
                 network = conv.network === "testnet" ? "testnet" : "mainnet";
+
+                if (existingBtcXpubs.has(input)) {
+                    toast.info("This address is already added");
+                    return;
+                }
             } else if (det.input_type === "address") {
                 accountType = "address";
             } else {
@@ -788,6 +793,11 @@
                 if (detection.isPrivate) {
                     addr = deriveEvmAddress(addr);
                     newAddress = "";
+                }
+
+                if (existingEvmAddresses.has(addr.toLowerCase())) {
+                    toast.info("This address is already added");
+                    return;
                 }
 
                 if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
