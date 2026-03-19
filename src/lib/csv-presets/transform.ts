@@ -113,6 +113,7 @@ export function transformGeneric(
     records.push({
       date,
       description,
+      descriptionData: { type: "generic-import", source: "csv", text: description },
       lines: [
         { account: mainAccount, currency, amount: amount.toString() },
         { account: counterAccount, currency, amount: (-amount).toString() },
@@ -366,6 +367,7 @@ async function postRecord(
     id: entryId,
     date: rec.date,
     description: rec.description,
+    description_data: rec.descriptionData ? JSON.stringify(rec.descriptionData) : undefined,
     status: "confirmed",
     source,
     voided_by: null,

@@ -74,6 +74,7 @@ export async function generateDueEntries(
         id: entryId,
         date: nextDate,
         description: template.description,
+        description_data: JSON.stringify({ type: "system", action: "recurring", ref: template.id }),
         status: "confirmed",
         source: `recurring:${template.id}`,
         voided_by: null,

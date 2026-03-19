@@ -1,8 +1,10 @@
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
 
 export interface CsvRecord {
   date: string;
   description: string;
+  descriptionData?: DescriptionData;
   lines: { account: string; currency: string; amount: string }[];
   groupKey?: string;
   sourceKey?: string;

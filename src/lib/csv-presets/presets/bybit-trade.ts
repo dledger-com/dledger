@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { parsePair, makeTradeDescription } from "./shared.js";
+import { parsePair, makeTradeDescription, makeTradeDescriptionData } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS_V1 = ["Date", "Pair", "Side", "Avg. Price", "Filled", "Total", "Fee"];
@@ -103,6 +103,7 @@ export const bybitTradePreset: CsvPreset = {
       records.push({
         date,
         description: makeTradeDescription("Bybit", pair.base, pair.quote, side as "BUY" | "SELL"),
+        descriptionData: makeTradeDescriptionData("Bybit", pair.base, pair.quote, side as "BUY" | "SELL"),
         lines,
       });
     }

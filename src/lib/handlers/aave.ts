@@ -535,9 +535,13 @@ export const aaveHandler: TransactionHandler = {
       }
     }
 
+    const descriptionAction = protocol.actions.length > 0
+      ? protocol.actions.map((a) => a.action.toLowerCase().replace(/_/g, "-")).join("+")
+      : actionSet === "CLAIM_REWARDS" ? "claim-rewards" : "interact";
     const handlerEntry = buildHandlerEntry({
       date,
       description,
+      descriptionData: { type: "defi", protocol: "Aave", action: descriptionAction, chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

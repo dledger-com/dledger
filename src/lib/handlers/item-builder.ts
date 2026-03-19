@@ -9,7 +9,7 @@ import type {
   Erc721Tx,
   Erc1155Tx,
 } from "./types.js";
-import type { ChainInfo } from "../types/index.js";
+import type { ChainInfo, DescriptionData } from "../types/index.js";
 import type { LineItem } from "../types/journal.js";
 import {
   weiToNative,
@@ -488,6 +488,7 @@ export function analyzeErc20Flows(erc20s: Erc20Tx[], addr: string): TokenFlow[] 
 export function buildHandlerEntry(opts: {
   date: string;
   description: string;
+  descriptionData?: DescriptionData;
   chainId: number;
   hash: string;
   items: Omit<LineItem, "id" | "journal_entry_id">[];
@@ -499,6 +500,7 @@ export function buildHandlerEntry(opts: {
     entry: {
       date: opts.date,
       description: opts.description,
+      ...(opts.descriptionData ? { description_data: JSON.stringify(opts.descriptionData) } : {}),
       status: "confirmed",
       source: `${prefix}:${opts.chainId}:${opts.hash}`,
       voided_by: null,

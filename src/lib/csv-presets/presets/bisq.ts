@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parseNamedMonthDate, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, parseNamedMonthDate, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const TRADE_HEADERS = ["Trade ID", "Date/Time", "Market", "Price", "Amount in BTC", "Offer type", "Status"];
@@ -95,7 +95,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     const feeBtc = feeBtcIdx >= 0 ? parseEurNum(row[feeBtcIdx] ?? "0") : 0;
     if (feeBtc > 0) lines.push(...makeFeeLines("Bisq", "BTC", feeBtc));
 
-    records.push({ date, description: makeTradeDescription("Bisq", base, quote, side), lines });
+    records.push({ date, description: makeTradeDescription("Bisq", base, quote, side), descriptionData: makeTradeDescriptionData("Bisq", base, quote, side), lines });
   }
 
   return records;
@@ -121,7 +121,7 @@ function transformTx(headers: string[], rows: string[][]): CsvRecord[] {
     const type = amount > 0 ? "deposit" : "withdrawal";
     const lines = makeTransferLines("Bisq", "BTC", amount);
 
-    records.push({ date, description: `Bisq ${type}: BTC`, lines });
+    records.push({ date, description: `Bisq ${type}: BTC`, descriptionData: makeTransferDescriptionData("Bisq", "BTC", type), lines });
   }
 
   return records;

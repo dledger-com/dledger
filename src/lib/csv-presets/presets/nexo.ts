@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, makeTransferLines } from "./shared.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
+import { colIdx, makeTransferLines, makeTransferDescriptionData } from "./shared.js";
 import {
   exchangeAssets,
   exchangeAssetsCurrency,
@@ -66,7 +67,7 @@ export const nexoPreset: CsvPreset = {
         if (inCurr && !isNaN(inAmt)) {
           lines.push(...makeTransferLines("Nexo", inCurr, inAmt));
         }
-        records.push({ date, description: `Nexo withdrawal: ${inCurr}`, lines });
+        records.push({ date, description: `Nexo withdrawal: ${inCurr}`, descriptionData: makeTransferDescriptionData("Nexo", inCurr, "withdrawal"), lines });
       } else if (typeUpper === "EXCHANGE" || typeUpper === "EXCHANGEDEPOSITEDON") {
         // Trade: Input → Output
         if (inCurr && outCurr && !isNaN(inAmt) && !isNaN(outAmt)) {
@@ -80,7 +81,7 @@ export const nexoPreset: CsvPreset = {
             { account: EQUITY_TRADING, currency: outCurr, amount: (-absOut).toString() },
           );
         }
-        records.push({ date, description: `Nexo exchange: ${inCurr} → ${outCurr}`, lines });
+        records.push({ date, description: `Nexo exchange: ${inCurr} → ${outCurr}`, descriptionData: { type: "cex-trade", exchange: "Nexo", spent: inCurr, received: outCurr } as DescriptionData, lines });
       } else if (typeUpper === "INTEREST" || typeUpper === "FIXED TERM INTEREST") {
         // Income: Output is what is earned
         const curr = outCurr || inCurr;
@@ -91,7 +92,7 @@ export const nexoPreset: CsvPreset = {
             { account: exchangeIncome("Nexo", "Interest"), currency: curr, amount: (-amt).toString() },
           );
         }
-        records.push({ date, description: `Nexo interest: ${curr}`, lines });
+        records.push({ date, description: `Nexo interest: ${curr}`, descriptionData: { type: "cex-reward", exchange: "Nexo", kind: "interest", currency: curr }, lines });
       } else if (typeUpper === "EXCHANGE CASHBACK") {
         const curr = outCurr || inCurr;
         const amt = !isNaN(outAmt) && outAmt > 0 ? outAmt : !isNaN(inAmt) ? Math.abs(inAmt) : 0;
@@ -101,14 +102,14 @@ export const nexoPreset: CsvPreset = {
             { account: exchangeIncome("Nexo", "Cashback"), currency: curr, amount: (-amt).toString() },
           );
         }
-        records.push({ date, description: `Nexo cashback: ${curr}`, lines });
+        records.push({ date, description: `Nexo cashback: ${curr}`, descriptionData: { type: "cex-reward", exchange: "Nexo", kind: "cashback", currency: curr }, lines });
       } else if (typeUpper === "DEPOSIT" || typeUpper === "TOP UP" || typeUpper === "TOP UP CRYPTO") {
         const curr = outCurr || inCurr;
         const amt = !isNaN(outAmt) && outAmt > 0 ? outAmt : !isNaN(inAmt) ? Math.abs(inAmt) : 0;
         if (curr && amt > 0) {
           lines.push(...makeTransferLines("Nexo", curr, amt));
         }
-        records.push({ date, description: `Nexo deposit: ${curr}`, lines });
+        records.push({ date, description: `Nexo deposit: ${curr}`, descriptionData: makeTransferDescriptionData("Nexo", curr, "deposit"), lines });
       } else {
         // Fallback: generic movement
         const curr = outCurr || inCurr;
@@ -119,7 +120,7 @@ export const nexoPreset: CsvPreset = {
             { account: EQUITY_EXTERNAL, currency: curr, amount: (-amt).toString() },
           );
         }
-        records.push({ date, description: `Nexo ${type.toLowerCase()}: ${curr}`, lines });
+        records.push({ date, description: `Nexo ${type.toLowerCase()}: ${curr}`, descriptionData: { type: "cex-operation", exchange: "Nexo", operation: type.toLowerCase(), currency: curr }, lines });
       }
     }
 

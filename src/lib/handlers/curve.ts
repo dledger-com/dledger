@@ -224,9 +224,19 @@ export const curveHandler: TransactionHandler = {
       }
     }
 
+    const CURVE_ACTION_LABELS: Record<CurveAction, string> = {
+      SWAP: "Swap",
+      ADD_LIQUIDITY: "Add Liquidity",
+      REMOVE_LIQUIDITY: "Remove Liquidity",
+      CLAIM_CRV: "Claim CRV",
+      STAKE_GAUGE: "Stake Gauge",
+      UNSTAKE_GAUGE: "Unstake Gauge",
+      UNKNOWN: "Interact",
+    };
     const handlerEntry = buildHandlerEntry({
       date,
       description,
+      descriptionData: { type: "defi", protocol: "Curve", action: CURVE_ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

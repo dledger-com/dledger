@@ -106,9 +106,11 @@ export const bridgeHandler: TransactionHandler = {
       "handler:protocol": protocol,
     };
 
+    const bridgeAction = action === "BRIDGE_DEPOSIT" ? "bridge" : "receive";
     const handlerEntry = buildHandlerEntry({
       date,
       description,
+      descriptionData: { type: "defi", protocol: protocolName, action: bridgeAction, chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

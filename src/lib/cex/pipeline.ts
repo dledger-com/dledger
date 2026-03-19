@@ -188,6 +188,7 @@ export async function syncCexAccount(
     source: string,
     items: Array<{ account: string; currency: string; amount: Decimal }>,
     metadata?: Record<string, string>,
+    descriptionData?: string,
   ): Promise<void> {
     // Merge items by (account, currency) and filter zeros
     const merged = new Map<string, { account: string; currency: string; amount: Decimal }>();
@@ -219,6 +220,7 @@ export async function syncCexAccount(
       id: entryId,
       date,
       description,
+      description_data: descriptionData,
       status: "confirmed",
       source,
       voided_by: null,
@@ -331,11 +333,14 @@ export async function syncCexAccount(
     for (const record of group) {
       if (record.metadata) Object.assign(groupMeta, record.metadata);
     }
+    const tradeDescData = spentAsset && receivedAsset
+      ? JSON.stringify({ type: "cex-trade", exchange: exchangeName, spent: spentAsset, received: receivedAsset })
+      : undefined;
     await postEntry(date, description, source, items, {
       exchange: adapter.exchangeId,
       refid,
       ...groupMeta,
-    });
+    }, tradeDescData);
 
     // Derive and record exchange rate from trade items
     const rateItems: TradeRateItem[] = items.map((i) => ({
@@ -431,7 +436,7 @@ export async function syncCexAccount(
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
           ...(record.metadata ?? {}),
-        });
+        }, JSON.stringify({ type: "cex-transfer", exchange: exchangeName, direction: "deposit", currency: record.asset }));
         break;
       }
 
@@ -449,7 +454,7 @@ export async function syncCexAccount(
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
           ...(record.metadata ?? {}),
-        });
+        }, JSON.stringify({ type: "cex-transfer", exchange: exchangeName, direction: "withdrawal", currency: record.asset }));
         break;
       }
 
@@ -463,7 +468,7 @@ export async function syncCexAccount(
             exchange: adapter.exchangeId,
             refid: record.refid,
             ...(record.metadata ?? {}),
-          });
+          }, JSON.stringify({ type: "cex-reward", exchange: exchangeName, kind: "staking", currency: record.asset }));
         } else {
           // Staking deduction (e.g., unstaking fee)
           result.warnings.push(`Staking record ${record.refid} has negative amount — skipping`);
@@ -695,6 +700,7 @@ async function consolidateWithEtherscan(
         id: entryId,
         date: handlerEntry.entry.date,
         description: cexDescription,
+        description_data: handlerEntry.entry.description_data,
         status: handlerEntry.entry.status,
         source: handlerEntry.entry.source,
         voided_by: null,
@@ -818,6 +824,7 @@ async function consolidateWithCex(
       id: entryId,
       date: existingEntry.date,
       description: existingEntry.description,
+      description_data: existingEntry.description_data,
       status: "confirmed",
       source: existingEntry.source,
       voided_by: null,

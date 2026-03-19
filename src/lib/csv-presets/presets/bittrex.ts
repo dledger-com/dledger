@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines, decodeUtf16Spaced } from "./shared.js";
+import { colIdx, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines, decodeUtf16Spaced } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const NEW_ORDER_HEADERS = ["Date", "Market", "Side", "Type", "Price", "Quantity", "Total"];
@@ -92,7 +92,7 @@ function transformNewOrders(headers: string[], rows: string[][]): CsvRecord[] {
     if (isNaN(qty) || isNaN(total) || qty === 0) continue;
 
     const lines = makeTradeLines("Bittrex", pair.base, pair.quote, side, qty, total);
-    records.push({ date, description: makeTradeDescription("Bittrex", pair.base, pair.quote, side), lines });
+    records.push({ date, description: makeTradeDescription("Bittrex", pair.base, pair.quote, side), descriptionData: makeTradeDescriptionData("Bittrex", pair.base, pair.quote, side), lines });
   }
 
   return records;
@@ -122,7 +122,7 @@ function transformTransactions(headers: string[], rows: string[][]): CsvRecord[]
     const isDeposit = type === "DEPOSIT";
     const lines = makeTransferLines("Bittrex", currency, isDeposit ? amount : -Math.abs(amount));
 
-    records.push({ date, description: `Bittrex ${type.toLowerCase()}: ${currency}`, lines });
+    records.push({ date, description: `Bittrex ${type.toLowerCase()}: ${currency}`, descriptionData: makeTransferDescriptionData("Bittrex", currency, isDeposit ? "deposit" : "withdrawal"), lines });
   }
 
   return records;
@@ -178,7 +178,7 @@ function transformOldOrders(headers: string[], rows: string[][]): CsvRecord[] {
       lines.push(...makeFeeLines("Bittrex", pair.quote, commission));
     }
 
-    records.push({ date, description: makeTradeDescription("Bittrex", pair.base, pair.quote, side), lines });
+    records.push({ date, description: makeTradeDescription("Bittrex", pair.base, pair.quote, side), descriptionData: makeTradeDescriptionData("Bittrex", pair.base, pair.quote, side), lines });
   }
 
   return records;

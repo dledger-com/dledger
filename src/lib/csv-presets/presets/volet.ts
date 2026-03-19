@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const MONTH_MAP: Record<string, string> = {
@@ -91,19 +91,23 @@ export const voletPreset: CsvPreset = {
 
       const lines: CsvRecord["lines"] = [];
       let desc = "";
+      let descData: import("$lib/types/description-data.js").DescriptionData | undefined;
 
       if (direction === "INNER_TRANSACTION") {
         if (isNaN(credit) || isNaN(debit) || !creditCurr || !debitCurr) continue;
         lines.push(...makeTradeLines("Volet", creditCurr, debitCurr, "BUY", credit, debit));
         desc = makeTradeDescription("Volet", creditCurr, debitCurr, "BUY");
+        descData = makeTradeDescriptionData("Volet", creditCurr, debitCurr, "BUY");
       } else if (direction === "DEPOSIT") {
         if (isNaN(credit) || !creditCurr) continue;
         lines.push(...makeTransferLines("Volet", creditCurr, credit));
         desc = `Volet deposit: ${creditCurr}`;
+        descData = makeTransferDescriptionData("Volet", creditCurr, "deposit");
       } else if (direction === "WITHDRAWAL") {
         if (isNaN(debit) || !debitCurr) continue;
         lines.push(...makeTransferLines("Volet", debitCurr, -debit));
         desc = `Volet withdrawal: ${debitCurr}`;
+        descData = makeTransferDescriptionData("Volet", debitCurr, "withdrawal");
       } else {
         continue;
       }
@@ -112,7 +116,7 @@ export const voletPreset: CsvPreset = {
         lines.push(...makeFeeLines("Volet", commCurr, comm));
       }
 
-      records.push({ date, description: desc, lines, sourceKey: id });
+      records.push({ date, description: desc, descriptionData: descData, lines, sourceKey: id });
     }
 
     return records;

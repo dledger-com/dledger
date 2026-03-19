@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parsePair, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, parsePair, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const TRADE_HEADERS = ["Date", "Market", "Category", "Type", "Price", "Amount", "Total", "Fee", "Order Number"];
@@ -99,7 +99,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
       }
     }
 
-    records.push({ date, description: makeTradeDescription("Poloniex", pair.base, pair.quote, side), lines });
+    records.push({ date, description: makeTradeDescription("Poloniex", pair.base, pair.quote, side), descriptionData: makeTradeDescriptionData("Poloniex", pair.base, pair.quote, side), lines });
   }
 
   return records;
@@ -131,7 +131,7 @@ function transformDeposits(headers: string[], rows: string[][]): CsvRecord[] {
 
     const lines = makeTransferLines("Poloniex", currency, amount);
     const sourceKey = idIdx >= 0 ? (row[idIdx] ?? "").trim() : undefined;
-    records.push({ date, description: `Poloniex deposit: ${currency}`, lines, sourceKey });
+    records.push({ date, description: `Poloniex deposit: ${currency}`, descriptionData: makeTransferDescriptionData("Poloniex", currency, "deposit"), lines, sourceKey });
   }
 
   return records;
@@ -168,7 +168,7 @@ function transformWithdrawals(headers: string[], rows: string[][]): CsvRecord[] 
     if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Poloniex", currency, fee));
 
     const sourceKey = idIdx >= 0 ? (row[idIdx] ?? "").trim() : undefined;
-    records.push({ date, description: `Poloniex withdrawal: ${currency}`, lines, sourceKey });
+    records.push({ date, description: `Poloniex withdrawal: ${currency}`, descriptionData: makeTransferDescriptionData("Poloniex", currency, "withdrawal"), lines, sourceKey });
   }
 
   return records;

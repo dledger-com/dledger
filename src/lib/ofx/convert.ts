@@ -63,6 +63,7 @@ export function convertOfxToRecords(
     records.push({
       date,
       description,
+      descriptionData: { type: "bank", bank: "OFX", text: description },
       lines: [
         { account: options.mainAccount, currency, amount: amount.toString() },
         { account: counterAccount, currency, amount: (-amount).toString() },

@@ -1023,6 +1023,7 @@ export async function importLedger(
       id: entryId,
       date,
       description,
+      description_data: JSON.stringify({ type: "generic-import", source: "ledger", text: description }),
       status,
       source: "ledger-file",
       voided_by: null,

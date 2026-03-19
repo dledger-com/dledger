@@ -49,6 +49,7 @@ export function convertPdfToRecords(
     records.push({
       date: tx.date,
       description: tx.description,
+      descriptionData: { type: "bank", bank: options.bankId ?? "unknown", text: tx.description },
       lines: [
         { account: options.mainAccount, currency, amount: amountStr },
         { account: counterAccount, currency, amount: counterAmountStr },

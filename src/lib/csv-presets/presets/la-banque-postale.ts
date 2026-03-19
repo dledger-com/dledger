@@ -206,6 +206,7 @@ export const laBanquePostalePreset: CsvPreset = {
       records.push({
         date,
         description,
+        descriptionData: { type: "bank", bank: "La Banque Postale", text: description },
         lines: [
           { account: mainAccount, currency, amount: amount.toString() },
           { account: counterAccount, currency, amount: (-amount).toString() },

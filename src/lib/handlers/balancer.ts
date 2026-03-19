@@ -251,6 +251,7 @@ export const balancerHandler: TransactionHandler = {
     const handlerEntry = buildHandlerEntry({
       date,
       description,
+      descriptionData: { type: "defi", protocol: "Balancer", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

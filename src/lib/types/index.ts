@@ -29,6 +29,8 @@ export type {
   GainLossReport,
   GainLossLine,
 } from "./report.js";
+export type { DescriptionData } from "./description-data.js";
+export { renderDescription } from "./description-data.js";
 
 /** Chain IDs excluded from Etherscan free tier — routed to Routescan instead. */
 export const ETHERSCAN_PAID_ONLY_CHAINS = new Set([56, 8453, 10, 43114]);

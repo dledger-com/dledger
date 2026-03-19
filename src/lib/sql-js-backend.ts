@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS journal_entry (
     id TEXT PRIMARY KEY NOT NULL,
     date TEXT NOT NULL,
     description TEXT NOT NULL,
+    description_data TEXT,
     status TEXT NOT NULL DEFAULT 'confirmed' CHECK(status IN ('confirmed', 'pending', 'voided')),
     source TEXT NOT NULL DEFAULT 'manual',
     voided_by TEXT REFERENCES journal_entry(id),
@@ -360,6 +361,7 @@ function mapJournalEntry(row: Row): JournalEntry {
     id: row.id,
     date: row.date,
     description: row.description,
+    ...(row.description_data ? { description_data: row.description_data } : {}),
     status: row.status as JournalEntryStatus,
     source: row.source,
     voided_by: row.voided_by ?? null,
@@ -501,7 +503,7 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (21)");
+    db.exec("INSERT INTO schema_version (version) VALUES (22)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -922,6 +924,11 @@ PRAGMA foreign_keys = ON;
           try { db.exec("ALTER TABLE exchange_account ADD COLUMN closed_at TEXT"); } catch { /* already exists */ }
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (21)");
+        }
+        if (currentVersion < 22) {
+          db.exec("ALTER TABLE journal_entry ADD COLUMN description_data TEXT");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (22)");
         }
       }
     }
@@ -1946,11 +1953,12 @@ PRAGMA foreign_keys = ON;
   ): Promise<void> {
     this.validateJournalEntry(items);
     this.run(
-      "INSERT INTO journal_entry (id, date, description, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO journal_entry (id, date, description, description_data, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [
         entry.id,
         entry.date,
         entry.description,
+        entry.description_data ?? null,
         entry.status,
         entry.source,
         entry.voided_by,
@@ -1978,7 +1986,7 @@ PRAGMA foreign_keys = ON;
 
   async voidJournalEntry(id: string): Promise<JournalEntry> {
     const original = this.queryOne(
-      "SELECT id, date, description, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+      "SELECT id, date, description, description_data, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
       [id],
       mapJournalEntry,
     );
@@ -1994,6 +2002,7 @@ PRAGMA foreign_keys = ON;
       id: reversalId,
       date: today,
       description: `Reversal of: ${original.description}`,
+      description_data: JSON.stringify({ type: "system", action: "reversal", ref: id }),
       status: "confirmed",
       source: "system:void",
       voided_by: null,
@@ -2001,11 +2010,12 @@ PRAGMA foreign_keys = ON;
     };
 
     this.run(
-      "INSERT INTO journal_entry (id, date, description, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO journal_entry (id, date, description, description_data, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [
         reversal.id,
         reversal.date,
         reversal.description,
+        reversal.description_data ?? null,
         reversal.status,
         reversal.source,
         null,
@@ -2045,7 +2055,7 @@ PRAGMA foreign_keys = ON;
   ): Promise<{ reversalId: string; newEntryId: string }> {
     // 1. Validate original exists and is not voided
     const original = this.queryOne(
-      "SELECT id, date, description, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+      "SELECT id, date, description, description_data, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
       [originalId],
       mapJournalEntry,
     );
@@ -2079,6 +2089,7 @@ PRAGMA foreign_keys = ON;
         id: reversalId,
         date: today,
         description: `Reversal of: ${original.description}`,
+        description_data: JSON.stringify({ type: "system", action: "reversal", ref: originalId }),
         status: "confirmed",
         source: "system:void",
         voided_by: null,
@@ -2086,8 +2097,8 @@ PRAGMA foreign_keys = ON;
       };
 
       this.run(
-        "INSERT INTO journal_entry (id, date, description, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [reversal.id, reversal.date, reversal.description, reversal.status, reversal.source, null, reversal.created_at],
+        "INSERT INTO journal_entry (id, date, description, description_data, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [reversal.id, reversal.date, reversal.description, reversal.description_data ?? null, reversal.status, reversal.source, null, reversal.created_at],
       );
 
       for (const item of originalItems) {
@@ -2105,8 +2116,8 @@ PRAGMA foreign_keys = ON;
 
       // 6. Post the new entry
       this.run(
-        "INSERT INTO journal_entry (id, date, description, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [newEntry.id, newEntry.date, newEntry.description, newEntry.status, newEntry.source, newEntry.voided_by, newEntry.created_at],
+        "INSERT INTO journal_entry (id, date, description, description_data, status, source, voided_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [newEntry.id, newEntry.date, newEntry.description, newEntry.description_data ?? null, newEntry.status, newEntry.source, newEntry.voided_by, newEntry.created_at],
       );
 
       for (const item of newItems) {
@@ -2162,7 +2173,7 @@ PRAGMA foreign_keys = ON;
     id: string,
   ): Promise<[JournalEntry, LineItem[]] | null> {
     const entry = this.queryOne(
-      "SELECT id, date, description, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+      "SELECT id, date, description, description_data, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
       [id],
       mapJournalEntry,
     );
@@ -2174,7 +2185,7 @@ PRAGMA foreign_keys = ON;
     filter: TransactionFilter,
   ): Promise<[JournalEntry, LineItem[]][]> {
     let sql =
-      "SELECT DISTINCT je.id, je.date, je.description, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je";
+      "SELECT DISTINCT je.id, je.date, je.description, je.description_data, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je";
     const conditions: string[] = [];
     const params: unknown[] = [];
 
@@ -2380,7 +2391,7 @@ PRAGMA foreign_keys = ON;
     signal?: AbortSignal,
   ): Promise<JournalEntry[]> {
     const { joinClause, whereClause, params } = this.buildFilterSql(filter);
-    let sql = "SELECT DISTINCT je.id, je.date, je.description, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je"
+    let sql = "SELECT DISTINCT je.id, je.date, je.description, je.description_data, je.status, je.source, je.voided_by, je.created_at FROM journal_entry je"
       + joinClause + whereClause;
 
     const allowedColumns: Record<string, string> = {

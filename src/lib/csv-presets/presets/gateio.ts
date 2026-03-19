@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parsePair, makeTradeLines, makeTransferLines, makeFeeLines } from "./shared.js";
+import { colIdx, parsePair, makeTradeLines, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
 const TRADE_HEADERS = ["create_time", "currency_pair", "side", "amount", "price", "fee", "fee_currency"];
@@ -89,7 +89,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     const feeCurr = feeCurrIdx >= 0 ? (row[feeCurrIdx] ?? "").trim().toUpperCase() : pair.base;
     if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Gateio", feeCurr, fee));
 
-    records.push({ date, description: `Gate.io ${side.toLowerCase()} ${pair.base}/${pair.quote}`, lines });
+    records.push({ date, description: `Gate.io ${side.toLowerCase()} ${pair.base}/${pair.quote}`, descriptionData: makeTradeDescriptionData("Gate.io", pair.base, pair.quote, side), lines });
   }
 
   return records;
@@ -118,7 +118,7 @@ function transformDeposits(headers: string[], rows: string[][]): CsvRecord[] {
     if (!currency || isNaN(amount) || amount === 0) continue;
 
     const lines = makeTransferLines("Gateio", currency, amount);
-    records.push({ date, description: `Gate.io deposit: ${currency}`, lines });
+    records.push({ date, description: `Gate.io deposit: ${currency}`, descriptionData: makeTransferDescriptionData("Gate.io", currency, "deposit"), lines });
   }
 
   return records;
@@ -155,7 +155,7 @@ function transformWithdrawals(headers: string[], rows: string[][]): CsvRecord[] 
     const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
     if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("Gateio", currency, fee));
 
-    records.push({ date, description: `Gate.io withdrawal: ${currency}`, lines });
+    records.push({ date, description: `Gate.io withdrawal: ${currency}`, descriptionData: makeTransferDescriptionData("Gate.io", currency, "withdrawal"), lines });
   }
 
   return records;

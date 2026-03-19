@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { makeTradeDescription } from "./shared.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
+import { makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, exchangeRewards, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS = [
@@ -154,9 +155,25 @@ export const coinbaseTransactionsPreset: CsvPreset = {
         ? makeTradeDescription("Coinbase", asset, quoteCurrency, typeUpper)
         : `Coinbase ${txType.toLowerCase()}: ${asset}`;
 
+      let descriptionData: DescriptionData;
+      if (typeUpper === "BUY" || typeUpper === "SELL") {
+        descriptionData = makeTradeDescriptionData("Coinbase", asset, quoteCurrency, typeUpper);
+      } else if (typeUpper === "SEND") {
+        descriptionData = makeTransferDescriptionData("Coinbase", asset, "withdrawal");
+      } else if (typeUpper === "RECEIVE") {
+        descriptionData = makeTransferDescriptionData("Coinbase", asset, "deposit");
+      } else if (["REWARDS INCOME", "STAKING INCOME", "LEARNING REWARD", "COINBASE EARN"].includes(typeUpper)) {
+        descriptionData = { type: "cex-reward", exchange: "Coinbase", kind: txType.toLowerCase(), currency: asset };
+      } else if (typeUpper === "CONVERT") {
+        descriptionData = { type: "cex-operation", exchange: "Coinbase", operation: "convert", currency: asset };
+      } else {
+        descriptionData = { type: "cex-operation", exchange: "Coinbase", operation: txType.toLowerCase(), currency: asset };
+      }
+
       records.push({
         date,
         description,
+        descriptionData,
         lines,
       });
     }

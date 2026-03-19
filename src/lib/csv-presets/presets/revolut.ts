@@ -134,7 +134,7 @@ export const revolutPreset: CsvPreset = {
         });
       }
 
-      records.push({ date, description, lines });
+      records.push({ date, description, descriptionData: { type: "bank", bank: "Revolut", text: description }, lines });
     }
 
     return records;

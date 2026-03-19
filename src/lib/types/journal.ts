@@ -16,6 +16,7 @@ export interface JournalEntry {
   id: string;
   date: string;
   description: string;
+  description_data?: string;
   status: JournalEntryStatus;
   source: string;
   voided_by: string | null;

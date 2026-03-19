@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parseNamedMonthDate } from "./shared.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
+import { colIdx, parseNamedMonthDate, makeTransferDescriptionData } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, exchangeStaking, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const REQUIRED_HEADERS = ["Date", "Description", "Asset", "Amount", "Balance"];
@@ -45,38 +46,44 @@ export const coinlistPreset: CsvPreset = {
       const descLower = desc.toLowerCase();
       const lines: CsvRecord["lines"] = [];
 
+      let descData: DescriptionData;
       if (descLower.includes("staking reward")) {
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: exchangeStaking("CoinList"), currency: asset, amount: (-amount).toString() },
         );
+        descData = { type: "cex-reward", exchange: "CoinList", kind: "staking", currency: asset };
       } else if (descLower.startsWith("sold ") || descLower.startsWith("bought ")) {
         // Trade: paired rows balance via Equity:Trading, groupKey merges both legs
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: EQUITY_TRADING, currency: asset, amount: (-amount).toString() },
         );
-        records.push({ date, description: `CoinList: ${desc.slice(0, 80)}`, lines, groupKey: `${date}|${desc}` });
+        descData = { type: "cex-trade", exchange: "CoinList", spent: descLower.startsWith("sold ") ? asset : "", received: descLower.startsWith("bought ") ? asset : "" };
+        records.push({ date, description: `CoinList: ${desc.slice(0, 80)}`, descriptionData: descData, lines, groupKey: `${date}|${desc}` });
         continue;
       } else if (descLower.includes("deposit")) {
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: EQUITY_EXTERNAL, currency: asset, amount: (-amount).toString() },
         );
+        descData = makeTransferDescriptionData("CoinList", asset, "deposit");
       } else if (descLower.includes("withdrawal")) {
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: EQUITY_EXTERNAL, currency: asset, amount: (-amount).toString() },
         );
+        descData = makeTransferDescriptionData("CoinList", asset, "withdrawal");
       } else {
         // Hold, Release, and other types → transfer
         lines.push(
           { account: exchangeAssetsCurrency("CoinList", asset), currency: asset, amount: amount.toString() },
           { account: EQUITY_EXTERNAL, currency: asset, amount: (-amount).toString() },
         );
+        descData = { type: "cex-operation", exchange: "CoinList", operation: descLower.split(" ")[0], currency: asset };
       }
 
-      records.push({ date, description: `CoinList: ${desc.slice(0, 80)}`, lines });
+      records.push({ date, description: `CoinList: ${desc.slice(0, 80)}`, descriptionData: descData, lines });
     }
 
     return records;

@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, parsePair, makeTradeLines, makeTradeDescription, makeTransferLines, makeFeeLines } from "./shared.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
+import { colIdx, parsePair, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import {
   exchangeAssets,
   exchangeAssetsCurrency,
@@ -93,6 +94,7 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
     records.push({
       date,
       description: makeTradeDescription("Bitfinex", pair.base, pair.quote, side),
+      descriptionData: makeTradeDescriptionData("Bitfinex", pair.base, pair.quote, side),
       lines,
     });
   }
@@ -132,6 +134,7 @@ function transformTradesOld(headers: string[], rows: string[][]): CsvRecord[] {
     records.push({
       date,
       description: makeTradeDescription("Bitfinex", pair.base, pair.quote, side),
+      descriptionData: makeTradeDescriptionData("Bitfinex", pair.base, pair.quote, side),
       lines,
     });
   }
@@ -201,17 +204,25 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
     }
 
     let description = `Bitfinex: ${descRaw.slice(0, 80)}`;
+    let descriptionData: DescriptionData | undefined;
     if (isExchangeRow) {
       const m = descRaw.match(/^Exchange \S+ (\S+) for (\S+) @/);
-      if (m) description = `Bitfinex trade: ${m[1]} \u2192 ${m[2]}`;
+      if (m) {
+        description = `Bitfinex trade: ${m[1]} \u2192 ${m[2]}`;
+        descriptionData = { type: "cex-trade", exchange: "Bitfinex", spent: m[1], received: m[2] };
+      }
+    } else if (isFee) {
+      descriptionData = { type: "cex-operation", exchange: "Bitfinex", operation: "fee", currency };
+    } else if (!isPairedEvent) {
+      descriptionData = { type: "cex-operation", exchange: "Bitfinex", operation: descRaw.split(" ")[0].toLowerCase(), currency };
     }
 
     // Collect fee records separately so they appear after exchange records,
     // ensuring the exchange description is used when groups are merged.
     if (isTradeFee) {
-      feeRecords.push({ date, description, lines, groupKey });
+      feeRecords.push({ date, description, descriptionData, lines, groupKey });
     } else {
-      records.push({ date, description, lines, groupKey });
+      records.push({ date, description, descriptionData, lines, groupKey });
     }
   }
 
@@ -247,7 +258,7 @@ function transformMovements(headers: string[], rows: string[][]): CsvRecord[] {
     const fees = feesIdx >= 0 ? Math.abs(parseFloat((row[feesIdx] ?? "0").replace(/,/g, ""))) : 0;
     if (fees > 0) lines.push(...makeFeeLines("Bitfinex", currency, fees));
 
-    records.push({ date, description: `Bitfinex ${type}: ${currency}`, lines });
+    records.push({ date, description: `Bitfinex ${type}: ${currency}`, descriptionData: makeTransferDescriptionData("Bitfinex", currency, type), lines });
   }
 
   return records;

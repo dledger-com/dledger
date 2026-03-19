@@ -100,6 +100,7 @@ export const n26Preset: CsvPreset = {
       records.push({
         date,
         description,
+        descriptionData: { type: "bank", bank: "N26", text: description },
         lines: [
           { account: mainAccount, currency, amount: amount.toString() },
           { account: counterAccount, currency, amount: (-amount).toString() },

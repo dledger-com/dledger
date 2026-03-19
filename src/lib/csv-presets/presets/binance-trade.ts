@@ -1,6 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { parsePair, makeTradeDescription } from "./shared.js";
+import { parsePair, makeTradeDescription, makeTradeDescriptionData } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
 // Binance trade history headers (spot trade)
@@ -105,6 +105,7 @@ export const binanceTradePreset: CsvPreset = {
       records.push({
         date,
         description: makeTradeDescription("Binance", pair.base, pair.quote, side as "BUY" | "SELL"),
+        descriptionData: makeTradeDescriptionData("Binance", pair.base, pair.quote, side as "BUY" | "SELL"),
         lines,
       });
     }

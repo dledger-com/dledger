@@ -97,6 +97,7 @@ export async function mergeMatchedPair(
 		id: entryId,
 		date,
 		description: desc,
+		description_data: movementA.entry.description_data,
 		status: "confirmed",
 		source,
 		voided_by: null,

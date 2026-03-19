@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { colIdx, makeTransferLines, makeFeeLines } from "./shared.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
+import { colIdx, makeTransferLines, makeTransferDescriptionData, makeFeeLines } from "./shared.js";
 import {
   exchangeAssets,
   exchangeAssetsCurrency,
@@ -79,7 +80,10 @@ export const cryptoComAppPreset: CsvPreset = {
             { account: EQUITY_TRADING, currency, amount: (-amount).toString() },
           );
         }
-        records.push({ date, description: `Crypto.com ${desc.slice(0, 60)}`, lines });
+        const tradeDescData: DescriptionData = toCurr
+          ? { type: "cex-trade", exchange: "Crypto.com", spent: amount < 0 ? currency : toCurr, received: amount < 0 ? toCurr : currency }
+          : { type: "cex-operation", exchange: "Crypto.com", operation: kind, currency };
+        records.push({ date, description: `Crypto.com ${desc.slice(0, 60)}`, descriptionData: tradeDescData, lines });
       } else if (kind === "referral_card_cashback" || kind === "supercharger_reward_to_app_credited" ||
                  kind === "crypto_earn_interest_paid" || kind === "mco_stake_reward") {
         // Income
@@ -87,42 +91,42 @@ export const cryptoComAppPreset: CsvPreset = {
           { account: exchangeAssetsCurrency("CryptoCom", currency), currency, amount: amount.toString() },
           { account: exchangeRewards("CryptoCom"), currency, amount: (-amount).toString() },
         );
-        records.push({ date, description: `Crypto.com ${desc.slice(0, 60)}`, lines });
+        records.push({ date, description: `Crypto.com ${desc.slice(0, 60)}`, descriptionData: { type: "cex-reward", exchange: "Crypto.com", kind: kind.replace(/_/g, " "), currency }, lines });
       } else if (kind === "card_cashback_reverted") {
         // Reversal of cashback
         lines.push(
           { account: exchangeAssetsCurrency("CryptoCom", currency), currency, amount: amount.toString() },
           { account: exchangeRewards("CryptoCom"), currency, amount: (-amount).toString() },
         );
-        records.push({ date, description: `Crypto.com cashback reverted: ${currency}`, lines });
+        records.push({ date, description: `Crypto.com cashback reverted: ${currency}`, descriptionData: { type: "cex-operation", exchange: "Crypto.com", operation: "cashback reverted", currency }, lines });
       } else if (kind === "crypto_withdrawal" || kind === "viban_withdrawal") {
         lines.push(...makeTransferLines("CryptoCom", currency, amount));
-        records.push({ date, description: `Crypto.com withdrawal: ${currency}`, lines });
+        records.push({ date, description: `Crypto.com withdrawal: ${currency}`, descriptionData: makeTransferDescriptionData("Crypto.com", currency, "withdrawal"), lines });
       } else if (kind === "crypto_deposit" || kind === "viban_deposit") {
         lines.push(...makeTransferLines("CryptoCom", currency, amount));
-        records.push({ date, description: `Crypto.com deposit: ${currency}`, lines });
+        records.push({ date, description: `Crypto.com deposit: ${currency}`, descriptionData: makeTransferDescriptionData("Crypto.com", currency, "deposit"), lines });
       } else if (kind === "viban_card_top_up") {
         // Card top-up: transfer from fiat wallet to card
         lines.push(...makeTransferLines("CryptoCom", currency, amount));
-        records.push({ date, description: `Crypto.com card top-up: ${currency}`, lines });
+        records.push({ date, description: `Crypto.com card top-up: ${currency}`, descriptionData: { type: "cex-operation", exchange: "Crypto.com", operation: "card top-up", currency }, lines });
       } else if (kind === "" && amount < 0) {
         // Card spending (no Transaction Kind)
         lines.push(
           { account: exchangeAssetsCurrency("CryptoCom", currency), currency, amount: amount.toString() },
           { account: exchangeExpense("CryptoCom", "Card"), currency, amount: (-amount).toString() },
         );
-        records.push({ date, description: `Crypto.com card: ${desc.slice(0, 60)}`, lines });
+        records.push({ date, description: `Crypto.com card: ${desc.slice(0, 60)}`, descriptionData: { type: "cex-operation", exchange: "Crypto.com", operation: "card", currency }, lines });
       } else if (kind === "" && amount > 0) {
         // Card refund or deposit without kind
         lines.push(...makeTransferLines("CryptoCom", currency, amount));
-        records.push({ date, description: `Crypto.com: ${desc.slice(0, 60)}`, lines });
+        records.push({ date, description: `Crypto.com: ${desc.slice(0, 60)}`, descriptionData: { type: "cex-operation", exchange: "Crypto.com", operation: "deposit", currency }, lines });
       } else {
         // Fallback: generic movement
         lines.push(
           { account: exchangeAssetsCurrency("CryptoCom", currency), currency, amount: amount.toString() },
           { account: EQUITY_EXTERNAL, currency, amount: (-amount).toString() },
         );
-        records.push({ date, description: `Crypto.com ${kind || desc.slice(0, 40)}`, lines });
+        records.push({ date, description: `Crypto.com ${kind || desc.slice(0, 40)}`, descriptionData: { type: "cex-operation", exchange: "Crypto.com", operation: kind || "unknown", currency }, lines });
       }
     }
 

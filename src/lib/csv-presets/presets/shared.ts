@@ -1,4 +1,5 @@
 import type { CsvRecord } from "../types.js";
+import type { DescriptionData } from "$lib/types/description-data.js";
 import {
   exchangeAssetsCurrency,
   exchangeFees,
@@ -134,6 +135,29 @@ export function colIdx(headers: string[], name: string): number {
   const lower = headers.map((h) => h.trim().toLowerCase());
   const idx = lower.indexOf(name.toLowerCase());
   return idx >= 0 ? idx : -1;
+}
+
+/** Build structured description data for CEX trades */
+export function makeTradeDescriptionData(
+  exchange: string, base: string, quote: string, side: "BUY" | "SELL",
+): DescriptionData {
+  return side === "BUY"
+    ? { type: "cex-trade", exchange, spent: quote, received: base }
+    : { type: "cex-trade", exchange, spent: base, received: quote };
+}
+
+/** Build structured description data for CEX deposits/withdrawals */
+export function makeTransferDescriptionData(
+  exchange: string, currency: string, direction: "deposit" | "withdrawal",
+): DescriptionData {
+  return { type: "cex-transfer", exchange, direction, currency };
+}
+
+/** Build structured description data for CEX fee operations */
+export function makeFeeDescriptionData(
+  exchange: string, currency: string,
+): DescriptionData {
+  return { type: "cex-operation", exchange, operation: "fee", currency };
 }
 
 /** Detect and strip null-byte spacing from UTF-16 encoded CSVs */

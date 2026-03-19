@@ -184,6 +184,7 @@ export async function applyReinterpret(
         id: newEntryId,
         date: c.entry.date,
         description: c.entry.description,
+        description_data: c.entry.description_data,
         status: c.entry.status,
         source: c.entry.source,
         voided_by: null,
