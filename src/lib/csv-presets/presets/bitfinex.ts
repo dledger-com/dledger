@@ -18,7 +18,7 @@ function detectVariant(headers: string[]): Variant | null {
   // Trades new: has PAIR + FEE CURRENCY
   if (has("pair") && has("fee currency")) return "trades";
   // Trades old: has Pair but not FEE CURRENCY (fewer columns)
-  if (has("pair") && !has("fee currency") && !has("wallet")) return "trades-old";
+  if (has("pair") && !has("fee currency") && !has("wallet") && !has("order type")) return "trades-old";
   // Ledgers: has DESCRIPTION + WALLET
   if (has("description") && has("wallet")) return "ledgers";
   // Movements: has STATUS + FEES + TRANSACTION ID (but not WALLET)
