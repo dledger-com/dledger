@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { bitfinexPreset } from "./bitfinex.js";
-import { exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING } from "$lib/accounts/paths.js";
+import { exchangeAssetsCurrency, exchangeFees, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
 const LEDGER_HEADERS = ["#", "DESCRIPTION", "CURRENCY", "AMOUNT", "BALANCE", "DATE", "WALLET"];
 
@@ -185,6 +185,35 @@ describe("bitfinexPreset ledger variant", () => {
 
       expect(records).toHaveLength(1);
       expect(records![0].groupKey).toBeUndefined();
+    });
+  });
+
+  describe("deposit/withdrawal counter-account", () => {
+    it("deposit uses EQUITY_EXTERNAL", () => {
+      const records = transformLedger([
+        ["1", "Deposit (BITCOIN) #1265542 on wallet exchange", "BTC", "1.5", "1.5", "2024-01-10 08:00:00", "exchange"],
+      ]);
+
+      expect(records).toHaveLength(1);
+      expect(records![0].lines[1].account).toBe(EQUITY_EXTERNAL);
+    });
+
+    it("withdrawal uses EQUITY_EXTERNAL", () => {
+      const records = transformLedger([
+        ["1", "Withdrawal #456 on wallet exchange", "BTC", "-0.5", "1.0", "2024-01-11 09:00:00", "exchange"],
+      ]);
+
+      expect(records).toHaveLength(1);
+      expect(records![0].lines[1].account).toBe(EQUITY_EXTERNAL);
+    });
+
+    it("exchange row uses EQUITY_TRADING", () => {
+      const records = transformLedger([
+        ["1", "Exchange 0.5 BTC for USD @ 40000 on wallet exchange", "BTC", "-0.5", "0", "2024-01-15 10:30:45", "exchange"],
+      ]);
+
+      expect(records).toHaveLength(1);
+      expect(records![0].lines[1].account).toBe(EQUITY_TRADING);
     });
   });
 

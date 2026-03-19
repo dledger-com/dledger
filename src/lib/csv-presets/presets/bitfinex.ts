@@ -171,7 +171,7 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
       descLower.startsWith("extraordinary loss adj");
 
     let counterAccount = EQUITY_EXTERNAL;
-    if (descLower.includes("exchange") || descLower.includes("trading")) {
+    if (isExchangeRow || isTradeFee || isPairedEvent) {
       counterAccount = EQUITY_TRADING;
     }
 
