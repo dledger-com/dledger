@@ -39,3 +39,25 @@ export interface BtcApiOutput {
   value: number; // satoshis
   n: number;
 }
+
+export interface BtcInputDetection {
+  input_type: "address" | "xpub" | "ypub" | "zpub" | "wif" | "xprv" | "yprv" | "zprv" | "seed" | "unknown";
+  is_private: boolean;
+  network: "mainnet" | "testnet" | "unknown";
+  suggested_bip: number | null;
+  description: string;
+  valid: boolean;
+  word_count: number | null;
+  invalid_words: string[] | null;
+}
+
+export type PublicResult =
+  | { kind: "Address"; address: string }
+  | { kind: "Xpub"; xpub: string; key_type: string };
+
+export interface PrivateKeyConversion {
+  input_type: string;
+  public_result: PublicResult;
+  network: string;
+  suggested_bip: number;
+}

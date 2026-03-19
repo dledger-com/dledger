@@ -13,6 +13,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 bitcoin = { version = "0.32", features = ["serde"] }
+bip39 = { version = "2", features = ["std"] }
 
 [dev-dependencies]
 rust_decimal_macros = { workspace = true }

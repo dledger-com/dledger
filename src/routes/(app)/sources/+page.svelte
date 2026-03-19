@@ -38,6 +38,8 @@
     import { reprocessStore } from "$lib/data/reprocess-store.svelte.js";
     import RotateCw from "lucide-svelte/icons/rotate-cw";
     import { v7 as uuidv7 } from "uuid";
+    import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
+    import { detectBtcInputType, convertPrivateKey } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
         getCexAdapter,
@@ -209,19 +211,26 @@
         selectedChainIds = new Set([1]);
         btcNewAddressOrXpub = "";
         btcNewLabel = "";
-        btcNewInputType = "address";
+        btcPrivateKeyAck = false;
+        btcSeedBip = 84;
+        btcSeedPassphrase = "";
     }
 
     // -- Bitcoin state --
     let btcAccounts = $state<import("$lib/bitcoin/types.js").BitcoinAccount[]>([]);
     let btcNewAddressOrXpub = $state("");
     let btcNewLabel = $state("");
-    let btcNewInputType = $state<"address" | "xpub">("address");
+    let btcPrivateKeyAck = $state(false);
+    let btcSeedBip = $state(84);
+    let btcSeedPassphrase = $state("");
     let btcAddingAccount = $state(false);
+
+    const btcDetection: QuickDetection = $derived.by(() => detectInputType(btcNewAddressOrXpub));
     const btcBusy = $derived(taskQueue.isActive("btc-sync"));
 
-    function startAddBitcoin() {
+    function startAddBitcoin(prefillInput?: string) {
         addSourceMode = "bitcoin";
+        if (prefillInput) btcNewAddressOrXpub = prefillInput;
     }
 
     async function loadBtcAccounts() {
@@ -233,31 +242,55 @@
     }
 
     async function handleAddBtcAccount() {
-        const input = btcNewAddressOrXpub.trim();
+        let input = btcNewAddressOrXpub.trim();
         const label = btcNewLabel.trim();
         if (!input || !label) {
-            toast.error("Address/xpub and label are required");
+            toast.error("Input and label are required");
             return;
         }
 
         btcAddingAccount = true;
         try {
+            // Authoritative validation via Rust
+            const det = await detectBtcInputType(input);
+            if (!det.valid) {
+                const msg = det.invalid_words?.length
+                    ? `Invalid BIP39 words: ${det.invalid_words.join(", ")}`
+                    : "Invalid Bitcoin input";
+                toast.error(msg);
+                return;
+            }
+
             let accountType: "address" | "xpub" | "ypub" | "zpub" = "address";
             let derivationBip: number | undefined;
-            let network: "mainnet" | "testnet" = "mainnet";
+            let network: "mainnet" | "testnet" = det.network === "testnet" ? "testnet" : "mainnet";
 
-            if (btcNewInputType === "xpub") {
-                if (input.startsWith("ypub")) { accountType = "ypub"; derivationBip = 49; }
-                else if (input.startsWith("zpub")) { accountType = "zpub"; derivationBip = 84; }
-                else { accountType = "xpub"; derivationBip = 44; }
-                if (input.startsWith("tpub") || input.startsWith("upub") || input.startsWith("vpub")) {
-                    network = "testnet";
+            if (det.is_private) {
+                // Convert private key → public result, discard private material
+                const conv = await convertPrivateKey(
+                    input,
+                    det.input_type === "seed" ? btcSeedBip : undefined,
+                    det.input_type === "seed" ? btcSeedPassphrase : undefined,
+                    network,
+                );
+                // Clear input immediately
+                btcNewAddressOrXpub = "";
+
+                if (conv.public_result.kind === "Address") {
+                    input = conv.public_result.address;
+                    accountType = "address";
+                } else {
+                    input = conv.public_result.xpub;
+                    accountType = conv.public_result.key_type as "xpub" | "ypub" | "zpub";
+                    derivationBip = conv.suggested_bip;
                 }
+                network = conv.network === "testnet" ? "testnet" : "mainnet";
+            } else if (det.input_type === "address") {
+                accountType = "address";
             } else {
-                // Detect network from address prefix
-                if (input.startsWith("m") || input.startsWith("n") || input.startsWith("2") || input.startsWith("tb1")) {
-                    network = "testnet";
-                }
+                // Extended public key
+                accountType = det.input_type as "xpub" | "ypub" | "zpub";
+                derivationBip = det.suggested_bip ?? undefined;
             }
 
             await getBackend().addBitcoinAccount({
@@ -273,6 +306,7 @@
             });
             btcNewAddressOrXpub = "";
             btcNewLabel = "";
+            btcPrivateKeyAck = false;
             addSourceMode = "idle";
             await loadBtcAccounts();
             toast.success("Bitcoin account added");
@@ -1091,24 +1125,13 @@
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
-                    <div class="flex items-center gap-4">
-                        <label class="flex items-center gap-1.5">
-                            <input type="radio" bind:group={btcNewInputType} value="address" />
-                            <span class="text-sm">Single Address</span>
-                        </label>
-                        <label class="flex items-center gap-1.5">
-                            <input type="radio" bind:group={btcNewInputType} value="xpub" />
-                            <span class="text-sm">Extended Public Key</span>
-                        </label>
-                    </div>
                     <div class="flex items-end gap-2">
                         <div class="flex-1 space-y-1">
-                            <label for="new-btc-input" class="text-xs font-medium">
-                                {btcNewInputType === "address" ? "Bitcoin Address" : "xpub / ypub / zpub"}
-                            </label>
+                            <label for="new-btc-input" class="text-xs font-medium">Address or extended public key</label>
                             <Input
                                 id="new-btc-input"
-                                placeholder={btcNewInputType === "address" ? "bc1q... or 1... or 3..." : "xpub... / ypub... / zpub..."}
+                                placeholder="Paste address or xpub / ypub / zpub..."
+                                autocomplete="off"
                                 bind:value={btcNewAddressOrXpub}
                             />
                         </div>
@@ -1122,12 +1145,50 @@
                         </div>
                         <Button
                             onclick={handleAddBtcAccount}
-                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || !btcNewLabel.trim()}
+                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || !btcNewLabel.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck)}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
                         </Button>
                     </div>
+                    {#if btcDetection.type !== "unknown" && btcNewAddressOrXpub.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if btcDetection.isPrivate}
+                                <Badge variant="outline" class="border-amber-500 text-amber-600">{btcDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-600">{btcDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+                    {#if btcDetection.isPrivate}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">Private Key Detected</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">
+                                dledger will derive the public key from it and discard the private material immediately.
+                                Your private key will NOT be stored.
+                            </p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={btcPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">I understand — derive public key and continue</span>
+                            </label>
+                        </div>
+                        {#if btcDetection.type === "seed"}
+                            <div class="flex items-center gap-4">
+                                <div class="space-y-1">
+                                    <label for="btc-seed-bip" class="text-xs font-medium">BIP Standard</label>
+                                    <select id="btc-seed-bip" bind:value={btcSeedBip} class="h-9 rounded-md border bg-background px-3 text-sm">
+                                        <option value={84}>BIP84 / Native SegWit (recommended)</option>
+                                        <option value={49}>BIP49 / Wrapped SegWit</option>
+                                        <option value={44}>BIP44 / Legacy</option>
+                                    </select>
+                                </div>
+                                <div class="flex-1 space-y-1">
+                                    <label for="btc-seed-pass" class="text-xs font-medium">Passphrase (optional)</label>
+                                    <Input id="btc-seed-pass" type="password" placeholder="Usually empty" autocomplete="off" bind:value={btcSeedPassphrase} />
+                                </div>
+                            </div>
+                        {/if}
+                    {/if}
                 </div>
             {/if}
 

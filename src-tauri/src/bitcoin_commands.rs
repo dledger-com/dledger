@@ -78,3 +78,23 @@ pub fn update_btc_derivation_index(
 ) -> Result<(), String> {
     state.update_derivation_index(&account_id, receive_index, change_index)
 }
+
+#[tauri::command]
+pub fn detect_btc_input_type(input: String) -> Result<dledger_core::bitcoin_privkey::BtcInputDetection, String> {
+    Ok(dledger_core::bitcoin_privkey::detect_input_type(&input))
+}
+
+#[tauri::command]
+pub fn convert_btc_private_key(
+    input: String,
+    bip: Option<u32>,
+    passphrase: Option<String>,
+    network: Option<String>,
+) -> Result<dledger_core::bitcoin_privkey::PrivateKeyConversion, String> {
+    dledger_core::bitcoin_privkey::convert_private_input(
+        &input,
+        bip,
+        &passphrase.unwrap_or_default(),
+        &network.unwrap_or_else(|| "mainnet".to_string()),
+    )
+}

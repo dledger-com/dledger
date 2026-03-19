@@ -14,7 +14,7 @@
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
     onSelectBlockchain: (prefillAddress?: string) => void;
-    onSelectBitcoin?: () => void;
+    onSelectBitcoin?: (prefillInput?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -39,9 +39,13 @@
     return /^0x[a-fA-F0-9]{40}$/.test(s) ? s : null;
   });
 
-  const detectedBtcAddress = $derived.by(() => {
+  const detectedBtcInput = $derived.by(() => {
     const s = search.trim();
-    return /^(1[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|bc1[qp][a-z0-9]{38,58})$/.test(s) ? s : null;
+    if (/^(1[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|bc1[qp][a-z0-9]{38,58})$/.test(s))
+      return { type: "address" as const, display: s };
+    if (/^[xyztuvXYZTUV]pub[1-9A-HJ-NP-Za-km-z]{100,112}$/.test(s))
+      return { type: "xpub" as const, display: s };
+    return null;
   });
 
   function selectCex(id: ExchangeId) {
@@ -56,10 +60,10 @@
     onSelectBlockchain(prefillAddress);
   }
 
-  function selectBitcoin() {
+  function selectBitcoin(prefillInput?: string) {
     open = false;
     search = "";
-    onSelectBitcoin?.();
+    onSelectBitcoin?.(prefillInput);
   }
 </script>
 
@@ -87,15 +91,15 @@
             </Command.Item>
           </Command.Group>
         {/if}
-        {#if detectedBtcAddress}
-          <Command.Group heading="Detected Address">
+        {#if detectedBtcInput}
+          <Command.Group heading="Detected Bitcoin Input">
             <Command.Item
-              value="detected-btc-{detectedBtcAddress}"
-              keywords={["bitcoin", "btc", "address"]}
-              onSelect={() => selectBitcoin()}
+              value="detected-btc-{detectedBtcInput.display}"
+              keywords={["bitcoin", "btc", "address", "xpub"]}
+              onSelect={() => selectBitcoin(detectedBtcInput!.display)}
               class="font-mono text-xs"
             >
-              Add {detectedBtcAddress.slice(0, 8)}...{detectedBtcAddress.slice(-4)} as Bitcoin address
+              Add {detectedBtcInput.display.slice(0, 8)}...{detectedBtcInput.display.slice(-4)} as Bitcoin {detectedBtcInput.type === "xpub" ? "HD wallet" : "address"}
             </Command.Item>
           </Command.Group>
         {/if}

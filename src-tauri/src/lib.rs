@@ -181,6 +181,8 @@ pub fn run() {
             bitcoin_commands::get_btc_tracked_addresses,
             bitcoin_commands::store_btc_derived_addresses,
             bitcoin_commands::update_btc_derivation_index,
+            bitcoin_commands::detect_btc_input_type,
+            bitcoin_commands::convert_btc_private_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

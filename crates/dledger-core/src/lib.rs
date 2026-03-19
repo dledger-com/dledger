@@ -1,5 +1,6 @@
 pub mod bitcoin_addr;
 pub mod bitcoin_derive;
+pub mod bitcoin_privkey;
 pub mod models;
 pub mod storage;
 pub mod schema;
