@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { convertPrivateKeyJs, deriveBtcAddressesJs, detectBtcInputTypeJs } from "./derive-js.js";
+import { convertPrivateKeyJs, deriveBtcAddressesJs, detectBtcInputTypeJs, deriveMultiAccountXpubs } from "./derive-js.js";
 
 // BIP39 test vector: "abandon" x11 + "about" (12-word mnemonic, no passphrase)
 const TEST_MNEMONIC_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -308,5 +308,53 @@ describe("detectBtcInputTypeJs", () => {
       const r = detectBtcInputTypeJs("");
       expect(r.input_type).toBe("unknown");
     });
+  });
+});
+
+describe("deriveMultiAccountXpubs", () => {
+  it("index 0 matches convertPrivateKeyJs result (backward compat)", () => {
+    const single = convertPrivateKeyJs(TEST_MNEMONIC_12, 84);
+    const multi = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "", false, 1, 0);
+    expect(multi).toHaveLength(1);
+    expect(multi[0].index).toBe(0);
+    if (single.public_result.kind === "Xpub") {
+      expect(multi[0].xpub).toBe(single.public_result.xpub);
+    }
+  });
+
+  it("derives 5 unique xpubs with sequential indexes", () => {
+    const xpubs = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "", false, 5, 0);
+    expect(xpubs).toHaveLength(5);
+    const indexes = xpubs.map(x => x.index);
+    expect(indexes).toEqual([0, 1, 2, 3, 4]);
+    const keys = new Set(xpubs.map(x => x.xpub));
+    expect(keys.size).toBe(5);
+  });
+
+  it("startIndex offset works correctly", () => {
+    const batch5 = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "", false, 5, 0);
+    const fromIdx3 = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "", false, 1, 3);
+    expect(fromIdx3[0].xpub).toBe(batch5[3].xpub);
+    expect(fromIdx3[0].index).toBe(3);
+  });
+
+  it("different BIP standards produce different key types", () => {
+    const bip84 = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "", false, 1);
+    const bip49 = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 49, "", false, 1);
+    const bip44 = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 44, "", false, 1);
+    expect(bip84[0].keyType).toBe("zpub");
+    expect(bip84[0].xpub).toMatch(/^zpub/);
+    expect(bip49[0].keyType).toBe("ypub");
+    expect(bip49[0].xpub).toMatch(/^ypub/);
+    expect(bip44[0].keyType).toBe("xpub");
+    expect(bip44[0].xpub).toMatch(/^xpub/);
+  });
+
+  it("passphrase changes all xpubs", () => {
+    const noPass = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "", false, 3);
+    const withPass = deriveMultiAccountXpubs(TEST_MNEMONIC_12, 84, "mypassphrase", false, 3);
+    for (let i = 0; i < 3; i++) {
+      expect(noPass[i].xpub).not.toBe(withPass[i].xpub);
+    }
   });
 });

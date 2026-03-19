@@ -40,7 +40,8 @@
     import { v7 as uuidv7 } from "uuid";
     import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
     import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase, deriveEvmAddressesFromSeed, deriveEvmAddressesFromXpub } from "$lib/evm/derive.js";
-    import { detectBtcInputType, convertPrivateKey } from "$lib/bitcoin/derive.js";
+    import { detectBtcInputType, convertPrivateKey, deriveMultiXpubsFromSeed } from "$lib/bitcoin/derive.js";
+    import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
         getCexAdapter,
@@ -219,6 +220,10 @@
         btcPrivateKeyAck = false;
         btcSeedBip = 84;
         btcSeedPassphrase = "";
+        btcDeriveCount = 5;
+        btcSelectedIndexes = new Set([0]);
+        btcDerivedXpubs = [];
+        btcDeriving = false;
         evmPrivateKeyAck = false;
         evmSeedPassphrase = "";
         evmDeriveCount = 5;
@@ -233,6 +238,10 @@
     let btcSeedBip = $state(84);
     let btcSeedPassphrase = $state("");
     let btcAddingAccount = $state(false);
+    let btcDeriveCount = $state(5);
+    let btcSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let btcDerivedXpubs = $state<import("$lib/bitcoin/derive-js.js").DerivedBtcXpub[]>([]);
+    let btcDeriving = $state(false);
 
     const btcDetection: QuickDetection = $derived.by(() => detectInputType(btcNewAddressOrXpub));
     const evmDetection = $derived.by(() => detectEvmInputType(newAddress));
@@ -254,6 +263,44 @@
     const evmShowAddressPicker = $derived(evmDerivedAddresses.length > 0);
     const btcBusy = $derived(taskQueue.isActive("btc-sync"));
 
+    // Async derivation of multi-index xpubs from seed phrase
+    $effect(() => {
+        const input = btcNewAddressOrXpub.trim();
+        const det = btcDetection;
+        const ack = btcPrivateKeyAck;
+        const bip = btcSeedBip;
+        const pass = btcSeedPassphrase;
+        const count = btcDeriveCount;
+
+        if (!input || det.type !== "seed" || !ack) {
+            btcDerivedXpubs = [];
+            return;
+        }
+
+        let cancelled = false;
+        btcDeriving = true;
+        deriveMultiXpubsFromSeed(input, bip, count, pass || undefined)
+            .then((result) => {
+                if (!cancelled) {
+                    btcDerivedXpubs = result;
+                    // Preserve selections that are still in range, default to 0 if empty
+                    const validIndexes = new Set(
+                        [...btcSelectedIndexes].filter(i => i < result.length),
+                    );
+                    if (validIndexes.size === 0 && result.length > 0) validIndexes.add(0);
+                    btcSelectedIndexes = validIndexes;
+                }
+            })
+            .catch(() => {
+                if (!cancelled) btcDerivedXpubs = [];
+            })
+            .finally(() => {
+                if (!cancelled) btcDeriving = false;
+            });
+
+        return () => { cancelled = true; };
+    });
+
     function startAddBitcoin(prefillInput?: string) {
         addSourceMode = "bitcoin";
         if (prefillInput) btcNewAddressOrXpub = prefillInput;
@@ -269,7 +316,7 @@
 
     async function handleAddBtcAccount() {
         let input = btcNewAddressOrXpub.trim();
-        let label = btcNewLabel.trim();
+        const baseLabel = btcNewLabel.trim();
         if (!input) {
             toast.error("Input is required");
             return;
@@ -277,6 +324,38 @@
 
         btcAddingAccount = true;
         try {
+            // Multi-index path: seed phrase with derived xpubs
+            if (btcDerivedXpubs.length > 0) {
+                if (btcSelectedIndexes.size === 0) {
+                    toast.error("Select at least one wallet");
+                    return;
+                }
+                const selected = btcDerivedXpubs.filter(x => btcSelectedIndexes.has(x.index));
+                // Clear private material immediately
+                btcNewAddressOrXpub = "";
+                for (const { index, xpub, keyType } of selected) {
+                    const label = baseLabel ? `${baseLabel} #${index}` : ellipseAddress(xpub);
+                    await getBackend().addBitcoinAccount({
+                        id: uuidv7(),
+                        address_or_xpub: xpub,
+                        account_type: keyType as "xpub" | "ypub" | "zpub",
+                        derivation_bip: btcSeedBip,
+                        network: "mainnet",
+                        label,
+                        last_receive_index: -1,
+                        last_change_index: -1,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                btcNewLabel = "";
+                btcPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadBtcAccounts();
+                toast.success(`${selected.length} HD wallet(s) added`);
+                return;
+            }
+
+            // Single-account path (xpub input, WIF, address, or non-seed private key)
             // Authoritative validation via Rust
             const det = await detectBtcInputType(input);
             if (!det.valid) {
@@ -328,7 +407,7 @@
             }
 
             // Compute label fallback after conversion so it uses the public key, not the private input
-            label = label || ellipseAddress(input);
+            const label = baseLabel || ellipseAddress(input);
 
             await getBackend().addBitcoinAccount({
                 id: uuidv7(),
@@ -1291,7 +1370,7 @@
                         </div>
                         <Button
                             onclick={handleAddBtcAccount}
-                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck)}
+                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck) || (btcDerivedXpubs.length > 0 && btcSelectedIndexes.size === 0)}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
@@ -1334,6 +1413,43 @@
                                 </div>
                             </div>
                         {/if}
+                    {/if}
+
+                    <!-- Multi-index xpub picker -->
+                    {#if btcDerivedXpubs.length > 0}
+                        <div class="space-y-2">
+                            <span class="text-xs font-medium">Derived HD Wallets</span>
+                            {#if btcDeriving}
+                                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <RefreshCw class="h-3 w-3 animate-spin" />
+                                    Deriving...
+                                </div>
+                            {/if}
+                            <div class="max-h-48 overflow-y-auto rounded-md border">
+                                {#each btcDerivedXpubs as { index, xpub, keyType }}
+                                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={btcSelectedIndexes.has(index)}
+                                            onchange={() => {
+                                                const next = new Set(btcSelectedIndexes);
+                                                if (next.has(index)) next.delete(index); else next.add(index);
+                                                btcSelectedIndexes = next;
+                                            }}
+                                        />
+                                        <span class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</span>
+                                        <span class="text-xs text-muted-foreground">#{index}</span>
+                                        <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
+                                    </label>
+                                {/each}
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{btcSelectedIndexes.size} wallet(s) selected</span>
+                                <Button variant="outline" size="sm" onclick={() => { btcDeriveCount += 5; }}>
+                                    Load more
+                                </Button>
+                            </div>
+                        </div>
                     {/if}
                 </div>
             {/if}

@@ -142,6 +142,49 @@ function encodeP2TR(pubkey: Uint8Array, testnet: boolean): string {
   return bech32m.encode(testnet ? "tb" : "bc", [1, ...words]);
 }
 
+// ---- Multi-index xpub derivation ----
+
+export interface DerivedBtcXpub {
+  index: number;
+  xpub: string;
+  keyType: string;
+}
+
+/**
+ * Derive multiple account-level xpubs from a seed phrase.
+ * Each xpub corresponds to m/{bip}'/{coinType}'/{i}' for i in [startIndex, startIndex+count).
+ */
+export function deriveMultiAccountXpubs(
+  mnemonic: string,
+  bip: number,
+  passphrase: string,
+  testnet: boolean,
+  count: number,
+  startIndex: number = 0,
+): DerivedBtcXpub[] {
+  const seed = mnemonicToSeedSync(mnemonic, passphrase);
+  const master = HDKey.fromMasterSeed(seed);
+  const coinType = testnet ? 1 : 0;
+  const pubVersion = pubVersionForBip(bip, testnet);
+  const keyType = VERSION_NAME[pubVersion] ?? "xpub";
+  const results: DerivedBtcXpub[] = [];
+
+  for (let i = startIndex; i < startIndex + count; i++) {
+    const path = `m/${bip}'/${coinType}'/${i}'`;
+    const accountKey = master.derive(path);
+    if (!accountKey.publicKey || !accountKey.chainCode) {
+      throw new Error(`Failed to derive account key at index ${i}`);
+    }
+    const xpubStr = accountKey.publicExtendedKey;
+    const finalKey = pubVersion !== VERSION.xpub && pubVersion !== VERSION.tpub
+      ? swapVersionBytes(xpubStr, pubVersion)
+      : (testnet ? swapVersionBytes(xpubStr, VERSION.tpub) : xpubStr);
+    results.push({ index: i, xpub: finalKey, keyType });
+  }
+
+  return results;
+}
+
 // ---- Public API ----
 
 /**

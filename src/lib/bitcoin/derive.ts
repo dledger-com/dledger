@@ -83,6 +83,39 @@ export async function validateXpub(
   };
 }
 
+// ---- Multi-index xpub derivation from seed ----
+
+export type { DerivedBtcXpub } from "./derive-js.js";
+
+/**
+ * Derive multiple account-level xpubs from a seed phrase.
+ * JS-only (no Tauri equivalent needed — seed is in JS memory for preview).
+ */
+export async function deriveMultiXpubsFromSeed(
+  input: string,
+  bip: number,
+  count: number,
+  passphrase?: string,
+  network?: string,
+  startIndex?: number,
+): Promise<import("./derive-js.js").DerivedBtcXpub[]> {
+  const { validateMnemonic } = await import("@scure/bip39");
+  const { wordlist: english } = await import("@scure/bip39/wordlists/english.js");
+  const trimmed = input.trim();
+  if (!validateMnemonic(trimmed, english)) {
+    throw new Error("Invalid mnemonic");
+  }
+  const { deriveMultiAccountXpubs } = await import("./derive-js.js");
+  return deriveMultiAccountXpubs(
+    trimmed,
+    bip,
+    passphrase ?? "",
+    network === "testnet",
+    count,
+    startIndex ?? 0,
+  );
+}
+
 // ---- JS fallback using @scure/@noble libraries ----
 
 async function deriveBtcAddressesJsFallback(
