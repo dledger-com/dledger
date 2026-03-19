@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { BtcApiTx } from "./types.js";
-import { fetchAddressTxs, fetchAddressInfo } from "./api.js";
+import { fetchAddressTxs, fetchAddressInfo, _resetRateLimiter } from "./api.js";
 
 function makeMockTx(txid: string): BtcApiTx {
   return {
@@ -12,10 +12,20 @@ function makeMockTx(txid: string): BtcApiTx {
   };
 }
 
+function mock429(headers?: Record<string, string>) {
+  return {
+    ok: false,
+    status: 429,
+    headers: { get: (k: string) => headers?.[k] ?? null },
+    text: () => Promise.resolve("Too Many Requests"),
+  };
+}
+
 describe("fetchAddressTxs", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    _resetRateLimiter();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -53,7 +63,6 @@ describe("fetchAddressTxs", () => {
 
     expect(result).toHaveLength(35);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
-    // Second call should use last txid from page 1 as cursor
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
       "https://mempool.test/api/address/bc1qtest/txs/chain/page1_tx24",
     );
@@ -73,6 +82,7 @@ describe("fetchAddressTxs", () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 500,
+      headers: { get: () => null },
       text: () => Promise.resolve("Internal Server Error"),
     });
 
@@ -81,41 +91,76 @@ describe("fetchAddressTxs", () => {
     );
   });
 
-  it("retries once on 429 rate limit", async () => {
+  it("retries up to 3 times on 429 rate limit", async () => {
     const txs = [makeMockTx("tx1")];
     globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        text: () => Promise.resolve("Too Many Requests"),
-      })
+      .mockResolvedValueOnce(mock429())
+      .mockResolvedValueOnce(mock429())
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(txs),
       });
 
-    const result = await fetchAddressTxs("bc1qtest", "https://mempool.test");
+    const promise = fetchAddressTxs("bc1qtest", "https://mempool.test");
+    await vi.advanceTimersByTimeAsync(15_000);
+    const result = await promise;
+
+    expect(result).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("throws after exhausting all 429 retries", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(mock429())
+      .mockResolvedValueOnce(mock429())
+      .mockResolvedValueOnce(mock429())
+      .mockResolvedValueOnce(mock429());
+
+    const promise = fetchAddressTxs("bc1qtest", "https://mempool.test")
+      .catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    const err = await promise;
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain("API error 429");
+    // 1 initial attempt + 3 retries = 4 calls
+    expect(globalThis.fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("respects Retry-After header on 429", async () => {
+    const txs = [makeMockTx("tx1")];
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(mock429({ "Retry-After": "5" }))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(txs),
+      });
+
+    const promise = fetchAddressTxs("bc1qtest", "https://mempool.test");
+    await vi.advanceTimersByTimeAsync(6_000);
+    const result = await promise;
 
     expect(result).toHaveLength(1);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("throws if retry after 429 also fails", async () => {
+  it("aborts between retries when signal is aborted", async () => {
+    const controller = new AbortController();
     globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        text: () => Promise.resolve("Too Many Requests"),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        text: () => Promise.resolve("Still Too Many Requests"),
-      });
+      .mockResolvedValueOnce(mock429());
 
-    await expect(fetchAddressTxs("bc1qtest", "https://mempool.test")).rejects.toThrow(
-      "API error 429",
-    );
+    const promise = fetchAddressTxs("bc1qtest", "https://mempool.test", controller.signal)
+      .catch((e: Error) => e);
+    // Abort during the retry wait period
+    controller.abort();
+    // Advance past the retry wait so the loop continues and checks signal.aborted
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    const err = await promise;
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain("Aborted");
+    // Only the initial fetch call, no retry after abort
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -123,6 +168,7 @@ describe("fetchAddressInfo", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    _resetRateLimiter();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 

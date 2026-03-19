@@ -50,7 +50,7 @@ export async function syncBitcoinAccount(
   }
 
   // 2. For the account being synced: derive addresses if xpub
-  let accountAddresses: string[];
+  let accountAddresses: string[] = [];
 
   if (account.account_type === "address") {
     accountAddresses = [account.address_or_xpub];
@@ -59,8 +59,36 @@ export async function syncBitcoinAccount(
     onProgress?.("Deriving addresses...");
 
     const bip = account.derivation_bip ?? 84;
+    let skipFullScan = false;
 
-    for (const chain of [0, 1]) {
+    // Quick probe: check first receive address to detect unused wallets
+    if (account.last_receive_index === -1 && account.last_change_index === -1) {
+      onProgress?.("Probing wallet activity...");
+      const probeAddresses = await deriveAddresses(
+        account.address_or_xpub, bip, 0, 0, 1, account.network,
+      );
+      if (probeAddresses.length > 0) {
+        try {
+          const probeInfo = await fetchAddressInfo(probeAddresses[0], baseUrl, signal);
+          if (probeInfo.tx_count === 0) {
+            await backend.storeBtcDerivedAddresses(account.id, [
+              { address: probeAddresses[0], change: 0, index: 0 },
+            ]);
+            result.addresses_derived += 1;
+            ownedAddresses.add(probeAddresses[0]);
+            addressToWallet.set(probeAddresses[0], account.label);
+            await backend.updateBtcDerivationIndex(account.id, 0, -1);
+            accountAddresses = [probeAddresses[0]];
+            skipFullScan = true;
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          result.warnings.push(`activity probe: ${msg}`);
+        }
+      }
+    }
+
+    if (!skipFullScan) for (const chain of [0, 1]) {
       const chainName = chain === 0 ? "receive" : "change";
       let lastKnownIndex = chain === 0
         ? account.last_receive_index
@@ -138,7 +166,9 @@ export async function syncBitcoinAccount(
       }
     }
 
-    accountAddresses = await backend.getBtcTrackedAddresses(account.id);
+    if (!skipFullScan) {
+      accountAddresses = await backend.getBtcTrackedAddresses(account.id);
+    }
   }
 
   // 3. Fetch transactions for all addresses

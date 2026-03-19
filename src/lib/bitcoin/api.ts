@@ -1,9 +1,16 @@
 import type { BtcApiTx } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://mempool.space";
-const RATE_LIMIT_MS = 150;
+const RATE_LIMIT_MS = 200;
+const MAX_RETRIES = 3;
+const BASE_RETRY_MS = 2000;
 
 let lastRequestTime = 0;
+
+/** @internal Reset rate limiter state (for testing only). */
+export function _resetRateLimiter(): void {
+  lastRequestTime = 0;
+}
 
 async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<Response> {
   const now = Date.now();
@@ -13,19 +20,21 @@ async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<Resp
   }
   lastRequestTime = Date.now();
 
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    if (res.status === 429) {
-      // Rate limited — wait and retry once
-      await new Promise(r => setTimeout(r, 2000));
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (signal?.aborted) throw new Error("Aborted");
+    const res = await fetch(url, { signal });
+    if (res.ok) return res;
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const retryAfter = res.headers.get("Retry-After");
+      const parsed = retryAfter ? parseInt(retryAfter, 10) * 1000 : NaN;
+      const waitMs = isNaN(parsed) ? BASE_RETRY_MS * 2 ** attempt : parsed;
+      await new Promise(r => setTimeout(r, waitMs));
       lastRequestTime = Date.now();
-      const retry = await fetch(url, { signal });
-      if (!retry.ok) throw new Error(`API error ${retry.status}: ${await retry.text()}`);
-      return retry;
+      continue;
     }
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
-  return res;
+  throw new Error("Max retries exceeded");
 }
 
 /**

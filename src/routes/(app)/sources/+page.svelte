@@ -498,8 +498,12 @@
         taskQueue.enqueue({
             key: `btc-sync:${account.id}`,
             label: `Sync ${account.label} (Bitcoin)`,
-            async run() {
-                const r = await getBackend().syncBitcoin(account);
+            async run(ctx) {
+                const r = await getBackend().syncBitcoin(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
                 await loadBtcAccounts();
                 if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
                 if (r.transactions_imported > 0) {
