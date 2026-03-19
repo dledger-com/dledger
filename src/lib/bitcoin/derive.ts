@@ -1,9 +1,7 @@
 /**
  * Unified address derivation — Tauri backend preferred, JS fallback for browser-only mode.
  *
- * In the current implementation only the Tauri path is wired. The JS fallback
- * stub throws so that callers know they need to install the optional
- * `bitcoinjs-lib` / `bip32` / `tiny-secp256k1` packages if running without Tauri.
+ * The JS fallback uses audited @scure/@noble libraries for pure-JS derivation.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,11 +35,10 @@ export async function deriveAddresses(
 
   // JS fallback — attempt dynamic import of optional deps
   try {
-    return await deriveBtcAddressesJs(xpub, bip, change, fromIndex, count, network);
-  } catch {
+    return await deriveBtcAddressesJsFallback(xpub, bip, change, fromIndex, count, network);
+  } catch (e) {
     throw new Error(
-      "HD address derivation requires the Tauri backend or optional JS dependencies (bitcoinjs-lib, bip32, tiny-secp256k1). " +
-      "Install them with: bun add bitcoinjs-lib bip32 tiny-secp256k1",
+      "HD address derivation failed: " + (e instanceof Error ? e.message : String(e)),
     );
   }
 }
@@ -86,19 +83,18 @@ export async function validateXpub(
   };
 }
 
-// ---- JS fallback (requires optional deps) ----
+// ---- JS fallback using @scure/@noble libraries ----
 
-async function deriveBtcAddressesJs(
-  _xpub: string,
-  _bip: number,
-  _change: number,
-  _fromIndex: number,
-  _count: number,
-  _network: "mainnet" | "testnet",
+async function deriveBtcAddressesJsFallback(
+  xpub: string,
+  bip: number,
+  change: number,
+  fromIndex: number,
+  count: number,
+  network: "mainnet" | "testnet",
 ): Promise<string[]> {
-  // This would use bitcoinjs-lib + bip32 + tiny-secp256k1 if installed.
-  // For now, throw to indicate the deps are needed.
-  throw new Error("JS derivation not implemented — install optional dependencies");
+  const { deriveBtcAddressesJs } = await import("./derive-js.js");
+  return deriveBtcAddressesJs(xpub, bip, change, fromIndex, count, network);
 }
 
 /**
@@ -112,8 +108,8 @@ export async function detectBtcInputType(
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("detect_btc_input_type", { input });
   }
-  // Minimal fallback — no private key validation without Rust
-  const { isValidBtcAddress, detectAddressNetwork, isValidBtcExtendedKey, detectKeyType, BTC_SEED_RE, BTC_WIF_RE, BTC_EXTENDED_PRIV_RE } = await import("./validate.js");
+  // Enhanced fallback using @scure libraries for proper validation
+  const { isValidBtcAddress, detectAddressNetwork, isValidBtcExtendedKey, detectKeyType } = await import("./validate.js");
   if (isValidBtcAddress(input)) {
     return {
       input_type: "address",
@@ -139,47 +135,10 @@ export async function detectBtcInputType(
       invalid_words: null,
     };
   }
-  // Browser fallback: detect seed phrases, WIF, and extended private keys
-  // so the frontend can show specific error messages instead of generic "unknown"
-  if (BTC_SEED_RE.test(input)) {
-    const words = input.trim().split(/\s+/);
-    const wordCount = words.length;
-    const validCounts = [12, 15, 18, 21, 24];
-    return {
-      input_type: "seed",
-      is_private: true,
-      network: "unknown",
-      suggested_bip: 84,
-      description: `BIP39 Seed Phrase (${wordCount} words)`,
-      valid: validCounts.includes(wordCount),
-      word_count: wordCount,
-      invalid_words: null,
-    };
-  }
-  if (BTC_WIF_RE.test(input)) {
-    return {
-      input_type: "wif",
-      is_private: true,
-      network: "unknown",
-      suggested_bip: null,
-      description: "WIF Private Key",
-      valid: false,
-      word_count: null,
-      invalid_words: null,
-    };
-  }
-  if (BTC_EXTENDED_PRIV_RE.test(input)) {
-    return {
-      input_type: "xprv",
-      is_private: true,
-      network: "unknown",
-      suggested_bip: null,
-      description: "Extended Private Key",
-      valid: false,
-      word_count: null,
-      invalid_words: null,
-    };
-  }
+  // Use @scure-based detection for private key types (seed, WIF, xprv)
+  const { detectBtcInputTypeJs } = await import("./derive-js.js");
+  const result = detectBtcInputTypeJs(input);
+  if (result.input_type !== "unknown") return result;
   return {
     input_type: "unknown",
     is_private: false,
@@ -194,7 +153,7 @@ export async function detectBtcInputType(
 
 /**
  * Convert a private key input (WIF, xprv, seed phrase) to its public equivalent.
- * Only available via Tauri — throws in browser-only mode.
+ * Uses Tauri backend when available, falls back to @scure/@noble JS libraries.
  */
 export async function convertPrivateKey(
   input: string,
@@ -211,5 +170,6 @@ export async function convertPrivateKey(
       network: network ?? null,
     });
   }
-  throw new Error("Private key conversion requires the Tauri backend");
+  const { convertPrivateKeyJs } = await import("./derive-js.js");
+  return convertPrivateKeyJs(input, bip ?? undefined, passphrase ?? undefined, network ?? undefined);
 }

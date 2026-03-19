@@ -6,6 +6,10 @@
       "name": "dledger",
       "dependencies": {
         "@huggingface/transformers": "^3.8.1",
+        "@noble/secp256k1": "^3.0.0",
+        "@scure/base": "^2.0.0",
+        "@scure/bip32": "^2.0.1",
+        "@scure/bip39": "^2.0.1",
         "@tailwindcss/vite": "^4.1.18",
         "@tanstack/table-core": "^8.21.3",
         "@tanstack/virtual-core": "^3.13.19",
@@ -217,6 +221,12 @@
 
     "@napi-rs/canvas-win32-x64-msvc": ["@napi-rs/canvas-win32-x64-msvc@0.1.95", "", { "os": "win32", "cpu": "x64" }, "sha512-GA8leTTCfdjuHi8reICTIxU0081PhXvl3lzIniLUjeLACx9GubUiyzkwFb+oyeKLS5IAGZFLKnzAf4wm2epRlA=="],
 
+    "@noble/curves": ["@noble/curves@2.0.1", "", { "dependencies": { "@noble/hashes": "2.0.1" } }, "sha512-vs1Az2OOTBiP4q0pwjW5aF0xp9n4MxVrmkFBxc6EKZc6ddYx5gaZiAsZoq0uRRXWbi3AT/sBqn05eRPtn1JCPw=="],
+
+    "@noble/hashes": ["@noble/hashes@2.0.1", "", {}, "sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw=="],
+
+    "@noble/secp256k1": ["@noble/secp256k1@3.0.0", "", {}, "sha512-NJBaR352KyIvj3t6sgT/+7xrNyF9Xk9QlLSIqUGVUYlsnDTAUqY8LOmwpcgEx4AMJXRITQ5XEVHD+mMaPfr3mg=="],
+
     "@playwright/test": ["@playwright/test@1.58.2", "", { "dependencies": { "playwright": "1.58.2" }, "bin": { "playwright": "cli.js" } }, "sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA=="],
 
     "@polka/url": ["@polka/url@1.0.0-next.29", "", {}, "sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww=="],
@@ -290,6 +300,12 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.57.1", "", { "os": "win32", "cpu": "x64" }, "sha512-VMBH2eOOaKGtIJYleXsi2B8CPVADrh+TyNxJ4mWPnKfLB/DBUmzW+5m1xUrcwWoMfSLagIRpjUFeW5CO5hyciQ=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.57.1", "", { "os": "win32", "cpu": "x64" }, "sha512-mxRFDdHIWRxg3UfIIAwCm6NzvxG0jDX/wBN6KsQFTvKFqqg9vTrWUE68qEjHt19A5wwx5X5aUi2zuZT7YR0jrA=="],
+
+    "@scure/base": ["@scure/base@2.0.0", "", {}, "sha512-3E1kpuZginKkek01ovG8krQ0Z44E3DHPjc5S2rjJw9lZn3KSQOs8S7wqikF/AH7iRanHypj85uGyxk0XAyC37w=="],
+
+    "@scure/bip32": ["@scure/bip32@2.0.1", "", { "dependencies": { "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@scure/base": "2.0.0" } }, "sha512-4Md1NI5BzoVP+bhyJaY3K6yMesEFzNS1sE/cP+9nuvE7p/b0kx9XbpDHHFl8dHtufcbdHRUUQdRqLIPHN/s7yA=="],
+
+    "@scure/bip39": ["@scure/bip39@2.0.1", "", { "dependencies": { "@noble/hashes": "2.0.1", "@scure/base": "2.0.0" } }, "sha512-PsxdFj/d2AcJcZDX1FXN3dDgitDDTmwf78rKZq1a6c1P1Nan1X/Sxc7667zU3U+AN60g7SxxP0YCVw2H/hBycg=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
