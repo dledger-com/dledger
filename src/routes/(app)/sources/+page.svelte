@@ -39,7 +39,7 @@
     import RotateCw from "lucide-svelte/icons/rotate-cw";
     import { v7 as uuidv7 } from "uuid";
     import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
-    import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase } from "$lib/evm/derive.js";
+    import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase, deriveEvmAddressesFromSeed, deriveEvmAddressesFromXpub } from "$lib/evm/derive.js";
     import { detectBtcInputType, convertPrivateKey } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
@@ -97,6 +97,8 @@
     let addingAccount = $state(false);
     let evmPrivateKeyAck = $state(false);
     let evmSeedPassphrase = $state("");
+    let evmDeriveCount = $state(5);
+    let evmSelectedIndexes = $state<Set<number>>(new Set([0]));
     const ethBusy = $derived(taskQueue.isActive("etherscan-sync"));
 
     // -- Inline edit state --
@@ -219,6 +221,8 @@
         btcSeedPassphrase = "";
         evmPrivateKeyAck = false;
         evmSeedPassphrase = "";
+        evmDeriveCount = 5;
+        evmSelectedIndexes = new Set([0]);
     }
 
     // -- Bitcoin state --
@@ -232,6 +236,22 @@
 
     const btcDetection: QuickDetection = $derived.by(() => detectInputType(btcNewAddressOrXpub));
     const evmDetection = $derived.by(() => detectEvmInputType(newAddress));
+    const evmDerivedAddresses = $derived.by(() => {
+        const input = newAddress.trim();
+        if (!input) return [];
+        const det = evmDetection;
+        if (det.type === "seed") {
+            if (!evmPrivateKeyAck) return [];
+            const v = validateEvmSeedPhrase(input);
+            if (!v.valid) return [];
+            return deriveEvmAddressesFromSeed(input, evmDeriveCount, evmSeedPassphrase || undefined);
+        }
+        if (det.type === "xpub") {
+            return deriveEvmAddressesFromXpub(input, evmDeriveCount);
+        }
+        return [];
+    });
+    const evmShowAddressPicker = $derived(evmDerivedAddresses.length > 0);
     const btcBusy = $derived(taskQueue.isActive("btc-sync"));
 
     function startAddBitcoin(prefillInput?: string) {
@@ -560,7 +580,12 @@
 
         addingAccount = true;
         try {
-            if (detection.isPrivate) {
+            // Multi-index path for seed / xpub
+            if (detection.type === "seed" || detection.type === "xpub") {
+                if (evmSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
                 if (detection.type === "seed") {
                     const v = validateEvmSeedPhrase(addr);
                     if (v.invalidWords.length > 0) {
@@ -572,25 +597,39 @@
                         return;
                     }
                 }
-                addr = deriveEvmAddress(addr, detection.type === "seed" ? evmSeedPassphrase : undefined);
-                // Clear private material immediately
-                newAddress = "";
-            } else if (detection.type === "xpub") {
-                addr = deriveEvmAddress(addr);
-            }
+                const selected = evmDerivedAddresses.filter(a => evmSelectedIndexes.has(a.index));
+                // Clear private material immediately if seed
+                if (detection.type === "seed") newAddress = "";
+                const baseLabel = newLabel.trim();
+                for (const { index, address } of selected) {
+                    const label = baseLabel ? `${baseLabel} #${index}` : ellipseAddress(address);
+                    for (const chainId of selectedChainIds) {
+                        await getBackend().addEtherscanAccount(address, chainId, label);
+                    }
+                }
+                cancelAdd();
+                await loadEthAccounts();
+                toast.success(`${selected.length} address(es) added to ${selectedChainIds.size} chain(s)`);
+            } else {
+                // Single-address path for private_key / address
+                if (detection.isPrivate) {
+                    addr = deriveEvmAddress(addr);
+                    newAddress = "";
+                }
 
-            if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-                toast.error("Invalid Ethereum address");
-                return;
-            }
+                if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+                    toast.error("Invalid Ethereum address");
+                    return;
+                }
 
-            const label = newLabel.trim() || ellipseAddress(addr);
-            for (const chainId of selectedChainIds) {
-                await getBackend().addEtherscanAccount(addr, chainId, label);
+                const label = newLabel.trim() || ellipseAddress(addr);
+                for (const chainId of selectedChainIds) {
+                    await getBackend().addEtherscanAccount(addr, chainId, label);
+                }
+                cancelAdd();
+                await loadEthAccounts();
+                toast.success(`Address added to ${selectedChainIds.size} chain(s)`);
             }
-            cancelAdd();
-            await loadEthAccounts();
-            toast.success(`Address added to ${selectedChainIds.size} chain(s)`);
         } catch (err) {
             toast.error(String(err));
         } finally {
@@ -1095,7 +1134,8 @@
                             disabled={addingAccount ||
                                 !newAddress.trim() ||
                                 selectedChainIds.size === 0 ||
-                                (evmDetection.isPrivate && !evmPrivateKeyAck)}
+                                (evmDetection.isPrivate && !evmPrivateKeyAck) ||
+                                (evmShowAddressPicker && evmSelectedIndexes.size === 0)}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
@@ -1129,6 +1169,36 @@
                                 <Input id="evm-seed-pass" type="password" placeholder="Usually empty" autocomplete="off" bind:value={evmSeedPassphrase} />
                             </div>
                         {/if}
+                    {/if}
+
+                    <!-- Multi-index address picker -->
+                    {#if evmShowAddressPicker}
+                        <div class="space-y-2">
+                            <span class="text-xs font-medium">Derived Addresses</span>
+                            <div class="max-h-48 overflow-y-auto rounded-md border">
+                                {#each evmDerivedAddresses as { index, address }}
+                                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={evmSelectedIndexes.has(index)}
+                                            onchange={() => {
+                                                const next = new Set(evmSelectedIndexes);
+                                                if (next.has(index)) next.delete(index); else next.add(index);
+                                                evmSelectedIndexes = next;
+                                            }}
+                                        />
+                                        <span class="font-mono text-xs">{address}</span>
+                                        <span class="text-xs text-muted-foreground">#{index}</span>
+                                    </label>
+                                {/each}
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{evmSelectedIndexes.size} address(es) selected</span>
+                                <Button variant="outline" size="sm" onclick={() => { evmDeriveCount += 5; }}>
+                                    Load more
+                                </Button>
+                            </div>
+                        </div>
                     {/if}
 
                     <!-- Chain selector -->

@@ -6,6 +6,8 @@ import {
   validateEvmSeedPhrase,
   deriveEvmAddress,
   deriveEvmAddressFromXpub,
+  deriveEvmAddressesFromSeed,
+  deriveEvmAddressesFromXpub,
   toChecksumAddress,
 } from "./derive.js";
 
@@ -174,6 +176,72 @@ describe("deriveEvmAddress", () => {
     const badXpub = xpub.slice(0, -4) + "ZZZZ";
 
     expect(() => deriveEvmAddressFromXpub(badXpub)).toThrow();
+  });
+});
+
+describe("deriveEvmAddressesFromSeed", () => {
+  const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+  it("index 0 matches deriveEvmAddress (backward compat)", () => {
+    const batch = deriveEvmAddressesFromSeed(mnemonic, 1);
+    const single = deriveEvmAddress(mnemonic);
+    expect(batch[0].index).toBe(0);
+    expect(batch[0].address).toBe(single);
+  });
+
+  it("returns 5 unique addresses with sequential indexes", () => {
+    const batch = deriveEvmAddressesFromSeed(mnemonic, 5);
+    expect(batch).toHaveLength(5);
+    expect(batch.map(a => a.index)).toEqual([0, 1, 2, 3, 4]);
+    const unique = new Set(batch.map(a => a.address));
+    expect(unique.size).toBe(5);
+  });
+
+  it("startIndex offset works (index 5 from batch-10 === index 0 from startIndex=5)", () => {
+    const full = deriveEvmAddressesFromSeed(mnemonic, 10);
+    const offset = deriveEvmAddressesFromSeed(mnemonic, 5, undefined, 5);
+    expect(offset[0].index).toBe(5);
+    expect(offset[0].address).toBe(full[5].address);
+    for (let i = 0; i < 5; i++) {
+      expect(offset[i].address).toBe(full[i + 5].address);
+    }
+  });
+
+  it("passphrase changes all addresses", () => {
+    const noPass = deriveEvmAddressesFromSeed(mnemonic, 3);
+    const withPass = deriveEvmAddressesFromSeed(mnemonic, 3, "mypassphrase");
+    for (let i = 0; i < 3; i++) {
+      expect(withPass[i].address).not.toBe(noPass[i].address);
+    }
+  });
+});
+
+describe("deriveEvmAddressesFromXpub", () => {
+  const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+  const seed = mnemonicToSeedSync(mnemonic, "");
+  const master = HDKey.fromMasterSeed(seed);
+  const xpub = master.derive("m/44'/60'/0'").publicExtendedKey;
+
+  it("index 0 matches deriveEvmAddressFromXpub", () => {
+    const batch = deriveEvmAddressesFromXpub(xpub, 1);
+    const single = deriveEvmAddressFromXpub(xpub);
+    expect(batch[0].index).toBe(0);
+    expect(batch[0].address).toBe(single);
+  });
+
+  it("xpub derivation at indexes 0-4 matches seed derivation at same indexes", () => {
+    const fromXpub = deriveEvmAddressesFromXpub(xpub, 5);
+    const fromSeed = deriveEvmAddressesFromSeed(mnemonic, 5);
+    for (let i = 0; i < 5; i++) {
+      expect(fromXpub[i].address).toBe(fromSeed[i].address);
+    }
+  });
+
+  it("returns 5 unique addresses", () => {
+    const batch = deriveEvmAddressesFromXpub(xpub, 5);
+    expect(batch).toHaveLength(5);
+    const unique = new Set(batch.map(a => a.address));
+    expect(unique.size).toBe(5);
   });
 });
 

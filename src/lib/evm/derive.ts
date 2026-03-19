@@ -10,6 +10,11 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 
 // ---- Types ----
 
+export interface DerivedEvmAddress {
+  index: number;
+  address: string; // EIP-55 checksummed
+}
+
 export type EvmInputType = "address" | "private_key" | "seed" | "xpub" | "unknown";
 
 export interface EvmInputDetection {
@@ -140,6 +145,52 @@ export function toChecksumAddress(rawHex: string): string {
     checksummed += nibble >= 8 ? addr[i].toUpperCase() : addr[i];
   }
   return checksummed;
+}
+
+/**
+ * Derive multiple EVM addresses from a seed phrase at sequential HD indexes.
+ * Path: m/44'/60'/0'/0/{i} for each index.
+ */
+export function deriveEvmAddressesFromSeed(
+  mnemonic: string,
+  count: number,
+  passphrase?: string,
+  startIndex = 0,
+): DerivedEvmAddress[] {
+  const s = mnemonic.trim();
+  const seed = mnemonicToSeedSync(s, passphrase ?? "");
+  const master = HDKey.fromMasterSeed(seed);
+  const results: DerivedEvmAddress[] = [];
+  for (let i = startIndex; i < startIndex + count; i++) {
+    const child = master.derive(`m/44'/60'/0'/0/${i}`);
+    if (!child.privateKey) throw new Error(`Failed to derive key at index ${i}`);
+    results.push({ index: i, address: pubkeyToAddress(child.privateKey) });
+  }
+  return results;
+}
+
+/**
+ * Derive multiple EVM addresses from an xpub at sequential child indexes.
+ * Expects xpub derived at m/44'/60'/0'. Derives 0/{i} for each index.
+ */
+export function deriveEvmAddressesFromXpub(
+  xpub: string,
+  count: number,
+  startIndex = 0,
+): DerivedEvmAddress[] {
+  const versions = { private: 0x0488ade4, public: 0x0488b21e };
+  const parent = HDKey.fromExtendedKey(xpub, versions);
+  const change = parent.deriveChild(0);
+  const results: DerivedEvmAddress[] = [];
+  for (let i = startIndex; i < startIndex + count; i++) {
+    const child = change.deriveChild(i);
+    if (!child.publicKey) throw new Error(`Failed to derive public key at index ${i}`);
+    const uncompressed = Point.fromBytes(child.publicKey).toBytes(false);
+    const hash = keccak_256(uncompressed.slice(1));
+    const addrBytes = hash.slice(-20);
+    results.push({ index: i, address: toChecksumAddress(bytesToHex(addrBytes)) });
+  }
+  return results;
 }
 
 // ---- Helpers ----
