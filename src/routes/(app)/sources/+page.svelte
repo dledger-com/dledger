@@ -265,6 +265,48 @@
         return [];
     });
     const evmShowAddressPicker = $derived(evmDerivedAddresses.length > 0);
+
+    // Existing-address sets for duplicate detection (O(1) lookup)
+    const existingEvmAddresses = $derived(new Set(ethAccounts.map(a => a.address.toLowerCase())));
+    const existingBtcXpubs = $derived(new Set(btcAccounts.map(a => a.address_or_xpub)));
+
+    // Auto-select first unknown index for EVM multi-index picker
+    $effect(() => {
+        const addrs = evmDerivedAddresses;
+        if (addrs.length === 0) return;
+        // Only auto-select on first derivation (when selection is default {0})
+        if (evmSelectedIndexes.size === 1 && evmSelectedIndexes.has(0)) {
+            const firstUnknown = addrs.find(a => !existingEvmAddresses.has(a.address.toLowerCase()));
+            if (firstUnknown && firstUnknown.index !== 0) {
+                evmSelectedIndexes = new Set([firstUnknown.index]);
+            } else if (!firstUnknown) {
+                // All known — clear selection
+                evmSelectedIndexes = new Set();
+            }
+        }
+    });
+
+    // Single-account duplicate detection
+    const evmSingleExists = $derived.by(() => {
+        const addr = newAddress.trim();
+        if (!addr) return false;
+        const det = evmDetection;
+        if (det.type !== "address" && det.type !== "private_key") return false;
+        let resolved = addr;
+        if (det.type === "private_key") {
+            try { resolved = deriveEvmAddress(addr); } catch { return false; }
+        }
+        return existingEvmAddresses.has(resolved.toLowerCase());
+    });
+
+    const btcSingleExists = $derived.by(() => {
+        const input = btcNewAddressOrXpub.trim();
+        if (!input) return false;
+        const det = btcDetection;
+        if (det.type === "seed" || det.type === "unknown") return false;
+        return existingBtcXpubs.has(input);
+    });
+
     const btcBusy = $derived(taskQueue.isActive("btc-sync"));
 
     // Async derivation of multi-index xpubs from seed phrase
@@ -287,12 +329,9 @@
             .then((result) => {
                 if (!cancelled) {
                     btcDerivedXpubs = result;
-                    // Preserve selections that are still in range, default to 0 if empty
-                    const validIndexes = new Set(
-                        [...btcSelectedIndexes].filter(i => i < result.length),
-                    );
-                    if (validIndexes.size === 0 && result.length > 0) validIndexes.add(0);
-                    btcSelectedIndexes = validIndexes;
+                    // Auto-select first unknown xpub, skip already-added ones
+                    const firstUnknown = result.find(x => !existingBtcXpubs.has(x.xpub));
+                    btcSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
                 }
             })
             .catch(() => {
@@ -334,7 +373,13 @@
                     toast.error("Select at least one wallet");
                     return;
                 }
-                const selected = btcDerivedXpubs.filter(x => btcSelectedIndexes.has(x.index));
+                const selected = btcDerivedXpubs
+                    .filter(x => btcSelectedIndexes.has(x.index))
+                    .filter(x => !existingBtcXpubs.has(x.xpub));
+                if (selected.length === 0) {
+                    toast.error("All selected wallets are already added");
+                    return;
+                }
                 // Clear private material immediately
                 btcNewAddressOrXpub = "";
                 for (const { index, xpub, keyType } of selected) {
@@ -680,7 +725,13 @@
                         return;
                     }
                 }
-                const selected = evmDerivedAddresses.filter(a => evmSelectedIndexes.has(a.index));
+                const selected = evmDerivedAddresses
+                    .filter(a => evmSelectedIndexes.has(a.index))
+                    .filter(a => !existingEvmAddresses.has(a.address.toLowerCase()));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
                 // Clear private material immediately if seed
                 if (detection.type === "seed") newAddress = "";
                 const baseLabel = newLabel.trim();
@@ -1218,7 +1269,8 @@
                                 !newAddress.trim() ||
                                 selectedChainIds.size === 0 ||
                                 (evmDetection.isPrivate && !evmPrivateKeyAck) ||
-                                (evmShowAddressPicker && evmSelectedIndexes.size === 0)}
+                                (evmShowAddressPicker && evmSelectedIndexes.size === 0) ||
+                                evmSingleExists}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
@@ -1231,6 +1283,9 @@
                                 <Badge variant="outline" class="border-amber-500 text-amber-600">{evmDetection.description}</Badge>
                             {:else}
                                 <Badge variant="outline" class="border-green-500 text-green-600">{evmDetection.description}</Badge>
+                            {/if}
+                            {#if evmSingleExists}
+                                <span class="text-xs text-amber-600 dark:text-amber-400">This address is already added</span>
                             {/if}
                         </div>
                     {/if}
@@ -1260,10 +1315,13 @@
                             <span class="text-xs font-medium">Derived Addresses</span>
                             <div class="max-h-48 overflow-y-auto rounded-md border">
                                 {#each evmDerivedAddresses as { index, address }}
-                                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer">
+                                    {@const exists = existingEvmAddresses.has(address.toLowerCase())}
+                                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer"
+                                           class:opacity-50={exists} class:cursor-not-allowed={exists}>
                                         <input
                                             type="checkbox"
                                             checked={evmSelectedIndexes.has(index)}
+                                            disabled={exists}
                                             onchange={() => {
                                                 const next = new Set(evmSelectedIndexes);
                                                 if (next.has(index)) next.delete(index); else next.add(index);
@@ -1272,18 +1330,22 @@
                                         />
                                         <span class="font-mono text-xs">{address}</span>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
-                                        <input
-                                            type="text"
-                                            class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
-                                            placeholder="Label"
-                                            value={evmItemLabels.get(index) ?? ""}
-                                            oninput={(e) => {
-                                                const next = new Map(evmItemLabels);
-                                                next.set(index, e.currentTarget.value);
-                                                evmItemLabels = next;
-                                            }}
-                                            onclick={(e) => e.stopPropagation()}
-                                        />
+                                        {#if exists}
+                                            <span class="ml-auto text-xs text-muted-foreground italic">already added</span>
+                                        {:else}
+                                            <input
+                                                type="text"
+                                                class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
+                                                placeholder="Label"
+                                                value={evmItemLabels.get(index) ?? ""}
+                                                oninput={(e) => {
+                                                    const next = new Map(evmItemLabels);
+                                                    next.set(index, e.currentTarget.value);
+                                                    evmItemLabels = next;
+                                                }}
+                                                onclick={(e) => e.stopPropagation()}
+                                            />
+                                        {/if}
                                     </label>
                                 {/each}
                             </div>
@@ -1386,7 +1448,7 @@
                         </div>
                         <Button
                             onclick={handleAddBtcAccount}
-                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck) || (btcDerivedXpubs.length > 0 && btcSelectedIndexes.size === 0)}
+                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck) || (btcDerivedXpubs.length > 0 && btcSelectedIndexes.size === 0) || btcSingleExists}
                         >
                             <Plus class="mr-1 h-4 w-4" />
                             Add
@@ -1398,6 +1460,9 @@
                                 <Badge variant="outline" class="border-amber-500 text-amber-600">{btcDetection.description}</Badge>
                             {:else}
                                 <Badge variant="outline" class="border-green-500 text-green-600">{btcDetection.description}</Badge>
+                            {/if}
+                            {#if btcSingleExists}
+                                <span class="text-xs text-amber-600 dark:text-amber-400">This address/key is already added</span>
                             {/if}
                         </div>
                     {/if}
@@ -1443,10 +1508,13 @@
                             {/if}
                             <div class="max-h-48 overflow-y-auto rounded-md border">
                                 {#each btcDerivedXpubs as { index, xpub, keyType }}
-                                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer">
+                                    {@const exists = existingBtcXpubs.has(xpub)}
+                                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer"
+                                           class:opacity-50={exists} class:cursor-not-allowed={exists}>
                                         <input
                                             type="checkbox"
                                             checked={btcSelectedIndexes.has(index)}
+                                            disabled={exists}
                                             onchange={() => {
                                                 const next = new Set(btcSelectedIndexes);
                                                 if (next.has(index)) next.delete(index); else next.add(index);
@@ -1456,18 +1524,22 @@
                                         <span class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</span>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
                                         <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
-                                        <input
-                                            type="text"
-                                            class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
-                                            placeholder="Label"
-                                            value={btcItemLabels.get(index) ?? ""}
-                                            oninput={(e) => {
-                                                const next = new Map(btcItemLabels);
-                                                next.set(index, e.currentTarget.value);
-                                                btcItemLabels = next;
-                                            }}
-                                            onclick={(e) => e.stopPropagation()}
-                                        />
+                                        {#if exists}
+                                            <span class="ml-auto text-xs text-muted-foreground italic">already added</span>
+                                        {:else}
+                                            <input
+                                                type="text"
+                                                class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
+                                                placeholder="Label"
+                                                value={btcItemLabels.get(index) ?? ""}
+                                                oninput={(e) => {
+                                                    const next = new Map(btcItemLabels);
+                                                    next.set(index, e.currentTarget.value);
+                                                    btcItemLabels = next;
+                                                }}
+                                                onclick={(e) => e.stopPropagation()}
+                                            />
+                                        {/if}
                                     </label>
                                 {/each}
                             </div>
