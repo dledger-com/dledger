@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { HDKey } from "@scure/bip32";
+import { mnemonicToSeedSync } from "@scure/bip39";
 import {
   detectEvmInputType,
   validateEvmSeedPhrase,
   deriveEvmAddress,
+  deriveEvmAddressFromXpub,
   toChecksumAddress,
 } from "./derive.js";
 
@@ -57,6 +60,20 @@ describe("detectEvmInputType", () => {
     // Address is 42 chars (0x + 40 hex), not 66 chars (0x + 64 hex)
     const r = detectEvmInputType("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
     expect(r.type).toBe("address");
+  });
+
+  it("detects an xpub", () => {
+    // Derive a real xpub from the well-known mnemonic for a valid test value
+    const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const seed = mnemonicToSeedSync(mnemonic, "");
+    const master = HDKey.fromMasterSeed(seed);
+    const account = master.derive("m/44'/60'/0'");
+    const xpub = account.publicExtendedKey;
+
+    const r = detectEvmInputType(xpub);
+    expect(r.type).toBe("xpub");
+    expect(r.isPrivate).toBe(false);
+    expect(r.description).toBe("Extended Public Key (xpub)");
   });
 });
 
@@ -122,6 +139,41 @@ describe("deriveEvmAddress", () => {
 
   it("throws on invalid input", () => {
     expect(() => deriveEvmAddress("not a valid input")).toThrow();
+  });
+
+  it("derives correct address from xpub (matches seed phrase derivation)", () => {
+    const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const seed = mnemonicToSeedSync(mnemonic, "");
+    const master = HDKey.fromMasterSeed(seed);
+    const account = master.derive("m/44'/60'/0'");
+    const xpub = account.publicExtendedKey;
+
+    const addrFromXpub = deriveEvmAddress(xpub);
+    const addrFromSeed = deriveEvmAddress(mnemonic);
+    expect(addrFromXpub).toBe(addrFromSeed);
+  });
+
+  it("derives correct address from xpub via deriveEvmAddressFromXpub", () => {
+    const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const seed = mnemonicToSeedSync(mnemonic, "");
+    const master = HDKey.fromMasterSeed(seed);
+    const account = master.derive("m/44'/60'/0'");
+    const xpub = account.publicExtendedKey;
+
+    const addr = deriveEvmAddressFromXpub(xpub);
+    expect(addr).toBe("0x9858EfFD232B4033E47d90003D41EC34EcaEda94");
+  });
+
+  it("throws on invalid xpub (bad checksum)", () => {
+    // Mangle the last few characters to break the base58check checksum
+    const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const seed = mnemonicToSeedSync(mnemonic, "");
+    const master = HDKey.fromMasterSeed(seed);
+    const account = master.derive("m/44'/60'/0'");
+    const xpub = account.publicExtendedKey;
+    const badXpub = xpub.slice(0, -4) + "ZZZZ";
+
+    expect(() => deriveEvmAddressFromXpub(badXpub)).toThrow();
   });
 });
 

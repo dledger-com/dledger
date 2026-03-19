@@ -5,12 +5,12 @@
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english.js";
-import { getPublicKey } from "@noble/secp256k1";
+import { getPublicKey, Point } from "@noble/secp256k1";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 
 // ---- Types ----
 
-export type EvmInputType = "address" | "private_key" | "seed" | "unknown";
+export type EvmInputType = "address" | "private_key" | "seed" | "xpub" | "unknown";
 
 export interface EvmInputDetection {
   type: EvmInputType;
@@ -29,6 +29,7 @@ export interface EvmSeedValidation {
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const EVM_PRIVKEY_RE = /^(0x)?[a-fA-F0-9]{64}$/;
 const SEED_RE = /^([a-z]+\s+){11,23}[a-z]+$/;
+const XPUB_RE = /^xpub[1-9A-HJ-NP-Za-km-z]{100,112}$/;
 
 // ---- Public API ----
 
@@ -56,6 +57,11 @@ export function detectEvmInputType(input: string): EvmInputDetection {
     return { type: "seed", isPrivate: true, description: `Seed Phrase (${wordCount} words)` };
   }
 
+  // Extended public key (xpub)
+  if (XPUB_RE.test(s)) {
+    return { type: "xpub", isPrivate: false, description: "Extended Public Key (xpub)" };
+  }
+
   return { type: "unknown", isPrivate: false, description: "" };
 }
 
@@ -73,7 +79,7 @@ export function validateEvmSeedPhrase(input: string): EvmSeedValidation {
 }
 
 /**
- * Derive an EVM address from a seed phrase or raw private key hex.
+ * Derive an EVM address from a seed phrase, raw private key hex, or xpub.
  * Returns an EIP-55 checksummed address. Throws on invalid input.
  */
 export function deriveEvmAddress(input: string, passphrase?: string): string {
@@ -95,7 +101,30 @@ export function deriveEvmAddress(input: string, passphrase?: string): string {
     return pubkeyToAddress(privKey);
   }
 
-  throw new Error("Input is not a seed phrase or private key");
+  // Extended public key (xpub) path
+  if (XPUB_RE.test(s)) {
+    return deriveEvmAddressFromXpub(s);
+  }
+
+  throw new Error("Input is not a seed phrase, private key, or xpub");
+}
+
+/**
+ * Derive an EVM address from an xpub (expected to be derived at m/44'/60'/0').
+ * Derives child 0/0 and computes the keccak address.
+ */
+export function deriveEvmAddressFromXpub(xpub: string): string {
+  const versions = { private: 0x0488ade4, public: 0x0488b21e };
+  const parent = HDKey.fromExtendedKey(xpub, versions);
+  const child = parent.deriveChild(0).deriveChild(0);
+  if (!child.publicKey) throw new Error("Failed to derive public key from xpub");
+
+  // Decompress public key → uncompressed 65 bytes (0x04 + x + y)
+  const uncompressed = Point.fromBytes(child.publicKey).toBytes(false);
+  // Keccak hash of the 64-byte x||y (skip 0x04 prefix), last 20 bytes = address
+  const hash = keccak_256(uncompressed.slice(1));
+  const addrBytes = hash.slice(-20);
+  return toChecksumAddress(bytesToHex(addrBytes));
 }
 
 /**

@@ -549,7 +549,7 @@
 
         const detection = detectEvmInputType(addr);
         if (detection.type === "unknown") {
-            toast.error("Unrecognized input — enter an 0x address, private key, or seed phrase");
+            toast.error("Unrecognized input — enter an 0x address, private key, seed phrase, or xpub");
             return;
         }
 
@@ -575,6 +575,8 @@
                 addr = deriveEvmAddress(addr, detection.type === "seed" ? evmSeedPassphrase : undefined);
                 // Clear private material immediately
                 newAddress = "";
+            } else if (detection.type === "xpub") {
+                addr = deriveEvmAddress(addr);
             }
 
             if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
@@ -1075,7 +1077,7 @@
                             <label for="new-eth-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-eth-address"
-                                placeholder="0x..."
+                                placeholder="0x... or xpub"
                                 autocomplete="off"
                                 bind:value={newAddress}
                             />
