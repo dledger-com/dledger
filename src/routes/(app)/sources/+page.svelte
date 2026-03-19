@@ -1173,7 +1173,7 @@
                             </label>
                         </div>
                         {#if btcDetection.type === "seed"}
-                            <div class="flex items-center gap-4">
+                            <div class="flex items-end gap-4">
                                 <div class="space-y-1">
                                     <label for="btc-seed-bip" class="text-xs font-medium">BIP Standard</label>
                                     <select id="btc-seed-bip" bind:value={btcSeedBip} class="h-9 rounded-md border bg-background px-3 text-sm">
