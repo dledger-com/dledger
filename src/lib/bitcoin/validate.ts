@@ -28,9 +28,9 @@ export function detectAddressNetwork(address: string): "mainnet" | "testnet" | "
   return "unknown";
 }
 
-const BTC_WIF_RE = /^[5KLcn9][1-9A-HJ-NP-Za-km-z]{49,52}$/;
-const BTC_EXTENDED_PRIV_RE = /^[xyztuvXYZTUV]prv[1-9A-HJ-NP-Za-km-z]{100,112}$/;
-const BTC_SEED_RE = /^([a-z]+\s+){11,23}[a-z]+$/;
+export const BTC_WIF_RE = /^[5KLcn9][1-9A-HJ-NP-Za-km-z]{49,52}$/;
+export const BTC_EXTENDED_PRIV_RE = /^[xyztuvXYZTUV]prv[1-9A-HJ-NP-Za-km-z]{100,112}$/;
+export const BTC_SEED_RE = /^([a-z]+\s+){11,23}[a-z]+$/;
 
 export type QuickInputType = "address" | "xpub" | "wif" | "xprv" | "seed" | "unknown";
 

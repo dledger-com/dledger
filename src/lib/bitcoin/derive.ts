@@ -113,7 +113,7 @@ export async function detectBtcInputType(
     return invoke("detect_btc_input_type", { input });
   }
   // Minimal fallback — no private key validation without Rust
-  const { isValidBtcAddress, detectAddressNetwork, isValidBtcExtendedKey, detectKeyType } = await import("./validate.js");
+  const { isValidBtcAddress, detectAddressNetwork, isValidBtcExtendedKey, detectKeyType, BTC_SEED_RE, BTC_WIF_RE, BTC_EXTENDED_PRIV_RE } = await import("./validate.js");
   if (isValidBtcAddress(input)) {
     return {
       input_type: "address",
@@ -135,6 +135,46 @@ export async function detectBtcInputType(
       suggested_bip: info.suggestedBip,
       description: `Extended Public Key (BIP${info.suggestedBip})`,
       valid: true,
+      word_count: null,
+      invalid_words: null,
+    };
+  }
+  // Browser fallback: detect seed phrases, WIF, and extended private keys
+  // so the frontend can show specific error messages instead of generic "unknown"
+  if (BTC_SEED_RE.test(input)) {
+    const words = input.trim().split(/\s+/);
+    const wordCount = words.length;
+    return {
+      input_type: "seed",
+      is_private: true,
+      network: "unknown",
+      suggested_bip: 84,
+      description: `BIP39 Seed Phrase (${wordCount} words)`,
+      valid: false,
+      word_count: wordCount,
+      invalid_words: null,
+    };
+  }
+  if (BTC_WIF_RE.test(input)) {
+    return {
+      input_type: "wif",
+      is_private: true,
+      network: "unknown",
+      suggested_bip: null,
+      description: "WIF Private Key",
+      valid: false,
+      word_count: null,
+      invalid_words: null,
+    };
+  }
+  if (BTC_EXTENDED_PRIV_RE.test(input)) {
+    return {
+      input_type: "xprv",
+      is_private: true,
+      network: "unknown",
+      suggested_bip: null,
+      description: "Extended Private Key",
+      valid: false,
       word_count: null,
       invalid_words: null,
     };

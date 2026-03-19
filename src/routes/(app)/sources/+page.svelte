@@ -254,9 +254,17 @@
             // Authoritative validation via Rust
             const det = await detectBtcInputType(input);
             if (!det.valid) {
-                const msg = det.invalid_words?.length
-                    ? `Invalid BIP39 words: ${det.invalid_words.join(", ")}`
-                    : "Invalid Bitcoin input";
+                let msg: string;
+                if (det.invalid_words?.length) {
+                    msg = `Invalid BIP39 words: ${det.invalid_words.join(", ")}`;
+                } else if (det.input_type === "seed" && det.word_count) {
+                    const valid = [12, 15, 18, 21, 24];
+                    msg = valid.includes(det.word_count)
+                        ? `Invalid seed phrase checksum (${det.word_count} words)`
+                        : `Invalid word count: ${det.word_count} (must be 12, 15, 18, 21, or 24)`;
+                } else {
+                    msg = "Invalid Bitcoin input";
+                }
                 toast.error(msg);
                 return;
             }
