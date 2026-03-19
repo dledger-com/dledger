@@ -19,6 +19,7 @@ import type {
   OpenLot,
   Budget,
 } from "./types/index.js";
+import type { BitcoinAccount, BitcoinSyncResult } from "./bitcoin/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -153,6 +154,15 @@ export interface Backend {
   removeEtherscanAccount(address: string, chainId: number): Promise<void>;
   syncEtherscan(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
   syncTheGraph(apiKey: string, address: string, label: string, chainId: number): Promise<EtherscanSyncResult>;
+
+  // Bitcoin
+  listBitcoinAccounts(): Promise<BitcoinAccount[]>;
+  addBitcoinAccount(account: Omit<BitcoinAccount, "last_sync">): Promise<void>;
+  removeBitcoinAccount(id: string): Promise<void>;
+  getBtcTrackedAddresses(accountId: string): Promise<string[]>;
+  storeBtcDerivedAddresses(accountId: string, addresses: Array<{address: string; change: number; index: number}>): Promise<void>;
+  updateBtcDerivationIndex(accountId: string, receiveIndex: number, changeIndex: number): Promise<void>;
+  syncBitcoin(account: BitcoinAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitcoinSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -545,6 +555,32 @@ class TauriBackend implements Backend {
     const { syncTheGraphWithHandlers, getDefaultRegistry } = await import("./handlers/index.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
     return syncTheGraphWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+  }
+
+  // Bitcoin
+  async listBitcoinAccounts(): Promise<BitcoinAccount[]> {
+    return this.invoke("list_bitcoin_accounts");
+  }
+  async addBitcoinAccount(account: Omit<BitcoinAccount, "last_sync">): Promise<void> {
+    return this.invoke("add_bitcoin_account", { account });
+  }
+  async removeBitcoinAccount(id: string): Promise<void> {
+    return this.invoke("remove_bitcoin_account", { id });
+  }
+  async getBtcTrackedAddresses(accountId: string): Promise<string[]> {
+    return this.invoke("get_btc_tracked_addresses", { accountId });
+  }
+  async storeBtcDerivedAddresses(accountId: string, addresses: Array<{address: string; change: number; index: number}>): Promise<void> {
+    return this.invoke("store_btc_derived_addresses", { accountId, addresses });
+  }
+  async updateBtcDerivationIndex(accountId: string, receiveIndex: number, changeIndex: number): Promise<void> {
+    return this.invoke("update_btc_derivation_index", { accountId, receiveIndex, changeIndex });
+  }
+  async syncBitcoin(account: BitcoinAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitcoinSyncResult> {
+    const { syncBitcoinAccount } = await import("./bitcoin/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    const allAccounts = await this.listBitcoinAccounts();
+    return syncBitcoinAccount(this, account, allAccounts, loadSettings(), onProgress, signal);
   }
 
   // Exchange accounts (CEX)

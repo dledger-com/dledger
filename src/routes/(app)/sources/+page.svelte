@@ -167,7 +167,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -207,9 +207,123 @@
         newAddress = "";
         newLabel = "";
         selectedChainIds = new Set([1]);
+        btcNewAddressOrXpub = "";
+        btcNewLabel = "";
+        btcNewInputType = "address";
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy);
+    // -- Bitcoin state --
+    let btcAccounts = $state<import("$lib/bitcoin/types.js").BitcoinAccount[]>([]);
+    let btcNewAddressOrXpub = $state("");
+    let btcNewLabel = $state("");
+    let btcNewInputType = $state<"address" | "xpub">("address");
+    let btcAddingAccount = $state(false);
+    const btcBusy = $derived(taskQueue.isActive("btc-sync"));
+
+    function startAddBitcoin() {
+        addSourceMode = "bitcoin";
+    }
+
+    async function loadBtcAccounts() {
+        try {
+            btcAccounts = await getBackend().listBitcoinAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Bitcoin accounts: ${err}`);
+        }
+    }
+
+    async function handleAddBtcAccount() {
+        const input = btcNewAddressOrXpub.trim();
+        const label = btcNewLabel.trim();
+        if (!input || !label) {
+            toast.error("Address/xpub and label are required");
+            return;
+        }
+
+        btcAddingAccount = true;
+        try {
+            let accountType: "address" | "xpub" | "ypub" | "zpub" = "address";
+            let derivationBip: number | undefined;
+            let network: "mainnet" | "testnet" = "mainnet";
+
+            if (btcNewInputType === "xpub") {
+                if (input.startsWith("ypub")) { accountType = "ypub"; derivationBip = 49; }
+                else if (input.startsWith("zpub")) { accountType = "zpub"; derivationBip = 84; }
+                else { accountType = "xpub"; derivationBip = 44; }
+                if (input.startsWith("tpub") || input.startsWith("upub") || input.startsWith("vpub")) {
+                    network = "testnet";
+                }
+            } else {
+                // Detect network from address prefix
+                if (input.startsWith("m") || input.startsWith("n") || input.startsWith("2") || input.startsWith("tb1")) {
+                    network = "testnet";
+                }
+            }
+
+            await getBackend().addBitcoinAccount({
+                id: uuidv7(),
+                address_or_xpub: input,
+                account_type: accountType,
+                derivation_bip: derivationBip,
+                network,
+                label,
+                last_receive_index: -1,
+                last_change_index: -1,
+                created_at: new Date().toISOString(),
+            });
+            btcNewAddressOrXpub = "";
+            btcNewLabel = "";
+            addSourceMode = "idle";
+            await loadBtcAccounts();
+            toast.success("Bitcoin account added");
+        } catch (err) {
+            toast.error(`Failed to add Bitcoin account: ${err}`);
+        } finally {
+            btcAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveBtcAccount(id: string) {
+        try {
+            await getBackend().removeBitcoinAccount(id);
+            await loadBtcAccounts();
+            toast.success("Bitcoin account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncBtcAccount(account: import("$lib/bitcoin/types.js").BitcoinAccount) {
+        taskQueue.enqueue({
+            key: `btc-sync:${account.id}`,
+            label: `Sync ${account.label} (Bitcoin)`,
+            async run() {
+                const r = await getBackend().syncBitcoin(account);
+                await loadBtcAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllBtc() {
+        for (const account of btcAccounts) {
+            syncBtcAccount(account);
+        }
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy);
 
     async function loadCexAccounts() {
         try {
@@ -361,6 +475,7 @@
     $effect(() => {
         loadEthAccounts();
         loadCexAccounts();
+        loadBtcAccounts();
     });
 
     // -- Etherscan handlers --
@@ -500,6 +615,7 @@
                 if (pickSyncSource(account.chain_id)) syncEthAccount(account);
             }
         }
+        if (btcAccounts.length > 0) syncAllBtc();
     }
 
     function handleReprocessOne(account: EtherscanAccount) {
@@ -805,6 +921,7 @@
                 <AddSourceInput
                     onSelectCex={startAddCex}
                     onSelectBlockchain={startAddBlockchain}
+                    onSelectBitcoin={startAddBitcoin}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -965,6 +1082,117 @@
                             </div>
                         {/if}
                     </div>
+                </div>
+            {:else if addSourceMode === "bitcoin"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Bitcoin Address / HD Wallet</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-1.5">
+                            <input type="radio" bind:group={btcNewInputType} value="address" />
+                            <span class="text-sm">Single Address</span>
+                        </label>
+                        <label class="flex items-center gap-1.5">
+                            <input type="radio" bind:group={btcNewInputType} value="xpub" />
+                            <span class="text-sm">Extended Public Key</span>
+                        </label>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-btc-input" class="text-xs font-medium">
+                                {btcNewInputType === "address" ? "Bitcoin Address" : "xpub / ypub / zpub"}
+                            </label>
+                            <Input
+                                id="new-btc-input"
+                                placeholder={btcNewInputType === "address" ? "bc1q... or 1... or 3..." : "xpub... / ypub... / zpub..."}
+                                bind:value={btcNewAddressOrXpub}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-btc-label" class="text-xs font-medium">Label</label>
+                            <Input
+                                id="new-btc-label"
+                                placeholder="My BTC Wallet"
+                                bind:value={btcNewLabel}
+                            />
+                        </div>
+                        <Button
+                            onclick={handleAddBtcAccount}
+                            disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || !btcNewLabel.trim()}
+                        >
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+                </div>
+            {/if}
+
+            <!-- Bitcoin Wallets sub-section -->
+            {#if btcAccounts.length > 0}
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Bitcoin Wallets</h4>
+                        <span class="text-xs text-muted-foreground">No API key needed</span>
+                    </div>
+                    <Table.Root>
+                        <Table.Header>
+                            <Table.Row>
+                                <Table.Head>Address / Key</Table.Head>
+                                <Table.Head>Label</Table.Head>
+                                <Table.Head>Type</Table.Head>
+                                <Table.Head>Last Sync</Table.Head>
+                                <Table.Head class="text-right">Actions</Table.Head>
+                            </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                            {#each btcAccounts as account}
+                                {@const isSyncing = taskQueue.isActive(`btc-sync:${account.id}`)}
+                                <Table.Row>
+                                    <Table.Cell class="font-mono text-sm">
+                                        {account.address_or_xpub.length > 20
+                                            ? `${account.address_or_xpub.slice(0, 12)}...${account.address_or_xpub.slice(-8)}`
+                                            : account.address_or_xpub}
+                                    </Table.Cell>
+                                    <Table.Cell>{account.label}</Table.Cell>
+                                    <Table.Cell>
+                                        <Badge variant="secondary">
+                                            {account.account_type === "address" ? "Address" : "HD Wallet"}
+                                        </Badge>
+                                    </Table.Cell>
+                                    <Table.Cell class="text-sm text-muted-foreground">
+                                        {account.last_sync
+                                            ? new Date(account.last_sync).toLocaleDateString()
+                                            : "Never"}
+                                    </Table.Cell>
+                                    <Table.Cell class="text-right">
+                                        <div class="flex justify-end gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onclick={() => syncBtcAccount(account)}
+                                                disabled={btcBusy}
+                                            >
+                                                <RefreshCw class="mr-1 h-3 w-3" />
+                                                {isSyncing ? "Syncing..." : "Sync"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onclick={() => handleRemoveBtcAccount(account.id)}
+                                                disabled={btcBusy}
+                                            >
+                                                <Trash2 class="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                    </Table.Cell>
+                                </Table.Row>
+                            {/each}
+                        </Table.Body>
+                    </Table.Root>
                 </div>
             {/if}
 
@@ -1237,13 +1465,13 @@
             {/if}
 
             <!-- Empty state -->
-            {#if cexAccounts.length === 0 && groupedAddresses.length === 0 && addSourceMode === "idle"}
+            {#if cexAccounts.length === 0 && groupedAddresses.length === 0 && btcAccounts.length === 0 && addSourceMode === "idle"}
                 <p class="text-sm text-muted-foreground">No online sources configured yet.</p>
             {/if}
         </Card.Content>
 
         <!-- Footer with unified actions -->
-        {#if cexAccounts.length > 0 || ethAccounts.length > 0}
+        {#if cexAccounts.length > 0 || ethAccounts.length > 0 || btcAccounts.length > 0}
             <Card.Footer class="flex justify-end gap-2">
                 {#if ethAccounts.length > 0 && cexAccounts.length > 0}
                     <Button

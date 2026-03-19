@@ -9,10 +9,12 @@
   let {
     onSelectCex,
     onSelectBlockchain,
+    onSelectBitcoin,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
     onSelectBlockchain: (prefillAddress?: string) => void;
+    onSelectBitcoin?: () => void;
     disabled?: boolean;
   } = $props();
 
@@ -37,6 +39,11 @@
     return /^0x[a-fA-F0-9]{40}$/.test(s) ? s : null;
   });
 
+  const detectedBtcAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^(1[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|bc1[qp][a-z0-9]{38,58})$/.test(s) ? s : null;
+  });
+
   function selectCex(id: ExchangeId) {
     open = false;
     search = "";
@@ -47,6 +54,12 @@
     open = false;
     search = "";
     onSelectBlockchain(prefillAddress);
+  }
+
+  function selectBitcoin() {
+    open = false;
+    search = "";
+    onSelectBitcoin?.();
   }
 </script>
 
@@ -74,6 +87,18 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#if detectedBtcAddress}
+          <Command.Group heading="Detected Address">
+            <Command.Item
+              value="detected-btc-{detectedBtcAddress}"
+              keywords={["bitcoin", "btc", "address"]}
+              onSelect={() => selectBitcoin()}
+              class="font-mono text-xs"
+            >
+              Add {detectedBtcAddress.slice(0, 8)}...{detectedBtcAddress.slice(-4)} as Bitcoin address
+            </Command.Item>
+          </Command.Group>
+        {/if}
         <Command.Group heading="Exchanges">
           {#each EXCHANGES as exchange}
             <Command.Item
@@ -92,6 +117,15 @@
           >
             EVM Address
           </Command.Item>
+          {#if onSelectBitcoin}
+            <Command.Item
+              value="Bitcoin Address"
+              keywords={["bitcoin", "btc", "xpub", "ypub", "zpub"]}
+              onSelect={() => selectBitcoin()}
+            >
+              Bitcoin Address / HD Wallet
+            </Command.Item>
+          {/if}
         </Command.Group>
       </Command.List>
     </Command.Root>

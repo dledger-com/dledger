@@ -1,3 +1,5 @@
+mod bitcoin_commands;
+mod bitcoin_state;
 mod commands;
 pub mod db;
 mod dprice_commands;
@@ -12,6 +14,7 @@ use commands::AppState;
 use db::{apply_migrations, SqliteStorage};
 use dledger_core::{LedgerEngine, Storage};
 use dprice_commands::{DpriceMode, DpriceState};
+use bitcoin_state::BitcoinState;
 use etherscan::EtherscanState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -46,6 +49,10 @@ pub fn run() {
             let etherscan_state =
                 EtherscanState::new(db_path_str).map_err(|e| e.to_string())?;
             app.manage(etherscan_state);
+
+            let bitcoin_state =
+                BitcoinState::new(db_path_str).map_err(|e| e.to_string())?;
+            app.manage(bitcoin_state);
 
             // Initialize dprice: co-located DB in app data dir + local XDG path
             let dprice_integrated_path = data_dir.join("dprice.db");
@@ -165,6 +172,15 @@ pub fn run() {
             dprice_commands::dprice_vacuum,
             dprice_commands::dprice_export_parquet,
             dprice_commands::dprice_query_assets,
+            bitcoin_commands::validate_btc_address,
+            bitcoin_commands::validate_btc_xpub,
+            bitcoin_commands::derive_btc_addresses,
+            bitcoin_commands::list_bitcoin_accounts,
+            bitcoin_commands::add_bitcoin_account,
+            bitcoin_commands::remove_bitcoin_account,
+            bitcoin_commands::get_btc_tracked_addresses,
+            bitcoin_commands::store_btc_derived_addresses,
+            bitcoin_commands::update_btc_derivation_index,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

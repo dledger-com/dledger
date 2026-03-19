@@ -930,6 +930,30 @@ PRAGMA foreign_keys = ON;
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (22)");
         }
+        if (currentVersion < 23) {
+          db.exec(`CREATE TABLE IF NOT EXISTS bitcoin_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address_or_xpub TEXT NOT NULL,
+            account_type TEXT NOT NULL DEFAULT 'address',
+            derivation_bip INTEGER,
+            network TEXT NOT NULL DEFAULT 'mainnet',
+            label TEXT NOT NULL,
+            last_receive_index INTEGER NOT NULL DEFAULT -1,
+            last_change_index INTEGER NOT NULL DEFAULT -1,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec(`CREATE TABLE IF NOT EXISTS btc_derived_address (
+            address TEXT PRIMARY KEY NOT NULL,
+            bitcoin_account_id TEXT NOT NULL REFERENCES bitcoin_account(id) ON DELETE CASCADE,
+            change_chain INTEGER NOT NULL DEFAULT 0,
+            address_index INTEGER NOT NULL,
+            has_transactions INTEGER NOT NULL DEFAULT 0
+          )`);
+          db.exec("CREATE INDEX IF NOT EXISTS idx_btc_derived_account ON btc_derived_address(bitcoin_account_id)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (23)");
+        }
       }
     }
     // Idempotent cleanup: ensure is_reconciled exists on line_item
@@ -3870,6 +3894,97 @@ PRAGMA foreign_keys = ON;
     this.beginTransaction();
     try {
       const result = await syncTheGraphWithHandlers(this, getDefaultRegistry(), apiKey, address, label, chainId, loadSettings());
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Bitcoin ----
+
+  async listBitcoinAccounts(): Promise<import("./bitcoin/types.js").BitcoinAccount[]> {
+    return this.query(
+      "SELECT id, address_or_xpub, account_type, derivation_bip, network, label, last_receive_index, last_change_index, last_sync, created_at FROM bitcoin_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string,
+        address_or_xpub: row.address_or_xpub as string,
+        account_type: row.account_type as "address" | "xpub" | "ypub" | "zpub",
+        derivation_bip: (row.derivation_bip as number) ?? undefined,
+        network: row.network as "mainnet" | "testnet",
+        label: row.label as string,
+        last_receive_index: (row.last_receive_index as number) ?? 0,
+        last_change_index: (row.last_change_index as number) ?? 0,
+        last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addBitcoinAccount(account: Omit<import("./bitcoin/types.js").BitcoinAccount, "last_sync">): Promise<void> {
+    this.run(
+      `INSERT INTO bitcoin_account (id, address_or_xpub, account_type, derivation_bip, network, label, last_receive_index, last_change_index, last_sync, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      [account.id, account.address_or_xpub, account.account_type, account.derivation_bip ?? null,
+       account.network, account.label, account.last_receive_index, account.last_change_index, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async removeBitcoinAccount(id: string): Promise<void> {
+    this.run("DELETE FROM btc_derived_address WHERE bitcoin_account_id = ?", [id]);
+    this.run("DELETE FROM bitcoin_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async getBtcTrackedAddresses(accountId: string): Promise<string[]> {
+    // Check if it's a single-address account
+    const account = this.queryOne(
+      "SELECT account_type, address_or_xpub FROM bitcoin_account WHERE id = ?",
+      [accountId],
+      (row) => ({ account_type: row.account_type as string, address_or_xpub: row.address_or_xpub as string }),
+    );
+    if (account && account.account_type === "address") {
+      return [account.address_or_xpub];
+    }
+    return this.query(
+      "SELECT address FROM btc_derived_address WHERE bitcoin_account_id = ? ORDER BY change_chain, address_index",
+      [accountId],
+      (row) => row.address as string,
+    );
+  }
+
+  async storeBtcDerivedAddresses(accountId: string, addresses: Array<{address: string; change: number; index: number}>): Promise<void> {
+    for (const addr of addresses) {
+      this.run(
+        `INSERT OR IGNORE INTO btc_derived_address (address, bitcoin_account_id, change_chain, address_index) VALUES (?, ?, ?, ?)`,
+        [addr.address, accountId, addr.change, addr.index],
+      );
+    }
+    this.scheduleSave();
+  }
+
+  async updateBtcDerivationIndex(accountId: string, receiveIndex: number, changeIndex: number): Promise<void> {
+    this.run(
+      "UPDATE bitcoin_account SET last_receive_index = ?, last_change_index = ?, last_sync = ? WHERE id = ?",
+      [receiveIndex, changeIndex, new Date().toISOString(), accountId],
+    );
+    this.scheduleSave();
+  }
+
+  async syncBitcoin(
+    account: import("./bitcoin/types.js").BitcoinAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./bitcoin/types.js").BitcoinSyncResult> {
+    const { syncBitcoinAccount } = await import("./bitcoin/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    const allAccounts = await this.listBitcoinAccounts();
+    this.beginTransaction();
+    try {
+      const result = await syncBitcoinAccount(this, account, allAccounts, loadSettings(), onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {

@@ -55,6 +55,7 @@ export interface AppSettings {
   journalChartGranularity?: ChartGranularity | null;
   journalLineItemView?: "table" | "flow";
   locale?: string;
+  btcExplorerUrl?: string;  // default: "https://mempool.space"
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

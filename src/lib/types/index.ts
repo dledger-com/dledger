@@ -130,6 +130,8 @@ export interface EtherscanSyncResult {
   warnings: string[];
 }
 
+export type { BitcoinAccount, BitcoinSyncResult, BtcApiTx, BtcApiInput, BtcApiOutput } from "../bitcoin/types.js";
+
 export interface OpenLot {
   id: string;
   account_id: string;
