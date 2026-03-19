@@ -23,6 +23,8 @@
     import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
     import X from "lucide-svelte/icons/x";
     import Pencil from "lucide-svelte/icons/pencil";
+    import Copy from "lucide-svelte/icons/copy";
+    import * as Tooltip from "$lib/components/ui/tooltip/index.js";
     import {
         enqueueRateBackfill,
     } from "$lib/exchange-rate-historical.js";
@@ -542,6 +544,12 @@
             const candidate = `${name} ${i}`;
             if (!existing.includes(candidate)) return candidate;
         }
+    }
+
+    function copyToClipboard(text: string) {
+        navigator.clipboard.writeText(text).then(() => {
+            toast.success("Copied to clipboard");
+        });
     }
 
     function ellipseAddress(addr: string): string {
@@ -1328,7 +1336,13 @@
                                                 evmSelectedIndexes = next;
                                             }}
                                         />
-                                        <span class="font-mono text-xs">{address}</span>
+                                        <Tooltip.Root>
+                                            <Tooltip.Trigger class="font-mono text-xs truncate">{address}</Tooltip.Trigger>
+                                            <Tooltip.Content><p class="font-mono text-xs">{address}</p></Tooltip.Content>
+                                        </Tooltip.Root>
+                                        <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(address); }} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                            <Copy class="h-3 w-3" />
+                                        </button>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
                                         {#if exists}
                                             <span class="ml-auto text-xs text-muted-foreground italic">already added</span>
@@ -1521,7 +1535,13 @@
                                                 btcSelectedIndexes = next;
                                             }}
                                         />
-                                        <span class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</span>
+                                        <Tooltip.Root>
+                                            <Tooltip.Trigger class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</Tooltip.Trigger>
+                                            <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{xpub}</p></Tooltip.Content>
+                                        </Tooltip.Root>
+                                        <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(xpub); }} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                            <Copy class="h-3 w-3" />
+                                        </button>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
                                         <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
                                         {#if exists}
@@ -1576,9 +1596,19 @@
                                 {@const isSyncing = taskQueue.isActive(`btc-sync:${account.id}`)}
                                 <Table.Row>
                                     <Table.Cell class="font-mono text-sm">
-                                        {account.address_or_xpub.length > 20
-                                            ? `${account.address_or_xpub.slice(0, 12)}...${account.address_or_xpub.slice(-8)}`
-                                            : account.address_or_xpub}
+                                        <div class="flex items-center gap-1">
+                                            <Tooltip.Root>
+                                                <Tooltip.Trigger class="truncate">
+                                                    {account.address_or_xpub.length > 20
+                                                        ? `${account.address_or_xpub.slice(0, 12)}...${account.address_or_xpub.slice(-8)}`
+                                                        : account.address_or_xpub}
+                                                </Tooltip.Trigger>
+                                                <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{account.address_or_xpub}</p></Tooltip.Content>
+                                            </Tooltip.Root>
+                                            <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                <Copy class="h-3 w-3" />
+                                            </button>
+                                        </div>
                                     </Table.Cell>
                                     <Table.Cell>{account.label}</Table.Cell>
                                     <Table.Cell>
@@ -1748,7 +1778,13 @@
                                                 }}
                                             >
                                                 <div class="flex items-center gap-3">
-                                                    <span class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</span>
+                                                    <Tooltip.Root>
+                                                        <Tooltip.Trigger class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</Tooltip.Trigger>
+                                                        <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
+                                                    </Tooltip.Root>
+                                                    <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
+                                                        <Copy class="h-3 w-3" />
+                                                    </button>
                                                     <div class="flex-1">
                                                         <Input placeholder="Label" bind:value={editLabel} />
                                                     </div>
@@ -1832,7 +1868,17 @@
                                     <!-- Display mode -->
                                     {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
                                     <Table.Row>
-                                        <Table.Cell class="font-mono text-sm">{formatAddress(group.address)}</Table.Cell>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">{formatAddress(group.address)}</Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
                                         <Table.Cell>{group.label}</Table.Cell>
                                         <Table.Cell>
                                             <div class="flex flex-wrap gap-1">
