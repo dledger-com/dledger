@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
 import { matchRule, type CsvCategorizationRule } from "../categorize.js";
@@ -134,7 +135,8 @@ export const revolutPreset: CsvPreset = {
         });
       }
 
-      records.push({ date, description, descriptionData: { type: "bank", bank: "Revolut", text: description }, lines });
+      const descData = { type: "bank" as const, bank: "Revolut", text: description };
+      records.push({ date, description: renderDescription(descData), descriptionData: descData, lines });
     }
 
     return records;

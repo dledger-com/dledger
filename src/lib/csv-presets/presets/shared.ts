@@ -1,5 +1,6 @@
 import type { CsvRecord } from "../types.js";
 import type { DescriptionData } from "$lib/types/description-data.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import {
   exchangeAssetsCurrency,
   exchangeFees,
@@ -125,9 +126,28 @@ export function makeFeeLines(
 export function makeTradeDescription(
   exchange: string, base: string, quote: string, side: "BUY" | "SELL",
 ): string {
-  return side === "BUY"
-    ? `${exchange} trade: ${quote} → ${base}`
-    : `${exchange} trade: ${base} → ${quote}`;
+  return renderDescription(makeTradeDescriptionData(exchange, base, quote, side));
+}
+
+/** Build consistent transfer description: "Exchange deposit/withdrawal: CURRENCY" */
+export function makeTransferDescription(
+  exchange: string, currency: string, direction: "deposit" | "withdrawal",
+): string {
+  return renderDescription(makeTransferDescriptionData(exchange, currency, direction));
+}
+
+/** Build consistent reward description: "Exchange kind reward: CURRENCY" */
+export function makeRewardDescription(
+  exchange: string, kind: string, currency: string,
+): string {
+  return renderDescription({ type: "cex-reward", exchange, kind, currency });
+}
+
+/** Build consistent operation description: "Exchange operation: CURRENCY" */
+export function makeOperationDescription(
+  exchange: string, operation: string, currency: string,
+): string {
+  return renderDescription({ type: "cex-operation", exchange, operation, currency });
 }
 
 /** Case-insensitive column index lookup */

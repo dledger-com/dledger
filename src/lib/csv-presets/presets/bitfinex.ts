@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import type { DescriptionData } from "$lib/types/description-data.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx, parsePair, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import {
   exchangeAssets,
@@ -203,12 +204,10 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
       groupKey = `${date}|${descRaw}`;
     }
 
-    let description = `Bitfinex: ${descRaw.slice(0, 80)}`;
     let descriptionData: DescriptionData | undefined;
     if (isExchangeRow) {
       const m = descRaw.match(/^Exchange \S+ (\S+) for (\S+) @/);
       if (m) {
-        description = `Bitfinex trade: ${m[1]} \u2192 ${m[2]}`;
         descriptionData = { type: "cex-trade", exchange: "Bitfinex", spent: m[1], received: m[2] };
       }
     } else if (isFee) {
@@ -216,6 +215,7 @@ function transformLedgers(headers: string[], rows: string[][]): CsvRecord[] {
     } else if (!isPairedEvent) {
       descriptionData = { type: "cex-operation", exchange: "Bitfinex", operation: descRaw.split(" ")[0].toLowerCase(), currency };
     }
+    const description = descriptionData ? renderDescription(descriptionData) : `Bitfinex: ${descRaw.slice(0, 80)}`;
 
     // Collect fee records separately so they appear after exchange records,
     // ensuring the exchange description is used when groups are merged.
@@ -258,7 +258,8 @@ function transformMovements(headers: string[], rows: string[][]): CsvRecord[] {
     const fees = feesIdx >= 0 ? Math.abs(parseFloat((row[feesIdx] ?? "0").replace(/,/g, ""))) : 0;
     if (fees > 0) lines.push(...makeFeeLines("Bitfinex", currency, fees));
 
-    records.push({ date, description: `Bitfinex ${type}: ${currency}`, descriptionData: makeTransferDescriptionData("Bitfinex", currency, type), lines });
+    const mvDescData = makeTransferDescriptionData("Bitfinex", currency, type);
+    records.push({ date, description: renderDescription(mvDescData), descriptionData: mvDescData, lines });
   }
 
   return records;

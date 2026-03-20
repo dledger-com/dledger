@@ -141,7 +141,7 @@ export const bankStatementPreset: CsvPreset = {
       records.push({
         date,
         description,
-        descriptionData: { type: "generic-import", source: "csv", text: description, presetId: "bank-statement" },
+        descriptionData: { type: "bank", bank: "", text: description },
         lines: [
           { account: bankAccount, currency, amount: amount.toString() },
           { account: counterAccount, currency, amount: (-amount).toString() },

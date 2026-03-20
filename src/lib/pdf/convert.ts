@@ -2,7 +2,15 @@ import type { CsvRecord, CsvFileHeader } from "$lib/csv-presets/types.js";
 import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { matchRule } from "$lib/csv-presets/categorize.js";
 import type { PdfStatement } from "./types.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { INCOME_UNCATEGORIZED, EXPENSES_UNCATEGORIZED, bankAssets } from "$lib/accounts/paths.js";
+
+const BANK_DISPLAY_NAMES: Record<string, string> = {
+  lbp: "La Banque Postale",
+  n26: "N26",
+  nuri: "Nuri",
+  deblock: "Deblock",
+};
 
 export interface PdfConvertOptions {
   mainAccount: string;
@@ -46,10 +54,12 @@ export function convertPdfToRecords(
     const amountStr = tx.amount.toString();
     const counterAmountStr = (-tx.amount).toString();
 
+    const bank = options.bankId ? (BANK_DISPLAY_NAMES[options.bankId] ?? options.bankId) : "";
+    const descData = { type: "bank" as const, bank, text: tx.description };
     records.push({
       date: tx.date,
-      description: tx.description,
-      descriptionData: { type: "bank", bank: options.bankId ?? "unknown", text: tx.description },
+      description: renderDescription(descData),
+      descriptionData: descData,
       lines: [
         { account: options.mainAccount, currency, amount: amountStr },
         { account: counterAccount, currency, amount: counterAmountStr },

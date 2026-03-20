@@ -3,11 +3,13 @@ import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
 import { matchRule } from "$lib/csv-presets/categorize.js";
 import type { OfxStatement, OfxTransaction } from "./parse-ofx.js";
 import { parseOfxDate } from "./parse-ofx.js";
-import { INCOME_UNCATEGORIZED, EXPENSES_UNCATEGORIZED, creditCard, bankAssets } from "$lib/accounts/paths.js";
+import { renderDescription } from "$lib/types/description-data.js";
+import { INCOME_UNCATEGORIZED, EXPENSES_UNCATEGORIZED, creditCard, bankAssets, bankNameFromAccount } from "$lib/accounts/paths.js";
 
 export interface OfxConvertOptions {
   mainAccount: string;
   rules: CsvCategorizationRule[];
+  bankName?: string;
 }
 
 export interface OfxConvertResult {
@@ -33,6 +35,7 @@ export function convertOfxToRecords(
   const records: CsvRecord[] = [];
   const warnings: string[] = [];
   const currency = statement.currency;
+  const bank = options.bankName ?? bankNameFromAccount(options.mainAccount);
 
   for (const tx of statement.transactions) {
     const date = parseOfxDate(tx.dtPosted);
@@ -60,10 +63,11 @@ export function convertOfxToRecords(
       counterAccount = amount > 0 ? INCOME_UNCATEGORIZED : EXPENSES_UNCATEGORIZED;
     }
 
+    const descData = { type: "bank" as const, bank, text: description };
     records.push({
       date,
-      description,
-      descriptionData: { type: "bank", bank: "OFX", text: description },
+      description: renderDescription(descData),
+      descriptionData: descData,
       lines: [
         { account: options.mainAccount, currency, amount: amount.toString() },
         { account: counterAccount, currency, amount: (-amount).toString() },

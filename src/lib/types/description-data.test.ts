@@ -27,8 +27,13 @@ describe("renderDescription", () => {
       .toBe("Binance fee: BNB");
   });
 
-  it("renders bank", () => {
+  it("renders bank with bank name", () => {
     expect(renderDescription({ type: "bank", bank: "N26", text: "REWE grocery store" }))
+      .toBe("N26: REWE grocery store");
+  });
+
+  it("renders bank without bank name", () => {
+    expect(renderDescription({ type: "bank", bank: "", text: "REWE grocery store" }))
       .toBe("REWE grocery store");
   });
 

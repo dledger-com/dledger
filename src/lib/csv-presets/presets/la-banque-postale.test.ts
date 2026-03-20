@@ -72,8 +72,8 @@ describe("laBanquePostalePreset", () => {
 
     it("uses Libellé column values as description", () => {
       const records = laBanquePostalePreset.transform(metadataHeaders, rows)!;
-      expect(records[0].description).toBe("PRELEVEMENT DE EXAMPLE TELCO");
-      expect(records[1].description).toBe("VIREMENT EN VOTRE FAVEUR");
+      expect(records[0].description).toBe("La Banque Postale: PRELEVEMENT DE EXAMPLE TELCO");
+      expect(records[1].description).toBe("La Banque Postale: VIREMENT EN VOTRE FAVEUR");
     });
 
     it("parses DD/MM/YYYY dates correctly", () => {
@@ -220,7 +220,7 @@ describe("laBanquePostalePreset", () => {
       const rows = [["16/02/2026", "", "-24,99"]];
 
       const records = laBanquePostalePreset.transform(headers, rows);
-      expect(records![0].description).toBe("La Banque Postale transaction");
+      expect(records![0].description).toBe("La Banque Postale: La Banque Postale transaction");
     });
 
     it("falls back to libell prefix when é is mangled by encoding", () => {
@@ -230,7 +230,7 @@ describe("laBanquePostalePreset", () => {
 
       const records = laBanquePostalePreset.transform(headers, rows);
       expect(records).not.toBeNull();
-      expect(records![0].description).toBe("PRELEVEMENT DE EXAMPLE TELCO");
+      expect(records![0].description).toBe("La Banque Postale: PRELEVEMENT DE EXAMPLE TELCO");
     });
   });
 });

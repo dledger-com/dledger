@@ -117,7 +117,7 @@ describe("bitfinexPreset ledger variant", () => {
       // Exchange records first, fee record last (regardless of input order)
       expect(records![0].description).toBe("Bitfinex trade: BFX → BTC");
       expect(records![1].description).toBe("Bitfinex trade: BFX → BTC");
-      expect(records![2].description).toContain("Trading fees");
+      expect(records![2].description).toBe("Bitfinex fee: BTC");
     });
 
     it("fee row produces fee + asset lines", () => {

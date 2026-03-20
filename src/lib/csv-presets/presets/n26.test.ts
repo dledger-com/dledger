@@ -38,7 +38,7 @@ describe("n26Preset", () => {
       expect(records!).toHaveLength(2);
 
       expect(records![0].date).toBe("2026-01-31");
-      expect(records![0].description).toBe("SARL EXEMPLE");
+      expect(records![0].description).toBe("N26: SARL EXEMPLE");
       expect(records![0].lines[0].account).toBe("Assets:Bank:N26:EUR");
       expect(records![0].lines[0].currency).toBe("EUR");
       expect(records![0].lines[0].amount).toBe("-17.5");
@@ -53,7 +53,7 @@ describe("n26Preset", () => {
 
       const records = n26Preset.transform(headers, rows);
       expect(records).not.toBeNull();
-      expect(records![0].description).toBe("Sophie Martin — Cours de yoga");
+      expect(records![0].description).toBe("N26: Sophie Martin — Cours de yoga");
     });
 
     it("does not append empty payment reference", () => {
@@ -62,7 +62,7 @@ describe("n26Preset", () => {
       ];
 
       const records = n26Preset.transform(headers, rows);
-      expect(records![0].description).toBe("SARL EXEMPLE");
+      expect(records![0].description).toBe("N26: SARL EXEMPLE");
     });
 
     it("applies categorization rules", () => {

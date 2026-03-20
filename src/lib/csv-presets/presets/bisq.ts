@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx, parseNamedMonthDate, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
@@ -121,7 +122,8 @@ function transformTx(headers: string[], rows: string[][]): CsvRecord[] {
     const type = amount > 0 ? "deposit" : "withdrawal";
     const lines = makeTransferLines("Bisq", "BTC", amount);
 
-    records.push({ date, description: `Bisq ${type}: BTC`, descriptionData: makeTransferDescriptionData("Bisq", "BTC", type), lines });
+    const xferDescData = makeTransferDescriptionData("Bisq", "BTC", type);
+    records.push({ date, description: renderDescription(xferDescData), descriptionData: xferDescData, lines });
   }
 
   return records;

@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx, makeTransferLines, makeTransferDescriptionData } from "./shared.js";
 import {
   exchangeAssets,
@@ -78,25 +79,33 @@ export const yieldAppPreset: CsvPreset = {
           { account: exchangeAssetsCurrency("YieldApp", currency), currency, amount: amount.toString() },
           { account: exchangeIncome("YieldApp", incomeLabel), currency, amount: (-amount).toString() },
         );
-        records.push({ date, description: `Yield App ${type}: ${currency}`, descriptionData: { type: "cex-reward", exchange: "Yield App", kind: type, currency }, lines });
+        const kind = type === "referral reward" ? "referral"
+          : type === "reward" ? "general"
+          : type;
+        const rewardDescData = { type: "cex-reward" as const, exchange: "Yield App", kind, currency };
+        records.push({ date, description: renderDescription(rewardDescData), descriptionData: rewardDescData, lines });
       } else if (type === "withdrawal") {
         // Withdrawal: amount is positive in data, negate for outflow
         lines.push(...makeTransferLines("YieldApp", currency, -amount));
-        records.push({ date, description: `Yield App withdrawal: ${currency}`, descriptionData: makeTransferDescriptionData("Yield App", currency, "withdrawal"), lines });
+        const wdDescData = makeTransferDescriptionData("Yield App", currency, "withdrawal");
+        records.push({ date, description: renderDescription(wdDescData), descriptionData: wdDescData, lines });
       } else if (type === "deposit") {
         lines.push(...makeTransferLines("YieldApp", currency, amount));
-        records.push({ date, description: `Yield App deposit: ${currency}`, descriptionData: makeTransferDescriptionData("Yield App", currency, "deposit"), lines });
+        const depDescData = makeTransferDescriptionData("Yield App", currency, "deposit");
+        records.push({ date, description: renderDescription(depDescData), descriptionData: depDescData, lines });
       } else if (type === "redeem" || type === "redemption") {
         // Redeem: receiving capital back
         lines.push(...makeTransferLines("YieldApp", currency, amount));
-        records.push({ date, description: `Yield App redeem: ${currency}`, descriptionData: { type: "cex-operation", exchange: "Yield App", operation: "redeem", currency }, lines });
+        const redeemDescData = { type: "cex-operation" as const, exchange: "Yield App", operation: "redeem", currency };
+        records.push({ date, description: renderDescription(redeemDescData), descriptionData: redeemDescData, lines });
       } else {
         // Fallback
         lines.push(
           { account: exchangeAssetsCurrency("YieldApp", currency), currency, amount: amount.toString() },
           { account: EQUITY_EXTERNAL, currency, amount: (-amount).toString() },
         );
-        records.push({ date, description: `Yield App ${type}: ${currency}`, descriptionData: { type: "cex-operation", exchange: "Yield App", operation: type, currency }, lines });
+        const fallbackDescData = { type: "cex-operation" as const, exchange: "Yield App", operation: type, currency };
+        records.push({ date, description: renderDescription(fallbackDescData), descriptionData: fallbackDescData, lines });
       }
     }
 

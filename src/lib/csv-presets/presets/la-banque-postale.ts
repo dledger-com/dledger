@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord, CsvFileHeader } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { parseAmount, detectNumberFormat } from "../parse-amount.js";
 import { parseDate, detectDateFormat } from "../parse-date.js";
 import { matchRule, type CsvCategorizationRule } from "../categorize.js";
@@ -203,10 +204,11 @@ export const laBanquePostalePreset: CsvPreset = {
         counterAccount = amount < 0 ? EXPENSES_UNCATEGORIZED : INCOME_UNCATEGORIZED;
       }
 
+      const descData = { type: "bank" as const, bank: "La Banque Postale", text: description };
       records.push({
         date,
-        description,
-        descriptionData: { type: "bank", bank: "La Banque Postale", text: description },
+        description: renderDescription(descData),
+        descriptionData: descData,
         lines: [
           { account: mainAccount, currency, amount: amount.toString() },
           { account: counterAccount, currency, amount: (-amount).toString() },

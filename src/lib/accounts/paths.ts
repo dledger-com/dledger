@@ -188,3 +188,15 @@ export function defiExpensePrefix(protocol: string) {
 export function tradingAccount(commodity: string) {
 	return `Equity:Trading:${commodity}`;
 }
+
+// ── Utilities ────────────────────────────────────────
+
+/** Extract a meaningful bank name from an account path.
+ *  e.g. "Assets:Bank:N26" → "N26", "Assets:Bank:Checking:1234" → "Checking" */
+export function bankNameFromAccount(accountPath: string): string {
+	const parts = accountPath.split(":");
+	// Skip "Assets" and "Bank" (or similar) prefixes — return the first meaningful segment after them
+	if (parts.length >= 3) return parts[2];
+	if (parts.length >= 2) return parts[1];
+	return parts[0] || "";
+}

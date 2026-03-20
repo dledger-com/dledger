@@ -28,7 +28,7 @@ describe("yieldAppPreset", () => {
         { account: exchangeAssetsCurrency("YieldApp", "YLD"), currency: "YLD", amount: "100" },
         { account: exchangeIncome("YieldApp", "Interest"), currency: "YLD", amount: "-100" },
       ]);
-      expect(records![0].description).toBe("Yield App interest: YLD");
+      expect(records![0].description).toBe("Yield App interest reward: YLD");
     });
 
     it("routes referral reward to Income:Referral", () => {
@@ -45,7 +45,7 @@ describe("yieldAppPreset", () => {
         { account: exchangeAssetsCurrency("YieldApp", "YLD"), currency: "YLD", amount: "100" },
         { account: exchangeIncome("YieldApp", "Bonus"), currency: "YLD", amount: "-100" },
       ]);
-      expect(records![0].description).toBe("Yield App bonus: YLD");
+      expect(records![0].description).toBe("Yield App bonus reward: YLD");
     });
 
     it("routes reward to Income:Rewards", () => {
@@ -55,7 +55,7 @@ describe("yieldAppPreset", () => {
         { account: exchangeAssetsCurrency("YieldApp", "YLD"), currency: "YLD", amount: "100" },
         { account: exchangeIncome("YieldApp", "Rewards"), currency: "YLD", amount: "-100" },
       ]);
-      expect(records![0].description).toBe("Yield App reward: YLD");
+      expect(records![0].description).toBe("Yield App general reward: YLD");
     });
   });
 });

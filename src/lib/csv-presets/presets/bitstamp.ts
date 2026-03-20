@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx, parseNamedMonthDate, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets, exchangeAssetsCurrency, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
@@ -98,14 +99,17 @@ function transformExport(headers: string[], rows: string[][]): CsvRecord[] {
     } else if (typeUpper === "DEPOSIT") {
       lines.push(...makeTransferLines("Bitstamp", currency, amount));
       if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
-      records.push({ date, description: `Bitstamp deposit: ${currency}`, descriptionData: makeTransferDescriptionData("Bitstamp", currency, "deposit"), lines });
+      const depDescData = makeTransferDescriptionData("Bitstamp", currency, "deposit");
+      records.push({ date, description: renderDescription(depDescData), descriptionData: depDescData, lines });
     } else if (typeUpper === "WITHDRAWAL") {
       lines.push(...makeTransferLines("Bitstamp", currency, -amount));
       if (!isNaN(fee) && fee > 0 && feeCurr) lines.push(...makeFeeLines("Bitstamp", feeCurr, fee));
-      records.push({ date, description: `Bitstamp withdrawal: ${currency}`, descriptionData: makeTransferDescriptionData("Bitstamp", currency, "withdrawal"), lines });
+      const wdDescData = makeTransferDescriptionData("Bitstamp", currency, "withdrawal");
+      records.push({ date, description: renderDescription(wdDescData), descriptionData: wdDescData, lines });
     } else {
       lines.push(...makeTransferLines("Bitstamp", currency, amount));
-      records.push({ date, description: `Bitstamp ${type.toLowerCase()}: ${currency}`, descriptionData: { type: "cex-operation", exchange: "Bitstamp", operation: type.toLowerCase(), currency }, lines });
+      const opDescData = { type: "cex-operation" as const, exchange: "Bitstamp", operation: type.toLowerCase(), currency };
+      records.push({ date, description: renderDescription(opDescData), descriptionData: opDescData, lines });
     }
   }
 
@@ -165,14 +169,17 @@ function transformAll(headers: string[], rows: string[][]): CsvRecord[] {
       records.push({ date, description: valParsed ? makeTradeDescription("Bitstamp", amtParsed.currency, valParsed.currency, side) : `Bitstamp ${side.toLowerCase()} ${amtParsed.currency}`, descriptionData: valParsed ? makeTradeDescriptionData("Bitstamp", amtParsed.currency, valParsed.currency, side) : { type: "cex-trade", exchange: "Bitstamp", spent: side === "SELL" ? amtParsed.currency : amtParsed.currency, received: side === "BUY" ? amtParsed.currency : amtParsed.currency }, lines });
     } else if (type === "DEPOSIT") {
       lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, amtParsed.amount));
-      records.push({ date, description: `Bitstamp deposit: ${amtParsed.currency}`, descriptionData: makeTransferDescriptionData("Bitstamp", amtParsed.currency, "deposit"), lines });
+      const depDescData2 = makeTransferDescriptionData("Bitstamp", amtParsed.currency, "deposit");
+      records.push({ date, description: renderDescription(depDescData2), descriptionData: depDescData2, lines });
     } else if (type === "WITHDRAWAL") {
       lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, -amtParsed.amount));
       if (feeParsed && feeParsed.amount > 0) lines.push(...makeFeeLines("Bitstamp", feeParsed.currency, feeParsed.amount));
-      records.push({ date, description: `Bitstamp withdrawal: ${amtParsed.currency}`, descriptionData: makeTransferDescriptionData("Bitstamp", amtParsed.currency, "withdrawal"), lines });
+      const wdDescData2 = makeTransferDescriptionData("Bitstamp", amtParsed.currency, "withdrawal");
+      records.push({ date, description: renderDescription(wdDescData2), descriptionData: wdDescData2, lines });
     } else {
       lines.push(...makeTransferLines("Bitstamp", amtParsed.currency, amtParsed.amount));
-      records.push({ date, description: `Bitstamp ${type.toLowerCase()}: ${amtParsed.currency}`, descriptionData: { type: "cex-operation", exchange: "Bitstamp", operation: type.toLowerCase(), currency: amtParsed.currency }, lines });
+      const opDescData2 = { type: "cex-operation" as const, exchange: "Bitstamp", operation: type.toLowerCase(), currency: amtParsed.currency };
+      records.push({ date, description: renderDescription(opDescData2), descriptionData: opDescData2, lines });
     }
   }
 

@@ -42,7 +42,7 @@ describe("convertOfxToRecords", () => {
 
     const rec1 = result.records[0];
     expect(rec1.date).toBe("2023-04-01");
-    expect(rec1.description).toBe("Grocery Store");
+    expect(rec1.description).toBe("Checking: Grocery Store");
     expect(rec1.lines).toHaveLength(2);
     expect(rec1.lines[0]).toEqual({
       account: "Assets:Bank:Checking",
@@ -57,7 +57,7 @@ describe("convertOfxToRecords", () => {
 
     const rec2 = result.records[1];
     expect(rec2.date).toBe("2023-04-05");
-    expect(rec2.description).toBe("Payroll - Monthly salary");
+    expect(rec2.description).toBe("Checking: Payroll - Monthly salary");
     expect(rec2.lines[0].amount).toBe("2500");
     expect(rec2.lines[1].account).toBe("Income:Uncategorized");
   });
@@ -88,10 +88,10 @@ describe("convertOfxToRecords", () => {
       rules: [],
     });
 
-    expect(result.records[0].description).toBe("Store - Dept A");
-    expect(result.records[1].description).toBe("Only Name");
-    expect(result.records[2].description).toBe("Only Memo");
-    expect(result.records[3].description).toBe("DEBIT"); // fallback to trnType
+    expect(result.records[0].description).toBe("Checking: Store - Dept A");
+    expect(result.records[1].description).toBe("Checking: Only Name");
+    expect(result.records[2].description).toBe("Checking: Only Memo");
+    expect(result.records[3].description).toBe("Checking: DEBIT"); // fallback to trnType
   });
 
   it("respects amount signs (negative=expense, positive=income)", () => {
@@ -252,7 +252,7 @@ VERSION:102
     expect(result.records[0].sourceKey).toBe("EU001");
 
     expect(result.records[1].lines[1].account).toBe("Income:Salary");
-    expect(result.records[1].description).toBe("Salaire - Juin 2023");
+    expect(result.records[1].description).toBe("BNPP: Salaire - Juin 2023");
 
     expect(result.fileHeader.balanceAmount).toBe("8500.00");
     expect(result.fileHeader.balanceDate).toBe("2023-06-30");

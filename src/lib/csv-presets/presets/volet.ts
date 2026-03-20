@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx, makeTradeLines, makeTradeDescription, makeTradeDescriptionData, makeTransferDescriptionData, makeTransferLines, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
@@ -101,13 +102,13 @@ export const voletPreset: CsvPreset = {
       } else if (direction === "DEPOSIT") {
         if (isNaN(credit) || !creditCurr) continue;
         lines.push(...makeTransferLines("Volet", creditCurr, credit));
-        desc = `Volet deposit: ${creditCurr}`;
         descData = makeTransferDescriptionData("Volet", creditCurr, "deposit");
+        desc = renderDescription(descData);
       } else if (direction === "WITHDRAWAL") {
         if (isNaN(debit) || !debitCurr) continue;
         lines.push(...makeTransferLines("Volet", debitCurr, -debit));
-        desc = `Volet withdrawal: ${debitCurr}`;
         descData = makeTransferDescriptionData("Volet", debitCurr, "withdrawal");
+        desc = renderDescription(descData);
       } else {
         continue;
       }

@@ -1,5 +1,6 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx, makeTransferLines, makeTransferDescriptionData, makeFeeLines } from "./shared.js";
 import { exchangeAssets } from "$lib/accounts/paths.js";
 
@@ -88,16 +89,19 @@ export const cryptoComExchangePreset: CsvPreset = {
         lines.push(...makeTransferLines("CryptoComExchange", currency, quantity));
         const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
         if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("CryptoComExchange", currency, fee));
-        records.push({ date, description: `Crypto.com Exchange deposit: ${currency}`, descriptionData: makeTransferDescriptionData("Crypto.com Exchange", currency, "deposit"), lines });
+        const depDescData = makeTransferDescriptionData("Crypto.com Exchange", currency, "deposit");
+        records.push({ date, description: renderDescription(depDescData), descriptionData: depDescData, lines });
       } else if (isWithdrawal) {
         lines.push(...makeTransferLines("CryptoComExchange", currency, -quantity));
         const fee = feeIdx >= 0 ? parseFloat((row[feeIdx] ?? "0").replace(/,/g, "")) : 0;
         if (!isNaN(fee) && fee > 0) lines.push(...makeFeeLines("CryptoComExchange", currency, fee));
-        records.push({ date, description: `Crypto.com Exchange withdrawal: ${currency}`, descriptionData: makeTransferDescriptionData("Crypto.com Exchange", currency, "withdrawal"), lines });
+        const wdDescData = makeTransferDescriptionData("Crypto.com Exchange", currency, "withdrawal");
+        records.push({ date, description: renderDescription(wdDescData), descriptionData: wdDescData, lines });
       } else {
         // Unknown type → generic
         lines.push(...makeTransferLines("CryptoComExchange", currency, quantity));
-        records.push({ date, description: `Crypto.com Exchange ${typeStr}: ${currency}`, descriptionData: { type: "cex-operation", exchange: "Crypto.com Exchange", operation: typeStr, currency }, lines });
+        const opDescData = { type: "cex-operation" as const, exchange: "Crypto.com Exchange", operation: typeStr, currency };
+        records.push({ date, description: renderDescription(opDescData), descriptionData: opDescData, lines });
       }
     }
 

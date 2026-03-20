@@ -23,7 +23,7 @@ export function renderDescription(data: DescriptionData): string {
     case "cex-operation":
       return `${data.exchange} ${data.operation}: ${data.currency}`;
     case "bank":
-      return data.text;
+      return data.bank ? `${data.bank}: ${data.text}` : data.text;
     case "onchain-transfer": {
       const dir = data.direction === "sent" ? "Send" : data.direction === "received" ? "Receive" : "Self-transfer";
       const cp = data.counterparty ? ` ${data.direction === "sent" ? "to" : "from"} ${data.counterparty}` : "";

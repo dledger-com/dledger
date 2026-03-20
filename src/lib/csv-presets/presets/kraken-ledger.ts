@@ -1,6 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import type { DescriptionData } from "$lib/types/description-data.js";
+import { renderDescription } from "$lib/types/description-data.js";
 import { KRAKEN_ASSET_MAP } from "$lib/cex/kraken.js";
 import { exchangeAssets, exchangeAssetsCurrency, exchangeFees, exchangeStaking, EQUITY_TRADING, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
 
@@ -113,12 +114,10 @@ export const krakenLedgerPreset: CsvPreset = {
 
         const spent = entries.find(e => e.amount < 0);
         const received = entries.find(e => e.amount > 0);
-        description = spent && received
-          ? `Kraken trade: ${spent.asset} → ${received.asset}`
-          : `Kraken trade: ${assets.join("/")}`;
         const descriptionData: DescriptionData = spent && received
           ? { type: "cex-trade", exchange: "Kraken", spent: spent.asset, received: received.asset }
           : { type: "cex-trade", exchange: "Kraken", spent: assets[0] ?? "", received: assets[1] ?? "" };
+        description = renderDescription(descriptionData);
 
         // Add Equity:Trading legs to balance
         // Group by currency and sum
@@ -173,10 +172,11 @@ export const krakenLedgerPreset: CsvPreset = {
             });
           }
 
+          const xferDescData: DescriptionData = { type: "cex-transfer", exchange: "Kraken", direction: type as "deposit" | "withdrawal", currency: e.asset };
           records.push({
             date,
-            description: `Kraken ${type}: ${e.asset}`,
-            descriptionData: { type: "cex-transfer", exchange: "Kraken", direction: type, currency: e.asset } as DescriptionData,
+            description: renderDescription(xferDescData),
+            descriptionData: xferDescData,
             lines,
             sourceKey: refid,
           });
@@ -184,10 +184,11 @@ export const krakenLedgerPreset: CsvPreset = {
       } else if (type === "staking") {
         for (const e of entries) {
           if (e.amount <= 0) continue;
+          const stakingDescData: DescriptionData = { type: "cex-reward", exchange: "Kraken", kind: "staking", currency: e.asset };
           records.push({
             date,
-            description: `Kraken staking reward: ${e.asset}`,
-            descriptionData: { type: "cex-reward", exchange: "Kraken", kind: "staking", currency: e.asset },
+            description: renderDescription(stakingDescData),
+            descriptionData: stakingDescData,
             lines: [
               {
                 account: exchangeAssetsCurrency("Kraken", e.asset),
@@ -206,10 +207,11 @@ export const krakenLedgerPreset: CsvPreset = {
       } else {
         // Other types: transfer, margin, etc.
         for (const e of entries) {
+          const otherDescData: DescriptionData = { type: "cex-operation", exchange: "Kraken", operation: type, currency: e.asset };
           records.push({
             date,
-            description: `Kraken ${type}: ${e.asset}`,
-            descriptionData: { type: "cex-operation", exchange: "Kraken", operation: type, currency: e.asset },
+            description: renderDescription(otherDescData),
+            descriptionData: otherDescData,
             lines: [
               {
                 account: exchangeAssetsCurrency("Kraken", e.asset),

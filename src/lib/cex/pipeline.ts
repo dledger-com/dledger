@@ -16,6 +16,7 @@ interface HandlerRegistryLike {
 import type { TaskProgress } from "../task-queue.svelte.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
+import { renderDescription } from "../types/description-data.js";
 import { exchangeAssetsCurrency, exchangeFees, exchangeExternal, exchangeStaking, tradingAccount } from "../accounts/paths.js";
 import { crossSourceAliases } from "../csv-presets/cross-source.js";
 
@@ -326,21 +327,21 @@ export async function syncCexAccount(
       else if (amount.gt(0)) { receivedAsset = record.asset; }
     }
 
-    const description = spentAsset && receivedAsset
-      ? `${exchangeName} trade: ${spentAsset} → ${receivedAsset}`
+    const tradeDescData = spentAsset && receivedAsset
+      ? { type: "cex-trade" as const, exchange: exchangeName, spent: spentAsset, received: receivedAsset }
+      : null;
+    const description = tradeDescData
+      ? renderDescription(tradeDescData)
       : `${exchangeName} trade: ${group.map(r => r.asset).join(" / ")}`;
     const groupMeta: Record<string, string> = {};
     for (const record of group) {
       if (record.metadata) Object.assign(groupMeta, record.metadata);
     }
-    const tradeDescData = spentAsset && receivedAsset
-      ? JSON.stringify({ type: "cex-trade", exchange: exchangeName, spent: spentAsset, received: receivedAsset })
-      : undefined;
     await postEntry(date, description, source, items, {
       exchange: adapter.exchangeId,
       refid,
       ...groupMeta,
-    }, tradeDescData);
+    }, tradeDescData ? JSON.stringify(tradeDescData) : undefined);
 
     // Derive and record exchange rate from trade items
     const rateItems: TradeRateItem[] = items.map((i) => ({
@@ -427,20 +428,22 @@ export async function syncCexAccount(
 
     switch (record.type) {
       case "deposit": {
+        const depDescData = { type: "cex-transfer" as const, exchange: exchangeName, direction: "deposit" as const, currency: record.asset };
         const items: Array<{ account: string; currency: string; amount: Decimal }> = [
           { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
           { account: exchangeExternal(exchangeName), currency: record.asset, amount: amount.neg() },
         ];
-        await postEntry(date, `${exchangeName} deposit: ${record.asset}`, source, items, {
+        await postEntry(date, renderDescription(depDescData), source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
           ...(record.metadata ?? {}),
-        }, JSON.stringify({ type: "cex-transfer", exchange: exchangeName, direction: "deposit", currency: record.asset }));
+        }, JSON.stringify(depDescData));
         break;
       }
 
       case "withdrawal": {
+        const wdDescData = { type: "cex-transfer" as const, exchange: exchangeName, direction: "withdrawal" as const, currency: record.asset };
         const absAmount = amount.abs();
         const items: Array<{ account: string; currency: string; amount: Decimal }> = [
           { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount: absAmount.neg() },
@@ -449,26 +452,27 @@ export async function syncCexAccount(
         if (fee.gt(0)) {
           items.push({ account: exchangeFees(exchangeName), currency: record.asset, amount: fee });
         }
-        await postEntry(date, `${exchangeName} withdrawal: ${record.asset}`, source, items, {
+        await postEntry(date, renderDescription(wdDescData), source, items, {
           exchange: adapter.exchangeId,
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
           ...(record.metadata ?? {}),
-        }, JSON.stringify({ type: "cex-transfer", exchange: exchangeName, direction: "withdrawal", currency: record.asset }));
+        }, JSON.stringify(wdDescData));
         break;
       }
 
       case "staking": {
+        const stakingDescData = { type: "cex-reward" as const, exchange: exchangeName, kind: "staking", currency: record.asset };
         if (amount.gt(0)) {
           const items: Array<{ account: string; currency: string; amount: Decimal }> = [
             { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
             { account: exchangeStaking(exchangeName), currency: record.asset, amount: amount.neg() },
           ];
-          await postEntry(date, `${exchangeName} staking reward: ${record.asset}`, source, items, {
+          await postEntry(date, renderDescription(stakingDescData), source, items, {
             exchange: adapter.exchangeId,
             refid: record.refid,
             ...(record.metadata ?? {}),
-          }, JSON.stringify({ type: "cex-reward", exchange: exchangeName, kind: "staking", currency: record.asset }));
+          }, JSON.stringify(stakingDescData));
         } else {
           // Staking deduction (e.g., unstaking fee)
           result.warnings.push(`Staking record ${record.refid} has negative amount — skipping`);
