@@ -118,6 +118,16 @@
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
+    let protocolFilter = $state("");
+
+    const filteredProtocolInfos = $derived(() => {
+        if (!protocolFilter.trim()) return protocolInfos;
+        const q = protocolFilter.trim().toLowerCase();
+        return protocolInfos.filter(
+            (p) => p.name.toLowerCase().includes(q) || p.chains.some((c) => c.toLowerCase().includes(q))
+        );
+    });
+
     const settings = new SettingsStore();
 
     // -- Categorization rules --
@@ -2093,41 +2103,56 @@
                 />
             </div>
             <div class="mt-4 border-t pt-4">
-                <p class="text-sm font-medium mb-2">Supported Protocols</p>
-                <div class="flex flex-col gap-1">
-                    {#each protocolInfos as proto}
-                        <Collapsible.Root>
-                            <Collapsible.Trigger class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-medium">{proto.name}</span>
-                                    <span class="text-xs text-muted-foreground">{proto.chains.length} {proto.chains.length === 1 ? 'network' : 'networks'}</span>
-                                </div>
-                                <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />
-                            </Collapsible.Trigger>
-                            <Collapsible.Content>
-                                <div class="px-2 pb-2 pt-1 space-y-2 text-sm">
-                                    <p class="text-muted-foreground">{proto.description}</p>
-                                    {#if proto.website}
-                                        <a href={proto.website} target="_blank" rel="noopener noreferrer"
-                                           class="text-xs text-blue-500 hover:underline">{proto.website}</a>
-                                    {/if}
-                                    <div class="flex flex-wrap gap-1">
-                                        {#each proto.chains as chain}
-                                            <Badge variant="outline">{chain}</Badge>
-                                        {/each}
-                                    </div>
-                                    {#if proto.contracts.length > 0}
-                                        <div class="text-xs text-muted-foreground space-y-0.5">
-                                            {#each proto.contracts as c}
-                                                <div><span class="font-medium">{c.label}:</span> <code class="text-[11px]">{c.address}</code></div>
-                                            {/each}
-                                        </div>
-                                    {/if}
-                                </div>
-                            </Collapsible.Content>
-                        </Collapsible.Root>
-                    {/each}
-                </div>
+                <Collapsible.Root>
+                    <Collapsible.Trigger class="flex w-full items-center justify-between text-sm font-medium hover:text-foreground/80 transition-colors">
+                        <span>Supported Protocols ({protocolInfos.length})</span>
+                        <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />
+                    </Collapsible.Trigger>
+                    <Collapsible.Content>
+                        <div class="mt-2">
+                            <Input
+                                type="text"
+                                placeholder="Filter protocols or networks…"
+                                class="mb-2 h-8 text-sm"
+                                bind:value={protocolFilter}
+                            />
+                            <div class="flex flex-col gap-1">
+                                {#each filteredProtocolInfos() as proto}
+                                    <Collapsible.Root>
+                                        <Collapsible.Trigger class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors">
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-medium">{proto.name}</span>
+                                                <span class="text-xs text-muted-foreground">{proto.chains.length} {proto.chains.length === 1 ? 'network' : 'networks'}</span>
+                                            </div>
+                                            <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />
+                                        </Collapsible.Trigger>
+                                        <Collapsible.Content>
+                                            <div class="px-2 pb-2 pt-1 space-y-2 text-sm">
+                                                <p class="text-muted-foreground">{proto.description}</p>
+                                                {#if proto.website}
+                                                    <a href={proto.website} target="_blank" rel="noopener noreferrer"
+                                                       class="text-xs text-blue-500 hover:underline">{proto.website}</a>
+                                                {/if}
+                                                <div class="flex flex-wrap gap-1">
+                                                    {#each proto.chains as chain}
+                                                        <Badge variant="outline">{chain}</Badge>
+                                                    {/each}
+                                                </div>
+                                                {#if proto.contracts.length > 0}
+                                                    <div class="text-xs text-muted-foreground space-y-0.5">
+                                                        {#each proto.contracts as c}
+                                                            <div><span class="font-medium">{c.label}:</span> <code class="text-[11px]">{c.address}</code></div>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                        </Collapsible.Content>
+                                    </Collapsible.Root>
+                                {/each}
+                            </div>
+                        </div>
+                    </Collapsible.Content>
+                </Collapsible.Root>
             </div>
         </Card.Content>
     </Card.Root>
