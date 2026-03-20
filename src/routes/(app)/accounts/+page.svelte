@@ -567,7 +567,7 @@
         <p class="text-sm text-muted-foreground text-center">
           No accounts configured yet. Start with a default chart of accounts, or add accounts manually.
         </p>
-        <div class="flex items-center justify-center gap-3">
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Select.Root type="single" bind:value={defaultSet}>
             <Select.Trigger>
               {defaultSet === "minimal" ? "Minimal (~25 accounts)" : defaultSet === "standard" ? "Standard (~45 accounts)" : "Comprehensive (~65 accounts)"}
