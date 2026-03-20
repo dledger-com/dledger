@@ -10,6 +10,8 @@ export type DescriptionData =
   | { type: "generic-import"; source: "csv" | "ofx" | "pdf" | "ledger"; text: string; presetId?: string }
   | { type: "manual"; text: string }
   | { type: "btc-transfer"; direction: "sent" | "received" | "self" | "consolidation"; counterparty?: string; txid: string }
+  | { type: "sol-transfer"; direction: "sent" | "received" | "self"; counterparty?: string; signature: string; tokenSymbol?: string }
+  | { type: "sol-defi"; protocol: string; action: string; signature: string; summary?: string }
   | { type: "system"; action: "reversal" | "pad" | "recurring"; ref?: string };
 
 export function renderDescription(data: DescriptionData): string {
@@ -44,6 +46,16 @@ export function renderDescription(data: DescriptionData): string {
       const cp = data.counterparty ? ` ${data.direction === "sent" ? "to" : "from"} ${data.counterparty}` : "";
       return `${dir} BTC on Bitcoin${cp}`;
     }
+    case "sol-transfer": {
+      const dir = data.direction === "sent" ? "Send"
+        : data.direction === "received" ? "Receive"
+        : "Self-transfer";
+      const token = data.tokenSymbol ? ` ${data.tokenSymbol}` : " SOL";
+      const cp = data.counterparty ? ` ${data.direction === "sent" ? "to" : "from"} ${data.counterparty}` : "";
+      return `${dir}${token} on Solana${cp}`;
+    }
+    case "sol-defi":
+      return data.summary ?? `${data.protocol}: ${data.action} on Solana`;
     case "generic-import":
       return data.text;
     case "manual":

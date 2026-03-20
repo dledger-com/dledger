@@ -20,6 +20,7 @@ import type {
   Budget,
 } from "./types/index.js";
 import type { BitcoinAccount, BitcoinSyncResult } from "./bitcoin/types.js";
+import type { SolanaAccount, SolanaSyncResult } from "./solana/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -163,6 +164,13 @@ export interface Backend {
   storeBtcDerivedAddresses(accountId: string, addresses: Array<{address: string; change: number; index: number}>): Promise<void>;
   updateBtcDerivationIndex(accountId: string, receiveIndex: number, changeIndex: number): Promise<void>;
   syncBitcoin(account: BitcoinAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitcoinSyncResult>;
+
+  // Solana
+  listSolanaAccounts(): Promise<SolanaAccount[]>;
+  addSolanaAccount(account: Omit<SolanaAccount, "last_sync">): Promise<void>;
+  removeSolanaAccount(id: string): Promise<void>;
+  updateSolanaLastSignature(id: string, signature: string): Promise<void>;
+  syncSolana(account: SolanaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SolanaSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -581,6 +589,25 @@ class TauriBackend implements Backend {
     const { loadSettings } = await import("./data/settings.svelte.js");
     const allAccounts = await this.listBitcoinAccounts();
     return syncBitcoinAccount(this, account, allAccounts, loadSettings(), onProgress, signal);
+  }
+
+  // Solana
+  async listSolanaAccounts(): Promise<SolanaAccount[]> {
+    return this.invoke("list_solana_accounts");
+  }
+  async addSolanaAccount(account: Omit<SolanaAccount, "last_sync">): Promise<void> {
+    return this.invoke("add_solana_account", { account });
+  }
+  async removeSolanaAccount(id: string): Promise<void> {
+    return this.invoke("remove_solana_account", { id });
+  }
+  async updateSolanaLastSignature(id: string, signature: string): Promise<void> {
+    return this.invoke("update_solana_last_signature", { id, signature });
+  }
+  async syncSolana(account: SolanaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SolanaSyncResult> {
+    const { syncSolanaAccount } = await import("./solana/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    return syncSolanaAccount(this, account, loadSettings(), onProgress, signal);
   }
 
   // Exchange accounts (CEX)

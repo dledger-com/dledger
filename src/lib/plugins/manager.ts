@@ -4,16 +4,19 @@ import { CsvPresetRegistry } from "../csv-presets/registry.js";
 import { PdfParserRegistry } from "./pdf-parser-registry.js";
 import { CexAdapterRegistry } from "./cex-adapter-registry.js";
 import { RateSourceRegistry } from "./rate-source-registry.js";
+import { SolanaHandlerRegistry } from "../solana/handlers/registry.js";
 
 import { builtinHandlerExtensions } from "./builtin/handlers.js";
 import { builtinCsvPresets } from "./builtin/csv-presets.js";
 import { builtinPdfParsers } from "./builtin/pdf-parsers.js";
 import { builtinCexAdapters } from "./builtin/cex-adapters.js";
+import { builtinSolanaHandlerExtensions } from "./builtin/solana-handlers.js";
 
 export class PluginManager {
   private plugins = new Map<string, Plugin>();
 
   readonly handlers: IndexedHandlerRegistry;
+  readonly solanaHandlers: SolanaHandlerRegistry;
   readonly csvPresets: CsvPresetRegistry;
   readonly pdfParsers: PdfParserRegistry;
   readonly cexAdapters: CexAdapterRegistry;
@@ -21,6 +24,7 @@ export class PluginManager {
 
   constructor() {
     this.handlers = new IndexedHandlerRegistry();
+    this.solanaHandlers = new SolanaHandlerRegistry();
     this.csvPresets = new CsvPresetRegistry();
     this.pdfParsers = new PdfParserRegistry();
     this.cexAdapters = new CexAdapterRegistry();
@@ -39,6 +43,12 @@ export class PluginManager {
     if (plugin.transactionHandlers) {
       for (const ext of plugin.transactionHandlers) {
         this.handlers.register(ext);
+      }
+    }
+
+    if (plugin.solanaHandlers) {
+      for (const ext of plugin.solanaHandlers) {
+        this.solanaHandlers.register(ext.handler, ext.programIds);
       }
     }
 
@@ -102,6 +112,7 @@ export function getPluginManager(): PluginManager {
     version: "1.0.0",
     description: "Core dledger handlers, presets, parsers, and adapters",
     transactionHandlers: builtinHandlerExtensions,
+    solanaHandlers: builtinSolanaHandlerExtensions,
     csvPresets: builtinCsvPresets,
     pdfParsers: builtinPdfParsers,
     cexAdapters: builtinCexAdapters,

@@ -56,6 +56,7 @@ export interface AppSettings {
   journalLineItemView?: "table" | "flow";
   locale?: string;
   btcExplorerUrl?: string;  // default: "https://mempool.space"
+  heliusApiKey?: string;    // Helius API key for Solana sync
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

@@ -1661,6 +1661,33 @@
                             </p>
                         </div>
                     </div>
+
+                    <Separator />
+
+                    <!-- Helius (Solana) -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Helius (Solana)</span>
+                    </div>
+                    <div class="space-y-2">
+                        <label for="helius-api-key"
+                            class="text-sm font-medium">Helius API Key</label
+                        >
+                        <Input
+                            id="helius-api-key"
+                            type="password"
+                            placeholder="Helius API key"
+                            value={settings.settings.heliusApiKey ?? ""}
+                            oninput={(e: Event) => settings.update({ heliusApiKey: (e.target as HTMLInputElement).value })}
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Get a free key at <a
+                                href="https://dev.helius.xyz/"
+                                target="_blank"
+                                class="underline hover:text-foreground"
+                                >dev.helius.xyz</a
+                            >. Required for Solana transaction sync (100k credits/day free tier).
+                        </p>
+                    </div>
                 </Tabs.Content>
             </Tabs.Root>
         </Card.Content>

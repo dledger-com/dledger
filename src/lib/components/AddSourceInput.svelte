@@ -10,11 +10,13 @@
     onSelectCex,
     onSelectBlockchain,
     onSelectBitcoin,
+    onSelectSolana,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
     onSelectBlockchain: (prefillAddress?: string) => void;
     onSelectBitcoin?: (prefillInput?: string) => void;
+    onSelectSolana?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -48,6 +50,13 @@
     return null;
   });
 
+  const detectedSolAddress = $derived.by(() => {
+    const s = search.trim();
+    // Solana addresses: Base58, 32-44 chars, no 0/O/I/l
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s) && !detectedBtcInput && !detectedAddress) return s;
+    return null;
+  });
+
   function selectCex(id: ExchangeId) {
     open = false;
     search = "";
@@ -64,6 +73,12 @@
     open = false;
     search = "";
     onSelectBitcoin?.(prefillInput);
+  }
+
+  function selectSolana(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectSolana?.(prefillAddress);
   }
 </script>
 
@@ -103,6 +118,18 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#if detectedSolAddress}
+          <Command.Group heading="Detected Solana Address">
+            <Command.Item
+              value="detected-sol-{detectedSolAddress}"
+              keywords={["solana", "sol", "address"]}
+              onSelect={() => selectSolana(detectedSolAddress)}
+              class="font-mono text-xs"
+            >
+              Add {detectedSolAddress.slice(0, 8)}...{detectedSolAddress.slice(-4)} as Solana address
+            </Command.Item>
+          </Command.Group>
+        {/if}
         <Command.Group heading="Blockchain">
           <Command.Item
             value="EVM Address"
@@ -118,6 +145,15 @@
               onSelect={() => selectBitcoin()}
             >
               Bitcoin Address / HD Wallet
+            </Command.Item>
+          {/if}
+          {#if onSelectSolana}
+            <Command.Item
+              value="Solana Address"
+              keywords={["solana", "sol", "phantom", "solflare"]}
+              onSelect={() => selectSolana()}
+            >
+              Solana Address / HD Wallet
             </Command.Item>
           {/if}
         </Command.Group>

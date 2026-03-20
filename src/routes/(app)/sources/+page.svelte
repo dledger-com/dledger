@@ -44,6 +44,10 @@
     import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
     import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase, deriveEvmAddressesFromSeed, deriveEvmAddressesFromXpub } from "$lib/evm/derive.js";
     import { detectBtcInputType, convertPrivateKey, deriveMultiXpubsFromSeed } from "$lib/bitcoin/derive.js";
+    import { detectSolInputType as detectSolInputTypeJs } from "$lib/solana/derive-js.js";
+    import { deriveSolAddresses as deriveSolAddressesJs } from "$lib/solana/derive-js.js";
+    import type { SolanaAccount } from "$lib/solana/types.js";
+    import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
@@ -183,15 +187,17 @@
         return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
     });
 
-    // Merged blockchain rows (BTC + EVM)
+    // Merged blockchain rows (BTC + EVM + SOL)
     type BlockchainRow =
         | { kind: "btc"; data: import("$lib/bitcoin/types.js").BitcoinAccount }
-        | { kind: "evm"; data: GroupedAddress };
+        | { kind: "evm"; data: GroupedAddress }
+        | { kind: "sol"; data: SolanaAccount };
 
     const blockchainRows = $derived.by((): BlockchainRow[] => {
         const rows: BlockchainRow[] = [];
         for (const account of btcAccounts) rows.push({ kind: "btc", data: account });
         for (const group of groupedAddresses) rows.push({ kind: "evm", data: group });
+        for (const account of solAccounts) rows.push({ kind: "sol", data: account });
         return rows;
     });
 
@@ -234,15 +240,15 @@
     type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
     const sortBlockchain = createSortState<BlockchainSortKey>();
     const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
-        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.data.address,
+        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.data.address,
         label: (r) => r.data.label,
         type: (r) => r.kind === "btc"
             ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
-            : "EVM",
+            : r.kind === "sol" ? "Solana" : "EVM",
         networks: (r) => r.kind === "btc"
             ? "Bitcoin"
-            : r.data.chainIds.map((id) => getChainName(id)).join(", "),
-        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : "",
+            : r.kind === "sol" ? "Solana" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
+        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : "",
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -250,7 +256,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -321,6 +327,18 @@
     let btcDerivedXpubs = $state<import("$lib/bitcoin/derive-js.js").DerivedBtcXpub[]>([]);
     let btcDeriving = $state(false);
 
+    // Solana state
+    let solAccounts = $state<SolanaAccount[]>([]);
+    let solNewAddress = $state("");
+    let solNewLabel = $state("");
+    let solPrivateKeyAck = $state(false);
+    let solAddingAccount = $state(false);
+    let solDeriveCount = $state(5);
+    let solSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let solItemLabels = $state<Map<number, string>>(new Map());
+    let solDerivedAddresses = $state<DerivedSolAddress[]>([]);
+    let solDeriving = $state(false);
+
     const btcDetection: QuickDetection = $derived.by(() => detectInputType(btcNewAddressOrXpub));
     const evmDetection = $derived.by(() => detectEvmInputType(newAddress));
     const evmDerivedAddresses = $derived.by(() => {
@@ -382,6 +400,48 @@
     });
 
     const btcBusy = $derived(taskQueue.isActive("btc-sync"));
+
+    // Solana detection and derivation
+    const solDetection = $derived.by(() => detectSolInputTypeJs(solNewAddress));
+    const existingSolAddresses = $derived(new Set(solAccounts.map(a => a.address)));
+    const solSingleExists = $derived.by(() => {
+        const addr = solNewAddress.trim();
+        if (!addr) return false;
+        const det = solDetection;
+        if (det.input_type !== "address") return false;
+        return existingSolAddresses.has(addr);
+    });
+    const solBusy = $derived(taskQueue.isActive("sol-sync"));
+
+    // Async derivation of Solana addresses from seed phrase
+    $effect(() => {
+        const input = solNewAddress.trim();
+        const det = solDetection;
+        const ack = solPrivateKeyAck;
+        const count = solDeriveCount;
+
+        if (!input || det.input_type !== "seed" || !ack) {
+            solDerivedAddresses = [];
+            return;
+        }
+
+        let cancelled = false;
+        solDeriving = true;
+        try {
+            const results = deriveSolAddressesJs(input, count);
+            if (!cancelled) {
+                solDerivedAddresses = results;
+                const firstUnknown = results.find(a => !existingSolAddresses.has(a.address));
+                solSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+            }
+        } catch {
+            if (!cancelled) solDerivedAddresses = [];
+        } finally {
+            if (!cancelled) solDeriving = false;
+        }
+
+        return () => { cancelled = true; };
+    });
 
     // Async derivation of multi-index xpubs from seed phrase
     $effect(() => {
@@ -605,7 +665,154 @@
         }
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy || btcBusy);
+    // ---- Solana functions ----
+
+    function startAddSolana(prefillAddress?: string) {
+        addSourceMode = "solana";
+        if (prefillAddress) solNewAddress = prefillAddress;
+    }
+
+    async function loadSolAccounts() {
+        try {
+            solAccounts = await getBackend().listSolanaAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Solana accounts: ${err}`);
+        }
+    }
+
+    async function handleAddSolanaAccount() {
+        const input = solNewAddress.trim();
+        const baseLabel = solNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        solAddingAccount = true;
+        try {
+            // Multi-index path: seed phrase with derived addresses
+            if (solDerivedAddresses.length > 0) {
+                if (solSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = solDerivedAddresses
+                    .filter(a => solSelectedIndexes.has(a.index))
+                    .filter(a => !existingSolAddresses.has(a.address));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                // Clear private material immediately
+                solNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = solItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : ellipseAddress(address));
+                    await getBackend().addSolanaAccount({
+                        id: uuidv7(),
+                        address,
+                        network: "mainnet-beta",
+                        label,
+                        last_signature: null,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                solNewLabel = "";
+                solPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadSolAccounts();
+                toast.success(`${selected.length} Solana address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const det = solDetection;
+            if (det.input_type === "unknown" || !det.valid) {
+                toast.error("Invalid Solana input");
+                return;
+            }
+
+            if (det.input_type === "keypair") {
+                toast.error("Keypair import not yet supported — use the public address instead");
+                return;
+            }
+
+            if (det.input_type !== "address") {
+                toast.error("Please enter a Solana address or seed phrase");
+                return;
+            }
+
+            if (existingSolAddresses.has(input)) {
+                toast.info("This address is already added");
+                return;
+            }
+
+            const label = baseLabel || ellipseAddress(input);
+            await getBackend().addSolanaAccount({
+                id: uuidv7(),
+                address: input,
+                network: "mainnet-beta",
+                label,
+                last_signature: null,
+                created_at: new Date().toISOString(),
+            });
+            solNewAddress = "";
+            solNewLabel = "";
+            solPrivateKeyAck = false;
+            addSourceMode = "idle";
+            await loadSolAccounts();
+            toast.success("Solana account added");
+        } catch (err) {
+            toast.error(`Failed to add Solana account: ${err}`);
+        } finally {
+            solAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveSolAccount(id: string) {
+        try {
+            await getBackend().removeSolanaAccount(id);
+            await loadSolAccounts();
+            toast.success("Solana account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncSolAccount(account: SolanaAccount) {
+        taskQueue.enqueue({
+            key: `sol-sync:${account.id}`,
+            label: `Sync ${account.label} (Solana)`,
+            async run(ctx) {
+                const r = await getBackend().syncSolana(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadSolAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllSol() {
+        for (const account of solAccounts) {
+            syncSolAccount(account);
+        }
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy);
 
     async function loadCexAccounts() {
         try {
@@ -764,6 +971,7 @@
         loadEthAccounts();
         loadCexAccounts();
         loadBtcAccounts();
+        loadSolAccounts();
     });
 
     // -- Etherscan handlers --
@@ -1268,6 +1476,7 @@
                     onSelectCex={startAddCex}
                     onSelectBlockchain={startAddBlockchain}
                     onSelectBitcoin={startAddBitcoin}
+                    onSelectSolana={startAddSolana}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -1660,7 +1869,105 @@
                 </div>
             {/if}
 
-            <!-- Blockchain Accounts sub-section (merged BTC + EVM) -->
+            {#if addSourceMode === "solana"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Solana Address / HD Wallet</span>
+                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; solNewAddress = ""; solNewLabel = ""; solPrivateKeyAck = false; }}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-sol-address" class="text-xs font-medium">Address or seed phrase</label>
+                            <Input
+                                id="new-sol-address"
+                                placeholder="Paste base58 address or seed..."
+                                autocomplete="off"
+                                bind:value={solNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-sol-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-sol-label" placeholder="My SOL Wallet" bind:value={solNewLabel} />
+                        </div>
+                        <Button onclick={handleAddSolanaAccount} disabled={solAddingAccount || (!solNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if solDetection.input_type !== "unknown" && solNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if solDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{solDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{solDetection.description}</Badge>
+                            {/if}
+                            {#if solSingleExists}
+                                <span class="text-xs text-muted-foreground">Already added</span>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if solDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">Private Key Detected</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">dledger will derive the public address and discard the private material immediately.</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={solPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">I understand — derive address and continue</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if solDeriving}
+                        <div class="text-xs text-muted-foreground">Deriving addresses...</div>
+                    {/if}
+
+                    {#if solDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each solDerivedAddresses as derived}
+                                {@const exists = existingSolAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={solSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(solSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            solSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder="Label"
+                                        value={solItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(solItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); solItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">Added</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{solSelectedIndexes.size} address(es) selected</span>
+                                <Button variant="outline" size="sm" onclick={() => { solDeriveCount += 5; }}>
+                                    Load more
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            <!-- Blockchain Accounts sub-section (merged BTC + EVM + SOL) -->
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
                     <div class="flex items-center justify-between">
@@ -1735,6 +2042,59 @@
                                                     size="sm"
                                                     onclick={() => handleRemoveBtcAccount(account.id)}
                                                     disabled={btcBusy}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "sol"}
+                                    {@const solAccount = row.data}
+                                    {@const isSolSyncing = taskQueue.isActive(`sol-sync:${solAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {solAccount.address.length > 20
+                                                            ? `${solAccount.address.slice(0, 12)}...${solAccount.address.slice(-8)}`
+                                                            : solAccount.address}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{solAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(solAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>{solAccount.label}</Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Solana Address</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Solana</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {solAccount.last_sync
+                                                ? new Date(solAccount.last_sync).toLocaleDateString()
+                                                : "Never"}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncSolAccount(solAccount)}
+                                                    disabled={solBusy}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isSolSyncing ? "Syncing..." : "Sync"}
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveSolAccount(solAccount.id)}
+                                                    disabled={solBusy}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>

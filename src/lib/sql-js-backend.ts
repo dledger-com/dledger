@@ -954,6 +954,19 @@ PRAGMA foreign_keys = ON;
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (23)");
         }
+        if (currentVersion < 24) {
+          db.exec(`CREATE TABLE IF NOT EXISTS solana_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL UNIQUE,
+            network TEXT NOT NULL DEFAULT 'mainnet-beta',
+            label TEXT NOT NULL,
+            last_signature TEXT,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (24)");
+        }
       }
     }
     // Idempotent cleanup: ensure is_reconciled exists on line_item
@@ -3985,6 +3998,64 @@ PRAGMA foreign_keys = ON;
     this.beginTransaction();
     try {
       const result = await syncBitcoinAccount(this, account, allAccounts, loadSettings(), onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Solana ----
+
+  async listSolanaAccounts(): Promise<import("./solana/types.js").SolanaAccount[]> {
+    return this.query(
+      "SELECT id, address, network, label, last_signature, last_sync, created_at FROM solana_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string,
+        address: row.address as string,
+        network: row.network as "mainnet-beta" | "devnet" | "testnet",
+        label: row.label as string,
+        last_signature: (row.last_signature as string) ?? null,
+        last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addSolanaAccount(account: Omit<import("./solana/types.js").SolanaAccount, "last_sync">): Promise<void> {
+    this.run(
+      `INSERT INTO solana_account (id, address, network, label, last_signature, last_sync, created_at)
+       VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.network, account.label, account.last_signature ?? null, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async removeSolanaAccount(id: string): Promise<void> {
+    this.run("DELETE FROM solana_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateSolanaLastSignature(id: string, signature: string): Promise<void> {
+    this.run(
+      "UPDATE solana_account SET last_signature = ?, last_sync = ? WHERE id = ?",
+      [signature, new Date().toISOString(), id],
+    );
+    this.scheduleSave();
+  }
+
+  async syncSolana(
+    account: import("./solana/types.js").SolanaAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./solana/types.js").SolanaSyncResult> {
+    const { syncSolanaAccount } = await import("./solana/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    this.beginTransaction();
+    try {
+      const result = await syncSolanaAccount(this, account, loadSettings(), onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {

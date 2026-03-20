@@ -3,6 +3,7 @@ import type { CsvPreset } from "../csv-presets/types.js";
 import type { CexAdapter } from "../cex/types.js";
 import type { PdfPage, PdfStatement } from "../pdf/types.js";
 import type { ChainInfo } from "../types/index.js";
+import type { SolanaHandler } from "../solana/handlers/types.js";
 
 // ---------------------------------------------------------------------------
 // Plugin top-level
@@ -16,6 +17,7 @@ export interface Plugin {
 
   // Extension contributions (include only the ones this plugin provides)
   transactionHandlers?: TransactionHandlerExtension[];
+  solanaHandlers?: SolanaHandlerExtension[];
   csvPresets?: CsvPreset[];
   pdfParsers?: PdfParserExtension[];
   cexAdapters?: CexAdapter[];
@@ -36,6 +38,11 @@ export interface HandlerHints {
 export interface TransactionHandlerExtension {
   handler: TransactionHandler;
   hints?: HandlerHints;          // omit = universal (always a candidate)
+}
+
+export interface SolanaHandlerExtension {
+  handler: SolanaHandler;
+  programIds?: string[];         // omit = universal (always a candidate)
 }
 
 // ---------------------------------------------------------------------------
