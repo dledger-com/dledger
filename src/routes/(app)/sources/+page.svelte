@@ -83,6 +83,39 @@
     const handlerRegistry = getDefaultRegistry();
     const handlers = handlerRegistry.getAll();
 
+    const protocolsByChain = (() => {
+        const specialized = handlers.filter((h) => h.supportedChainIds.length > 0);
+        const chainMap = new Map<number, string[]>();
+        for (const h of specialized) {
+            for (const cid of h.supportedChainIds) {
+                const list = chainMap.get(cid);
+                if (list) list.push(h.name);
+                else chainMap.set(cid, [h.name]);
+            }
+        }
+        return Array.from(chainMap.entries())
+            .map(([chainId, names]) => ({
+                chainName: SUPPORTED_CHAINS.find((c) => c.chain_id === chainId)?.name ?? `Chain ${chainId}`,
+                handlerNames: names.sort(),
+            }))
+            .sort((a, b) => b.handlerNames.length - a.handlerNames.length);
+    })();
+
+    let protocolFilter = $state("");
+
+    const filteredProtocolsByChain = $derived(() => {
+        if (!protocolFilter.trim()) return protocolsByChain;
+        const q = protocolFilter.trim().toLowerCase();
+        return protocolsByChain
+            .map(({ chainName, handlerNames }) => ({
+                chainName,
+                handlerNames: handlerNames.filter(
+                    (n) => n.toLowerCase().includes(q) || chainName.toLowerCase().includes(q)
+                ),
+            }))
+            .filter(({ handlerNames }) => handlerNames.length > 0);
+    });
+
     const settings = new SettingsStore();
 
     // -- Categorization rules --
@@ -2056,6 +2089,25 @@
                         suggestReprocess();
                     }}
                 />
+            </div>
+            <div class="mt-4 border-t pt-4">
+                <p class="text-sm font-medium mb-2">Supported Protocols</p>
+                <Input
+                    type="text"
+                    placeholder="Filter protocols or networks…"
+                    class="mb-2 h-8 text-sm"
+                    bind:value={protocolFilter}
+                />
+                <div class="flex flex-col gap-1.5">
+                    {#each filteredProtocolsByChain() as { chainName, handlerNames }}
+                        <div class="flex flex-wrap items-center gap-1">
+                            <span class="text-xs font-medium text-muted-foreground/70 w-20 shrink-0">{chainName}</span>
+                            {#each handlerNames as name}
+                                <Badge variant="outline">{name}</Badge>
+                            {/each}
+                        </div>
+                    {/each}
+                </div>
             </div>
         </Card.Content>
     </Card.Root>
