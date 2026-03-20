@@ -25,6 +25,7 @@
     import Pencil from "lucide-svelte/icons/pencil";
     import Copy from "lucide-svelte/icons/copy";
     import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+    import * as Collapsible from "$lib/components/ui/collapsible/index.js";
     import {
         enqueueRateBackfill,
     } from "$lib/exchange-rate-historical.js";
@@ -83,38 +84,39 @@
     const handlerRegistry = getDefaultRegistry();
     const handlers = handlerRegistry.getAll();
 
-    const protocolsByChain = (() => {
-        const specialized = handlers.filter((h) => h.supportedChainIds.length > 0);
-        const chainMap = new Map<number, string[]>();
-        for (const h of specialized) {
-            for (const cid of h.supportedChainIds) {
-                const list = chainMap.get(cid);
-                if (list) list.push(h.name);
-                else chainMap.set(cid, [h.name]);
-            }
-        }
-        return Array.from(chainMap.entries())
-            .map(([chainId, names]) => ({
-                chainName: SUPPORTED_CHAINS.find((c) => c.chain_id === chainId)?.name ?? `Chain ${chainId}`,
-                handlerNames: names.sort(),
-            }))
-            .sort((a, b) => b.handlerNames.length - a.handlerNames.length);
-    })();
+    const PROTOCOL_CONTRACTS: Record<string, { label: string; address: string }[]> = {
+        uniswap: [
+            { label: "Universal Router", address: "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad" },
+            { label: "V3 Position Manager", address: "0xc36442b4a4522e871399cd717abdd847ab11fe88" },
+        ],
+        aave: [
+            { label: "V3 Pool (ETH)", address: "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2" },
+        ],
+        lido: [
+            { label: "stETH Token", address: "0xae7ab96520de3a18e5e111b5eaab095312d7fe84" },
+            { label: "wstETH Token", address: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0" },
+        ],
+        compound: [
+            { label: "Comet (USDC)", address: "0xc3d688b66703497daa19211eedff47f25384cdc3" },
+        ],
+        curve: [
+            { label: "Router", address: "0xf0d4c12a5768d806021f80a262b4d39d26c58b8d" },
+        ],
+        eigenlayer: [
+            { label: "Strategy Manager", address: "0x858646372cc42e1a627fce94aa7a7033e7cf075a" },
+        ],
+    };
 
-    let protocolFilter = $state("");
-
-    const filteredProtocolsByChain = $derived(() => {
-        if (!protocolFilter.trim()) return protocolsByChain;
-        const q = protocolFilter.trim().toLowerCase();
-        return protocolsByChain
-            .map(({ chainName, handlerNames }) => ({
-                chainName,
-                handlerNames: handlerNames.filter(
-                    (n) => n.toLowerCase().includes(q) || chainName.toLowerCase().includes(q)
-                ),
-            }))
-            .filter(({ handlerNames }) => handlerNames.length > 0);
-    });
+    const protocolInfos = handlers
+        .filter((h) => h.supportedChainIds.length > 0)
+        .map((h) => ({
+            ...h,
+            chains: h.supportedChainIds
+                .map((cid) => SUPPORTED_CHAINS.find((c) => c.chain_id === cid)?.name ?? `Chain ${cid}`)
+                .sort(),
+            contracts: PROTOCOL_CONTRACTS[h.id] ?? [],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
     const settings = new SettingsStore();
 
@@ -2092,20 +2094,38 @@
             </div>
             <div class="mt-4 border-t pt-4">
                 <p class="text-sm font-medium mb-2">Supported Protocols</p>
-                <Input
-                    type="text"
-                    placeholder="Filter protocols or networks…"
-                    class="mb-2 h-8 text-sm"
-                    bind:value={protocolFilter}
-                />
-                <div class="flex flex-col gap-1.5">
-                    {#each filteredProtocolsByChain() as { chainName, handlerNames }}
-                        <div class="flex flex-wrap items-center gap-1">
-                            <span class="text-xs font-medium text-muted-foreground/70 w-20 shrink-0">{chainName}</span>
-                            {#each handlerNames as name}
-                                <Badge variant="outline">{name}</Badge>
-                            {/each}
-                        </div>
+                <div class="flex flex-col gap-1">
+                    {#each protocolInfos as proto}
+                        <Collapsible.Root>
+                            <Collapsible.Trigger class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium">{proto.name}</span>
+                                    <span class="text-xs text-muted-foreground">{proto.chains.length} {proto.chains.length === 1 ? 'network' : 'networks'}</span>
+                                </div>
+                                <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />
+                            </Collapsible.Trigger>
+                            <Collapsible.Content>
+                                <div class="px-2 pb-2 pt-1 space-y-2 text-sm">
+                                    <p class="text-muted-foreground">{proto.description}</p>
+                                    {#if proto.website}
+                                        <a href={proto.website} target="_blank" rel="noopener noreferrer"
+                                           class="text-xs text-blue-500 hover:underline">{proto.website}</a>
+                                    {/if}
+                                    <div class="flex flex-wrap gap-1">
+                                        {#each proto.chains as chain}
+                                            <Badge variant="outline">{chain}</Badge>
+                                        {/each}
+                                    </div>
+                                    {#if proto.contracts.length > 0}
+                                        <div class="text-xs text-muted-foreground space-y-0.5">
+                                            {#each proto.contracts as c}
+                                                <div><span class="font-medium">{c.label}:</span> <code class="text-[11px]">{c.address}</code></div>
+                                            {/each}
+                                        </div>
+                                    {/if}
+                                </div>
+                            </Collapsible.Content>
+                        </Collapsible.Root>
                     {/each}
                 </div>
             </div>

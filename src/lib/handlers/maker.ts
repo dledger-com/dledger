@@ -122,6 +122,7 @@ export const makerHandler: TransactionHandler = {
   id: "maker",
   name: "MakerDAO/Spark",
   description: "Interprets MakerDAO sDAI and Spark lending transactions",
+  website: "https://makerdao.com",
   supportedChainIds: [1],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {

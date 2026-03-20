@@ -139,6 +139,7 @@ export const lidoHandler: TransactionHandler = {
   id: "lido",
   name: "Lido Finance",
   description: "Interprets Lido liquid staking transactions",
+  website: "https://lido.fi",
   supportedChainIds: [1, 42161, 10, 8453],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {

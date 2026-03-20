@@ -175,6 +175,7 @@ export const uniswapHandler: TransactionHandler = {
   id: "uniswap",
   name: "Uniswap",
   description: "Interprets Uniswap swap and liquidity transactions",
+  website: "https://uniswap.org",
   supportedChainIds: [1, 42161, 10, 137, 8453, 56, 43114],
 
   match(group: TxHashGroup, _ctx: HandlerContext): number {

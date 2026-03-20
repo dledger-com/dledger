@@ -106,6 +106,7 @@ export const compoundHandler: TransactionHandler = {
   id: "compound",
   name: "Compound Finance",
   description: "Interprets Compound lending/borrowing transactions",
+  website: "https://compound.finance",
   supportedChainIds: [1, 42161, 10, 137, 8453],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {

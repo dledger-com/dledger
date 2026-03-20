@@ -110,6 +110,7 @@ export const yearnHandler: TransactionHandler = {
   id: "yearn",
   name: "Yearn Finance",
   description: "Interprets Yearn vault deposit/withdraw transactions",
+  website: "https://yearn.fi",
   supportedChainIds: [1, 42161, 10, 137],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {

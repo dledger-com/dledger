@@ -143,6 +143,7 @@ export const balancerHandler: TransactionHandler = {
   id: "balancer",
   name: "Balancer",
   description: "Interprets Balancer pool join/exit, swap, and reward transactions",
+  website: "https://balancer.fi",
   supportedChainIds: [1, 42161, 10, 137, 8453],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {

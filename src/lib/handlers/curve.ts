@@ -154,6 +154,7 @@ export const curveHandler: TransactionHandler = {
   id: "curve",
   name: "Curve Finance",
   description: "Interprets Curve Finance swaps, liquidity, gauge staking, and CRV claims",
+  website: "https://curve.fi",
   supportedChainIds: [1, 42161, 10, 137, 8453],
 
   match(group: TxHashGroup, _ctx: HandlerContext): number {

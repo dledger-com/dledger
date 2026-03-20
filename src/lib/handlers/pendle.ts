@@ -197,6 +197,7 @@ export const pendleHandler: TransactionHandler = {
   id: "pendle",
   name: "Pendle Finance",
   description: "Interprets Pendle yield trading transactions",
+  website: "https://pendle.finance",
   supportedChainIds: [1, 42161, 8453, 56, 10, 5000, 43114],
 
   match(group: TxHashGroup, _ctx: HandlerContext): number {

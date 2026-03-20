@@ -329,6 +329,7 @@ export const aaveHandler: TransactionHandler = {
   id: "aave",
   name: "Aave",
   description: "Interprets Aave lending/borrowing transactions",
+  website: "https://aave.com",
   supportedChainIds: [1, 42161, 10, 137, 8453],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {

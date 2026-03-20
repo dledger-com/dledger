@@ -16,6 +16,7 @@ export interface TransactionHandler {
   id: string;
   name: string;
   description: string;
+  website?: string;
   /** Chains this handler supports (empty = all chains) */
   supportedChainIds: number[];
 

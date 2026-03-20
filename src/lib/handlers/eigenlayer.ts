@@ -111,6 +111,7 @@ export const eigenLayerHandler: TransactionHandler = {
   id: "eigenlayer",
   name: "EigenLayer",
   description: "Interprets EigenLayer restaking deposit/withdraw and reward transactions",
+  website: "https://eigenlayer.xyz",
   supportedChainIds: [1],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {
