@@ -137,5 +137,16 @@ export function pairLineItems(
     }
   }
 
+  // Sort flows: outflows from asset accounts before inflows to asset accounts.
+  // For trades, this puts the spent currency before the received currency,
+  // matching the arrow direction in trade descriptions (e.g., "HMT → BTC").
+  flows.sort((a, b) => {
+    const aIsOutflow = accountTypeLookup(a.sourceAccountId) === "asset";
+    const bIsOutflow = accountTypeLookup(b.sourceAccountId) === "asset";
+    if (aIsOutflow && !bIsOutflow) return -1;
+    if (!aIsOutflow && bIsOutflow) return 1;
+    return 0;
+  });
+
   return flows;
 }

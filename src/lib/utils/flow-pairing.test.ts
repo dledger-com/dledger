@@ -187,4 +187,35 @@ describe("pairLineItems", () => {
     const flows = pairLineItems(items, lookup);
     expect(flows[0].flowType).toBe("equity");
   });
+
+  it("sorts trade outflows before inflows (spent before received)", () => {
+    // Simulate a CoinList trade: selling HMT for BTC
+    // BTC items appear first in array (wrong CSV order), but outflow should sort first
+    const tradeTypeLookup: Record<string, AccountType> = {
+      "exchange:BTC": "asset",
+      "exchange:HMT": "asset",
+      "equity:trading": "equity",
+    };
+    const tradeLookup = (id: string) => tradeTypeLookup[id];
+
+    const items = [
+      // BTC side (received) — listed first in array
+      li("exchange:BTC", "BTC", "0.001"),
+      li("equity:trading", "BTC", "-0.001"),
+      // HMT side (spent) — listed second in array
+      li("equity:trading", "HMT", "100"),
+      li("exchange:HMT", "HMT", "-100"),
+    ];
+
+    const flows = pairLineItems(items, tradeLookup);
+    expect(flows).toHaveLength(2);
+    // HMT outflow (asset → equity) should come first
+    expect(flows[0].currency).toBe("HMT");
+    expect(flows[0].sourceAccountId).toBe("exchange:HMT");
+    expect(flows[0].destAccountId).toBe("equity:trading");
+    // BTC inflow (equity → asset) should come second
+    expect(flows[1].currency).toBe("BTC");
+    expect(flows[1].sourceAccountId).toBe("equity:trading");
+    expect(flows[1].destAccountId).toBe("exchange:BTC");
+  });
 });
