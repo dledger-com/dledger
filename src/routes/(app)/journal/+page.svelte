@@ -1932,10 +1932,8 @@
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
-        <!-- svelte-ignore binding_property_non_reactive -->
         <div
             class="h-36 px-2 cursor-col-resize select-none touch-none"
-            bind:clientWidth={chartContainerWidth}
             onpointerdown={(e) => {
                 isDragging = true;
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -1954,6 +1952,8 @@
                 }
             }}
         >
+            <!-- svelte-ignore binding_property_non_reactive -->
+            <div class="w-full h-full" bind:clientWidth={chartContainerWidth}>
             <BarChartComp
                 data={chartData}
                 x="date"
@@ -2038,6 +2038,7 @@
                     {/if}
                 {/snippet}
             </BarChartComp>
+            </div>
         </div>
         </div>
     {:else if showChart && (store.loading || !BarChart_imported)}
