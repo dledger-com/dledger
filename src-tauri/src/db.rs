@@ -458,8 +458,12 @@ impl Storage for SqliteStorage {
             conditions.push(format!("je.source = ?{}", param_values.len()));
         }
         if let Some(ref search) = filter.description_search {
-            param_values.push(format!("%{}%", search));
-            conditions.push(format!("je.description LIKE ?{}", param_values.len()));
+            let search_param = format!("%{}%", search);
+            param_values.push(search_param.clone());
+            let p1 = param_values.len();
+            param_values.push(search_param);
+            let p2 = param_values.len();
+            conditions.push(format!("(je.description LIKE ?{} OR je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'note' AND LOWER(value) LIKE LOWER(?{})))", p1, p2));
         }
         if let Some(ref tags) = filter.tag_filters {
             for tag in tags {
@@ -2064,8 +2068,10 @@ impl Storage for SqliteStorage {
             param_values.push(Box::new(source.clone()));
         }
         if let Some(ref search) = filter.description_search {
-            conditions.push("je.description LIKE ?".to_string());
-            param_values.push(Box::new(format!("%{}%", search)));
+            let search_param = format!("%{}%", search);
+            conditions.push("(je.description LIKE ? OR je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'note' AND LOWER(value) LIKE LOWER(?)))".to_string());
+            param_values.push(Box::new(search_param.clone()));
+            param_values.push(Box::new(search_param));
         }
         if let Some(ref tags) = filter.tag_filters {
             for tag in tags {

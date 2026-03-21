@@ -2255,7 +2255,8 @@ PRAGMA foreign_keys = ON;
       params.push(filter.source);
     }
     if (filter.description_search) {
-      conditions.push("je.description LIKE ?");
+      conditions.push("(je.description LIKE ? OR je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'note' AND LOWER(value) LIKE LOWER(?)))");
+      params.push(`%${filter.description_search}%`);
       params.push(`%${filter.description_search}%`);
     }
     if (filter.tag_filters && filter.tag_filters.length > 0) {
@@ -2374,7 +2375,8 @@ PRAGMA foreign_keys = ON;
       params.push(filter.source);
     }
     if (filter.description_search) {
-      conditions.push("je.description LIKE ?");
+      conditions.push("(je.description LIKE ? OR je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'note' AND LOWER(value) LIKE LOWER(?)))");
+      params.push(`%${filter.description_search}%`);
       params.push(`%${filter.description_search}%`);
     }
     if (filter.tag_filters && filter.tag_filters.length > 0) {
@@ -2541,7 +2543,8 @@ PRAGMA foreign_keys = ON;
       params.push(filter.source);
     }
     if (filter.description_search) {
-      conditions.push("je.description LIKE ?");
+      conditions.push("(je.description LIKE ? OR je.id IN (SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'note' AND LOWER(value) LIKE LOWER(?)))");
+      params.push(`%${filter.description_search}%`);
       params.push(`%${filter.description_search}%`);
     }
     if (filter.tag_filters && filter.tag_filters.length > 0) {

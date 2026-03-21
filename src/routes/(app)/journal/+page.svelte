@@ -891,13 +891,12 @@
         // Multi-group: client-side OR filtering across groups
         return store.entries.filter((entry) => {
             return groups.some(({ tags, links, text }) => {
-                if (
-                    text &&
-                    !entry.description
-                        .toLowerCase()
-                        .includes(text.toLowerCase())
-                )
-                    return false;
+                if (text) {
+                    const lower = text.toLowerCase();
+                    const matchesDesc = entry.description.toLowerCase().includes(lower);
+                    const matchesNote = entryNotes.get(entry.id)?.toLowerCase().includes(lower);
+                    if (!matchesDesc && !matchesNote) return false;
+                }
                 if (tags.length > 0) {
                     const eTags = entryTags.get(entry.id);
                     if (
