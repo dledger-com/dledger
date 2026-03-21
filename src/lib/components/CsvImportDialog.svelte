@@ -323,7 +323,28 @@
     rows = parsed.rows;
   }
 
-  async function generatePreview() {
+  function shouldAutoSkip(records: CsvRecord[]): boolean {
+    const nonDupCount = records.length - duplicateFlags.filter(Boolean).length;
+    if (nonDupCount > 0) return false;
+    if (importDrop.batchActive) {
+      toast.info(
+        records.length === 0
+          ? `Skipped ${fileName}: no entries found`
+          : `Skipped ${fileName}: all ${records.length} entries are duplicates`,
+      );
+      importDrop.skipFile();
+    } else {
+      open = false;
+      toast.info(
+        records.length === 0
+          ? `No entries found in ${fileName}`
+          : `All ${records.length} entries in ${fileName} are duplicates`,
+      );
+    }
+    return true;
+  }
+
+  async function generatePreview(autoSkipOnly = false) {
     if (usePreset && selectedPresetId) {
       const preset = presetRegistry.getById(selectedPresetId);
       if (preset) {
@@ -341,6 +362,8 @@
           previewRecords = records;
           previewWarnings = [];
           await detectDuplicates(records);
+          if (shouldAutoSkip(records)) return;
+          if (autoSkipOnly) return;
           fetchAccountPaths();
           step = 3;
           return;
@@ -369,6 +392,8 @@
     previewRecords = result.records;
     previewWarnings = result.warnings;
     await detectDuplicates(result.records);
+    if (shouldAutoSkip(result.records)) return;
+    if (autoSkipOnly) return;
     fetchAccountPaths();
     step = 3;
   }
@@ -487,6 +512,10 @@
       rawContent = initialContent;
       fileName = initialFileName;
       untrack(() => handleParse());
+      // In batch mode, auto-generate preview to trigger duplicate detection
+      if (importDrop.batchActive) {
+        untrack(() => generatePreview(true));
+      }
     } else if (open) {
       untrack(() => resetDialog());
     }
@@ -880,7 +909,7 @@
 
         <div class="flex justify-between">
           <Button variant="outline" onclick={() => { step = 1; }}>Back</Button>
-          <Button onclick={generatePreview} disabled={!usePreset && !dateColumn}>
+          <Button onclick={() => generatePreview()} disabled={!usePreset && !dateColumn}>
             Preview &rarr;
           </Button>
         </div>

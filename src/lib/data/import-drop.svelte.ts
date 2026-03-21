@@ -223,13 +223,18 @@ class ImportDropStore {
         // Queue empty — reset batch state if a batch was active
         if (this._queueTotal > 1) {
             const imported = this._queueIndex - this._skippedCount;
-            const parts: string[] = [];
-            if (imported > 0) parts.push(`${imported} imported`);
-            if (this._skippedCount > 0) parts.push(`${this._skippedCount} skipped`);
+            const skipped = this._skippedCount;
             this._queueTotal = 0;
             this._queueIndex = 0;
             this._skippedCount = 0;
-            toast.info(`Batch import complete: ${parts.join(", ")}`);
+            if (imported === 0) {
+                toast.info(`Batch import complete: all ${skipped} files skipped (no new entries)`);
+            } else {
+                const parts: string[] = [];
+                parts.push(`${imported} imported`);
+                if (skipped > 0) parts.push(`${skipped} skipped`);
+                toast.info(`Batch import complete: ${parts.join(", ")}`);
+            }
         } else if (this._queueTotal > 0) {
             this._queueTotal = 0;
             this._queueIndex = 0;
@@ -260,14 +265,23 @@ class ImportDropStore {
             if (this._cancelled) return;
             if (this._queueTotal > 1) {
                 const imported = this._queueIndex - this._skippedCount;
-                const parts: string[] = [];
-                if (imported > 0) parts.push(`${imported} imported`);
-                if (this._skippedCount > 0) parts.push(`${this._skippedCount} skipped`);
-                toast.info(`Batch import complete: ${parts.join(", ")}`);
+                const skipped = this._skippedCount;
+                this._queueTotal = 0;
+                this._queueIndex = 0;
+                this._skippedCount = 0;
+                if (imported === 0) {
+                    toast.info(`Batch import complete: all ${skipped} files skipped (no new entries)`);
+                } else {
+                    const parts: string[] = [];
+                    parts.push(`${imported} imported`);
+                    if (skipped > 0) parts.push(`${skipped} skipped`);
+                    toast.info(`Batch import complete: ${parts.join(", ")}`);
+                }
+            } else {
+                this._queueTotal = 0;
+                this._queueIndex = 0;
+                this._skippedCount = 0;
             }
-            this._queueTotal = 0;
-            this._queueIndex = 0;
-            this._skippedCount = 0;
         } finally {
             this._advancing = false;
         }

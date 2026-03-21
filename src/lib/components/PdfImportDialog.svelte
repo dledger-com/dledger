@@ -247,7 +247,7 @@
     }
   }
 
-  async function generatePreview() {
+  async function generatePreview(autoSkipOnly = false) {
     if (!statement) return;
 
     const result = convertPdfToRecords(statement, {
@@ -260,6 +260,28 @@
     fileHeader = result.fileHeader;
 
     await detectDuplicates(result.records);
+
+    const nonDupCount = result.records.length - duplicateFlags.filter(Boolean).length;
+    if (nonDupCount === 0) {
+      if (importDrop.batchActive) {
+        toast.info(
+          result.records.length === 0
+            ? `Skipped ${fileName}: no entries found`
+            : `Skipped ${fileName}: all ${result.records.length} entries are duplicates`,
+        );
+        importDrop.skipFile();
+      } else {
+        open = false;
+        toast.info(
+          result.records.length === 0
+            ? `No entries found in ${fileName}`
+            : `All ${result.records.length} entries in ${fileName} are duplicates`,
+        );
+      }
+      return;
+    }
+
+    if (autoSkipOnly) return;
     fetchAccountPaths();
     step = 2;
   }
@@ -371,7 +393,11 @@
       const file = initialFile;
       untrack(() => {
         resetDialog();
-        parseFile(file);
+        parseFile(file).then(() => {
+          if (importDrop.batchActive) {
+            generatePreview(true);
+          }
+        });
       });
     } else if (open) {
       untrack(() => resetDialog());
@@ -479,7 +505,7 @@
           {/if}
 
           <div class="flex justify-end">
-            <Button onclick={generatePreview} disabled={txCount === 0}>
+            <Button onclick={() => generatePreview()} disabled={txCount === 0}>
               Preview &rarr;
             </Button>
           </div>
