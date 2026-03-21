@@ -420,6 +420,15 @@
     }
   });
 
+  function autoResize(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+
+  function autoResizeAction(el: HTMLTextAreaElement) {
+    autoResize(el);
+  }
+
   function handleOpenChange(newOpen: boolean) {
     if (!newOpen && isDirty) {
       confirmDiscardOpen = true;
@@ -498,9 +507,10 @@
                 <dd>
                   <textarea
                     bind:value={formNote}
-                    rows="2"
                     placeholder="Add a note..."
-                    class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-y"
+                    use:autoResizeAction
+                    oninput={(e) => autoResize(e.currentTarget)}
+                    class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-none overflow-y-auto min-h-[2lh] max-h-[12lh]"
                   ></textarea>
                 </dd>
               </div>

@@ -7,10 +7,20 @@
   let draft = $state("");
   let textareaEl = $state<HTMLTextAreaElement | null>(null);
 
+  function autoResize(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+
   function startEditing() {
     draft = note;
     editing = true;
-    setTimeout(() => textareaEl?.focus(), 0);
+    setTimeout(() => {
+      if (textareaEl) {
+        textareaEl.focus();
+        autoResize(textareaEl);
+      }
+    }, 0);
   }
 
   function save() {
@@ -41,10 +51,10 @@
     <textarea
       bind:this={textareaEl}
       bind:value={draft}
-      rows="3"
-      class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-y"
+      class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-none min-h-[3lh] max-h-[12lh] overflow-y-auto"
       onblur={save}
       onkeydown={handleKeydown}
+      oninput={(e) => autoResize(e.currentTarget)}
     ></textarea>
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
