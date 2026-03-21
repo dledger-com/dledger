@@ -14,7 +14,7 @@ function detectVariant(headers: string[]): Variant | null {
   const lower = headers.map((h) => h.trim().toLowerCase());
   const has = (n: string) => lower.includes(n.toLowerCase());
 
-  if (has("Amount currency") || has("Fee currency")) return "export";
+  if ((has("Amount currency") || has("Fee currency")) && has("Subtype")) return "export";
   if (has("Order Type") && has("Pair") && has("Closed")) return "orders";
   if (has("Type") && has("Datetime") && has("Sub Type")) return "all";
   return null;

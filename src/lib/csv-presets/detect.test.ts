@@ -4,6 +4,7 @@ import { bittrexPreset } from "./presets/bittrex.js";
 import { cryptoComExchangePreset } from "./presets/crypto-com-exchange.js";
 import { yieldAppPreset } from "./presets/yield-app.js";
 import { kucoinPreset } from "./presets/kucoin.js";
+import { bitstampPreset } from "./presets/bitstamp.js";
 
 describe("detectColumns", () => {
   it("detects standard bank statement columns by header name", () => {
@@ -163,8 +164,15 @@ describe("cross-preset detection", () => {
     ];
     expect(bittrexPreset.detect(kucoinSpotHeaders, [])).toBe(0);
     expect(cryptoComExchangePreset.detect(kucoinSpotHeaders, [])).toBe(0);
+    expect(bitstampPreset.detect(kucoinSpotHeaders, [])).toBe(0);
     expect(bittrexPreset.detect(kucoinDepositHeaders, [])).toBe(0);
     expect(cryptoComExchangePreset.detect(kucoinDepositHeaders, [])).toBe(0);
+    expect(bitstampPreset.detect(kucoinDepositHeaders, [])).toBe(0);
+  });
+
+  it("Bitstamp export headers are correctly detected", () => {
+    const exportHeaders = ["ID", "Account", "Type", "Subtype", "Datetime", "Amount", "Amount currency"];
+    expect(bitstampPreset.detect(exportHeaders, [])).toBe(85);
   });
 
   it("Yield App headers are not detected as Bittrex or Crypto.com Exchange", () => {
