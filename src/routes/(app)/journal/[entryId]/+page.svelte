@@ -18,7 +18,8 @@
   import { templateFromEntry } from "$lib/utils/recurring.js";
   import TagInput from "$lib/components/TagInput.svelte";
   import LinkInput from "$lib/components/LinkInput.svelte";
-  import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
+  import { parseTags, serializeTags, TAGS_META_KEY, NOTE_META_KEY } from "$lib/utils/tags.js";
+  import NoteInput from "$lib/components/NoteInput.svelte";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
@@ -34,6 +35,7 @@
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const isHidden = $derived(entryInvolvesHidden(items, hidden));
   const tags = $derived(parseTags(metadata[TAGS_META_KEY]));
+  const note = $derived(metadata[NOTE_META_KEY] ?? "");
   let entryLinks = $state<string[]>([]);
   let linkSuggestions = $state<string[]>([]);
 
@@ -50,6 +52,21 @@
     const serialized = serializeTags(newTags);
     await getBackend().setMetadata(id, { [TAGS_META_KEY]: serialized });
     metadata = { ...metadata, [TAGS_META_KEY]: serialized };
+  }
+
+  async function handleNoteChange(newNote: string) {
+    const id = entryId;
+    if (!id) return;
+    if (newNote) {
+      await getBackend().setMetadata(id, { [NOTE_META_KEY]: newNote });
+      metadata = { ...metadata, [NOTE_META_KEY]: newNote };
+    } else {
+      // Remove note key when empty
+      const next = { ...metadata };
+      delete next[NOTE_META_KEY];
+      await getBackend().setMetadata(id, { [NOTE_META_KEY]: "" });
+      metadata = next;
+    }
   }
   let loading = $state(true);
 
@@ -221,7 +238,7 @@
       </Card.Content>
     </Card.Root>
 
-    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
+    {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY && k !== NOTE_META_KEY && k !== "links")}
     <Card.Root>
       <Card.Header>
         <Card.Title>Metadata</Card.Title>
@@ -237,6 +254,10 @@
             <dd><LinkInput links={entryLinks} onchange={handleLinksChange} suggestions={linkSuggestions} /></dd>
           </div>
         </dl>
+        <div>
+          <dt class="text-sm text-muted-foreground">Note</dt>
+          <dd><NoteInput {note} onchange={handleNoteChange} /></dd>
+        </div>
         {#if displayMeta.length > 0}
           <dl class="grid grid-cols-2 gap-4 text-sm">
             {#each displayMeta as [key, value]}

@@ -1,6 +1,9 @@
 /** Metadata key used to store tags on journal entries. */
 export const TAGS_META_KEY = "tags";
 
+/** Metadata key used to store a free-form note on journal entries. */
+export const NOTE_META_KEY = "note";
+
 const TAG_CHAR_RE = /[^\p{L}\p{N}_-]/gu;
 
 /** Normalize a single tag: trim, lowercase, strip invalid chars. */

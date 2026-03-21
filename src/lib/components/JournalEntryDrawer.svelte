@@ -16,7 +16,8 @@
   import TagInput from "$lib/components/TagInput.svelte";
   import LinkInput from "$lib/components/LinkInput.svelte";
   import FlowView from "$lib/components/FlowView.svelte";
-  import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
+  import { parseTags, serializeTags, TAGS_META_KEY, NOTE_META_KEY } from "$lib/utils/tags.js";
+  import NoteInput from "$lib/components/NoteInput.svelte";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import type { AccountType } from "$lib/types/account.js";
   import { invalidate } from "$lib/data/invalidation.js";
@@ -60,6 +61,7 @@
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const isHidden = $derived(entryInvolvesHidden(viewItems, hidden));
   const viewTags = $derived(parseTags(viewMetadata[TAGS_META_KEY]));
+  const viewNote = $derived(viewMetadata[NOTE_META_KEY] ?? "");
 
   function formatMetaKey(key: string): string {
     let display = key
@@ -130,6 +132,19 @@
     const serialized = serializeTags(newTags);
     await getBackend().setMetadata(entryId, { [TAGS_META_KEY]: serialized });
     viewMetadata = { ...viewMetadata, [TAGS_META_KEY]: serialized };
+  }
+
+  async function handleViewNoteChange(newNote: string) {
+    if (!entryId) return;
+    if (newNote) {
+      await getBackend().setMetadata(entryId, { [NOTE_META_KEY]: newNote });
+      viewMetadata = { ...viewMetadata, [NOTE_META_KEY]: newNote };
+    } else {
+      const next = { ...viewMetadata };
+      delete next[NOTE_META_KEY];
+      await getBackend().setMetadata(entryId, { [NOTE_META_KEY]: "" });
+      viewMetadata = next;
+    }
   }
 
   async function handleVoid() {
@@ -263,7 +278,7 @@
         </section>
 
         <!-- Metadata -->
-        {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== "links")}
+        {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== NOTE_META_KEY && k !== "links")}
         <section>
             <h3 class="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
             <div class="space-y-3 text-sm">
@@ -275,6 +290,10 @@
                   <div>
                     <dt class="text-muted-foreground">Links</dt>
                     <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
+                  </div>
+                  <div>
+                    <dt class="text-muted-foreground">Note</dt>
+                    <dd><NoteInput note={viewNote} onchange={handleViewNoteChange} /></dd>
                   </div>
               </div>
               {#if displayMeta.length > 0}

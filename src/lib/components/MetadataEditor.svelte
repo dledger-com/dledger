@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input/index.js";
-  import { TAGS_META_KEY } from "$lib/utils/tags.js";
+  import { TAGS_META_KEY, NOTE_META_KEY } from "$lib/utils/tags.js";
   import X from "lucide-svelte/icons/x";
   import Plus from "lucide-svelte/icons/plus";
 
@@ -23,7 +23,7 @@
 
   /** Entries excluding tags (managed separately via TagInput). */
   const entries = $derived(
-    Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY),
+    Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY && k !== NOTE_META_KEY),
   );
 
   function addEntry() {

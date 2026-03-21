@@ -13,7 +13,7 @@
   import LinkInput from "$lib/components/LinkInput.svelte";
   import MetadataEditor from "$lib/components/MetadataEditor.svelte";
   import AccountCombobox from "$lib/components/AccountCombobox.svelte";
-  import { parseTags, serializeTags, TAGS_META_KEY } from "$lib/utils/tags.js";
+  import { parseTags, serializeTags, TAGS_META_KEY, NOTE_META_KEY } from "$lib/utils/tags.js";
   import type { JournalEntry, LineItem, Account } from "$lib/types/index.js";
   import { invalidate } from "$lib/data/invalidation.js";
   import { AlertDialog } from "bits-ui";
@@ -52,6 +52,7 @@
   let formCurrency = $state("EUR");
   let formTags = $state<string[]>([]);
   let formLinks = $state<string[]>([]);
+  let formNote = $state("");
   let formMetadata = $state<Record<string, string>>({});
   let tagSuggestions = $state<string[]>([]);
   let formLinkSuggestions = $state<string[]>([]);
@@ -74,7 +75,7 @@
 
   function takeSnapshot(): string {
     return JSON.stringify({
-      formDate, formDescription, formCurrency, formTags, formLinks, formMetadata,
+      formDate, formDescription, formCurrency, formTags, formLinks, formNote, formMetadata,
       lines: lines.map(l => ({ accountPath: l.accountPath, debit: l.debit, credit: l.credit })),
     });
   }
@@ -232,9 +233,12 @@
       ];
 
       const filteredMeta: Record<string, string> = {};
+      formNote = "";
       for (const [k, v] of Object.entries(metaResult)) {
         if (k === TAGS_META_KEY) {
           formTags = parseTags(v);
+        } else if (k === NOTE_META_KEY) {
+          formNote = v;
         } else if (!k.startsWith("edit:")) {
           filteredMeta[k] = v;
         }
@@ -308,6 +312,7 @@
       };
       const metaToSave = { ...formMetadata };
       if (formTags.length > 0) metaToSave[TAGS_META_KEY] = serializeTags(formTags);
+      if (formNote) metaToSave[NOTE_META_KEY] = formNote;
 
       const result = await journalStore.edit(
         entryId, journalEntry, items,
@@ -334,6 +339,7 @@
       if (ok) {
         const metaToSave = { ...formMetadata };
         if (formTags.length > 0) metaToSave[TAGS_META_KEY] = serializeTags(formTags);
+        if (formNote) metaToSave[NOTE_META_KEY] = formNote;
         if (Object.keys(metaToSave).length > 0) {
           await getBackend().setMetadata(newEntryId, metaToSave);
         }
@@ -381,6 +387,7 @@
       formCurrency = "EUR";
       formTags = [];
       formLinks = [];
+      formNote = "";
       formMetadata = {};
       entryMode = "simple";
       fromCurrency = "EUR";
@@ -485,6 +492,17 @@
               <div class="space-y-1">
                 <dt class="text-muted-foreground">Links</dt>
                 <dd><LinkInput links={formLinks} onchange={(l) => { formLinks = l; }} suggestions={formLinkSuggestions} /></dd>
+              </div>
+              <div class="space-y-1">
+                <dt class="text-muted-foreground">Note</dt>
+                <dd>
+                  <textarea
+                    bind:value={formNote}
+                    rows="2"
+                    placeholder="Add a note..."
+                    class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-y"
+                  ></textarea>
+                </dd>
               </div>
               <MetadataEditor
                 metadata={formMetadata}

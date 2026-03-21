@@ -51,7 +51,8 @@
     import ListFilter from "$lib/components/ListFilter.svelte";
     import TagDisplay from "$lib/components/TagDisplay.svelte";
     import LinkDisplay from "$lib/components/LinkDisplay.svelte";
-    import { parseTags, TAGS_META_KEY } from "$lib/utils/tags.js";
+    import { parseTags, TAGS_META_KEY, NOTE_META_KEY } from "$lib/utils/tags.js";
+    import StickyNote from "lucide-svelte/icons/sticky-note";
     import { formatExtension, type LedgerFormat } from "$lib/ledger-format.js";
     import { exportLedger } from "$lib/browser-ledger-file.js";
     import SortableHeader from "$lib/components/SortableHeader.svelte";
@@ -872,6 +873,7 @@
     // Metadata state — declared before displayEntries to avoid TDZ
     let entryTags = $state<Map<string, string[]>>(new Map());
     let entryLinks = $state<Map<string, string[]>>(new Map());
+    let entryNotes = $state<Map<string, string>>(new Map());
 
     // Post-filter: OR across comma-separated groups, AND within each group
     const displayEntries = $derived.by((): JournalEntry[] => {
@@ -1507,6 +1509,7 @@
         void store.entries;
         entryTags = new Map();
         entryLinks = new Map();
+        entryNotes = new Map();
         convertedTotals = new Map();
         convertedBarSegments = new Map();
     });
@@ -1563,10 +1566,13 @@
                 ]);
                 if (gen !== metaGen) return;
                 const tags = new Map(entryTags);
+                const notes = new Map(entryNotes);
                 for (const [id, meta] of metaMap) {
                     tags.set(id, parseTags(meta[TAGS_META_KEY]));
+                    if (meta[NOTE_META_KEY]) notes.set(id, meta[NOTE_META_KEY]);
                 }
                 entryTags = tags;
+                entryNotes = notes;
                 const linksOut = new Map(entryLinks);
                 for (const [id, links] of linkMap) {
                     linksOut.set(id, links);
@@ -2586,6 +2592,11 @@
                                                             </span>
                                                         {/if}
                                                     {/if}
+                                                    {#if entryNotes.get(entry.id)}
+                                                        <span title={entryNotes.get(entry.id)} class="text-muted-foreground shrink-0">
+                                                            <StickyNote class="h-3.5 w-3.5 inline" />
+                                                        </span>
+                                                    {/if}
                                                 </div>
                                             </td>
                                         </tr>
@@ -2665,6 +2676,11 @@
                                                                         />
                                                                     </span>
                                                                 {/if}
+                                                            {/if}
+                                                            {#if entryNotes.get(entry.id)}
+                                                                <span title={entryNotes.get(entry.id)} class="text-muted-foreground shrink-0">
+                                                                    <StickyNote class="h-3.5 w-3.5 inline" />
+                                                                </span>
                                                             {/if}
                                                         </div>
                                                     </Table.Cell>
