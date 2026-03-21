@@ -7,6 +7,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
+  import { importDrop } from "$lib/data/import-drop.svelte.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
   import type { CsvCategorizationRule } from "$lib/csv-presets/categorize.js";
@@ -634,9 +635,17 @@
 
           <div class="flex justify-between">
             <Button variant="outline" onclick={() => { step = 1; }}>Back</Button>
-            <Button onclick={doImport} disabled={taskQueue.isActive("pdf-import") || nonDuplicateCount === 0}>
-              {taskQueue.isActive("pdf-import") ? "Importing..." : `Import ${nonDuplicateCount} entries`}
-            </Button>
+            {#if nonDuplicateCount === 0}
+              {#if importDrop.batchActive}
+                <Button variant="outline" onclick={() => importDrop.skipFile()}>Skip</Button>
+              {:else}
+                <Button variant="outline" onclick={() => { open = false; }}>Cancel</Button>
+              {/if}
+            {:else}
+              <Button onclick={doImport} disabled={taskQueue.isActive("pdf-import")}>
+                {taskQueue.isActive("pdf-import") ? "Importing..." : `Import ${nonDuplicateCount} entries`}
+              </Button>
+            {/if}
           </div>
       </div>
     {/if}
