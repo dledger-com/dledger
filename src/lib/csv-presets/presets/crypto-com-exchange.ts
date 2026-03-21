@@ -24,20 +24,48 @@ function findCol(headers: string[], alts: string[]): number {
   return -1;
 }
 
+/** Check if a row looks like the real Crypto.com Exchange header row */
+function isHeaderRow(row: string[]): boolean {
+  const lower = row.map((h) => h.trim().toLowerCase());
+  return lower.includes("date") && (lower.includes("monnaie") || lower.includes("currency")) && lower.includes("type");
+}
+
+/** Find real headers + data rows, handling optional preamble lines */
+function extractHeadersAndRows(
+  headers: string[],
+  rows: string[][],
+): { realHeaders: string[]; dataRows: string[][] } | null {
+  // Case 1: headers are already the real column headers
+  if (isHeaderRow(headers)) return { realHeaders: headers, dataRows: rows };
+  // Case 2: headers are preamble — scan rows for real header row
+  for (let i = 0; i < rows.length; i++) {
+    if (isHeaderRow(rows[i])) {
+      return { realHeaders: rows[i], dataRows: rows.slice(i + 1) };
+    }
+  }
+  return null;
+}
+
 export const cryptoComExchangePreset: CsvPreset = {
   id: "crypto-com-exchange",
   name: "Crypto.com Exchange",
   description: "Crypto.com Exchange deposit and withdrawal CSV (French/Italian headers).",
   suggestedMainAccount: exchangeAssets("CryptoComExchange"),
 
-  detect(headers: string[]): number {
+  detect(headers: string[], rows?: string[][]): number {
     const lower = headers.map((h) => h.trim().toLowerCase());
     const matched = FRENCH_HEADERS.map((h) => h.toLowerCase()).filter((r) => lower.includes(r)).length;
     // Also check for variant header names
     const hasMonnaie = findCol(headers, ALT_HEADER_MAP["monnaie"]) >= 0;
     const hasStatut = findCol(headers, ALT_HEADER_MAP["statut"]) >= 0;
     if (hasMonnaie && hasStatut) return 85;
-    return matched >= 4 ? 85 : 0;
+    if (matched >= 4) return 85;
+    // Check if real headers are buried in the rows (preamble case)
+    if (rows) {
+      const result = extractHeadersAndRows(headers, rows);
+      if (result) return 85;
+    }
+    return 0;
   },
 
   getDefaultMapping(): Partial<CsvImportOptions> {
@@ -45,18 +73,23 @@ export const cryptoComExchangePreset: CsvPreset = {
   },
 
   transform(headers: string[], rows: string[][]): CsvRecord[] | null {
-    const dateIdx = colIdx(headers, "Date");
-    const currIdx = findCol(headers, ALT_HEADER_MAP["monnaie"]);
-    const typeIdx = findCol(headers, ALT_HEADER_MAP["type"]);
-    const qtyIdx = findCol(headers, ALT_HEADER_MAP["quantité"]);
-    const feeIdx = findCol(headers, ALT_HEADER_MAP["frais"]);
-    const statusIdx = findCol(headers, ALT_HEADER_MAP["statut"]);
+    // Handle preamble: find the real headers if they're buried in the rows
+    const extracted = extractHeadersAndRows(headers, rows);
+    if (!extracted) return null;
+    const { realHeaders, dataRows } = extracted;
+
+    const dateIdx = colIdx(realHeaders, "Date");
+    const currIdx = findCol(realHeaders, ALT_HEADER_MAP["monnaie"]);
+    const typeIdx = findCol(realHeaders, ALT_HEADER_MAP["type"]);
+    const qtyIdx = findCol(realHeaders, ALT_HEADER_MAP["quantité"]);
+    const feeIdx = findCol(realHeaders, ALT_HEADER_MAP["frais"]);
+    const statusIdx = findCol(realHeaders, ALT_HEADER_MAP["statut"]);
 
     if ([dateIdx, currIdx, typeIdx, qtyIdx].some((i) => i === -1)) return null;
 
     const records: CsvRecord[] = [];
 
-    for (const row of rows) {
+    for (const row of dataRows) {
       if (row.length <= 1 && (row[0] ?? "") === "") continue;
 
       // Filter by status: "Terminé" (completed) or "COMPLETED"

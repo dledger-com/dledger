@@ -101,7 +101,7 @@ export function detectDelimiter(content: string): string {
 }
 
 export function parseCsv(content: string, delimiter = ",", skipLines = 0): { headers: string[]; rows: string[][] } {
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const lines = content.split(/\r\n|\r|\n/).filter((l) => l.trim().length > 0);
   const effective = skipLines > 0 ? lines.slice(skipLines) : lines;
   if (effective.length === 0) return { headers: [], rows: [] };
   const headers = parseCsvRow(effective[0], delimiter);
