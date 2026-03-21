@@ -140,6 +140,15 @@ describe("detectColumns", () => {
 });
 
 describe("cross-preset detection", () => {
+  it("Gate.io deposit/withdrawal headers are not detected as Bittrex or Crypto.com Exchange", () => {
+    const depositHeaders = ["id", "txid", "withdraw_order_id", "timestamp", "amount", "currency", "address", "memo", "status", "chain"];
+    const withdrawalHeaders = ["id", "txid", "block_number", "withdraw_order_id", "timestamp", "amount", "fee", "currency", "address", "fail_reason", "timestamp2", "memo", "status", "chain", "type"];
+    expect(bittrexPreset.detect(depositHeaders, [])).toBe(0);
+    expect(bittrexPreset.detect(withdrawalHeaders, [])).toBe(0);
+    expect(cryptoComExchangePreset.detect(depositHeaders, [])).toBe(0);
+    expect(cryptoComExchangePreset.detect(withdrawalHeaders, [])).toBe(0);
+  });
+
   it("Yield App headers are not detected as Bittrex or Crypto.com Exchange", () => {
     const yieldAppHeaders = ["Date", "Amount", "Currency", "Type", "Status", "Rewarded From", "Fund Price", "YLD Price", "Txid", "Address From", "Address To"];
     expect(bittrexPreset.detect(yieldAppHeaders, [])).toBe(0);

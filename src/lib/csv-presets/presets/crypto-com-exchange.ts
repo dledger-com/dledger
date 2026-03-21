@@ -58,7 +58,9 @@ export const cryptoComExchangePreset: CsvPreset = {
     // Also check for variant header names
     const hasMonnaie = findCol(headers, ALT_HEADER_MAP["monnaie"]) >= 0;
     const hasStatut = findCol(headers, ALT_HEADER_MAP["statut"]) >= 0;
-    if (hasMonnaie && hasStatut) return 85;
+    const hasType = findCol(headers, ALT_HEADER_MAP["type"]) >= 0;
+    const hasQuantite = findCol(headers, ALT_HEADER_MAP["quantité"]) >= 0;
+    if (hasMonnaie && hasStatut && hasType && hasQuantite) return 85;
     if (matched >= 4) return 85;
     // Check if real headers are buried in the rows (preamble case)
     if (rows) {
