@@ -47,9 +47,9 @@
     {#each flows as flow, i (i)}
       <div class="rounded-md border p-3 {colorClasses[flow.flowType]}">
         <!-- Source -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-baseline gap-2">
           <span class="text-xs font-medium uppercase {labelClasses[flow.flowType]}">From</span>
-          <span class="text-sm break-words">
+          <span class="text-sm break-words min-w-0">
             {flow.sourceAccountId ? accountName(flow.sourceAccountId) : "—"}
           </span>
         </div>
@@ -64,9 +64,9 @@
         </div>
 
         <!-- Destination -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-baseline gap-2">
           <span class="text-xs font-medium uppercase {labelClasses[flow.flowType]}">To</span>
-          <span class="text-sm break-words">
+          <span class="text-sm break-words min-w-0">
             {flow.destAccountId ? accountName(flow.destAccountId) : "—"}
           </span>
         </div>
