@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { renderMarkdown } from "$lib/utils/markdown";
+
   let { note, onchange, class: className }: { note: string; onchange: (note: string) => void; class?: string } = $props();
 
   let editing = $state(false);
@@ -48,10 +50,15 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
-      class="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50 min-h-[1.75rem] {note ? '' : 'text-muted-foreground italic'}"
+      class="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50 min-h-[1.75rem] {note ? 'prose prose-xs dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0' : 'text-muted-foreground italic'}"
       onclick={startEditing}
     >
-      {note || "Add a note..."}
+      {#if note}
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html renderMarkdown(note)}
+      {:else}
+        Add a note...
+      {/if}
     </div>
   {/if}
 </div>
