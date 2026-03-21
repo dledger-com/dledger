@@ -901,5 +901,39 @@
   "sources_my_wallet": "My Wallet",
   "sources_evm_placeholder": "0x... or xpub",
   "sources_bitcoin": "Bitcoin",
-  "sources_evm": "EVM"
+  "sources_evm": "EVM",
+
+  "task_rate_backfill_auto": "Auto-backfill all missing rates",
+  "task_rate_backfill_import": "Backfill rates for {count} imported currency(ies)",
+  "task_rate_fetched_summary": "Fetched {count} rate(s)",
+  "task_rate_fetched_full_summary": "Fetched {fetched} rate(s) for {currencies} currency(ies)",
+  "task_rates_already_available": "All rates already available",
+
+  "task_report_trial_balance": "Trial Balance",
+  "task_report_trial_balance_desc": "As of {date}",
+  "task_report_trial_balance_done": "Trial balance generated",
+  "task_report_income_statement": "Income Statement",
+  "task_report_income_statement_desc": "{from} to {to}",
+  "task_report_income_statement_done": "Income statement generated",
+  "task_report_balance_sheet": "Balance Sheet",
+  "task_report_balance_sheet_desc": "As of {date}",
+  "task_report_balance_sheet_done": "Balance sheet generated",
+  "task_report_gain_loss": "Gain/Loss Report",
+  "task_report_gain_loss_desc": "{from} to {to}",
+  "task_report_gain_loss_done": "Gain/loss report generated",
+
+  "task_import_summary": "{count} entries imported",
+  "task_import_summary_with_skips": "{count} entries imported, {skipped} duplicates skipped",
+  "toast_import_with_skips": "Imported {count} entries, {skipped} duplicates skipped",
+
+  "toast_auto_hid_currencies": "Auto-hid {count} currency(ies): {list}",
+  "toast_auto_hid_and_more": " and {count} more",
+  "toast_review_in_settings": "Review in Settings",
+
+  "error_unsupported_file_format": "Unsupported file format",
+  "toast_batch_complete_all_skipped": "Batch import complete: all {count} files skipped (no new entries)",
+  "toast_batch_complete": "Batch import complete: {summary}",
+  "toast_batch_progress": "Batch import: {summary}",
+  "label_imported": "{count} imported",
+  "label_skipped": "{count} skipped"
 }

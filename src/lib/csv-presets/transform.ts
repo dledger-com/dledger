@@ -14,6 +14,7 @@ import { invalidate } from "$lib/data/invalidation.js";
 import { toast } from "svelte-sonner";
 import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
 import type { HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
+import * as m from "$paraglide/messages.js";
 import { yieldToUI } from "$lib/utils/yield.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "$lib/utils/derive-trade-rate.js";
 
@@ -406,7 +407,7 @@ export function enqueueRecordImport(params: {
   return taskQueue.enqueue({
     key,
     label,
-    description: `Importing ${records.length} records`,
+    description: m.state_importing(),
     run: async (ctx) => {
       const backend = getBackend();
       const result = await importRecords(backend, records, presetId, {
@@ -418,8 +419,11 @@ export function enqueueRecordImport(params: {
         await postImport(backend, result);
       }
 
-      const skipMsg = result.duplicates_skipped > 0 ? `, ${result.duplicates_skipped} duplicates skipped` : "";
-      toast.success(`Imported ${result.entries_created} entries${skipMsg}`);
+      if (result.duplicates_skipped > 0) {
+        toast.success(m.toast_import_with_skips({ count: String(result.entries_created), skipped: String(result.duplicates_skipped) }));
+      } else {
+        toast.success(m.toast_entries_imported({ count: String(result.entries_created) }));
+      }
       if (result.entries_created > 0) invalidate("journal", "accounts", "reports");
 
       if (result.transaction_currency_dates.length > 0) {
@@ -432,10 +436,10 @@ export function enqueueRecordImport(params: {
         );
       }
 
-      return {
-        summary: `${result.entries_created} entries imported${skipMsg}`,
-        data: result,
-      };
+      const summary = result.duplicates_skipped > 0
+        ? m.task_import_summary_with_skips({ count: String(result.entries_created), skipped: String(result.duplicates_skipped) })
+        : m.task_import_summary({ count: String(result.entries_created) });
+      return { summary, data: result };
     },
   });
 }

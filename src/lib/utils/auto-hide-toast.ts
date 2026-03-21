@@ -1,5 +1,6 @@
 import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
+import * as m from "$paraglide/messages.js";
 
 /**
  * Show a toast listing auto-hidden currencies with a "Review in Settings" action.
@@ -12,15 +13,13 @@ export function showAutoHideToast(currencies: string[]): void {
   const shown = currencies.slice(0, MAX_SHOWN);
   const remaining = currencies.length - shown.length;
 
-  let message = `Auto-hid ${currencies.length} currency(ies): ${shown.join(", ")}`;
-  if (remaining > 0) {
-    message += ` and ${remaining} more`;
-  }
+  const base = m.toast_auto_hid_currencies({ count: String(currencies.length), list: shown.join(", ") });
+  const suffix = remaining > 0 ? m.toast_auto_hid_and_more({ count: String(remaining) }) : "";
 
-  toast.info(message, {
+  toast.info(`${base}${suffix}`, {
     duration: 8000,
     action: {
-      label: "Review in Settings",
+      label: m.toast_review_in_settings(),
       onClick: () => goto("/settings"),
     },
   });

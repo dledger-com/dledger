@@ -1,6 +1,7 @@
 import type { TrialBalance, IncomeStatement, BalanceSheet, GainLossReport } from "$lib/types/index.js";
 import { getBackend } from "$lib/backend.js";
 import { taskQueue } from "$lib/task-queue.svelte.js";
+import * as m from "$paraglide/messages.js";
 
 // Module-level cache for balance sheet and income statement
 let _cachedBS = $state<BalanceSheet | null>(null);
@@ -80,8 +81,8 @@ export class ReportStore {
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
         key: `report:trial-balance:${asOf}`,
-        label: "Trial Balance",
-        description: `As of ${asOf}`,
+        label: m.task_report_trial_balance(),
+        description: m.task_report_trial_balance_desc({ date: asOf }),
         run: async (ctx) => {
           try {
             const result = await getBackend().trialBalance(asOf);
@@ -94,7 +95,7 @@ export class ReportStore {
             this.loading = false;
             resolve();
           }
-          return { summary: "Trial balance generated" };
+          return { summary: m.task_report_trial_balance_done() };
         },
       });
       if (id === null) {
@@ -110,8 +111,8 @@ export class ReportStore {
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
         key: `report:income-statement:${fromDate}:${toDate}`,
-        label: "Income Statement",
-        description: `${fromDate} to ${toDate}`,
+        label: m.task_report_income_statement(),
+        description: m.task_report_income_statement_desc({ from: fromDate, to: toDate }),
         run: async (ctx) => {
           try {
             const result = await getBackend().incomeStatement(fromDate, toDate, ctx.signal);
@@ -127,7 +128,7 @@ export class ReportStore {
             this.loading = false;
             resolve();
           }
-          return { summary: "Income statement generated" };
+          return { summary: m.task_report_income_statement_done() };
         },
       });
       if (id === null) {
@@ -143,8 +144,8 @@ export class ReportStore {
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
         key: `report:balance-sheet:${asOf}`,
-        label: "Balance Sheet",
-        description: `As of ${asOf}`,
+        label: m.task_report_balance_sheet(),
+        description: m.task_report_balance_sheet_desc({ date: asOf }),
         run: async (ctx) => {
           try {
             const result = await getBackend().balanceSheet(asOf, ctx.signal);
@@ -159,7 +160,7 @@ export class ReportStore {
             this.loading = false;
             resolve();
           }
-          return { summary: "Balance sheet generated" };
+          return { summary: m.task_report_balance_sheet_done() };
         },
       });
       if (id === null) {
@@ -175,8 +176,8 @@ export class ReportStore {
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
         key: `report:gain-loss:${fromDate}:${toDate}`,
-        label: "Gain/Loss Report",
-        description: `${fromDate} to ${toDate}`,
+        label: m.task_report_gain_loss(),
+        description: m.task_report_gain_loss_desc({ from: fromDate, to: toDate }),
         run: async (ctx) => {
           try {
             const result = await getBackend().gainLossReport(fromDate, toDate);
@@ -189,7 +190,7 @@ export class ReportStore {
             this.loading = false;
             resolve();
           }
-          return { summary: "Gain/loss report generated" };
+          return { summary: m.task_report_gain_loss_done() };
         },
       });
       if (id === null) {

@@ -901,5 +901,39 @@
   "sources_my_wallet": "Mon portefeuille",
   "sources_evm_placeholder": "0x... ou xpub",
   "sources_bitcoin": "Bitcoin",
-  "sources_evm": "EVM"
+  "sources_evm": "EVM",
+
+  "task_rate_backfill_auto": "Compléter automatiquement les taux manquants",
+  "task_rate_backfill_import": "Compléter les taux pour {count} devise(s) importée(s)",
+  "task_rate_fetched_summary": "{count} taux récupéré(s)",
+  "task_rate_fetched_full_summary": "{fetched} taux récupéré(s) pour {currencies} devise(s)",
+  "task_rates_already_available": "Tous les taux sont déjà disponibles",
+
+  "task_report_trial_balance": "Balance générale",
+  "task_report_trial_balance_desc": "Au {date}",
+  "task_report_trial_balance_done": "Balance générale générée",
+  "task_report_income_statement": "Compte de résultat",
+  "task_report_income_statement_desc": "Du {from} au {to}",
+  "task_report_income_statement_done": "Compte de résultat généré",
+  "task_report_balance_sheet": "Bilan",
+  "task_report_balance_sheet_desc": "Au {date}",
+  "task_report_balance_sheet_done": "Bilan généré",
+  "task_report_gain_loss": "Plus/Moins-values",
+  "task_report_gain_loss_desc": "Du {from} au {to}",
+  "task_report_gain_loss_done": "Rapport plus/moins-values généré",
+
+  "task_import_summary": "{count} écritures importées",
+  "task_import_summary_with_skips": "{count} écritures importées, {skipped} doublons ignorés",
+  "toast_import_with_skips": "{count} écritures importées, {skipped} doublons ignorés",
+
+  "toast_auto_hid_currencies": "{count} devise(s) masquée(s) automatiquement : {list}",
+  "toast_auto_hid_and_more": " et {count} de plus",
+  "toast_review_in_settings": "Vérifier dans les paramètres",
+
+  "error_unsupported_file_format": "Format de fichier non supporté",
+  "toast_batch_complete_all_skipped": "Import par lot terminé : les {count} fichiers ont été ignorés (aucune nouvelle écriture)",
+  "toast_batch_complete": "Import par lot terminé : {summary}",
+  "toast_batch_progress": "Import par lot : {summary}",
+  "label_imported": "{count} importé(s)",
+  "label_skipped": "{count} ignoré(s)"
 }

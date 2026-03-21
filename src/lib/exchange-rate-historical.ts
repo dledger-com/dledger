@@ -5,6 +5,7 @@ import type { SourceName } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 import { setRateHealthSyncing, updateRateHealth } from "./data/rate-health.svelte.js";
+import * as m from "$paraglide/messages.js";
 
 
 // ECB/Frankfurter supported fiat currency codes
@@ -1313,13 +1314,13 @@ export function enqueueRateBackfill(
     const pairs = currencyDates.map(([currency, date]) => ({ currency, date }));
     taskQueue.enqueue({
       key: "rate-backfill:post-import",
-      label: `Backfill rates for ${new Set(currencyDates.map(([c]) => c)).size} imported currency(ies)`,
+      label: m.task_rate_backfill_import({ count: String(new Set(currencyDates.map(([c]) => c)).size) }),
       async run(ctx) {
         // Auto-resolve dpriceAssets when dprice is active but caller didn't provide the set
         const resolvedDpriceAssets = dpriceAssets ?? await resolveDpriceAssets(config, [...new Set(pairs.map((p) => p.currency))]);
         const missing = await findMissingRates(backend, config.baseCurrency, pairs, resolvedDpriceAssets, undefined, config.disabledSources);
         if (missing.length === 0) {
-          return { summary: "All rates already available" };
+          return { summary: m.task_rates_already_available() };
         }
         const totalDates = missing.reduce((sum, r) => sum + r.dates.length, 0);
         const result = await fetchHistoricalRates(backend, missing, {
@@ -1327,14 +1328,14 @@ export function enqueueRateBackfill(
           signal: ctx.signal,
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total: total || totalDates }),
         }, resolvedDpriceAssets);
-        return { summary: `Fetched ${result.fetched} rate(s)`, data: result };
+        return { summary: m.task_rate_fetched_summary({ count: String(result.fetched) }), data: result };
       },
     });
   } else {
     // Full auto-backfill
     taskQueue.enqueue({
       key: "rate-backfill:auto",
-      label: "Auto-backfill all missing rates",
+      label: m.task_rate_backfill_auto(),
       async run(ctx) {
         setRateHealthSyncing();
         const result = await autoBackfillRates(backend, {
@@ -1357,10 +1358,10 @@ export function enqueueRateBackfill(
         updateRateHealth(result, failedNonHidden);
 
         if (result.fetched === 0 && result.errors.length === 0) {
-          return { summary: "All rates already available" };
+          return { summary: m.task_rates_already_available() };
         }
         return {
-          summary: `Fetched ${result.fetched} rate(s) for ${result.currenciesAnalyzed} currency(ies)`,
+          summary: m.task_rate_fetched_full_summary({ fetched: String(result.fetched), currencies: String(result.currenciesAnalyzed) }),
           data: result,
         };
       },

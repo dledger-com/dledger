@@ -6,6 +6,7 @@ import { detectImportTarget } from "$lib/import-detect.js";
 import { guessFromExtension } from "$lib/import-detect.js";
 import { getDefaultPresetRegistry } from "$lib/csv-presets/index.js";
 import { detectDelimiter, parseCsv } from "$lib/utils/csv-import.js";
+import * as m from "$paraglide/messages.js";
 
 const LEDGER_EXTENSIONS = new Set(["ledger", "beancount", "journal", "hledger", "dat"]);
 
@@ -56,7 +57,7 @@ class ImportDropStore {
     async routeFile(file: File, silent = false): Promise<boolean> {
         const result = await detectImportTarget(file);
         if (!result) {
-            if (!silent) toast.error("Unsupported file format");
+            if (!silent) toast.error(m.error_unsupported_file_format());
             return false;
         }
 
@@ -99,7 +100,7 @@ class ImportDropStore {
                         }
                         const ledgerFiles = filterLedgerFiles(fileMap);
                         if (ledgerFiles.length === 0) {
-                            if (!silent) toast.error("No ledger files found in archive");
+                            if (!silent) toast.error(m.toast_no_ledger_files_in_archive());
                             return false;
                         }
                         const parts: string[] = [];
@@ -108,7 +109,7 @@ class ImportDropStore {
                         }
                         this.ledgerContent = parts.join("\n\n");
                     } catch (err) {
-                        if (!silent) toast.error(`Failed to read zip: ${err}`);
+                        if (!silent) toast.error(m.toast_zip_read_failed({ message: String(err) }));
                         return false;
                     }
                 } else {
@@ -156,7 +157,7 @@ class ImportDropStore {
                 return new File([data], baseName);
             });
         } catch (err) {
-            toast.error(`Failed to read zip: ${err}`);
+            toast.error(m.toast_zip_read_failed({ message: String(err) }));
             return [];
         }
     }
@@ -228,12 +229,12 @@ class ImportDropStore {
             this._queueIndex = 0;
             this._skippedCount = 0;
             if (imported === 0) {
-                toast.info(`Batch import complete: all ${skipped} files skipped (no new entries)`);
+                toast.info(m.toast_batch_complete_all_skipped({ count: String(skipped) }));
             } else {
                 const parts: string[] = [];
-                parts.push(`${imported} imported`);
-                if (skipped > 0) parts.push(`${skipped} skipped`);
-                toast.info(`Batch import complete: ${parts.join(", ")}`);
+                parts.push(m.label_imported({ count: String(imported) }));
+                if (skipped > 0) parts.push(m.label_skipped({ count: String(skipped) }));
+                toast.info(m.toast_batch_complete({ summary: parts.join(", ") }));
             }
         } else if (this._queueTotal > 0) {
             this._queueTotal = 0;
@@ -270,12 +271,12 @@ class ImportDropStore {
                 this._queueIndex = 0;
                 this._skippedCount = 0;
                 if (imported === 0) {
-                    toast.info(`Batch import complete: all ${skipped} files skipped (no new entries)`);
+                    toast.info(m.toast_batch_complete_all_skipped({ count: String(skipped) }));
                 } else {
                     const parts: string[] = [];
-                    parts.push(`${imported} imported`);
-                    if (skipped > 0) parts.push(`${skipped} skipped`);
-                    toast.info(`Batch import complete: ${parts.join(", ")}`);
+                    parts.push(m.label_imported({ count: String(imported) }));
+                    if (skipped > 0) parts.push(m.label_skipped({ count: String(skipped) }));
+                    toast.info(m.toast_batch_complete({ summary: parts.join(", ") }));
                 }
             } else {
                 this._queueTotal = 0;
@@ -295,16 +296,16 @@ class ImportDropStore {
         const openDialogCount = this.anyDialogOpen ? 1 : 0;
         const remaining = this._queue.length + openDialogCount;
         const imported = this._queueIndex - this._skippedCount - openDialogCount;
-        const parts: string[] = [`${remaining} cancelled`];
-        if (imported > 0) parts.push(`${imported} imported`);
-        if (this._skippedCount > 0) parts.push(`${this._skippedCount} skipped`);
+        const parts: string[] = [m.label_cancelled() + ` (${remaining})`];
+        if (imported > 0) parts.push(m.label_imported({ count: String(imported) }));
+        if (this._skippedCount > 0) parts.push(m.label_skipped({ count: String(this._skippedCount) }));
         this._queue = [];
         this._cancelled = true;
         this._skippedCount = 0;
         this._queueTotal = 0;
         this._queueIndex = 0;
         this.closeCurrentDialog();
-        toast.info(`Batch import: ${parts.join(", ")}`);
+        toast.info(m.toast_batch_progress({ summary: parts.join(", ") }));
     }
 
     /**
