@@ -491,10 +491,15 @@
             });
         };
 
+        // Skip backend query for short plain-text searches (1-2 chars) that are
+        // unlikely to be intentional. Empty string (reload all) and pure #tag/^link
+        // filters (where backendText is "") still fire.
+        const skipSearch = backendText.length > 0 && backendText.length < 3;
+
         if (initialLoad) {
             initialLoad = false;
-            doLoad();
-        } else {
+            if (!skipSearch) doLoad();
+        } else if (!skipSearch) {
             debounceTimer = setTimeout(doLoad, 300);
         }
         return () => clearTimeout(debounceTimer);
