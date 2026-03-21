@@ -19,6 +19,7 @@ import {
   yieldAppPreset,
   laBanquePostalePreset,
   n26Preset,
+  kucoinPreset,
   voletPreset,
 } from "../../csv-presets/presets/index.js";
 
@@ -40,6 +41,7 @@ export const builtinCsvPresets: CsvPreset[] = [
   yieldAppPreset,
   laBanquePostalePreset,
   n26Preset,
+  kucoinPreset,
   voletPreset,
   revolutPreset,
   bankStatementPreset, // lowest priority (score 40-60)

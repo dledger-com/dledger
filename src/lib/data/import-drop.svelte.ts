@@ -4,6 +4,8 @@ import { unzipSync, strFromU8 } from "fflate";
 import { filterLedgerFiles, resolveIncludes } from "$lib/ledger-include.js";
 import { detectImportTarget } from "$lib/import-detect.js";
 import { guessFromExtension } from "$lib/import-detect.js";
+import { getDefaultPresetRegistry } from "$lib/csv-presets/index.js";
+import { detectDelimiter, parseCsv } from "$lib/utils/csv-import.js";
 
 const LEDGER_EXTENSIONS = new Set(["ledger", "beancount", "journal", "hledger", "dat"]);
 
@@ -59,11 +61,24 @@ class ImportDropStore {
         }
 
         switch (result.target) {
-            case "csv":
-                this.csvContent = result.text ?? (await readFileAsText(file));
+            case "csv": {
+                const text = result.text ?? (await readFileAsText(file));
+                // In batch mode, skip CSVs that don't match any preset
+                if (silent) {
+                    const delimiter = detectDelimiter(text);
+                    const { headers, rows } = parseCsv(text, delimiter);
+                    const sampleRows = rows.slice(0, 20);
+                    const best = getDefaultPresetRegistry().detectBest(headers, sampleRows);
+                    if (!best) {
+                        this._skippedCount++;
+                        return false;
+                    }
+                }
+                this.csvContent = text;
                 this.csvFileName = file.name;
                 this.csvOpen = true;
                 return true;
+            }
             case "ofx":
                 this.ofxContent = result.text ?? (await readFileAsText(file));
                 this.ofxFileName = file.name;
