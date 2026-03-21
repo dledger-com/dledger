@@ -34,6 +34,7 @@
   import type { ExchangeAccount } from "$lib/cex/types.js";
   import { requiresDeclaration } from "$lib/cex/institution-registry.js";
   import { onMount, onDestroy } from "svelte";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
 
@@ -116,10 +117,10 @@
     const years = [...chainData.keys()].sort((a, b) => a - b);
     const parts: { label: string; value: string }[] = [];
     if (initialAcquisitionCost && initialAcquisitionCost !== "0") {
-      parts.push({ label: "Pre-dledger", value: formatCurrency(initialAcquisitionCost, "EUR") });
+      parts.push({ label: m.report_pre_dledger(), value: formatCurrency(initialAcquisitionCost, "EUR") });
     }
     for (const y of years) {
-      parts.push({ label: `After ${y}`, value: formatCurrency(chainData.get(y)!, "EUR") });
+      parts.push({ label: m.report_after_year({ year: String(y) }), value: formatCurrency(chainData.get(y)!, "EUR") });
     }
     return parts;
   });
@@ -201,7 +202,7 @@
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
         key: `report:tax-fr:${capturedYear}`,
-        label: "French Tax Report",
+        label: m.report_french_tax(),
         description: `Year ${capturedYear}`,
         run: async () => {
           try {
@@ -265,7 +266,7 @@
     // Check if downstream reports depend on this
     const nextYearFinal = chainData.get(taxYear + 1);
     if (nextYearFinal !== undefined) {
-      if (!confirm(`The ${taxYear + 1} report chains from this year's report. Delete anyway?`)) return;
+      if (!confirm(m.report_delete_confirm_chain({ year: String(taxYear + 1) }))) return;
     }
     await getBackend().deleteFrenchTaxReport(taxYear);
     await loadChainData();
@@ -284,7 +285,7 @@
     return new Promise<void>((resolve) => {
       taskQueue.enqueue({
         key: `report:tax-fr:all-missing`,
-        label: "French Tax Reports",
+        label: m.report_french_tax_plural(),
         description: `Generating ${years.length} missing years`,
         run: async (ctx) => {
           try {
@@ -345,7 +346,7 @@
     const actions: import("$lib/data/page-actions.svelte.js").PageAction[] = [
       {
         type: "button",
-        label: _loading ? "Generating..." : _hasSaved ? "Regenerate" : "Generate",
+        label: _loading ? m.state_generating() : _hasSaved ? m.report_regenerate() : m.btn_generate(),
         onclick: generate,
         disabled: _loading,
       },
@@ -357,15 +358,15 @@
         items: [
           ...(_report
             ? [
-                { label: "Export CSV (Form 2086)", onclick: () => exportFrenchTaxCsv(_report) },
+                { label: m.report_export_form_2086(), onclick: () => exportFrenchTaxCsv(_report) },
                 ...(exchangeAccounts.length > 0
-                  ? [{ label: "Export CSV (3916-bis)", onclick: () => exportForm3916bisCsv(exchangeAccounts, taxYear) }]
+                  ? [{ label: m.report_export_3916bis(), onclick: () => exportForm3916bisCsv(exchangeAccounts, taxYear) }]
                   : []),
                 { separator: true, label: "" },
               ]
             : []),
           ...(_hasSaved
-            ? [{ label: "Delete Report", onclick: deleteReport }]
+            ? [{ label: m.report_delete(), onclick: deleteReport }]
             : []),
         ],
       });
@@ -399,7 +400,7 @@
     <div class="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
       <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" />
       <div class="flex-1">
-        <p>Missing reports for {missingYears.join(", ")}. For accurate cost chaining, generate from the earliest year first.</p>
+        <p>{m.report_missing_years({ years: missingYears.join(", ") })}</p>
         <Button
           variant="outline"
           size="sm"
@@ -407,7 +408,7 @@
           onclick={generateAllMissing}
           disabled={generatingAll}
         >
-          {generatingAll ? "Generating..." : `Generate All Missing (${missingYears.length})`}
+          {generatingAll ? m.state_generating() : m.report_generate_all_missing({ count: String(missingYears.length) })}
         </Button>
       </div>
     </div>
@@ -416,12 +417,12 @@
   <!-- Parameters Card -->
   <Card.Root>
     <Card.Header class="pb-3">
-      <Card.Title class="text-base">Report Parameters</Card.Title>
+      <Card.Title class="text-base">{m.report_parameters()}</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
       <!-- Year Chips -->
       <div class="space-y-1">
-        <label class="text-sm font-medium">Tax Year</label>
+        <label class="text-sm font-medium">{m.report_tax_year()}</label>
         <div class="flex flex-wrap gap-1.5">
           {#each availableYears as year}
             <button
@@ -447,11 +448,11 @@
       <div class="space-y-2">
         {#if resolved.source === "chained"}
           <div class="flex items-center gap-2 text-sm flex-wrap">
-            <span class="font-medium">Prior Acquisition Cost:</span>
+            <span class="font-medium">{m.report_prior_acquisition_cost()}</span>
             <span class="font-mono">{formatCurrency(resolved.value, "EUR")}</span>
-            <Badge variant="secondary">from {resolved.sourceYear} report</Badge>
+            <Badge variant="secondary">{m.report_from_year_report({ year: String(resolved.sourceYear) })}</Badge>
             <Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => { overridePriorCost = !overridePriorCost; overrideValue = resolved.value; }}>
-              {overridePriorCost ? "Use chained" : "Override"}
+              {overridePriorCost ? m.report_use_chained() : m.report_override()}
             </Button>
           </div>
           {#if overridePriorCost}
@@ -459,9 +460,9 @@
           {/if}
         {:else}
           <div class="space-y-1">
-            <label for="initial-a" class="text-sm font-medium">Initial Acquisition Cost (EUR)</label>
+            <label for="initial-a" class="text-sm font-medium">{m.report_initial_acquisition_cost()}</label>
             <Input id="initial-a" type="text" bind:value={initialAcquisitionCost} class="w-40" placeholder="0.00" />
-            <p class="text-xs text-muted-foreground">Total EUR spent on crypto before your dledger data.</p>
+            <p class="text-xs text-muted-foreground">{m.report_initial_cost_desc()}</p>
           </div>
         {/if}
 
@@ -471,7 +472,7 @@
           {#if !chainData.has(prevYearVal) && chainData.size > 0}
             <div class="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-2 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
               <AlertTriangle class="h-4 w-4 shrink-0" />
-              <span>No saved report for {prevYearVal}. Consider generating it first for automatic chaining.</span>
+              <span>{m.report_no_saved_report_for({ year: String(prevYearVal) })}</span>
             </div>
           {/if}
         {/if}
@@ -479,7 +480,7 @@
 
       {#if savedReport}
         <p class="text-xs text-muted-foreground">
-          Last generated: {new Date(savedReport.generatedAt).toLocaleString()}
+          {m.report_last_generated({ date: new Date(savedReport.generatedAt).toLocaleString() })}
         </p>
       {/if}
     </Card.Content>
@@ -518,11 +519,11 @@
     <!-- Tabs -->
     <Tabs.Root value="overview">
       <Tabs.List class="overflow-x-auto">
-        <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-        <Tabs.Trigger value="form2086">Form 2086</Tabs.Trigger>
-        <Tabs.Trigger value="form2042c">Form 2042 C</Tabs.Trigger>
-        <Tabs.Trigger value="form3916bis">Form 3916-bis</Tabs.Trigger>
-        <Tabs.Trigger value="checklist">Checklist</Tabs.Trigger>
+        <Tabs.Trigger value="overview">{m.report_overview()}</Tabs.Trigger>
+        <Tabs.Trigger value="form2086">{m.report_form_2086()}</Tabs.Trigger>
+        <Tabs.Trigger value="form2042c">{m.report_form_2042c()}</Tabs.Trigger>
+        <Tabs.Trigger value="form3916bis">{m.report_form_3916bis()}</Tabs.Trigger>
+        <Tabs.Trigger value="checklist">{m.report_checklist()}</Tabs.Trigger>
       </Tabs.List>
 
       <Tabs.Content value="overview" class="mt-4">
@@ -549,27 +550,26 @@
     <!-- Empty state: no report generated -->
     <Card.Root>
       <Card.Content class="py-8 text-center space-y-3">
-        <p class="text-lg font-semibold">Ready to generate your {taxYear} crypto tax report</p>
+        <p class="text-lg font-semibold">{m.report_ready_to_generate({ year: String(taxYear) })}</p>
         <p class="text-sm text-muted-foreground max-w-lg mx-auto">
-          This will compute your taxable crypto-to-fiat dispositions
-          using the Art. 150 VH bis portfolio-weighted formula.
+          {m.report_compute_description()}
         </p>
         {#if resolved.source === "chained"}
           <p class="text-sm text-green-700 dark:text-green-300">
-            Prior year report available (acquisition cost: {formatCurrency(resolved.value, "EUR")})
+            {m.report_prior_year_available({ cost: formatCurrency(resolved.value, "EUR") })}
           </p>
         {:else if initialAcquisitionCost && initialAcquisitionCost !== "0"}
           <p class="text-sm text-muted-foreground">
-            Using initial cost of {formatCurrency(initialAcquisitionCost, "EUR")}
+            {m.report_using_initial_cost({ cost: formatCurrency(initialAcquisitionCost, "EUR") })}
           </p>
         {:else}
           <div class="flex items-center justify-center gap-1.5 text-sm text-yellow-700 dark:text-yellow-300">
             <AlertTriangle class="h-3.5 w-3.5" />
-            <span>No prior year report — using initial cost of 0 EUR</span>
+            <span>{m.report_no_prior_year()}</span>
           </div>
         {/if}
         <Button onclick={generate} disabled={loading} class="mt-2">
-          Generate Report
+          {m.report_generate_report()}
         </Button>
       </Card.Content>
     </Card.Root>

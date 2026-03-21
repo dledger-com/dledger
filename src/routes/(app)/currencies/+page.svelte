@@ -23,6 +23,7 @@
   import CircleCheck from "lucide-svelte/icons/circle-check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import Loader from "lucide-svelte/icons/loader";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   const syncing = $derived(taskQueue.isActive("rate-backfill"));
@@ -68,7 +69,7 @@
 
   async function addCurrency() {
     if (!currCode.trim() || !currName.trim()) {
-      toast.error("Code and name are required");
+      toast.error(m.error_code_name_required());
       return;
     }
     try {
@@ -80,7 +81,7 @@
         decimal_places: parseInt(currDecimals, 10) || 2,
         is_base: currIsBase,
       });
-      toast.success(`Currency ${currCode.trim().toUpperCase()} created`);
+      toast.success(m.toast_currency_created({ code: currCode.trim().toUpperCase() }));
       currCode = "";
       currName = "";
       currDecimals = "2";
@@ -96,7 +97,7 @@
 
     if (newSource === "auto" || newSource === "none") {
       await loadRateSources();
-      toast.success(`Updated ${currencyCode} rate source to ${newSource}`);
+      toast.success(m.toast_rate_source_updated({ code: currencyCode, source: newSource }));
       return;
     }
 
@@ -118,7 +119,7 @@
         );
         await loadRateSources();
         if (res.success) {
-          toast.success(`Fetched ${currencyCode} rate from ${newSource}`);
+          toast.success(m.toast_rate_fetched({ code: currencyCode, source: newSource }));
         } else {
           toast.error(res.error ?? `Failed to fetch ${currencyCode} rate`);
         }
@@ -130,7 +131,7 @@
   async function handleDontConvert(code: string) {
     await getBackend().setCurrencyRateSource(code, "none", "user");
     await loadRateSources();
-    toast.success(`${code} marked as "don't convert"`);
+    toast.success(m.toast_rate_source_updated({ code, source: "none" }));
   }
 
   const unsubCurrencies = onInvalidate("currencies", () => {
@@ -147,14 +148,14 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <ListFilter bind:value={currencySearchTerm} placeholder="Filter currencies..." class="order-last sm:order-none" />
+    <ListFilter bind:value={currencySearchTerm} placeholder={m.placeholder_filter_currencies()} class="order-last sm:order-none" />
     <div class="flex flex-wrap items-center gap-3 shrink-0">
       <label class="flex items-center gap-2 text-sm">
         <Switch
           checked={settings.showHidden}
           onCheckedChange={(v) => settings.update({ showHidden: v })}
         />
-        Show hidden
+        {m.label_show_hidden()}
       </label>
     </div>
   </div>
@@ -163,7 +164,7 @@
   {#if rateHealth.status === "syncing" || syncing}
     <div class="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
       <Loader class="h-4 w-4 animate-spin" />
-      <span>Syncing exchange rates...</span>
+      <span>{m.banner_syncing_rates()}</span>
     </div>
   {:else if rateHealth.status === "missing" && rateHealth.missingCurrencies.length > 0}
     <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950">
@@ -171,7 +172,7 @@
         <CircleAlert class="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <div class="space-y-2 w-full">
           <p class="text-sm font-medium text-amber-800 dark:text-amber-200">
-            Missing rates for {rateHealth.missingCurrencies.length} currency(ies)
+            {m.banner_missing_rates({ count: String(rateHealth.missingCurrencies.length) })}
           </p>
           <div class="flex flex-wrap gap-2">
             {#each rateHealth.missingCurrencies as code}
@@ -181,14 +182,14 @@
                 <button
                   onclick={async () => { await markCurrencyHidden(getBackend(), code); await loadCurrencies(); }}
                   class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
-                >Hide</button>
+                >{m.btn_hide()}</button>
                 <span class="text-amber-400 dark:text-amber-600">|</span>
-                <a href="/currencies/{code}" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200">Enter Rate</a>
+                <a href="/currencies/{code}" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200">{m.btn_enter_rate()}</a>
                 <span class="text-amber-400 dark:text-amber-600">|</span>
                 <button
                   onclick={() => handleDontConvert(code)}
                   class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
-                >Don't Convert</button>
+                >{m.btn_dont_convert()}</button>
               </div>
             {/each}
           </div>
@@ -198,34 +199,34 @@
   {:else if rateHealth.status === "ok"}
     <div class="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
       <CircleCheck class="h-4 w-4" />
-      <span>All rates up to date</span>
+      <span>{m.banner_rates_ok()}</span>
     </div>
   {/if}
 
   <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
     <div class="space-y-1">
-      <label for="curr-code" class="text-xs text-muted-foreground">Code</label>
+      <label for="curr-code" class="text-xs text-muted-foreground">{m.label_code()}</label>
       <Input id="curr-code" bind:value={currCode} placeholder="EUR" class="w-24" />
     </div>
     <div class="space-y-1">
-      <label for="curr-name" class="text-xs text-muted-foreground">Name</label>
+      <label for="curr-name" class="text-xs text-muted-foreground">{m.label_name()}</label>
       <Input id="curr-name" bind:value={currName} placeholder="Euro" class="w-40" />
     </div>
     <div class="space-y-1">
-      <label for="curr-decimals" class="text-xs text-muted-foreground">Decimals</label>
+      <label for="curr-decimals" class="text-xs text-muted-foreground">{m.label_decimals()}</label>
       <Input id="curr-decimals" type="number" bind:value={currDecimals} class="w-20" />
     </div>
     <div class="space-y-1 flex items-center gap-2 pb-1">
       <Switch id="curr-base" bind:checked={currIsBase} />
-      <label for="curr-base" class="text-xs text-muted-foreground">Base</label>
+      <label for="curr-base" class="text-xs text-muted-foreground">{m.label_base()}</label>
     </div>
-    <Button type="submit" size="sm">Add</Button>
+    <Button type="submit" size="sm">{m.btn_add()}</Button>
   </form>
 
   {#if currencies.length === 0}
     <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">No currencies defined.</p>
+        <p class="text-sm text-muted-foreground text-center">{m.empty_no_currencies()}</p>
       </Card.Content>
     </Card.Root>
   {:else}
@@ -234,12 +235,12 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")}>Code</SortableHeader>
-              <SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>Name</SortableHeader>
-              <SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden md:table-cell">Decimals</SortableHeader>
-              <SortableHeader active={sortCurr.key === "base"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("base")} class="hidden sm:table-cell">Base</SortableHeader>
-              <SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden lg:table-cell">Rate Source</SortableHeader>
-              <Table.Head class="text-right">Actions</Table.Head>
+              <SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")}>{m.label_code()}</SortableHeader>
+              <SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>{m.label_name()}</SortableHeader>
+              <SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden md:table-cell">{m.label_decimals()}</SortableHeader>
+              <SortableHeader active={sortCurr.key === "base"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("base")} class="hidden sm:table-cell">{m.label_base()}</SortableHeader>
+              <SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden lg:table-cell">{m.label_rate_source()}</SortableHeader>
+              <Table.Head class="text-right">{m.label_actions()}</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -253,14 +254,14 @@
                     {c.code}
                   </a>
                   {#if c.is_hidden}
-                    <span class="ml-1 text-xs text-muted-foreground">(hidden)</span>
+                    <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
                   {/if}
                 </Table.Cell>
                 <Table.Cell>{c.name}</Table.Cell>
                 <Table.Cell class="text-right hidden md:table-cell">{c.decimal_places}</Table.Cell>
                 <Table.Cell class="hidden sm:table-cell">
                   {#if c.is_base}
-                    <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Base</span>
+                    <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{m.label_base()}</span>
                   {/if}
                 </Table.Cell>
                 <Table.Cell class="hidden lg:table-cell">
@@ -268,7 +269,7 @@
                     <div class="flex items-center gap-2">
                       <Select.Root type="single" value={rs?.rate_source ?? "auto"} onValueChange={(val) => handleSourceChange(c.code, val)} disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}>
                         <Select.Trigger class="h-7" size="sm">
-                          {rs?.rate_source ?? "auto-detect"}
+                          {rs?.rate_source ?? m.label_auto_detect()}
                         </Select.Trigger>
                         <Select.Content>
                           <Select.Item value="auto">auto-detect</Select.Item>
@@ -291,9 +292,9 @@
                 <Table.Cell class="text-right">
                   {#if !c.is_base}
                     {#if c.is_hidden}
-                      <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>Unhide</Button>
+                      <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</Button>
                     {:else}
-                      <Button variant="ghost" size="sm" onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>Hide</Button>
+                      <Button variant="ghost" size="sm" onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</Button>
                     {/if}
                   {/if}
                 </Table.Cell>
@@ -308,22 +309,22 @@
   {#if hiddenCurrencies.length > 0 && !settings.showHidden}
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <h3 class="text-sm font-medium">Hidden Currencies ({hiddenCurrencies.length})</h3>
+        <h3 class="text-sm font-medium">{m.section_hidden_currencies({ count: String(hiddenCurrencies.length) })}</h3>
         <Button variant="outline" size="sm" onclick={async () => {
           for (const c of hiddenCurrencies) {
             await unmarkCurrencyHidden(getBackend(), c.code);
           }
           await loadCurrencies();
-        }}>Unhide All</Button>
+        }}>{m.btn_unhide_all()}</Button>
       </div>
       <Card.Root class="border-x-0 rounded-none shadow-none py-0">
         <Card.Content class="p-0">
           <Table.Root>
             <Table.Header>
               <Table.Row>
-                <Table.Head>Code</Table.Head>
-                <Table.Head>Name</Table.Head>
-                <Table.Head class="text-right">Actions</Table.Head>
+                <Table.Head>{m.label_code()}</Table.Head>
+                <Table.Head>{m.label_name()}</Table.Head>
+                <Table.Head class="text-right">{m.label_actions()}</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -334,7 +335,7 @@
                   </Table.Cell>
                   <Table.Cell>{c.name}</Table.Cell>
                   <Table.Cell class="text-right">
-                    <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>Unhide</Button>
+                    <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</Button>
                   </Table.Cell>
                 </Table.Row>
               {/each}

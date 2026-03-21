@@ -38,6 +38,7 @@
   import AccountCombobox from "./AccountCombobox.svelte";
   import TagInput from "./TagInput.svelte";
   import CategorizationRulesEditor from "./CategorizationRulesEditor.svelte";
+  import * as m from "$paraglide/messages.js";
   import { serializeTags, parseTags, TAGS_META_KEY, tagColor } from "$lib/utils/tags.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
@@ -118,8 +119,8 @@
 
     const taskId = taskQueue.enqueue({
       key: "ml-classify",
-      label: "Classifying transactions...",
-      description: "Using ML to suggest account categories for uncategorized transactions",
+      label: m.state_classifying_transactions(),
+      description: m.ml_description(),
       run: async (ctx) => {
         const classifier = new TransactionClassifier();
         try {
@@ -135,7 +136,7 @@
           );
           mlSuggestions = suggestions;
           mlAccepted = new Set(suggestions.keys());
-          return { summary: `Classified ${suggestions.size}/${previewRecords.length} transactions` };
+          return { summary: m.import_ml_classified_summary({ classified: String(suggestions.size), total: String(previewRecords.length) }) };
         } finally {
           classifier.dispose();
           mlClassifying = false;
@@ -145,7 +146,7 @@
 
     if (!taskId) {
       mlClassifying = false;
-      toast.error("ML classification is already running");
+      toast.error(m.error_ml_already_running());
     }
   }
 
@@ -175,7 +176,7 @@
     previewRecords = updated;
     mlSuggestions = new Map();
     mlAccepted = new Set();
-    toast.success("ML suggestions applied");
+    toast.success(m.toast_ml_applied());
   }
 
   // -- Derived info --
@@ -235,13 +236,13 @@
         const fallback = candidates.sort((a, b) => a.result.warnings.length - b.result.warnings.length)[0];
         statement = fallback.result;
         detectedBank = null;
-        toast.error(statement.warnings[0] ?? "No transactions found in PDF");
+        toast.error(statement.warnings[0] ?? m.error_no_transactions_pdf());
         return;
       }
 
       mainAccount = suggestMainAccount(statement, detectedBank);
     } catch (err) {
-      toast.error(`Failed to parse PDF: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(m.toast_pdf_parse_failed({ message: err instanceof Error ? err.message : String(err) }));
     } finally {
       parsing = false;
     }
@@ -266,16 +267,16 @@
       if (importDrop.batchActive) {
         toast.info(
           result.records.length === 0
-            ? `Skipped ${fileName}: no entries found`
-            : `Skipped ${fileName}: all ${result.records.length} entries are duplicates`,
+            ? m.toast_skipped_no_entries({ name: fileName })
+            : m.toast_skipped_all_duplicates({ name: fileName, count: String(result.records.length) }),
         );
         importDrop.skipFile();
       } else {
         open = false;
         toast.info(
           result.records.length === 0
-            ? `No entries found in ${fileName}`
-            : `All ${result.records.length} entries in ${fileName} are duplicates`,
+            ? m.toast_no_entries_found({ name: fileName })
+            : m.toast_all_duplicates({ name: fileName, count: String(result.records.length) }),
         );
       }
       return;
@@ -316,7 +317,7 @@
 
     const taskId = enqueueRecordImport({
       key: "pdf-import",
-      label: "PDF Import",
+      label: m.import_pdf_task_label(),
       records: recordsSnapshot,
       presetId: presetIdSnapshot,
       postImport: async (backend, result) => {
@@ -364,7 +365,7 @@
     if (taskId) {
       open = false;
     } else {
-      toast.error("An import is already in progress");
+      toast.error(m.error_import_in_progress());
     }
   }
 
@@ -410,16 +411,16 @@
     <Dialog.Header>
       <Dialog.Title>
         {#if step === 1}
-          PDF Import — Upload & Configure
+          {m.dialog_pdf_upload_configure()}
         {:else}
-          PDF Import — Preview & Import
+          {m.dialog_pdf_preview_import()}
         {/if}
       </Dialog.Title>
       <Dialog.Description>
         {#if step === 1}
-          Upload a PDF bank statement.{#if detectedBank === "n26"} Detected: N26.{:else if detectedBank === "lbp"} Detected: La Banque Postale.{:else if detectedBank === "nuri"} Detected: Nuri/Bitwala.{:else if detectedBank === "deblock"} Detected: Deblock.{/if}
+          {m.dialog_pdf_upload_desc()}{#if detectedBank === "n26"} {m.dialog_pdf_detected({ bank: "N26" })}{:else if detectedBank === "lbp"} {m.dialog_pdf_detected({ bank: "La Banque Postale" })}{:else if detectedBank === "nuri"} {m.dialog_pdf_detected({ bank: "Nuri/Bitwala" })}{:else if detectedBank === "deblock"} {m.dialog_pdf_detected({ bank: "Deblock" })}{/if}
         {:else}
-          Review entries before importing.
+          {m.dialog_pdf_review_desc()}
         {/if}
       </Dialog.Description>
     </Dialog.Header>
@@ -432,7 +433,7 @@
             class="flex cursor-pointer items-center gap-2 rounded-md border border-input px-4 py-2 text-sm hover:bg-accent"
           >
             <Upload class="h-4 w-4" />
-            <span>{parsing ? "Parsing..." : fileName || "Choose PDF file"}</span>
+            <span>{parsing ? m.state_parsing() : fileName || m.label_choose_pdf()}</span>
             <input type="file" accept=".pdf" class="hidden" onchange={handleFileChange} />
           </label>
         </div>
@@ -440,43 +441,43 @@
         {#if statement}
           <!-- Statement info card -->
           <div class="rounded-md border bg-muted/30 p-3 space-y-2">
-            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Statement Info</h4>
+            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{m.import_statement_info()}</h4>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               {#if statement.accountNumber}
                 <div>
-                  <span class="text-xs text-muted-foreground">Account #</span>
+                  <span class="text-xs text-muted-foreground">{m.import_account_number()}</span>
                   <p class="font-mono text-xs">{statement.accountNumber}</p>
                 </div>
               {/if}
               {#if statement.iban}
                 <div>
-                  <span class="text-xs text-muted-foreground">IBAN</span>
+                  <span class="text-xs text-muted-foreground">{m.label_iban()}</span>
                   <p class="font-mono text-xs">{statement.iban}</p>
                 </div>
               {/if}
               <div>
-                <span class="text-xs text-muted-foreground">Currency</span>
+                <span class="text-xs text-muted-foreground">{m.label_currency()}</span>
                 <p class="font-mono text-xs">{statement.currency}</p>
               </div>
               <div>
-                <span class="text-xs text-muted-foreground">Transactions</span>
+                <span class="text-xs text-muted-foreground">{m.label_transactions()}</span>
                 <p class="font-mono text-xs">{txCount}</p>
               </div>
               {#if dateRange}
                 <div>
-                  <span class="text-xs text-muted-foreground">Date Range</span>
+                  <span class="text-xs text-muted-foreground">{m.label_date_range()}</span>
                   <p class="font-mono text-xs">{dateRange.from} &mdash; {dateRange.to}</p>
                 </div>
               {/if}
               {#if statement.openingBalance !== null}
                 <div>
-                  <span class="text-xs text-muted-foreground">Opening Balance</span>
+                  <span class="text-xs text-muted-foreground">{m.label_opening_balance()}</span>
                   <p class="font-mono text-xs">{statement.openingBalance} {statement.currency}</p>
                 </div>
               {/if}
               {#if statement.closingBalance !== null}
                 <div>
-                  <span class="text-xs text-muted-foreground">Closing Balance</span>
+                  <span class="text-xs text-muted-foreground">{m.label_closing_balance()}</span>
                   <p class="font-mono text-xs">{statement.closingBalance} {statement.currency}</p>
                 </div>
               {/if}
@@ -485,8 +486,8 @@
 
           <!-- Main Account -->
           <div class="space-y-1">
-            <label for="pdf-mainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="pdf-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
+            <label for="pdf-mainAcct" class="text-sm font-medium">{m.label_main_account()}</label>
+            <Input id="pdf-mainAcct" bind:value={mainAccount} placeholder={m.placeholder_bank_account()} />
           </div>
 
           <!-- Categorization Rules -->
@@ -506,7 +507,7 @@
 
           <div class="flex justify-end">
             <Button onclick={() => generatePreview()} disabled={txCount === 0}>
-              Preview &rarr;
+              {m.import_preview_arrow()} &rarr;
             </Button>
           </div>
         {/if}
@@ -519,19 +520,19 @@
           <!-- Preview -->
           <div class="flex items-center justify-between">
             <p class="text-sm">
-              <strong>{nonDuplicateCount}</strong> entries to import
+              {m.import_entries_to_import({ count: String(nonDuplicateCount) })}
               {#if duplicateCount > 0}
-                <Badge variant="secondary" class="ml-2">{duplicateCount} duplicates (will skip)</Badge>
+                <Badge variant="secondary" class="ml-2">{m.import_duplicates_will_skip({ count: String(duplicateCount) })}</Badge>
               {/if}
               {#if previewWarnings.length > 0}
-                <Badge variant="destructive" class="ml-2">{previewWarnings.length} warnings</Badge>
+                <Badge variant="destructive" class="ml-2">{m.import_warnings_count({ count: String(previewWarnings.length) })}</Badge>
               {/if}
             </p>
             <div class="flex items-center gap-2">
               {#if mlSuggestions.size > 0}
-                <Badge variant="outline" class="text-xs">{mlSuggestions.size} ML suggestions</Badge>
+                <Badge variant="outline" class="text-xs">{m.import_ml_suggestions_count({ count: String(mlSuggestions.size) })}</Badge>
                 <Button size="sm" variant="default" class="h-7 text-xs" onclick={applyMlSuggestions}>
-                  Accept {mlAccepted.size} suggestions
+                  {m.import_accept_suggestions({ count: String(mlAccepted.size) })}
                 </Button>
               {/if}
               {#if mlEnabled}
@@ -547,7 +548,7 @@
                   {:else}
                     <BrainCircuit class="h-3 w-3 mr-1" />
                   {/if}
-                  {mlClassifying ? "Classifying..." : "Classify with AI"}
+                  {mlClassifying ? m.state_classifying() : m.btn_classify_with_ai()}
                 </Button>
               {/if}
             </div>
@@ -555,13 +556,13 @@
 
           <!-- Batch tags for all imported entries -->
           <div class="flex items-center gap-2">
-            <span class="text-xs text-muted-foreground shrink-0">Tags for all:</span>
+            <span class="text-xs text-muted-foreground shrink-0">{m.import_tags_for_all()}</span>
             <TagInput tags={importTags} onchange={(t) => { importTags = t; }} class="flex-1" />
           </div>
 
           {#if previewWarnings.length > 0}
             <details>
-              <summary class="text-xs text-muted-foreground cursor-pointer">Show warnings</summary>
+              <summary class="text-xs text-muted-foreground cursor-pointer">{m.btn_show_warnings()}</summary>
               <div class="max-h-24 overflow-y-auto mt-1 space-y-0.5">
                 {#each previewWarnings.slice(0, 20) as w}
                   <p class="text-xs text-muted-foreground">{w}</p>
@@ -575,10 +576,10 @@
             <Table.Root>
               <Table.Header>
                 <Table.Row>
-                  <Table.Head class="w-24">Date</Table.Head>
-                  <Table.Head>Description</Table.Head>
-                  <Table.Head class="min-w-[260px]">Line Items</Table.Head>
-                  <Table.Head class="w-16 text-center">Balance</Table.Head>
+                  <Table.Head class="w-24">{m.label_date()}</Table.Head>
+                  <Table.Head>{m.label_description()}</Table.Head>
+                  <Table.Head class="min-w-[260px]">{m.label_line_items()}</Table.Head>
+                  <Table.Head class="w-16 text-center">{m.label_balance()}</Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -595,7 +596,7 @@
                       <span>{rec.description}</span>
                       {#if rec.metadata?.["bank-category"]}<span class="text-muted-foreground ml-1">• {rec.metadata["bank-category"]}</span>{/if}
                       {#if rec.metadata?.["transaction-type"]}<Badge variant="secondary" class="ml-1 text-[10px] px-1 py-0 h-4">{rec.metadata["transaction-type"]}</Badge>{/if}
-                      {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
+                      {#if dup}<Badge variant="outline" class="ml-1 text-xs">{m.import_dup_badge()}</Badge>{/if}
                       {#if recTags.length > 0}
                         <div class="flex flex-wrap gap-0.5 mt-0.5">
                           {#each recTags as tag}
@@ -618,13 +619,13 @@
                         </div>
                       {/each}
                       {#if rec.lines.length > 4}
-                        <span class="text-muted-foreground text-xs">+{rec.lines.length - 4} more</span>
+                        <span class="text-muted-foreground text-xs">{m.import_more_lines({ count: String(rec.lines.length - 4) })}</span>
                       {/if}
                       {#if mlSuggestion}
                         <button
                           class="flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs cursor-pointer {mlIsAccepted ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-muted text-muted-foreground line-through'}"
                           onclick={() => toggleMlAccept(recIdx)}
-                          title={mlIsAccepted ? "Click to reject suggestion" : "Click to accept suggestion"}
+                          title={mlIsAccepted ? m.ml_click_to_reject() : m.ml_click_to_accept()}
                         >
                           <BrainCircuit class="h-3 w-3" />
                           <span class="font-mono truncate max-w-[140px]">{mlSuggestion.account}</span>
@@ -651,7 +652,7 @@
                 {#if previewRecords.length > 50}
                   <Table.Row>
                     <Table.Cell colspan={4} class="text-center text-xs text-muted-foreground py-2">
-                      ... and {previewRecords.length - 50} more entries
+                      {m.import_more_entries({ count: String(previewRecords.length - 50) })}
                     </Table.Cell>
                   </Table.Row>
                 {/if}
@@ -660,16 +661,16 @@
           </div>
 
           <div class="flex justify-between">
-            <Button variant="outline" onclick={() => { step = 1; }}>Back</Button>
+            <Button variant="outline" onclick={() => { step = 1; }}>{m.btn_back()}</Button>
             {#if nonDuplicateCount === 0}
               {#if importDrop.batchActive}
-                <Button variant="outline" onclick={() => importDrop.skipFile()}>Skip</Button>
+                <Button variant="outline" onclick={() => importDrop.skipFile()}>{m.btn_skip()}</Button>
               {:else}
-                <Button variant="outline" onclick={() => { open = false; }}>Cancel</Button>
+                <Button variant="outline" onclick={() => { open = false; }}>{m.btn_cancel()}</Button>
               {/if}
             {:else}
               <Button onclick={doImport} disabled={taskQueue.isActive("pdf-import")}>
-                {taskQueue.isActive("pdf-import") ? "Importing..." : `Import ${nonDuplicateCount} entries`}
+                {taskQueue.isActive("pdf-import") ? m.state_importing() : m.import_n_entries({ count: String(nonDuplicateCount) })}
               </Button>
             {/if}
           </div>

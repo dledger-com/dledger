@@ -22,6 +22,7 @@
   import * as Tabs from "$lib/components/ui/tabs/index.js";
   import ExchangeEntryForm from "$lib/components/ExchangeEntryForm.svelte";
   import { EQUITY_TRADING } from "$lib/accounts/paths.js";
+  import * as m from "$paraglide/messages.js";
 
   interface Props {
     open: boolean;
@@ -197,14 +198,14 @@
         backend.getEntryLinks(editId).catch(() => [] as string[]),
       ]);
       if (!entryResult) {
-        toast.error("Entry not found");
+        toast.error(m.error_entry_not_found());
         editLoading = false;
         return;
       }
       const [origEntry, origItems] = entryResult;
 
       if (origEntry.status === "voided") {
-        toast.error("Cannot edit a voided entry");
+        toast.error(m.error_cannot_edit_voided());
         open = false;
         return;
       }
@@ -322,7 +323,7 @@
 
       if (result) {
         submitting = false;
-        toast.success("Entry updated");
+        toast.success(m.toast_entry_updated());
         invalidate("journal", "accounts", "reports");
         onsaved?.(result.newEntryId);
       } else {
@@ -347,7 +348,7 @@
           await getBackend().setEntryLinks(newEntryId, formLinks);
         }
         submitting = false;
-        toast.success("Journal entry posted");
+        toast.success(m.toast_entry_posted());
         invalidate("journal", "accounts", "reports");
         onsaved?.(newEntryId);
       } else {
@@ -448,7 +449,7 @@
   >
     <Dialog.Header class="space-y-1 px-6 pt-6 pb-0">
       <Dialog.Title class="text-sm font-medium text-muted-foreground">
-        {mode === "edit" ? "Edit Entry" : "New Entry"}
+        {mode === "edit" ? m.dialog_edit_entry() : m.dialog_new_entry()}
       </Dialog.Title>
       <Input id="dialog-desc" bind:value={formDescription} placeholder="e.g. Monthly rent payment"
              class="text-base font-semibold border-none shadow-none px-0 h-auto focus-visible:ring-0" required />
@@ -457,21 +458,21 @@
     <div class="flex-1 overflow-y-auto px-6 pb-4">
       {#if editLoading}
         <div class="py-8 text-center">
-          <p class="text-sm text-muted-foreground">Loading entry...</p>
+          <p class="text-sm text-muted-foreground">{m.state_loading()}</p>
         </div>
       {:else}
         <form id="journal-entry-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-4">
           <!-- Details -->
           <section>
-            <h3 class="text-sm font-medium text-muted-foreground mb-2">Details</h3>
+            <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.section_details()}</h3>
             <div class="space-y-3">
               <div class="space-y-1">
-                <label for="dialog-date" class="text-sm font-medium">Date</label>
+                <label for="dialog-date" class="text-sm font-medium">{m.label_date()}</label>
                 <Input id="dialog-date" type="date" bind:value={formDate} required />
               </div>
 
               <div class="space-y-1">
-                <span class="text-sm font-medium">Currency</span>
+                <span class="text-sm font-medium">{m.label_currency()}</span>
                 <Select.Root type="single" bind:value={formCurrency}>
                   <Select.Trigger class="w-full max-w-[200px]">
                     {@const cur = accountStore.currencies.find((c) => c.code === formCurrency)}
@@ -492,22 +493,22 @@
 
           <!-- Metadata -->
           <section>
-            <h3 class="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
+            <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.section_metadata()}</h3>
             <div class="space-y-3">
               <div class="space-y-1">
-                <dt class="text-muted-foreground">Tags</dt>
+                <dt class="text-muted-foreground">{m.label_tags()}</dt>
                 <dd><TagInput tags={formTags} onchange={(t) => { formTags = t; }} suggestions={tagSuggestions} /></dd>
               </div>
               <div class="space-y-1">
-                <dt class="text-muted-foreground">Links</dt>
+                <dt class="text-muted-foreground">{m.label_links()}</dt>
                 <dd><LinkInput links={formLinks} onchange={(l) => { formLinks = l; }} suggestions={formLinkSuggestions} /></dd>
               </div>
               <div class="space-y-1">
-                <dt class="text-muted-foreground">Note</dt>
+                <dt class="text-muted-foreground">{m.label_note()}</dt>
                 <dd>
                   <textarea
                     bind:value={formNote}
-                    placeholder="Add a note..."
+                    placeholder={m.placeholder_note()}
                     use:autoResizeAction
                     oninput={(e) => autoResize(e.currentTarget)}
                     class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-none overflow-y-auto min-h-[2lh] max-h-[12lh]"
@@ -526,15 +527,15 @@
           <Tabs.Root bind:value={entryMode}>
             <section>
               <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-medium text-muted-foreground">Line Items</h3>
+                <h3 class="text-sm font-medium text-muted-foreground">{m.section_line_items()}</h3>
                 <Tabs.List>
-                  <Tabs.Trigger value="simple">Simple</Tabs.Trigger>
-                  <Tabs.Trigger value="exchange">Exchange</Tabs.Trigger>
+                  <Tabs.Trigger value="simple">{m.label_simple()}</Tabs.Trigger>
+                  <Tabs.Trigger value="exchange">{m.label_exchange()}</Tabs.Trigger>
                 </Tabs.List>
               </div>
 
               {#if entryMode === "simple"}
-                <p class="text-xs text-muted-foreground mb-3">Debits must equal credits for the entry to balance.</p>
+                <p class="text-xs text-muted-foreground mb-3">{m.error_debits_must_equal_credits()}</p>
                 <div class="space-y-3">
                   {#each lines as line, i (line.key)}
                     <div class="rounded-md border p-2 space-y-2">
@@ -547,7 +548,7 @@
                       />
                       <div class="grid grid-cols-[1fr_1fr_40px] gap-2 items-center">
                         <div class="space-y-0.5">
-                          <span class="text-xs text-muted-foreground">Debit</span>
+                          <span class="text-xs text-muted-foreground">{m.label_debit()}</span>
                           <Input
                             type="number"
                             step="0.01"
@@ -559,7 +560,7 @@
                           />
                         </div>
                         <div class="space-y-0.5">
-                          <span class="text-xs text-muted-foreground">Credit</span>
+                          <span class="text-xs text-muted-foreground">{m.label_credit()}</span>
                           <Input
                             type="number"
                             step="0.01"
@@ -586,17 +587,17 @@
                   {/each}
 
                   <Button variant="outline" size="sm" type="button" onclick={addLine}>
-                    <Plus class="h-4 w-4 mr-1" /> Add Line
+                    <Plus class="h-4 w-4 mr-1" /> {m.btn_add_line()}
                   </Button>
                 </div>
 
                 <div class="mt-4 flex justify-end gap-6 border-t pt-3 text-sm">
                   <div>
-                    <span class="text-muted-foreground">Debit:</span>
+                    <span class="text-muted-foreground">{m.label_debit()}:</span>
                     <span class="ml-1 font-mono font-medium">{totalDebit.toFixed(2)}</span>
                   </div>
                   <div>
-                    <span class="text-muted-foreground">Credit:</span>
+                    <span class="text-muted-foreground">{m.label_credit()}:</span>
                     <span class="ml-1 font-mono font-medium">{totalCredit.toFixed(2)}</span>
                   </div>
                   <div>
@@ -622,12 +623,12 @@
     </div>
 
     <Dialog.Footer class="px-6 pb-6 pt-2 border-t">
-      <Button variant="outline" type="button" onclick={() => { if (isDirty) { confirmDiscardOpen = true; return; } open = false; onclose?.(); }}>Cancel</Button>
+      <Button variant="outline" type="button" onclick={() => { if (isDirty) { confirmDiscardOpen = true; return; } open = false; onclose?.(); }}>{m.btn_cancel()}</Button>
       <Button type="submit" form="journal-entry-form" disabled={!canPost}>
         {#if submitting}
-          {mode === "edit" ? "Saving..." : "Posting..."}
+          {mode === "edit" ? m.state_saving() : m.state_posting()}
         {:else}
-          {mode === "edit" ? "Save Changes" : "Post Entry"}
+          {mode === "edit" ? m.btn_save_changes() : m.btn_post_entry()}
         {/if}
       </Button>
     </Dialog.Footer>
@@ -638,21 +639,21 @@
       <AlertDialog.Portal>
         <AlertDialog.Overlay class="fixed inset-0 z-[60] bg-black/50" />
         <AlertDialog.Content class="fixed top-1/2 left-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 bg-background rounded-lg border p-6 shadow-lg max-w-sm w-full">
-          <AlertDialog.Title class="text-lg font-semibold">Discard changes?</AlertDialog.Title>
+          <AlertDialog.Title class="text-lg font-semibold">{m.dialog_discard_changes()}</AlertDialog.Title>
           <AlertDialog.Description class="text-sm text-muted-foreground mt-2">
-            You have unsaved changes. Are you sure you want to discard them?
+            {m.dialog_discard_desc()}
           </AlertDialog.Description>
           <div class="flex justify-end gap-2 mt-4">
             <AlertDialog.Cancel
               class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
             >
-              Keep Editing
+              {m.btn_keep_editing()}
             </AlertDialog.Cancel>
             <AlertDialog.Action
               class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onclick={() => { confirmDiscardOpen = false; open = false; onclose?.(); }}
             >
-              Discard
+              {m.btn_discard()}
             </AlertDialog.Action>
           </div>
         </AlertDialog.Content>

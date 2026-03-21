@@ -23,6 +23,7 @@
   import Download from "lucide-svelte/icons/download";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection } from "$lib/types/index.js";
+  import * as m from "$paraglide/messages.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -102,15 +103,15 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="from" class="text-sm font-medium">From</label>
+      <label for="from" class="text-sm font-medium">{m.label_from()}</label>
       <Input id="from" type="date" bind:value={fromDate} class="w-full sm:w-48" />
     </div>
     <div class="space-y-2">
-      <label for="to" class="text-sm font-medium">To</label>
+      <label for="to" class="text-sm font-medium">{m.label_to()}</label>
       <Input id="to" type="date" bind:value={toDate} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={store.loading}>
-      {store.loading ? "Loading..." : "Generate"}
+      {store.loading ? m.state_loading_report() : m.btn_generate()}
     </Button>
     {#if store.incomeStatement}
       <Button variant="outline" onclick={() => exportIncomeStatementCsv(store.incomeStatement!)}>
@@ -119,7 +120,7 @@
       </Button>
       <label class="flex items-center gap-2 text-sm">
         <Switch checked={convertToBase} onCheckedChange={handleToggleConvert} />
-        Convert to {settings.currency}
+        {m.report_convert_to({ currency: settings.currency })}
       </label>
     {/if}
   </div>
@@ -134,7 +135,7 @@
     {@const report = store.incomeStatement}
     {@const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet()}
     <Card.Root>
-      <Card.Header><Card.Title>Revenue</Card.Title></Card.Header>
+      <Card.Header><Card.Title>{m.report_revenue()}</Card.Title></Card.Header>
       <Table.Root>
         <Table.Body>
           {#each filterHiddenTrialLines(report.revenue.lines, hidden) as line (line.account_id)}
@@ -148,13 +149,13 @@
         </Table.Body>
         <Table.Footer>
           <Table.Row class="font-bold">
-            <Table.Cell>Total Revenue</Table.Cell>
+            <Table.Cell>{m.report_total_revenue()}</Table.Cell>
             <Table.Cell class="text-right font-mono">
               {renderTotals(report.revenue)}
               {#if convertToBase && revenueSummary}
                 <span class="ml-2 text-primary">({renderConvertedTotal(revenueSummary)})</span>
                 {#if settings.debugMode}
-                  <ConversionDebugDialog summary={revenueSummary} label="Revenue" />
+                  <ConversionDebugDialog summary={revenueSummary} label={m.report_revenue()} />
                 {/if}
               {/if}
             </Table.Cell>
@@ -164,7 +165,7 @@
     </Card.Root>
 
     <Card.Root>
-      <Card.Header><Card.Title>Expenses</Card.Title></Card.Header>
+      <Card.Header><Card.Title>{m.report_expenses()}</Card.Title></Card.Header>
       <Table.Root>
         <Table.Body>
           {#each filterHiddenTrialLines(report.expenses.lines, hidden) as line (line.account_id)}
@@ -178,13 +179,13 @@
         </Table.Body>
         <Table.Footer>
           <Table.Row class="font-bold">
-            <Table.Cell>Total Expenses</Table.Cell>
+            <Table.Cell>{m.report_total_expenses()}</Table.Cell>
             <Table.Cell class="text-right font-mono">
               {renderTotals(report.expenses)}
               {#if convertToBase && expensesSummary}
                 <span class="ml-2 text-primary">({renderConvertedTotal(expensesSummary)})</span>
                 {#if settings.debugMode}
-                  <ConversionDebugDialog summary={expensesSummary} label="Expenses" />
+                  <ConversionDebugDialog summary={expensesSummary} label={m.report_expenses()} />
                 {/if}
               {/if}
             </Table.Cell>
@@ -195,7 +196,7 @@
 
     <Card.Root>
       <Card.Header>
-        <Card.Description>Net Income</Card.Description>
+        <Card.Description>{m.report_net_income()}</Card.Description>
         <Card.Title class="text-2xl">
           {filterHiddenBalances(report.net_income, hidden).length === 0
             ? formatCurrency(0, settings.currency)
@@ -203,7 +204,7 @@
           {#if convertToBase && netIncomeSummary}
             <span class="ml-2 text-lg text-primary">({renderConvertedTotal(netIncomeSummary)})</span>
             {#if settings.debugMode}
-              <ConversionDebugDialog summary={netIncomeSummary} label="Net Income" />
+              <ConversionDebugDialog summary={netIncomeSummary} label={m.report_net_income()} />
             {/if}
           {/if}
         </Card.Title>
@@ -213,7 +214,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No data available. Post journal entries to generate the income statement.
+          {m.empty_no_income_statement_data()}
         </p>
       </Card.Content>
     </Card.Root>

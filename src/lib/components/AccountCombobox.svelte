@@ -2,6 +2,7 @@
   import * as Popover from "$lib/components/ui/popover/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import { cn } from "$lib/utils.js";
+  import * as m from "$paraglide/messages.js";
 
   let {
     value,
@@ -67,9 +68,9 @@
   </Popover.Trigger>
   <Popover.Content class="w-[280px] p-0" align="start">
     <Command.Root shouldFilter={true}>
-      <Command.Input placeholder="Search accounts..." bind:value={search} />
+      <Command.Input placeholder={m.placeholder_search_accounts()} bind:value={search} />
       <Command.List class="max-h-[200px]">
-        <Command.Empty>No matching account</Command.Empty>
+        <Command.Empty>{m.empty_no_matching_account()}</Command.Empty>
         {#each groupedAccounts as [type, accts]}
           <Command.Group heading={type}>
             {#each accts as acct}

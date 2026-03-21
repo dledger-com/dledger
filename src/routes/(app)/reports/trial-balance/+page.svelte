@@ -16,6 +16,7 @@
   import ListFilter from "$lib/components/ListFilter.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -40,11 +41,11 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="asOf" class="text-sm font-medium">As of Date</label>
+      <label for="asOf" class="text-sm font-medium">{m.report_as_of_date()}</label>
       <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={store.loading}>
-      {store.loading ? "Loading..." : "Generate"}
+      {store.loading ? m.state_loading_report() : m.btn_generate()}
     </Button>
     {#if store.trialBalance}
       <Button variant="outline" onclick={() => exportTrialBalanceCsv(store.trialBalance!)}>
@@ -52,7 +53,7 @@
         CSV
       </Button>
     {/if}
-    <ListFilter bind:value={searchTerm} placeholder="Filter accounts..." />
+    <ListFilter bind:value={searchTerm} placeholder={m.placeholder_filter_accounts()} />
   </div>
 
   {#if store.loading}
@@ -80,10 +81,10 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <SortableHeader active={sort.key === "account"} direction={sort.direction} onclick={() => sort.toggle("account")}>Account</SortableHeader>
-            <SortableHeader active={sort.key === "type"} direction={sort.direction} onclick={() => sort.toggle("type")}>Type</SortableHeader>
-            <SortableHeader active={sort.key === "debit"} direction={sort.direction} onclick={() => sort.toggle("debit")} class="text-right">Debit</SortableHeader>
-            <SortableHeader active={sort.key === "credit"} direction={sort.direction} onclick={() => sort.toggle("credit")} class="text-right">Credit</SortableHeader>
+            <SortableHeader active={sort.key === "account"} direction={sort.direction} onclick={() => sort.toggle("account")}>{m.label_account()}</SortableHeader>
+            <SortableHeader active={sort.key === "type"} direction={sort.direction} onclick={() => sort.toggle("type")}>{m.label_type()}</SortableHeader>
+            <SortableHeader active={sort.key === "debit"} direction={sort.direction} onclick={() => sort.toggle("debit")} class="text-right">{m.label_debit()}</SortableHeader>
+            <SortableHeader active={sort.key === "credit"} direction={sort.direction} onclick={() => sort.toggle("credit")} class="text-right">{m.label_credit()}</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -109,7 +110,7 @@
         </Table.Body>
         <Table.Footer>
           <Table.Row class="font-bold">
-            <Table.Cell colspan={2}>Totals</Table.Cell>
+            <Table.Cell colspan={2}>{m.report_totals()}</Table.Cell>
             <Table.Cell class="text-right font-mono">
               {#each filteredDebits as b}
                 {formatCurrency(b.amount, b.currency)}
@@ -128,7 +129,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No data available. Post journal entries to see the trial balance.
+          {m.empty_no_trial_balance_data()}
         </p>
       </Card.Content>
     </Card.Root>

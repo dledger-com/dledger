@@ -14,6 +14,7 @@
   import Download from "lucide-svelte/icons/download";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
 
@@ -66,7 +67,7 @@
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
         key: `report:tax:${fromDate}:${toDate}`,
-        label: "Tax Summary",
+        label: m.report_tax_summary(),
         description: `${fromDate} to ${toDate}`,
         run: async () => {
           try {
@@ -96,24 +97,24 @@
 <div class="space-y-6">
   <Card.Root>
     <Card.Header>
-      <Card.Title>Report Parameters</Card.Title>
+      <Card.Title>{m.report_parameters()}</Card.Title>
     </Card.Header>
     <Card.Content>
       <div class="flex items-end gap-4 flex-wrap">
         <div class="space-y-1">
-          <label for="from" class="text-sm font-medium">From</label>
+          <label for="from" class="text-sm font-medium">{m.label_from()}</label>
           <Input id="from" type="date" bind:value={fromDate} class="w-40" />
         </div>
         <div class="space-y-1">
-          <label for="to" class="text-sm font-medium">To</label>
+          <label for="to" class="text-sm font-medium">{m.label_to()}</label>
           <Input id="to" type="date" bind:value={toDate} class="w-40" />
         </div>
         <div class="space-y-1">
-          <label for="holding" class="text-sm font-medium">Holding Period (days)</label>
+          <label for="holding" class="text-sm font-medium">{m.report_holding_period()}</label>
           <Input id="holding" type="number" bind:value={holdingPeriodDays} class="w-32" min="1" />
         </div>
         <Button onclick={generate} disabled={loading}>
-          {loading ? "Generating..." : "Generate"}
+          {loading ? m.state_generating() : m.btn_generate()}
         </Button>
         {#if summary}
           <Button variant="outline" onclick={() => exportTaxSummaryCsv(summary!)}>
@@ -146,7 +147,7 @@
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Short-Term Gains</Card.Description>
+          <Card.Description>{m.report_short_term_gains()}</Card.Description>
           <Card.Title class="text-xl text-green-600 dark:text-green-400">
             +{formatCurrency(stGains, settings.currency)}
           </Card.Title>
@@ -155,7 +156,7 @@
 
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Short-Term Losses</Card.Description>
+          <Card.Description>{m.report_short_term_losses()}</Card.Description>
           <Card.Title class="text-xl text-red-600 dark:text-red-400">
             {formatCurrency(stLosses, settings.currency)}
           </Card.Title>
@@ -164,7 +165,7 @@
 
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Long-Term Gains</Card.Description>
+          <Card.Description>{m.report_long_term_gains()}</Card.Description>
           <Card.Title class="text-xl text-green-600 dark:text-green-400">
             +{formatCurrency(ltGains, settings.currency)}
           </Card.Title>
@@ -173,7 +174,7 @@
 
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Long-Term Losses</Card.Description>
+          <Card.Description>{m.report_long_term_losses()}</Card.Description>
           <Card.Title class="text-xl text-red-600 dark:text-red-400">
             {formatCurrency(ltLosses, settings.currency)}
           </Card.Title>
@@ -182,7 +183,7 @@
 
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Total Realized</Card.Description>
+          <Card.Description>{m.report_total_realized()}</Card.Description>
           <Card.Title class="text-xl {totalRealized >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
             {totalRealized >= 0 ? "+" : ""}{formatCurrency(totalRealized, settings.currency)}
           </Card.Title>
@@ -191,7 +192,7 @@
 
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Unrealized</Card.Description>
+          <Card.Description>{m.report_unrealized_label()}</Card.Description>
           <Card.Title class="text-xl {totalUnrealized >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
             {totalUnrealized >= 0 ? "+" : ""}{formatCurrency(totalUnrealized, settings.currency)}
           </Card.Title>
@@ -200,7 +201,7 @@
 
       <Card.Root>
         <Card.Header class="pb-2">
-          <Card.Description>Total Income</Card.Description>
+          <Card.Description>{m.report_total_income()}</Card.Description>
           <Card.Title class="text-xl">
             {formatCurrency(totalIncome, settings.currency)}
           </Card.Title>
@@ -212,19 +213,19 @@
     {#if summary.gain_loss_lines.length > 0}
       <Card.Root>
         <Card.Header>
-          <Card.Title>Realized Gain/Loss Details</Card.Title>
+          <Card.Title>{m.report_realized_gl_details()}</Card.Title>
         </Card.Header>
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortGL.key === "type"} direction={sortGL.direction} onclick={() => sortGL.toggle("type")}>Type</SortableHeader>
-              <SortableHeader active={sortGL.key === "currency"} direction={sortGL.direction} onclick={() => sortGL.toggle("currency")}>Currency</SortableHeader>
-              <SortableHeader active={sortGL.key === "acquired"} direction={sortGL.direction} onclick={() => sortGL.toggle("acquired")}>Acquired</SortableHeader>
-              <SortableHeader active={sortGL.key === "disposed"} direction={sortGL.direction} onclick={() => sortGL.toggle("disposed")}>Disposed</SortableHeader>
-              <SortableHeader active={sortGL.key === "quantity"} direction={sortGL.direction} onclick={() => sortGL.toggle("quantity")} class="text-right">Quantity</SortableHeader>
-              <SortableHeader active={sortGL.key === "costBasis"} direction={sortGL.direction} onclick={() => sortGL.toggle("costBasis")} class="text-right">Cost Basis</SortableHeader>
-              <SortableHeader active={sortGL.key === "proceeds"} direction={sortGL.direction} onclick={() => sortGL.toggle("proceeds")} class="text-right">Proceeds</SortableHeader>
-              <SortableHeader active={sortGL.key === "gainLoss"} direction={sortGL.direction} onclick={() => sortGL.toggle("gainLoss")} class="text-right">Gain/Loss</SortableHeader>
+              <SortableHeader active={sortGL.key === "type"} direction={sortGL.direction} onclick={() => sortGL.toggle("type")}>{m.label_type()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "currency"} direction={sortGL.direction} onclick={() => sortGL.toggle("currency")}>{m.label_currency()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "acquired"} direction={sortGL.direction} onclick={() => sortGL.toggle("acquired")}>{m.report_acquired()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "disposed"} direction={sortGL.direction} onclick={() => sortGL.toggle("disposed")}>{m.report_disposed()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "quantity"} direction={sortGL.direction} onclick={() => sortGL.toggle("quantity")} class="text-right">{m.report_quantity()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "costBasis"} direction={sortGL.direction} onclick={() => sortGL.toggle("costBasis")} class="text-right">{m.report_cost_basis()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "proceeds"} direction={sortGL.direction} onclick={() => sortGL.toggle("proceeds")} class="text-right">{m.report_proceeds()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "gainLoss"} direction={sortGL.direction} onclick={() => sortGL.toggle("gainLoss")} class="text-right">{m.report_gain_loss_col()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -257,7 +258,7 @@
       <Card.Root>
         <Card.Content class="py-8">
           <p class="text-sm text-muted-foreground text-center">
-            No lot disposals in this period.
+            {m.empty_no_lot_disposals()}
           </p>
         </Card.Content>
       </Card.Root>
@@ -267,14 +268,14 @@
     {#if summary.income_by_account.length > 0}
       <Card.Root>
         <Card.Header>
-          <Card.Title>Income by Account</Card.Title>
+          <Card.Title>{m.report_income_by_account()}</Card.Title>
         </Card.Header>
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortInc.key === "account"} direction={sortInc.direction} onclick={() => sortInc.toggle("account")}>Account</SortableHeader>
-              <SortableHeader active={sortInc.key === "currency"} direction={sortInc.direction} onclick={() => sortInc.toggle("currency")}>Currency</SortableHeader>
-              <SortableHeader active={sortInc.key === "amount"} direction={sortInc.direction} onclick={() => sortInc.toggle("amount")} class="text-right">Amount</SortableHeader>
+              <SortableHeader active={sortInc.key === "account"} direction={sortInc.direction} onclick={() => sortInc.toggle("account")}>{m.label_account()}</SortableHeader>
+              <SortableHeader active={sortInc.key === "currency"} direction={sortInc.direction} onclick={() => sortInc.toggle("currency")}>{m.label_currency()}</SortableHeader>
+              <SortableHeader active={sortInc.key === "amount"} direction={sortInc.direction} onclick={() => sortInc.toggle("amount")} class="text-right">{m.label_amount()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -291,7 +292,7 @@
           </Table.Body>
           <Table.Footer>
             <Table.Row>
-              <Table.Cell colspan={2} class="font-medium">Total Income</Table.Cell>
+              <Table.Cell colspan={2} class="font-medium">{m.report_total_income()}</Table.Cell>
               <Table.Cell class="text-right font-mono font-medium">
                 {formatCurrency(totalIncome, settings.currency)}
               </Table.Cell>
@@ -303,7 +304,7 @@
       <Card.Root>
         <Card.Content class="py-8">
           <p class="text-sm text-muted-foreground text-center">
-            No income recorded in this period.
+            {m.empty_no_income_recorded()}
           </p>
         </Card.Content>
       </Card.Root>

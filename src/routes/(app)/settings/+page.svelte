@@ -169,10 +169,10 @@
             }
             if (totalRenamed > 0) {
                 toast.success(
-                    `Renamed ${totalRenamed} account${totalRenamed !== 1 ? "s" : ""}${totalSkipped > 0 ? ` (${totalSkipped} skipped)` : ""}`,
+                    msg.toast_accounts_renamed({ count: totalRenamed, skipped: totalSkipped > 0 ? ` (${totalSkipped} skipped)` : "" }),
                 );
             } else {
-                toast.info("No accounts needed renaming");
+                toast.info(msg.toast_no_accounts_renamed());
             }
             renameCounts = new Map();
         } catch (e) {
@@ -192,91 +192,89 @@
         }[];
     }[] = [
         {
-            title: "Banking",
-            description: "Paths for bank account imports (CSV, OFX, PDF).",
+            title: msg.settings_path_banking(),
+            description: msg.settings_path_banking_desc(),
             keys: [
-                { key: "bankAssets", label: "Bank Assets", example: "MyBank" },
-                { key: "bankFees", label: "Bank Fees", example: "MyBank" },
-                { key: "creditCards", label: "Credit Cards", example: "1234" },
+                { key: "bankAssets", label: msg.settings_path_bank_assets(), example: "MyBank" },
+                { key: "bankFees", label: msg.settings_path_bank_fees(), example: "MyBank" },
+                { key: "creditCards", label: msg.settings_path_credit_cards(), example: "1234" },
             ],
         },
         {
-            title: "Exchange",
-            description:
-                "Paths for crypto exchange imports and CEX integration.",
+            title: msg.settings_path_exchange(),
+            description: msg.settings_path_exchange_desc(),
             keys: [
                 {
                     key: "exchangeAssets",
-                    label: "Exchange Assets",
+                    label: msg.settings_path_exchange_assets(),
                     example: "Kraken",
                 },
                 {
                     key: "exchangeFees",
-                    label: "Exchange Fees",
+                    label: msg.settings_path_exchange_fees(),
                     example: "Kraken",
                 },
                 {
                     key: "exchangeEquity",
-                    label: "Exchange Equity",
+                    label: msg.settings_path_exchange_equity(),
                     example: "Kraken",
                 },
                 {
                     key: "exchangeStaking",
-                    label: "Exchange Staking",
+                    label: msg.settings_path_exchange_staking(),
                     example: "Kraken",
                 },
                 {
                     key: "exchangeIncome",
-                    label: "Exchange Income",
+                    label: msg.settings_path_exchange_income(),
                     example: "Nexo",
                 },
                 {
                     key: "exchangeExpenses",
-                    label: "Exchange Expenses",
+                    label: msg.settings_path_exchange_expenses(),
                     example: "CryptoCom",
                 },
             ],
         },
         {
-            title: "Wallet / On-chain",
-            description: "Paths for on-chain wallet and gas fee accounts.",
+            title: msg.settings_path_wallet(),
+            description: msg.settings_path_wallet_desc(),
             keys: [
                 {
                     key: "walletAssets",
-                    label: "Wallet Assets",
+                    label: msg.settings_path_wallet_assets(),
                     example: "Ethereum:Main",
                 },
                 {
                     key: "walletEquity",
-                    label: "Wallet Equity",
+                    label: msg.settings_path_wallet_equity(),
                     example: "Ethereum",
                 },
-                { key: "chainFees", label: "Chain Fees", example: "Ethereum" },
+                { key: "chainFees", label: msg.settings_path_chain_fees(), example: "Ethereum" },
             ],
         },
         {
-            title: "DeFi",
-            description:
-                "Paths for DeFi protocol accounts (Aave, Uniswap, etc.).",
+            title: msg.settings_path_defi(),
+            description: msg.settings_path_defi_desc(),
             keys: [
                 {
                     key: "defiAssets",
-                    label: "DeFi Assets",
+                    label: msg.settings_path_defi_assets(),
                     example: "Aave:Supply",
                 },
                 {
                     key: "defiLiabilities",
-                    label: "DeFi Liabilities",
+                    label: msg.settings_path_defi_liabilities(),
                     example: "Aave:Borrow",
                 },
                 {
                     key: "defiIncome",
-                    label: "DeFi Income",
+                    label: msg.settings_path_defi_income(),
                     example: "Aave:Interest",
                 },
                 {
                     key: "defiExpenses",
-                    label: "DeFi Expenses",
+                    label: msg.settings_path_defi_expenses(),
                     example: "Aave:Interest",
                 },
             ],
@@ -298,13 +296,13 @@
 
     // Currency asset type override state
     const ASSET_TYPES: { value: CurrencyAssetType; label: string }[] = [
-        { value: "", label: "Unclassified" },
-        { value: "fiat", label: "Fiat" },
-        { value: "crypto", label: "Crypto" },
-        { value: "stock", label: "Stock" },
-        { value: "commodity", label: "Commodity" },
-        { value: "index", label: "Index" },
-        { value: "bond", label: "Bond" },
+        { value: "", label: msg.asset_type_unclassified() },
+        { value: "fiat", label: msg.asset_type_fiat() },
+        { value: "crypto", label: msg.asset_type_crypto() },
+        { value: "stock", label: msg.asset_type_stock() },
+        { value: "commodity", label: msg.asset_type_commodity() },
+        { value: "index", label: msg.asset_type_index() },
+        { value: "bond", label: msg.asset_type_bond() },
     ];
     let assetTypeEdits = $state<Map<string, CurrencyAssetType>>(new Map());
     let savingAssetTypes = $state(false);
@@ -328,9 +326,9 @@
             assetTypeEdits = new Map();
             await loadCurrencies();
             invalidate("currencies");
-            toast.success(`Asset type overrides saved`);
+            toast.success(msg.toast_asset_type_overrides_saved());
         } catch (err) {
-            toast.error(`Failed to save: ${err}`);
+            toast.error(msg.toast_error_generic({ message: String(err) }));
         } finally {
             savingAssetTypes = false;
         }
@@ -343,18 +341,18 @@
     ];
 
     const months = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
+        msg.month_january(),
+        msg.month_february(),
+        msg.month_march(),
+        msg.month_april(),
+        msg.month_may(),
+        msg.month_june(),
+        msg.month_july(),
+        msg.month_august(),
+        msg.month_september(),
+        msg.month_october(),
+        msg.month_november(),
+        msg.month_december(),
     ];
 
     async function loadCurrencies() {
@@ -424,19 +422,17 @@
 
     function handleClearExchangeRates() {
         if (
-            !window.confirm(
-                "Are you sure you want to clear all exchange rates? This cannot be undone.",
-            )
+            !window.confirm(msg.confirm_clear_exchange_rates())
         )
             return;
         taskQueue.enqueue({
             key: "clear-exchange-rates",
-            label: "Clear exchange rates",
+            label: msg.settings_clear_exchange_rates(),
             async run() {
                 await getBackend().clearExchangeRates();
                 await getBackend().clearAutoRateSources();
                 invalidate("currencies");
-                toast.success("Exchange rates cleared");
+                toast.success(msg.toast_exchange_rates_cleared());
                 return { summary: "Exchange rates cleared" };
             },
         });
@@ -444,19 +440,18 @@
 
     function handleClearLedgerData() {
         if (
-            !window.confirm(
-                "Are you sure you want to clear all ledger data? This will remove all accounts, transactions, and currencies. Exchange rates, sources, and settings will be preserved. This cannot be undone.",
+            !window.confirm(msg.confirm_clear_ledger_data()
             )
         )
             return;
         taskQueue.enqueue({
             key: "clear-ledger-data",
-            label: "Clear ledger data",
+            label: msg.settings_clear_ledger_data(),
             async run() {
                 await getBackend().clearLedgerData();
                 await reloadHiddenCurrencies(getBackend());
                 currencies = [];
-                toast.success("Ledger data cleared");
+                toast.success(msg.toast_ledger_data_cleared());
                 return { summary: "Ledger data cleared" };
             },
         });
@@ -464,20 +459,18 @@
 
     function handleClearAllData() {
         if (
-            !window.confirm(
-                "Are you sure you want to delete ALL data? This will remove all accounts, transactions, currencies, exchange rates, and reset settings. This cannot be undone.",
-            )
+            !window.confirm(msg.confirm_clear_all_data())
         )
             return;
         taskQueue.enqueue({
             key: "clear-all-data",
-            label: "Clear all data",
+            label: msg.settings_clear_all_data(),
             async run() {
                 await getBackend().clearAllData();
                 settings.reset();
                 currencies = [];
                 invalidate("currencies");
-                toast.success("All data cleared");
+                toast.success(msg.toast_all_data_cleared());
                 return { summary: "All data cleared" };
             },
         });
@@ -495,9 +488,9 @@
                 defaultSet,
             );
             if (result.created > 0) {
-                toast.success(`Created ${result.created} accounts`);
+                toast.success(msg.toast_accounts_created_count({ count: result.created }));
             } else {
-                toast.info("All default accounts already exist");
+                toast.info(msg.toast_accounts_exist());
             }
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e));
@@ -555,11 +548,11 @@
     function handleDpriceSyncLatest() {
         taskQueue.enqueue({
             key: "dprice-sync-latest",
-            label: "dprice latest prices",
+            label: msg.settings_dprice_sync_latest_task(),
             async run() {
                 await dpriceClient().syncLatest();
                 await loadDpriceStatus();
-                toast.success("dprice latest prices synced");
+                toast.success(msg.toast_dprice_latest_synced());
                 return { summary: "dprice latest synced" };
             },
         });
@@ -568,11 +561,11 @@
     function handleDpriceSyncFull() {
         taskQueue.enqueue({
             key: "dprice-sync-full",
-            label: "dprice full sync",
+            label: msg.settings_dprice_full_sync_task(),
             async run() {
                 await dpriceClient().sync();
                 await loadDpriceStatus();
-                toast.success("dprice full sync completed");
+                toast.success(msg.toast_dprice_full_synced());
                 return { summary: "dprice full sync done" };
             },
         });
@@ -586,7 +579,7 @@
                 data,
                 `dprice-backup-${new Date().toISOString().slice(0, 10)}.db`,
             );
-            toast.success("dprice database exported");
+            toast.success(msg.toast_dprice_exported());
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e));
         } finally {
@@ -602,16 +595,14 @@
             const file = input.files?.[0];
             if (!file) return;
             if (
-                !window.confirm(
-                    `Import "${file.name}" as dprice database? This will replace the current price database.`,
-                )
+                !window.confirm(msg.confirm_import_dprice({ name: file.name }))
             )
                 return;
             dpriceImporting = true;
             try {
                 const data = await readFileAsUint8Array(file);
                 await dpriceClient().importDb(data);
-                toast.success("dprice database imported");
+                toast.success(msg.toast_dprice_imported());
                 await loadDpriceStatus();
             } catch (e) {
                 toast.error(e instanceof Error ? e.message : String(e));
@@ -654,7 +645,7 @@
                 }
             } catch (e) {
                 toast.error(
-                    `Failed to switch dprice mode: ${e instanceof Error ? e.message : String(e)}`,
+                    msg.toast_dprice_mode_failed({ message: e instanceof Error ? e.message : String(e) }),
                 );
             }
         }
@@ -677,15 +668,15 @@
     <!-- General -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>General</Card.Title>
+            <Card.Title>{msg.settings_general()}</Card.Title>
             <Card.Description
-                >Currency, date format, and fiscal year settings.</Card.Description
+                >{msg.settings_general_desc()}</Card.Description
             >
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="space-y-2">
-                    <span class="text-sm font-medium">Base Currency</span>
+                    <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
                     <Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
                         <Select.Trigger class="w-full">
                             {#if currencies.length === 0}
@@ -708,7 +699,7 @@
                 </div>
 
                 <div class="space-y-2">
-                    <span class="text-sm font-medium">Date Format</span>
+                    <span class="text-sm font-medium">{msg.settings_date_format()}</span>
                     <Select.Root type="single" value={settings.dateFormat} onValueChange={handleDateFormatChange}>
                         <Select.Trigger class="w-full">
                             {dateFormats.find((df) => df.value === settings.dateFormat)?.label ?? settings.dateFormat}
@@ -722,7 +713,7 @@
                 </div>
 
                 <div class="space-y-2">
-                    <span class="text-sm font-medium">Number & Currency Format</span>
+                    <span class="text-sm font-medium">{msg.settings_number_format()}</span>
                     <Select.Root type="single" value={currentLocaleValue} onValueChange={handleLocaleChange}>
                         <Select.Trigger class="w-full">
                             {localeOptions.find((l) => l.value === currentLocaleValue)?.label ?? currentLocaleValue}
@@ -751,10 +742,10 @@
                 </div>
 
                 <div class="space-y-2">
-                    <span class="text-sm font-medium">Fiscal Year Start</span>
+                    <span class="text-sm font-medium">{msg.settings_fiscal_year_start()}</span>
                     <Select.Root type="single" value={String(parseInt(settings.fiscalYearStart.split("-")[0], 10))} onValueChange={handleFiscalYearChange}>
                         <Select.Trigger class="w-full">
-                            {months[parseInt(settings.fiscalYearStart.split("-")[0], 10) - 1] ?? "January"}
+                            {months[parseInt(settings.fiscalYearStart.split("-")[0], 10) - 1] ?? msg.month_january()}
                         </Select.Trigger>
                         <Select.Content>
                             {#each months as m, i (i)}
@@ -765,9 +756,7 @@
                 </div>
             </div>
             <p class="text-xs text-muted-foreground">
-                Manage currencies on the <a href="/currencies" class="underline"
-                    >Currencies</a
-                > page.
+                {msg.settings_manage_currencies_prefix()}<a href="/currencies" class="underline">{msg.settings_currencies_link()}</a>{msg.settings_manage_currencies_suffix()}
             </p>
         </Card.Content>
     </Card.Root>
@@ -775,14 +764,14 @@
     <!-- Appearance -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Appearance</Card.Title>
-            <Card.Description>Theme and display preferences.</Card.Description>
+            <Card.Title>{msg.settings_appearance()}</Card.Title>
+            <Card.Description>{msg.settings_appearance_desc()}</Card.Description>
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Dark mode</p>
-                    <p class="text-sm text-muted-foreground">Switch between light and dark theme.</p>
+                    <p class="text-sm font-medium">{msg.settings_dark_mode()}</p>
+                    <p class="text-sm text-muted-foreground">{msg.settings_dark_mode_desc()}</p>
                 </div>
                 <Switch checked={mode.current === "dark"}
                     onCheckedChange={(v) => setMode(v ? "dark" : "light")} />
@@ -793,17 +782,17 @@
     <!-- Backup & Restore -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Backup & Restore</Card.Title>
+            <Card.Title>{msg.settings_backup_restore()}</Card.Title>
             <Card.Description
-                >Export or import your database file.</Card.Description
+                >{msg.settings_backup_restore_desc()}</Card.Description
             >
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Export Database</p>
+                    <p class="text-sm font-medium">{msg.settings_export_database()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Download a .db backup file containing all your data.
+                        {msg.settings_export_database_desc()}
                     </p>
                 </div>
                 <Button
@@ -816,7 +805,7 @@
                             const data =
                                 await exportDatabaseBackup(getBackend());
                             downloadDatabase(data);
-                            toast.success("Database exported");
+                            toast.success(msg.toast_database_exported());
                         } catch (e) {
                             toast.error(
                                 e instanceof Error ? e.message : String(e),
@@ -826,16 +815,15 @@
                         }
                     }}
                 >
-                    {exporting ? "Exporting..." : "Export .db"}
+                    {exporting ? msg.state_exporting() : msg.btn_export_dot_db()}
                 </Button>
             </div>
             <Separator />
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Import Database</p>
+                    <p class="text-sm font-medium">{msg.settings_import_database()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Restore from a .db backup file. This replaces all
-                        current data.
+                        {msg.settings_import_database_desc()}
                     </p>
                 </div>
                 <Button
@@ -850,9 +838,7 @@
                             const file = input.files?.[0];
                             if (!file) return;
                             if (
-                                !window.confirm(
-                                    `Import "${file.name}"? This will replace ALL current data. This cannot be undone.`,
-                                )
+                                !window.confirm(msg.confirm_import_db({ name: file.name }))
                             )
                                 return;
                             importing = true;
@@ -861,12 +847,12 @@
                                 const backend = getBackend();
                                 if (!backend.importDatabase) {
                                     throw new Error(
-                                        "Import not supported by this backend",
+                                        msg.error_import_not_supported(),
                                     );
                                 }
                                 await backend.importDatabase(data);
                                 toast.success(
-                                    "Database imported. Reloading...",
+                                    msg.toast_database_imported_reloading(),
                                 );
                                 setTimeout(() => window.location.reload(), 500);
                             } catch (e) {
@@ -880,7 +866,7 @@
                         input.click();
                     }}
                 >
-                    {importing ? "Importing..." : "Import .db"}
+                    {importing ? msg.state_importing() : msg.btn_import_dot_db()}
                 </Button>
             </div>
         </Card.Content>
@@ -889,20 +875,19 @@
     <!-- ML Classification -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>ML Classification</Card.Title>
+            <Card.Title>{msg.settings_ml_classification()}</Card.Title>
             <Card.Description
-                >Use in-browser machine learning to auto-classify imported
-                transactions.</Card.Description
+                >{msg.settings_ml_classification_desc()}</Card.Description
             >
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium">
-                        Enable ML-powered classification
+                        {msg.settings_ml_enable()}
                     </p>
                     <p class="text-sm text-muted-foreground">
-                        Shows a "Classify with AI" button in import dialogs.
+                        {msg.settings_ml_enable_desc()}
                     </p>
                 </div>
                 <Switch
@@ -915,10 +900,10 @@
                 <Separator />
                 <div class="space-y-2">
                     <label for="ml-threshold" class="text-sm font-medium">
-                        Confidence threshold: {Math.round(
+                        {msg.settings_ml_confidence({ percent: String(Math.round(
                             (settings.settings.mlConfidenceThreshold ?? 0.5) *
                                 100,
-                        )}%
+                        )) })}
                     </label>
                     <input
                         id="ml-threshold"
@@ -936,17 +921,13 @@
                         class="w-full accent-primary"
                     />
                     <p class="text-xs text-muted-foreground">
-                        Suggestions below this confidence are discarded. Higher
-                        = fewer but more accurate suggestions.
+                        {msg.settings_ml_confidence_desc()}
                     </p>
                 </div>
                 <Separator />
                 <div class="space-y-2">
                     <p class="text-xs text-muted-foreground">
-                        Models (~70 MB total) are downloaded from HuggingFace on
-                        first use and cached in the browser. Classification runs
-                        entirely in your browser — no data is sent to external
-                        servers.
+                        {msg.settings_ml_models_info()}
                     </p>
                     <Button
                         variant="outline"
@@ -963,15 +944,15 @@
                                 }
                                 toast.success(
                                     deleted > 0
-                                        ? "Cached models cleared"
-                                        : "No cached models found",
+                                        ? msg.toast_cached_models_cleared()
+                                        : msg.toast_no_cached_models(),
                                 );
                             } catch {
-                                toast.error("Failed to clear cached models");
+                                toast.error(msg.toast_failed_clear_cache());
                             }
                         }}
                     >
-                        Clear cached models
+                        {msg.settings_ml_clear_cache()}
                     </Button>
                 </div>
             {/if}
@@ -983,25 +964,25 @@
         <Card.Header>
             <div class="flex items-center justify-between">
                 <div>
-                    <Card.Title>Currency Asset Types</Card.Title>
+                    <Card.Title>{msg.settings_currency_asset_types()}</Card.Title>
                     <Card.Description
-                        >Override the auto-detected asset type for currencies. This affects which rate source is used for exchange rate sync.</Card.Description
+                        >{msg.settings_currency_asset_types_desc()}</Card.Description
                     >
                 </div>
                 {#if currencies.filter((c) => !c.is_hidden).length > 0}
                     <Button variant="outline" size="sm" onclick={() => (assetTypesOpen = !assetTypesOpen)}>
-                        {assetTypesOpen ? "Hide" : "Show"} ({currencies.filter((c) => !c.is_hidden).length}){#if assetTypeEdits.size > 0} &middot; {assetTypeEdits.size} modified{/if}
+                        {assetTypesOpen ? msg.btn_hide() : msg.btn_show()} ({currencies.filter((c) => !c.is_hidden).length}){#if assetTypeEdits.size > 0} &middot; {msg.settings_modified_count({ count: assetTypeEdits.size })}{/if}
                     </Button>
                 {/if}
             </div>
         </Card.Header>
         {#if currencies.filter((c) => !c.is_hidden).length === 0}
             <Card.Content>
-                <p class="text-muted-foreground text-sm">No currencies found. Create currencies first.</p>
+                <p class="text-muted-foreground text-sm">{msg.empty_no_currencies_found()}</p>
             </Card.Content>
         {:else if assetTypesOpen}
             <Card.Content class="space-y-3">
-                <ListFilter bind:value={assetTypeSearch} placeholder="Filter currencies..." />
+                <ListFilter bind:value={assetTypeSearch} placeholder={msg.placeholder_filter_currencies()} />
                 <div class="max-h-[400px] overflow-y-auto space-y-2">
                     {#each visibleCurrencies as cur (cur.code)}
                         {@const currentType = assetTypeEdits.get(cur.code) ?? cur.asset_type}
@@ -1018,7 +999,7 @@
                                 }
                             }}>
                                 <Select.Trigger class="h-8 text-sm">
-                                    {ASSET_TYPES.find((at) => at.value === currentType)?.label ?? "Unclassified"}
+                                    {ASSET_TYPES.find((at) => at.value === currentType)?.label ?? msg.asset_type_unclassified()}
                                 </Select.Trigger>
                                 <Select.Content>
                                     {#each ASSET_TYPES as at (at.value)}
@@ -1027,21 +1008,21 @@
                                 </Select.Content>
                             </Select.Root>
                             {#if assetTypeEdits.has(cur.code)}
-                                <span class="text-xs text-yellow-500">modified</span>
+                                <span class="text-xs text-yellow-500">{msg.label_modified()}</span>
                             {/if}
                         </div>
                     {/each}
                     {#if visibleCurrencies.length === 0}
-                        <p class="text-sm text-muted-foreground">No currencies match &ldquo;{assetTypeSearch}&rdquo;.</p>
+                        <p class="text-sm text-muted-foreground">{msg.empty_no_currencies_match({ search: assetTypeSearch })}</p>
                     {/if}
                 </div>
                 {#if assetTypeEdits.size > 0}
                     <div class="flex gap-2">
                         <Button size="sm" onclick={saveAssetTypeOverrides} disabled={savingAssetTypes}>
-                            {savingAssetTypes ? "Saving..." : `Save ${assetTypeEdits.size} change${assetTypeEdits.size > 1 ? "s" : ""}`}
+                            {savingAssetTypes ? msg.state_saving() : msg.settings_save_count({ count: assetTypeEdits.size })}
                         </Button>
                         <Button size="sm" variant="outline" onclick={() => (assetTypeEdits = new Map())}>
-                            Discard
+                            {msg.btn_discard()}
                         </Button>
                     </div>
                 {/if}
@@ -1052,18 +1033,18 @@
     <!-- External Services -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>External Services</Card.Title>
+            <Card.Title>{msg.settings_external_services()}</Card.Title>
             <Card.Description
-                >API keys and configuration for external data providers.</Card.Description
+                >{msg.settings_external_services_desc()}</Card.Description
             >
         </Card.Header>
         <Card.Content>
             <Tabs.Root value="general">
                 <Tabs.List>
-                    <Tabs.Trigger value="general">General</Tabs.Trigger>
-                    <Tabs.Trigger value="fiat">Fiat</Tabs.Trigger>
-                    <Tabs.Trigger value="stock">Stocks</Tabs.Trigger>
-                    <Tabs.Trigger value="crypto">Crypto</Tabs.Trigger>
+                    <Tabs.Trigger value="general">{msg.settings_tab_general()}</Tabs.Trigger>
+                    <Tabs.Trigger value="fiat">{msg.settings_tab_fiat()}</Tabs.Trigger>
+                    <Tabs.Trigger value="stock">{msg.settings_tab_stocks()}</Tabs.Trigger>
+                    <Tabs.Trigger value="crypto">{msg.settings_tab_crypto()}</Tabs.Trigger>
                 </Tabs.List>
 
                 <Tabs.Content value="general" class="space-y-4">
@@ -1071,11 +1052,10 @@
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-sm font-medium">
-                                    dprice Price Database
+                                    {msg.settings_dprice()}
                                 </p>
                                 <p class="text-sm text-muted-foreground">
-                                    Dedicated price DB — syncs from ECB,
-                                    CryptoCompare, DefiLlama, and Binance.
+                                    {msg.settings_dprice_desc()}
                                 </p>
                             </div>
                             <Switch
@@ -1088,36 +1068,30 @@
                         {#if isDpriceActive(settings.settings.dpriceMode)}
                             {#if isTauri}
                                 <div class="space-y-2">
-                                    <span class="text-sm font-medium">Mode</span>
+                                    <span class="text-sm font-medium">{msg.settings_dprice_mode()}</span>
                                     <Select.Root type="single" value={settings.settings.dpriceMode} onValueChange={(val) => handleDpriceModeChange(val as DpriceMode)}>
                                         <Select.Trigger class="w-60">
-                                            {settings.settings.dpriceMode === "integrated" ? "Integrated (app-managed DB)" : settings.settings.dpriceMode === "local" ? "Local (shared CLI DB)" : "HTTP API (external server)"}
+                                            {settings.settings.dpriceMode === "integrated" ? msg.settings_dprice_integrated() : settings.settings.dpriceMode === "local" ? msg.settings_dprice_local() : msg.settings_dprice_http()}
                                         </Select.Trigger>
                                         <Select.Content>
-                                            <Select.Item value="integrated">Integrated (app-managed DB)</Select.Item>
-                                            <Select.Item value="local">Local (shared CLI DB)</Select.Item>
-                                            <Select.Item value="http">HTTP API (external server)</Select.Item>
+                                            <Select.Item value="integrated">{msg.settings_dprice_integrated()}</Select.Item>
+                                            <Select.Item value="local">{msg.settings_dprice_local()}</Select.Item>
+                                            <Select.Item value="http">{msg.settings_dprice_http()}</Select.Item>
                                         </Select.Content>
                                     </Select.Root>
                                     <p class="text-xs text-muted-foreground">
                                         {#if settings.settings.dpriceMode === "integrated"}
-                                            Uses a co-located database managed
-                                            by the app.
+                                            {msg.settings_dprice_integrated_desc()}
                                         {:else if settings.settings.dpriceMode === "local"}
-                                            Shares the database with the <code
-                                                >dprice</code
-                                            > CLI tool.
+                                            {msg.settings_dprice_local_desc()}
                                         {:else if settings.settings.dpriceMode === "http"}
-                                            Connects to an external <code
-                                                >dprice serve</code
-                                            > instance.
+                                            {msg.settings_dprice_http_desc()}
                                         {/if}
                                     </p>
                                 </div>
                             {:else}
                                 <p class="text-xs text-muted-foreground">
-                                    Using HTTP API mode. Configure the server
-                                    URL below.
+                                    {msg.settings_dprice_http_mode_hint()}
                                 </p>
                             {/if}
                             {#if settings.settings.dpriceMode === "http"}
@@ -1125,7 +1099,7 @@
                                     <label
                                         for="dprice-url"
                                         class="text-sm font-medium"
-                                        >Server URL</label
+                                        >{msg.settings_dprice_server_url()}</label
                                     >
                                     <Input
                                         id="dprice-url"
@@ -1146,22 +1120,19 @@
                             {#if settings.settings.dpriceMode === "local" && dpriceLocalPath}
                                 <div class="rounded-md border bg-muted/50 p-3">
                                     <p class="text-xs text-muted-foreground">
-                                        Database path: <code
-                                            >{dpriceLocalPath}</code
-                                        >
+                                        {msg.settings_dprice_db_path({ path: dpriceLocalPath ?? "" })}
                                     </p>
                                 </div>
                             {/if}
                             <div class="space-y-2">
                                 {#if dpriceLoading}
                                     <p class="text-sm text-muted-foreground">
-                                        Loading status...
+                                        {msg.settings_dprice_loading()}
                                     </p>
                                 {:else if dpriceHealth}
                                     <p class="text-sm">
-                                        <span class="font-medium">Status:</span>
-                                        {dpriceHealth.assets.toLocaleString()} assets,
-                                        {dpriceHealth.prices.toLocaleString()} prices
+                                        <span class="font-medium">{msg.label_status()}:</span>
+                                        {msg.settings_dprice_status_info({ assets: dpriceHealth.assets.toLocaleString(), prices: dpriceHealth.prices.toLocaleString() })}
                                     </p>
                                     {#if dpriceLatest}
                                         {@const days = dpriceStaleDays()}
@@ -1169,31 +1140,27 @@
                                             <p
                                                 class="text-sm text-amber-600 dark:text-amber-400"
                                             >
-                                                Data is stale (last update: {dpriceLatest},
-                                                {days} days ago)
+                                                {msg.settings_dprice_stale({ date: dpriceLatest ?? "", days: String(days) })}
                                             </p>
                                         {:else}
                                             <p
                                                 class="text-sm text-muted-foreground"
                                             >
-                                                Last updated: {dpriceLatest}{days !==
-                                                null
-                                                    ? ` (${days === 0 ? "today" : days === 1 ? "1 day ago" : `${days} days ago`})`
-                                                    : ""}
+                                                {days !== null
+                                                    ? msg.settings_dprice_last_updated_ago({ date: dpriceLatest ?? "", ago: days === 0 ? msg.settings_dprice_today() : days === 1 ? msg.settings_dprice_one_day_ago() : msg.settings_dprice_days_ago({ days: String(days) }) })
+                                                    : msg.settings_dprice_last_updated({ date: dpriceLatest ?? "" })}
                                             </p>
                                         {/if}
                                     {:else}
                                         <p
                                             class="text-sm text-muted-foreground"
                                         >
-                                            No price data yet. Run a sync to
-                                            populate.
+                                            {msg.settings_dprice_no_data()}
                                         </p>
                                     {/if}
                                 {:else}
                                     <p class="text-sm text-muted-foreground">
-                                        Could not load dprice status. Is the
-                                        database accessible?
+                                        {msg.settings_dprice_unavailable()}
                                     </p>
                                 {/if}
                             </div>
@@ -1204,7 +1171,7 @@
                                     disabled={testResults.dprice?.status === 'testing'}
                                     onclick={() => handleTest('dprice', () => testDprice(() => dpriceClient().health()))}
                                 >
-                                    {testResults.dprice?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.dprice?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                                 {#if testResults.dprice?.status === 'success'}
                                     <span class="text-xs text-green-600 dark:text-green-400">{testResults.dprice.message ?? 'OK'}</span>
@@ -1228,8 +1195,8 @@
                                         {taskQueue.isActive(
                                             "dprice-sync-latest",
                                         )
-                                            ? "Syncing..."
-                                            : "Sync Latest"}
+                                            ? msg.state_syncing()
+                                            : msg.btn_sync_latest()}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -1243,8 +1210,8 @@
                                         onclick={handleDpriceSyncFull}
                                     >
                                         {taskQueue.isActive("dprice-sync-full")
-                                            ? "Syncing..."
-                                            : "Full Sync"}
+                                            ? msg.state_syncing()
+                                            : msg.btn_full_sync()}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -1253,8 +1220,8 @@
                                         onclick={handleDpriceExport}
                                     >
                                         {dpriceExporting
-                                            ? "Exporting..."
-                                            : "Export DB"}
+                                            ? msg.state_exporting()
+                                            : msg.btn_export_db()}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -1263,8 +1230,8 @@
                                         onclick={handleDpriceImport}
                                     >
                                         {dpriceImporting
-                                            ? "Importing..."
-                                            : "Import DB"}
+                                            ? msg.state_importing()
+                                            : msg.btn_import_db()}
                                     </Button>
                                 </div>
                             {/if}
@@ -1278,19 +1245,19 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.frankfurterEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ frankfurterEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.frankfurterEnabled === false}
                          class:pointer-events-none={settings.settings.frankfurterEnabled === false}>
                         <div class="flex items-center gap-2">
                             <p class="text-sm text-muted-foreground">
-                                Fiat exchange rates (no key required)
+                                {msg.settings_fiat_no_key()}
                             </p>
                             <Button variant="outline" size="sm"
                                 disabled={testResults.frankfurter?.status === 'testing'}
                                 onclick={() => handleTest('frankfurter', testFrankfurter)}>
-                                {testResults.frankfurter?.status === 'testing' ? 'Testing...' : 'Test'}
+                                {testResults.frankfurter?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                             </Button>
                             {#if testResults.frankfurter?.status === 'success'}
                                 <span class="text-xs text-green-600 dark:text-green-400">{testResults.frankfurter.message ?? 'OK'}</span>
@@ -1307,7 +1274,7 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.finnhubEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ finnhubEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.finnhubEnabled === false}
@@ -1332,7 +1299,7 @@
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.finnhub?.status === 'testing'}
                                     onclick={() => handleTest('finnhub', () => testFinnhub(settings.finnhubApiKey))}>
-                                    {testResults.finnhub?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.finnhub?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
                             {#if testResults.finnhub?.status === 'success'}
@@ -1341,12 +1308,7 @@
                                 <span class="text-xs text-destructive">{testResults.finnhub.message}</span>
                             {/if}
                             <p class="text-xs text-muted-foreground">
-                                Get a free key at <a
-                                    href="https://finnhub.io"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >finnhub.io</a
-                                >. Required for stock prices (AAPL, GOOG, etc.).
+                                {@html msg.settings_finnhub_hint()}
                             </p>
                         </div>
                     </div>
@@ -1359,7 +1321,7 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.coingeckoEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ coingeckoEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.coingeckoEnabled === false}
@@ -1385,7 +1347,7 @@
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.coingecko?.status === 'testing'}
                                     onclick={() => handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey, settings.settings.coingeckoPro))}>
-                                    {testResults.coingecko?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.coingecko?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
                             <div class="flex items-center gap-2">
@@ -1394,7 +1356,7 @@
                                     checked={settings.settings.coingeckoPro ?? false}
                                     onCheckedChange={(checked) => settings.update({ coingeckoPro: checked })}
                                 />
-                                <label for="coingecko-pro" class="text-sm">Pro API</label>
+                                <label for="coingecko-pro" class="text-sm">{msg.label_pro_api()}</label>
                             </div>
                             {#if testResults.coingecko?.status === 'success'}
                                 <span class="text-xs text-green-600 dark:text-green-400">{testResults.coingecko.message ?? 'OK'}</span>
@@ -1403,20 +1365,9 @@
                             {/if}
                             <p class="text-xs text-muted-foreground">
                                 {#if settings.settings.coingeckoPro}
-                                    Using Pro endpoint (<a
-                                        href="https://www.coingecko.com/en/api/pricing"
-                                        target="_blank"
-                                        class="underline hover:text-foreground"
-                                        >pro-api.coingecko.com</a
-                                    >). 500 req/min.
+                                    {@html msg.settings_coingecko_pro_hint()}
                                 {:else}
-                                    Get a free demo key at <a
-                                        href="https://www.coingecko.com/en/api"
-                                        target="_blank"
-                                        class="underline hover:text-foreground"
-                                        >coingecko.com</a
-                                    >. Required for crypto rates. Fiat rates work
-                                    without a key.
+                                    {@html msg.settings_coingecko_demo_hint()}
                                 {/if}
                             </p>
                         </div>
@@ -1430,7 +1381,7 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.cryptoCompareEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ cryptoCompareEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.cryptoCompareEnabled === false}
@@ -1457,7 +1408,7 @@
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.cryptocompare?.status === 'testing'}
                                     onclick={() => handleTest('cryptocompare', () => testCryptoCompare(settings.cryptoCompareApiKey))}>
-                                    {testResults.cryptocompare?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.cryptocompare?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
                             {#if testResults.cryptocompare?.status === 'success'}
@@ -1466,12 +1417,7 @@
                                 <span class="text-xs text-destructive">{testResults.cryptocompare.message}</span>
                             {/if}
                             <p class="text-xs text-muted-foreground">
-                                Get a free key at <a
-                                    href="https://www.cryptocompare.com/cryptopian/api-keys"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >cryptocompare.com</a
-                                >. Optional fallback for crypto historical rates.
+                                {@html msg.settings_cryptocompare_hint()}
                             </p>
                         </div>
                     </div>
@@ -1484,19 +1430,19 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.defillamaEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ defillamaEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.defillamaEnabled === false}
                          class:pointer-events-none={settings.settings.defillamaEnabled === false}>
                         <div class="flex items-center gap-2">
                             <p class="text-sm text-muted-foreground">
-                                Default crypto rate source (no key required)
+                                {msg.settings_defillama_no_key()}
                             </p>
                             <Button variant="outline" size="sm"
                                 disabled={testResults.defillama?.status === 'testing'}
                                 onclick={() => handleTest('defillama', testDefiLlama)}>
-                                {testResults.defillama?.status === 'testing' ? 'Testing...' : 'Test'}
+                                {testResults.defillama?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                             </Button>
                             {#if testResults.defillama?.status === 'success'}
                                 <span class="text-xs text-green-600 dark:text-green-400">{testResults.defillama.message ?? 'OK'}</span>
@@ -1514,19 +1460,19 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.binanceRatesEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ binanceRatesEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.binanceRatesEnabled === false}
                          class:pointer-events-none={settings.settings.binanceRatesEnabled === false}>
                         <div class="flex items-center gap-2">
                             <p class="text-sm text-muted-foreground">
-                                Crypto rates via public API (no key required)
+                                {msg.settings_binance_no_key()}
                             </p>
                             <Button variant="outline" size="sm"
                                 disabled={testResults.binance?.status === 'testing'}
                                 onclick={() => handleTest('binance', testBinance)}>
-                                {testResults.binance?.status === 'testing' ? 'Testing...' : 'Test'}
+                                {testResults.binance?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                             </Button>
                             {#if testResults.binance?.status === 'success'}
                                 <span class="text-xs text-green-600 dark:text-green-400">{testResults.binance.message ?? 'OK'}</span>
@@ -1544,7 +1490,7 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.etherscanEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ etherscanEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.etherscanEnabled === false}
@@ -1570,7 +1516,7 @@
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.etherscan?.status === 'testing'}
                                     onclick={() => handleTest('etherscan', () => testEtherscan(settings.etherscanApiKey))}>
-                                    {testResults.etherscan?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.etherscan?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
                             {#if testResults.etherscan?.status === 'success'}
@@ -1579,12 +1525,7 @@
                                 <span class="text-xs text-destructive">{testResults.etherscan.message}</span>
                             {/if}
                             <p class="text-xs text-muted-foreground">
-                                Get a free API key at <a
-                                    href="https://etherscan.io/apis"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >etherscan.io</a
-                                >. One key works for most EVM chains.
+                                {@html msg.settings_etherscan_hint()}
                             </p>
                         </div>
                     </div>
@@ -1597,7 +1538,7 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.routescanEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ routescanEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.routescanEnabled === false}
@@ -1624,7 +1565,7 @@
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.routescan?.status === 'testing'}
                                     onclick={() => handleTest('routescan', () => testRoutescan(settings.settings.routescanApiKey || undefined))}>
-                                    {testResults.routescan?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.routescan?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
                             {#if testResults.routescan?.status === 'success'}
@@ -1633,13 +1574,7 @@
                                 <span class="text-xs text-destructive">{testResults.routescan.message}</span>
                             {/if}
                             <p class="text-xs text-muted-foreground">
-                                Used for BSC, Base, Optimism, and Avalanche (free at <a
-                                    href="https://routescan.io"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >routescan.io</a
-                                >). Leave blank for keyless access (slower rate
-                                limit).
+                                {@html msg.settings_routescan_hint()}
                             </p>
                         </div>
                     </div>
@@ -1652,7 +1587,7 @@
                         <div class="flex items-center gap-2">
                             <Switch checked={settings.settings.theGraphEnabled !== false}
                                 onCheckedChange={(c) => settings.update({ theGraphEnabled: c })} />
-                            <label class="text-sm text-muted-foreground">Enabled</label>
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
                         </div>
                     </div>
                     <div class:opacity-50={settings.settings.theGraphEnabled === false}
@@ -1678,7 +1613,7 @@
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.thegraph?.status === 'testing'}
                                     onclick={() => handleTest('thegraph', () => testTheGraph(settings.theGraphApiKey))}>
-                                    {testResults.thegraph?.status === 'testing' ? 'Testing...' : 'Test'}
+                                    {testResults.thegraph?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
                             {#if testResults.thegraph?.status === 'success'}
@@ -1687,12 +1622,7 @@
                                 <span class="text-xs text-destructive">{testResults.thegraph.message}</span>
                             {/if}
                             <p class="text-xs text-muted-foreground">
-                                Get a free key at <a
-                                    href="https://thegraph.com/studio/apikeys/"
-                                    target="_blank"
-                                    class="underline hover:text-foreground"
-                                    >thegraph.com/studio</a
-                                >. Required for Uniswap pool enrichment.
+                                {@html msg.settings_thegraph_hint()}
                             </p>
                         </div>
                     </div>
@@ -1715,12 +1645,7 @@
                             oninput={(e: Event) => settings.update({ heliusApiKey: (e.target as HTMLInputElement).value })}
                         />
                         <p class="text-xs text-muted-foreground">
-                            Get a free key at <a
-                                href="https://dev.helius.xyz/"
-                                target="_blank"
-                                class="underline hover:text-foreground"
-                                >dev.helius.xyz</a
-                            >. Required for Solana transaction sync (100k credits/day free tier).
+                            {@html msg.settings_helius_hint()}
                         </p>
                     </div>
                 </Tabs.Content>
@@ -1733,10 +1658,9 @@
         <Card.Header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <Card.Title>Account Paths</Card.Title>
+                    <Card.Title>{msg.settings_account_paths()}</Card.Title>
                     <Card.Description
-                        >Customize the account paths used by future imports.
-                        Existing accounts are not automatically renamed.</Card.Description
+                        >{msg.settings_account_paths_desc()}</Card.Description
                     >
                 </div>
                 <div class="flex items-center gap-2">
@@ -1746,7 +1670,7 @@
                         onclick={countAffectedAccounts}
                         disabled={pathRenaming}
                     >
-                        Check Existing
+                        {msg.settings_check_existing()}
                     </Button>
                     {#if renameCounts.size > 0}
                         <Button
@@ -1756,8 +1680,8 @@
                             disabled={pathRenaming}
                         >
                             {pathRenaming
-                                ? "Renaming..."
-                                : `Rename ${[...renameCounts.values()].reduce((a, b) => a + b, 0)} accounts`}
+                                ? msg.state_renaming()
+                                : msg.settings_rename_accounts({ count: [...renameCounts.values()].reduce((a, b) => a + b, 0) })}
                         </Button>
                     {/if}
                 </div>
@@ -1784,7 +1708,7 @@
                                     section.keys.map((k) => k.key),
                                 )}
                         >
-                            Reset
+                            {msg.btn_reset()}
                         </Button>
                     </div>
                     <p class="text-xs text-muted-foreground mb-2">
@@ -1848,10 +1772,9 @@
     <!-- Default Accounts -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Default Accounts</Card.Title>
+            <Card.Title>{msg.settings_default_accounts()}</Card.Title>
             <Card.Description
-                >Create a starter chart of accounts. Existing accounts are
-                preserved.</Card.Description
+                >{msg.settings_default_accounts_desc()}</Card.Description
             >
         </Card.Header>
         <Card.Content>
@@ -1859,12 +1782,12 @@
                 <div class="flex items-center gap-3">
                     <Select.Root type="single" bind:value={defaultSet}>
                         <Select.Trigger>
-                            {defaultSet === "minimal" ? "Minimal (~25)" : defaultSet === "standard" ? "Standard (~45)" : "Comprehensive (~65)"}
+                            {defaultSet === "minimal" ? msg.account_set_minimal() : defaultSet === "standard" ? msg.account_set_standard() : msg.account_set_comprehensive()}
                         </Select.Trigger>
                         <Select.Content>
-                            <Select.Item value="minimal">Minimal (~25)</Select.Item>
-                            <Select.Item value="standard">Standard (~45)</Select.Item>
-                            <Select.Item value="comprehensive">Comprehensive (~65)</Select.Item>
+                            <Select.Item value="minimal">{msg.account_set_minimal()}</Select.Item>
+                            <Select.Item value="standard">{msg.account_set_standard()}</Select.Item>
+                            <Select.Item value="comprehensive">{msg.account_set_comprehensive()}</Select.Item>
                         </Select.Content>
                     </Select.Root>
                 </div>
@@ -1874,7 +1797,7 @@
                     onclick={handleCreateDefaults}
                     disabled={creatingDefaults}
                 >
-                    {creatingDefaults ? "Creating..." : "Create Accounts"}
+                    {creatingDefaults ? msg.state_creating() : msg.settings_create_accounts()}
                 </Button>
             </div>
         </Card.Content>
@@ -1883,17 +1806,17 @@
     <!-- Data Management -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Data Management</Card.Title>
+            <Card.Title>{msg.settings_data_management()}</Card.Title>
             <Card.Description
-                >Clear stored data. These actions cannot be undone.</Card.Description
+                >{msg.settings_data_management_desc()}</Card.Description
             >
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Clear Exchange Rates</p>
+                    <p class="text-sm font-medium">{msg.settings_clear_exchange_rates()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Remove all synced and manual exchange rates.
+                        {msg.settings_clear_exchange_rates_desc()}
                     </p>
                 </div>
                 <Button
@@ -1903,17 +1826,16 @@
                     disabled={clearing}
                 >
                     {taskQueue.isActive("clear-exchange-rates")
-                        ? "Clearing..."
-                        : "Clear Rates"}
+                        ? msg.state_clearing()
+                        : msg.settings_clear_rates_btn()}
                 </Button>
             </div>
             <Separator />
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Clear Ledger Data</p>
+                    <p class="text-sm font-medium">{msg.settings_clear_ledger_data()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Remove all accounts, transactions, and currencies.
-                        Exchange rates, sources, and settings are preserved.
+                        {msg.settings_clear_ledger_data_desc()}
                     </p>
                 </div>
                 <Button
@@ -1923,17 +1845,16 @@
                     disabled={clearing}
                 >
                     {taskQueue.isActive("clear-ledger-data")
-                        ? "Clearing..."
-                        : "Clear Ledger"}
+                        ? msg.state_clearing()
+                        : msg.settings_clear_ledger_btn()}
                 </Button>
             </div>
             <Separator />
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Clear All Data</p>
+                    <p class="text-sm font-medium">{msg.settings_clear_all_data()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Delete all accounts, transactions, currencies, exchange
-                        rates, and reset settings.
+                        {msg.settings_clear_all_data_desc()}
                     </p>
                 </div>
                 <Button
@@ -1943,8 +1864,8 @@
                     disabled={clearing}
                 >
                     {taskQueue.isActive("clear-all-data")
-                        ? "Clearing..."
-                        : "Clear All Data"}
+                        ? msg.state_clearing()
+                        : msg.settings_clear_all_data()}
                 </Button>
             </div>
         </Card.Content>
@@ -1953,9 +1874,9 @@
     {#if import.meta.env.DEV}
         <Card.Root>
             <Card.Header>
-                <Card.Title>Development</Card.Title>
+                <Card.Title>{msg.settings_development()}</Card.Title>
                 <Card.Description
-                    >Debug tools (only visible in dev mode).</Card.Description
+                    >{msg.settings_development_desc()}</Card.Description
                 >
             </Card.Header>
             <Card.Content>
@@ -1965,7 +1886,7 @@
                         onCheckedChange={(v) =>
                             settings.update({ debugMode: v })}
                     />
-                    Debug Mode
+                    {msg.settings_debug_mode()}
                 </label>
             </Card.Content>
         </Card.Root>

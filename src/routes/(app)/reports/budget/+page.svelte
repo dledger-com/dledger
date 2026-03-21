@@ -13,6 +13,7 @@
   import type { BudgetReport } from "$lib/types/index.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   const now = new Date();
@@ -42,7 +43,7 @@
       const backend = getBackend();
       const budgets = await backend.listBudgets();
       if (budgets.length === 0) {
-        error = "No budgets configured. Add budgets first.";
+        error = m.report_no_budgets_configured();
         return;
       }
       report = await computeBudgetReport(backend, budgets, fromDate, toDate);
@@ -72,9 +73,9 @@
   }
 
   function statusBadge(percent: number): { variant: "default" | "secondary" | "destructive"; label: string } {
-    if (percent >= 100) return { variant: "destructive", label: "Over budget" };
-    if (percent >= 80) return { variant: "secondary", label: "Near limit" };
-    return { variant: "default", label: "On track" };
+    if (percent >= 100) return { variant: "destructive", label: m.budget_over() };
+    if (percent >= 80) return { variant: "secondary", label: m.budget_near_limit() };
+    return { variant: "default", label: m.budget_on_track() };
   }
 
   onMount(generate);
@@ -83,15 +84,15 @@
 <div class="space-y-6">
   <div class="flex items-end gap-4 flex-wrap">
     <div class="space-y-2">
-      <label for="from" class="text-sm font-medium">From</label>
+      <label for="from" class="text-sm font-medium">{m.label_from()}</label>
       <Input id="from" type="date" bind:value={fromDate} class="w-48" />
     </div>
     <div class="space-y-2">
-      <label for="to" class="text-sm font-medium">To</label>
+      <label for="to" class="text-sm font-medium">{m.label_to()}</label>
       <Input id="to" type="date" bind:value={toDate} class="w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
-      {loading ? "Loading..." : "Generate"}
+      {loading ? m.state_loading_report() : m.btn_generate()}
     </Button>
     <Button variant="outline" onclick={() => { setMTD(); generate(); }}>MTD</Button>
     <Button variant="outline" onclick={() => { setYTD(); generate(); }}>YTD</Button>
@@ -106,8 +107,8 @@
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
           {error}
-          {#if error.includes("No budgets")}
-            <a href="/budgets" class="underline hover:text-foreground ml-1">Add budgets</a>
+          {#if error === m.report_no_budgets_configured()}
+            <a href="/budgets" class="underline hover:text-foreground ml-1">{m.report_add_budgets()}</a>
           {/if}
         </p>
       </Card.Content>
@@ -117,13 +118,13 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>Account Pattern</SortableHeader>
-            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>Period</SortableHeader>
-            <SortableHeader active={sort.key === "budget"} direction={sort.direction} onclick={() => sort.toggle("budget")} class="text-right">Budget</SortableHeader>
-            <SortableHeader active={sort.key === "actual"} direction={sort.direction} onclick={() => sort.toggle("actual")} class="text-right">Actual</SortableHeader>
-            <SortableHeader active={sort.key === "remaining"} direction={sort.direction} onclick={() => sort.toggle("remaining")} class="text-right">Remaining</SortableHeader>
-            <Table.Head class="w-48">Progress</Table.Head>
-            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")}>Status</SortableHeader>
+            <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>{m.label_account_pattern()}</SortableHeader>
+            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>{m.label_period()}</SortableHeader>
+            <SortableHeader active={sort.key === "budget"} direction={sort.direction} onclick={() => sort.toggle("budget")} class="text-right">{m.report_budget()}</SortableHeader>
+            <SortableHeader active={sort.key === "actual"} direction={sort.direction} onclick={() => sort.toggle("actual")} class="text-right">{m.label_actual()}</SortableHeader>
+            <SortableHeader active={sort.key === "remaining"} direction={sort.direction} onclick={() => sort.toggle("remaining")} class="text-right">{m.label_remaining()}</SortableHeader>
+            <Table.Head class="w-48">{m.report_progress()}</Table.Head>
+            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")}>{m.label_status()}</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -169,7 +170,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No budget comparisons for this period.
+          {m.report_no_budget_comparisons()}
         </p>
       </Card.Content>
     </Card.Root>

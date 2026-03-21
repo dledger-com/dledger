@@ -18,6 +18,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
+  import * as m from "$paraglide/messages.js";
 
   let {
     open = $bindable(false),
@@ -68,7 +69,7 @@
         const ledgerFiles = filterLedgerFiles(fileMap);
         fileCount = ledgerFiles.length;
         if (ledgerFiles.length === 0) {
-          toast.error("No ledger files found in archive");
+          toast.error(m.toast_no_ledger_files_in_archive());
           fileContent = "";
           return;
         }
@@ -78,7 +79,7 @@
         }
         fileContent = parts.join("\n\n");
       } catch (err) {
-        toast.error(`Failed to read zip: ${err}`);
+        toast.error(m.toast_zip_read_failed({ message: String(err) }));
         fileContent = "";
       }
     } else if (files.length > 1) {
@@ -105,7 +106,7 @@
 
   function handleImport() {
     if (!fileContent.trim()) {
-      toast.error("No ledger data to import");
+      toast.error(m.error_no_ledger_data());
       return;
     }
 
@@ -114,17 +115,17 @@
 
     const taskId = taskQueue.enqueue({
       key: "ledger-import",
-      label: "Ledger Import",
-      description: "Importing ledger file",
+      label: m.task_ledger_import(),
+      description: m.task_ledger_import_desc(),
       run: async (ctx) => {
         const backend = getBackend();
         const importResult = await backend.importLedgerFile(contentSnapshot, formatSnapshot, {
           signal: ctx.signal,
           onProgress: (p) => ctx.reportProgress(p),
         });
-        const parts = [`${importResult.transactions_imported} transaction(s) imported`];
+        const parts = [m.toast_ledger_transactions_imported({ count: importResult.transactions_imported })];
         if (importResult.duplicates_skipped > 0) {
-          parts.push(`${importResult.duplicates_skipped} duplicate(s) skipped`);
+          parts.push(m.toast_ledger_duplicates_skipped({ count: importResult.duplicates_skipped }));
         }
         toast.success(parts.join(", "));
         if (importResult.transactions_imported > 0) invalidate("journal", "accounts", "reports");
@@ -150,7 +151,7 @@
     if (taskId) {
       open = false;
     } else {
-      toast.error("An import is already in progress");
+      toast.error(m.error_import_in_progress());
     }
   }
 
@@ -182,9 +183,9 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="w-fit max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
-      <Dialog.Title>Plain-Text Accounting Import</Dialog.Title>
+      <Dialog.Title>{m.dialog_ledger_import()}</Dialog.Title>
       <Dialog.Description>
-        Import from ledger files (.ledger, .beancount, .journal, .hledger), a zip archive, or paste content directly.
+        {m.dialog_ledger_import_desc()}
       </Dialog.Description>
     </Dialog.Header>
 
@@ -195,7 +196,7 @@
             class="flex cursor-pointer items-center gap-2 rounded-md border border-input px-4 py-2 text-sm hover:bg-accent"
           >
             <Upload class="h-4 w-4" />
-            <span>{fileName || "Choose file"}</span>
+            <span>{fileName || m.btn_choose_file()}</span>
             <input
               type="file"
               accept=".ledger,.beancount,.journal,.hledger,.txt,.zip"
@@ -210,14 +211,14 @@
               {fileName}
             </span>
             {#if fileCount > 1}
-              <Badge variant="secondary">{fileCount} files</Badge>
+              <Badge variant="secondary">{m.label_files_count({ count: fileCount })}</Badge>
             {/if}
           {/if}
         </div>
 
         {#if detectedFormat}
           <div class="flex items-center gap-3 rounded-md border p-3">
-            <span class="text-sm text-muted-foreground">Detected format: <strong>{formatLabel(detectedFormat)}</strong></span>
+            <span class="text-sm text-muted-foreground">{m.import_detected_format()} <strong>{formatLabel(detectedFormat)}</strong></span>
             <div class="flex gap-1">
               {#each ALL_FORMATS as fmt}
                 <Button
@@ -244,7 +245,7 @@
         <!-- Preview -->
         {#if previewLines.length > 0}
           <div class="rounded-md border bg-muted/50 p-3">
-            <p class="mb-2 text-xs font-medium text-muted-foreground">Preview (first 10 lines)</p>
+            <p class="mb-2 text-xs font-medium text-muted-foreground">{m.import_preview()}</p>
             <pre class="overflow-x-auto text-xs font-mono">{previewLines.join("\n")}</pre>
           </div>
         {/if}
@@ -256,7 +257,7 @@
             disabled={taskQueue.isActive("ledger-import") || !fileContent.trim()}
           >
             <Upload class="mr-2 h-4 w-4" />
-            {taskQueue.isActive("ledger-import") ? "Importing..." : "Import"}
+            {taskQueue.isActive("ledger-import") ? m.state_importing() : m.btn_import()}
           </Button>
         </div>
     </div>

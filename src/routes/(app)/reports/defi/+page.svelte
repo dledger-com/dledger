@@ -11,6 +11,7 @@
   import { getBackend } from "$lib/backend.js";
   import { computeDefiPositions } from "$lib/utils/defi-positions.js";
   import type { ProtocolSummary } from "$lib/utils/defi-positions.js";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -43,11 +44,11 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="asOf" class="text-sm font-medium">As of Date</label>
+      <label for="asOf" class="text-sm font-medium">{m.report_as_of_date()}</label>
       <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
-      {loading ? "Loading..." : "Generate"}
+      {loading ? m.state_loading() : m.btn_generate()}
     </Button>
   </div>
 
@@ -65,7 +66,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No DeFi positions found. Import transactions from DeFi protocols to see positions here.
+          {m.empty_no_defi_positions()}
         </p>
       </Card.Content>
     </Card.Root>
@@ -89,15 +90,15 @@
         <Card.Content class="space-y-4">
           {#if hasSupplies}
             <div>
-              <h3 class="text-sm font-medium text-muted-foreground mb-2">Supplies</h3>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.report_supplies()}</h3>
               <Table.Root>
                 <Table.Header>
                   <Table.Row>
-                    <Table.Head>Currency</Table.Head>
-                    <Table.Head>Account</Table.Head>
-                    <Table.Head class="text-right">Balance</Table.Head>
+                    <Table.Head>{m.label_currency()}</Table.Head>
+                    <Table.Head>{m.label_account()}</Table.Head>
+                    <Table.Head class="text-right">{m.label_balance()}</Table.Head>
                     {#if proto.supplies.some((p) => p.baseValue !== undefined)}
-                      <Table.Head class="text-right">Value ({settings.currency})</Table.Head>
+                      <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
                     {/if}
                   </Table.Row>
                 </Table.Header>
@@ -123,15 +124,15 @@
 
           {#if hasBorrows}
             <div>
-              <h3 class="text-sm font-medium text-muted-foreground mb-2">Borrows</h3>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.report_borrows()}</h3>
               <Table.Root>
                 <Table.Header>
                   <Table.Row>
-                    <Table.Head>Currency</Table.Head>
-                    <Table.Head>Account</Table.Head>
-                    <Table.Head class="text-right">Balance</Table.Head>
+                    <Table.Head>{m.label_currency()}</Table.Head>
+                    <Table.Head>{m.label_account()}</Table.Head>
+                    <Table.Head class="text-right">{m.label_balance()}</Table.Head>
                     {#if proto.borrows.some((p) => p.baseValue !== undefined)}
-                      <Table.Head class="text-right">Value ({settings.currency})</Table.Head>
+                      <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
                     {/if}
                   </Table.Row>
                 </Table.Header>
@@ -157,15 +158,15 @@
 
           {#if hasRewards}
             <div>
-              <h3 class="text-sm font-medium text-muted-foreground mb-2">Rewards</h3>
+              <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.report_rewards()}</h3>
               <Table.Root>
                 <Table.Header>
                   <Table.Row>
-                    <Table.Head>Currency</Table.Head>
-                    <Table.Head>Account</Table.Head>
-                    <Table.Head class="text-right">Balance</Table.Head>
+                    <Table.Head>{m.label_currency()}</Table.Head>
+                    <Table.Head>{m.label_account()}</Table.Head>
+                    <Table.Head class="text-right">{m.label_balance()}</Table.Head>
                     {#if proto.rewards.some((p) => p.baseValue !== undefined)}
-                      <Table.Head class="text-right">Value ({settings.currency})</Table.Head>
+                      <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
                     {/if}
                   </Table.Row>
                 </Table.Header>

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import * as m from "$paraglide/messages.js";
     import * as Card from "$lib/components/ui/card/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -1418,9 +1419,9 @@
     <!-- Import Files -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Import Files</Card.Title>
+            <Card.Title>{m.sources_import_files()}</Card.Title>
             <Card.Description>
-                Import transactions from files. Drop a file or click to choose.
+                {m.sources_import_files_desc()}
                 <span class="mt-2 flex flex-col gap-1.5">
                     <span class="flex flex-wrap items-center gap-1">
                         <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">CSV</span>
@@ -1438,7 +1439,7 @@
                         {/each}
                     </span>
                     <span class="flex flex-wrap items-center gap-1">
-                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">Plain-Text</span>
+                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">{m.sources_plain_text()}</span>
                         {#each ["Beancount", "hledger", "ledger"] as name}
                             <Badge variant="outline">{name}</Badge>
                         {/each}
@@ -1449,7 +1450,7 @@
         <Card.Content>
             <div class="flex items-center gap-3">
                 <Button onclick={handleImportClick}>
-                    <Upload class="mr-2 h-4 w-4" /> Import Files
+                    <Upload class="mr-2 h-4 w-4" /> {m.sources_import_files()}
                 </Button>
                 <input
                     bind:this={fileInputEl}
@@ -1466,8 +1467,8 @@
     <!-- Online Sources -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Online Sources</Card.Title>
-            <Card.Description>Sync data from exchanges and blockchains.</Card.Description>
+            <Card.Title>{m.sources_online()}</Card.Title>
+            <Card.Description>{m.sources_online_desc()}</Card.Description>
         </Card.Header>
         <Card.Content class="space-y-6">
             <!-- Smart input / Add forms -->
@@ -1484,7 +1485,7 @@
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             <Badge variant="secondary">{EXCHANGE_NAMES[addSourceExchangeId]}</Badge>
-                            <span class="text-sm font-medium">Add Exchange Account</span>
+                            <span class="text-sm font-medium">{m.sources_add_exchange_account()}</span>
                         </div>
                         <Button variant="ghost" size="sm" onclick={cancelAdd}>
                             <X class="h-4 w-4" />
@@ -1492,7 +1493,7 @@
                     </div>
                     <Input
                         class="w-full sm:w-60"
-                        placeholder="Label (optional)"
+                        placeholder={m.sources_label_optional()}
                         bind:value={cexNewLabel}
                     />
                     <div class="flex flex-wrap gap-2">
@@ -1500,20 +1501,20 @@
                             class="w-full sm:flex-1"
                             type="password"
                             placeholder={addSourceExchangeId === "coinbase"
-                                ? "API Key Name"
+                                ? m.sources_api_key_name()
                                 : addSourceExchangeId === "volet"
-                                ? "API Name"
-                                : "API Key"}
+                                ? m.sources_api_name()
+                                : m.label_api_key()}
                             bind:value={cexNewApiKey}
                         />
                         <Input
                             class="w-full sm:flex-1"
                             type="password"
                             placeholder={addSourceExchangeId === "coinbase"
-                                ? "EC Private Key (PEM)"
+                                ? m.sources_ec_private_key_pem()
                                 : addSourceExchangeId === "volet"
-                                ? "Security Word"
-                                : "API Secret"}
+                                ? m.sources_security_word()
+                                : m.label_api_secret()}
                             bind:value={cexNewApiSecret}
                         />
                     </div>
@@ -1521,48 +1522,48 @@
                         <Input
                             class="w-full sm:w-64"
                             type="password"
-                            placeholder={addSourceExchangeId === "volet" ? "Account Email" : "API Passphrase"}
+                            placeholder={addSourceExchangeId === "volet" ? m.sources_account_email() : m.label_api_passphrase()}
                             bind:value={cexNewPassphrase}
                         />
                     {/if}
                     <div class="flex flex-wrap gap-2">
                         <div class="space-y-1">
-                            <label for="cex-opened-at" class="text-xs font-medium text-muted-foreground">Opened (optional)</label>
+                            <label for="cex-opened-at" class="text-xs font-medium text-muted-foreground">{m.sources_opened_optional()}</label>
                             <Input id="cex-opened-at" class="w-40" type="date" bind:value={cexNewOpenedAt} />
                         </div>
                         <div class="space-y-1">
-                            <label for="cex-closed-at" class="text-xs font-medium text-muted-foreground">Closed (optional)</label>
+                            <label for="cex-closed-at" class="text-xs font-medium text-muted-foreground">{m.sources_closed_optional()}</label>
                             <Input id="cex-closed-at" class="w-40" type="date" bind:value={cexNewClosedAt} />
                         </div>
                     </div>
                     <Button size="sm" disabled={cexAdding} onclick={addCexAccount}>
                         <Plus class="mr-1 h-4 w-4" />
-                        Add Account
+                        {m.sources_add_account()}
                     </Button>
                 </div>
             {:else if addSourceMode === "blockchain"}
                 <div class="space-y-3 rounded-lg border p-4">
                     <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium">Add EVM Address</span>
+                        <span class="text-sm font-medium">{m.sources_add_evm_address()}</span>
                         <Button variant="ghost" size="sm" onclick={cancelAdd}>
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
                     <div class="flex items-end gap-2">
                         <div class="flex-1 space-y-1">
-                            <label for="new-eth-address" class="text-xs font-medium">Address</label>
+                            <label for="new-eth-address" class="text-xs font-medium">{m.sources_address()}</label>
                             <Input
                                 id="new-eth-address"
-                                placeholder="0x... or xpub"
+                                placeholder={m.sources_evm_placeholder()}
                                 autocomplete="off"
                                 bind:value={newAddress}
                             />
                         </div>
                         <div class="flex-1 space-y-1">
-                            <label for="new-eth-label" class="text-xs font-medium">Label (optional)</label>
+                            <label for="new-eth-label" class="text-xs font-medium">{m.sources_label_optional()}</label>
                             <Input
                                 id="new-eth-label"
-                                placeholder="My Wallet"
+                                placeholder={m.sources_my_wallet()}
                                 bind:value={newLabel}
                             />
                         </div>
@@ -1588,26 +1589,25 @@
                                 <Badge variant="outline" class="border-green-500 text-green-600">{evmDetection.description}</Badge>
                             {/if}
                             {#if evmSingleExists}
-                                <span class="text-xs text-amber-600 dark:text-amber-400">This address is already added</span>
+                                <span class="text-xs text-amber-600 dark:text-amber-400">{m.sources_address_already_added()}</span>
                             {/if}
                         </div>
                     {/if}
                     {#if evmDetection.isPrivate}
                         <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
-                            <p class="font-medium text-amber-800 dark:text-amber-200">Private Key Detected</p>
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
                             <p class="mt-1 text-amber-700 dark:text-amber-300">
-                                dledger will derive the EVM address from it and discard the private material immediately.
-                                Your private key will NOT be stored.
+                                {m.sources_evm_private_key_warning()}
                             </p>
                             <label class="mt-2 flex items-center gap-2">
                                 <input type="checkbox" bind:checked={evmPrivateKeyAck} />
-                                <span class="text-amber-800 dark:text-amber-200">I understand — derive address and continue</span>
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
                             </label>
                         </div>
                         {#if evmDetection.type === "seed"}
                             <div class="flex-1 space-y-1">
-                                <label for="evm-seed-pass" class="text-xs font-medium">Passphrase (optional)</label>
-                                <Input id="evm-seed-pass" type="password" placeholder="Usually empty" autocomplete="off" bind:value={evmSeedPassphrase} />
+                                <label for="evm-seed-pass" class="text-xs font-medium">{m.sources_passphrase_optional()}</label>
+                                <Input id="evm-seed-pass" type="password" placeholder={m.sources_usually_empty()} autocomplete="off" bind:value={evmSeedPassphrase} />
                             </div>
                         {/if}
                     {/if}
@@ -1615,7 +1615,7 @@
                     <!-- Multi-index address picker -->
                     {#if evmShowAddressPicker}
                         <div class="space-y-2">
-                            <span class="text-xs font-medium">Derived Addresses</span>
+                            <span class="text-xs font-medium">{m.sources_derived_addresses()}</span>
                             <div class="max-h-48 overflow-y-auto rounded-md border">
                                 {#each evmDerivedAddresses as { index, address }}
                                     {@const exists = existingEvmAddresses.has(address.toLowerCase())}
@@ -1635,17 +1635,17 @@
                                             <Tooltip.Trigger class="font-mono text-xs truncate">{address}</Tooltip.Trigger>
                                             <Tooltip.Content><p class="font-mono text-xs">{address}</p></Tooltip.Content>
                                         </Tooltip.Root>
-                                        <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(address); }} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                        <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(address); }} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                             <Copy class="h-3 w-3" />
                                         </button>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
                                         {#if exists}
-                                            <span class="ml-auto text-xs text-muted-foreground italic">already added</span>
+                                            <span class="ml-auto text-xs text-muted-foreground italic">{m.sources_already_added()}</span>
                                         {:else}
                                             <input
                                                 type="text"
                                                 class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
-                                                placeholder="Label"
+                                                placeholder={m.label_label()}
                                                 value={evmItemLabels.get(index) ?? ""}
                                                 oninput={(e) => {
                                                     const next = new Map(evmItemLabels);
@@ -1659,9 +1659,9 @@
                                 {/each}
                             </div>
                             <div class="flex items-center justify-between">
-                                <span class="text-xs text-muted-foreground">{evmSelectedIndexes.size} address(es) selected</span>
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: evmSelectedIndexes.size })}</span>
                                 <Button variant="outline" size="sm" onclick={() => { evmDeriveCount += 5; }}>
-                                    Load more
+                                    {m.sources_load_more()}
                                 </Button>
                             </div>
                         </div>
@@ -1669,7 +1669,7 @@
 
                     <!-- Chain selector -->
                     <div class="space-y-2">
-                        <span class="text-xs font-medium">Chains</span>
+                        <span class="text-xs font-medium">{m.sources_chains()}</span>
                         <Popover.Root bind:open={chainPopoverOpen}>
                             <Popover.Trigger>
                                 <Button
@@ -1677,18 +1677,18 @@
                                     class="w-[300px] justify-between"
                                 >
                                     {#if selectedChainIds.size === 0}
-                                        Select chains...
+                                        {m.sources_select_chains()}
                                     {:else}
-                                        {selectedChainIds.size} chain{selectedChainIds.size === 1 ? "" : "s"} selected
+                                        {m.sources_chains_selected({ count: selectedChainIds.size })}
                                     {/if}
                                     <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </Popover.Trigger>
                             <Popover.Content class="w-[300px] p-0">
                                 <Command.Root>
-                                    <Command.Input placeholder="Search chains..." />
+                                    <Command.Input placeholder={m.sources_search_chains()} />
                                     <Command.List>
-                                        <Command.Empty>No chain found.</Command.Empty>
+                                        <Command.Empty>{m.sources_no_chain_found()}</Command.Empty>
                                         <Command.Group>
                                             {#each SUPPORTED_CHAINS as chain}
                                                 <Command.Item
@@ -1732,26 +1732,26 @@
             {:else if addSourceMode === "bitcoin"}
                 <div class="space-y-3 rounded-lg border p-4">
                     <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium">Add Bitcoin Address / HD Wallet</span>
+                        <span class="text-sm font-medium">{m.sources_add_bitcoin()}</span>
                         <Button variant="ghost" size="sm" onclick={cancelAdd}>
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
                     <div class="flex items-end gap-2">
                         <div class="flex-1 space-y-1">
-                            <label for="new-btc-input" class="text-xs font-medium">Address or extended public key</label>
+                            <label for="new-btc-input" class="text-xs font-medium">{m.sources_address_or_xpub()}</label>
                             <Input
                                 id="new-btc-input"
-                                placeholder="Paste address or xpub / ypub / zpub..."
+                                placeholder={m.sources_paste_btc_placeholder()}
                                 autocomplete="off"
                                 bind:value={btcNewAddressOrXpub}
                             />
                         </div>
                         <div class="w-40 space-y-1">
-                            <label for="new-btc-label" class="text-xs font-medium">Label (optional)</label>
+                            <label for="new-btc-label" class="text-xs font-medium">{m.sources_label_optional()}</label>
                             <Input
                                 id="new-btc-label"
-                                placeholder="My BTC Wallet"
+                                placeholder={m.sources_my_btc_wallet()}
                                 bind:value={btcNewLabel}
                             />
                         </div>
@@ -1771,35 +1771,34 @@
                                 <Badge variant="outline" class="border-green-500 text-green-600">{btcDetection.description}</Badge>
                             {/if}
                             {#if btcSingleExists}
-                                <span class="text-xs text-amber-600 dark:text-amber-400">This address/key is already added</span>
+                                <span class="text-xs text-amber-600 dark:text-amber-400">{m.sources_address_already_added()}</span>
                             {/if}
                         </div>
                     {/if}
                     {#if btcDetection.isPrivate}
                         <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
-                            <p class="font-medium text-amber-800 dark:text-amber-200">Private Key Detected</p>
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
                             <p class="mt-1 text-amber-700 dark:text-amber-300">
-                                dledger will derive the public key from it and discard the private material immediately.
-                                Your private key will NOT be stored.
+                                {m.sources_btc_private_key_warning()}
                             </p>
                             <label class="mt-2 flex items-center gap-2">
                                 <input type="checkbox" bind:checked={btcPrivateKeyAck} />
-                                <span class="text-amber-800 dark:text-amber-200">I understand — derive public key and continue</span>
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_pubkey()}</span>
                             </label>
                         </div>
                         {#if btcDetection.type === "seed"}
                             <div class="flex items-end gap-4">
                                 <div class="space-y-1">
-                                    <label for="btc-seed-bip" class="text-xs font-medium">BIP Standard</label>
+                                    <label for="btc-seed-bip" class="text-xs font-medium">{m.sources_bip_standard()}</label>
                                     <select id="btc-seed-bip" bind:value={btcSeedBip} class="h-9 rounded-md border bg-background px-3 text-sm">
-                                        <option value={84}>BIP84 / Native SegWit (recommended)</option>
-                                        <option value={49}>BIP49 / Wrapped SegWit</option>
-                                        <option value={44}>BIP44 / Legacy</option>
+                                        <option value={84}>{m.sources_bip84()}</option>
+                                        <option value={49}>{m.sources_bip49()}</option>
+                                        <option value={44}>{m.sources_bip44()}</option>
                                     </select>
                                 </div>
                                 <div class="flex-1 space-y-1">
-                                    <label for="btc-seed-pass" class="text-xs font-medium">Passphrase (optional)</label>
-                                    <Input id="btc-seed-pass" type="password" placeholder="Usually empty" autocomplete="off" bind:value={btcSeedPassphrase} />
+                                    <label for="btc-seed-pass" class="text-xs font-medium">{m.sources_passphrase_optional()}</label>
+                                    <Input id="btc-seed-pass" type="password" placeholder={m.sources_usually_empty()} autocomplete="off" bind:value={btcSeedPassphrase} />
                                 </div>
                             </div>
                         {/if}
@@ -1808,11 +1807,11 @@
                     <!-- Multi-index xpub picker -->
                     {#if btcDerivedXpubs.length > 0}
                         <div class="space-y-2">
-                            <span class="text-xs font-medium">Derived HD Wallets</span>
+                            <span class="text-xs font-medium">{m.sources_derived_hd_wallets()}</span>
                             {#if btcDeriving}
                                 <div class="flex items-center gap-2 text-xs text-muted-foreground">
                                     <RefreshCw class="h-3 w-3 animate-spin" />
-                                    Deriving...
+                                    {m.sources_deriving()}
                                 </div>
                             {/if}
                             <div class="max-h-48 overflow-y-auto rounded-md border">
@@ -1834,18 +1833,18 @@
                                             <Tooltip.Trigger class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</Tooltip.Trigger>
                                             <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{xpub}</p></Tooltip.Content>
                                         </Tooltip.Root>
-                                        <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(xpub); }} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                        <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(xpub); }} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                             <Copy class="h-3 w-3" />
                                         </button>
                                         <span class="text-xs text-muted-foreground">#{index}</span>
                                         <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
                                         {#if exists}
-                                            <span class="ml-auto text-xs text-muted-foreground italic">already added</span>
+                                            <span class="ml-auto text-xs text-muted-foreground italic">{m.sources_already_added()}</span>
                                         {:else}
                                             <input
                                                 type="text"
                                                 class="ml-auto h-6 w-28 rounded border bg-background px-1.5 text-xs"
-                                                placeholder="Label"
+                                                placeholder={m.label_label()}
                                                 value={btcItemLabels.get(index) ?? ""}
                                                 oninput={(e) => {
                                                     const next = new Map(btcItemLabels);
@@ -1859,9 +1858,9 @@
                                 {/each}
                             </div>
                             <div class="flex items-center justify-between">
-                                <span class="text-xs text-muted-foreground">{btcSelectedIndexes.size} wallet(s) selected</span>
+                                <span class="text-xs text-muted-foreground">{m.sources_wallets_selected({ count: btcSelectedIndexes.size })}</span>
                                 <Button variant="outline" size="sm" onclick={() => { btcDeriveCount += 5; }}>
-                                    Load more
+                                    {m.sources_load_more()}
                                 </Button>
                             </div>
                         </div>
@@ -1872,24 +1871,24 @@
             {#if addSourceMode === "solana"}
                 <div class="space-y-3 rounded-lg border p-4">
                     <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium">Add Solana Address / HD Wallet</span>
+                        <span class="text-sm font-medium">{m.sources_add_solana()}</span>
                         <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; solNewAddress = ""; solNewLabel = ""; solPrivateKeyAck = false; }}>
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
                     <div class="flex items-end gap-2">
                         <div class="flex-1 space-y-1">
-                            <label for="new-sol-address" class="text-xs font-medium">Address or seed phrase</label>
+                            <label for="new-sol-address" class="text-xs font-medium">{m.sources_address_or_seed()}</label>
                             <Input
                                 id="new-sol-address"
-                                placeholder="Paste base58 address or seed..."
+                                placeholder={m.sources_paste_sol_placeholder()}
                                 autocomplete="off"
                                 bind:value={solNewAddress}
                             />
                         </div>
                         <div class="w-40 space-y-1">
-                            <label for="new-sol-label" class="text-xs font-medium">Label (optional)</label>
-                            <Input id="new-sol-label" placeholder="My SOL Wallet" bind:value={solNewLabel} />
+                            <label for="new-sol-label" class="text-xs font-medium">{m.sources_label_optional()}</label>
+                            <Input id="new-sol-label" placeholder={m.sources_my_sol_wallet()} bind:value={solNewLabel} />
                         </div>
                         <Button onclick={handleAddSolanaAccount} disabled={solAddingAccount || (!solNewAddress.trim())}>
                             <Plus class="mr-1 h-4 w-4" />
@@ -1905,24 +1904,24 @@
                                 <Badge variant="outline" class="border-green-500 text-green-700">{solDetection.description}</Badge>
                             {/if}
                             {#if solSingleExists}
-                                <span class="text-xs text-muted-foreground">Already added</span>
+                                <span class="text-xs text-muted-foreground">{m.sources_already_added()}</span>
                             {/if}
                         </div>
                     {/if}
 
                     {#if solDetection.is_private}
                         <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
-                            <p class="font-medium text-amber-800 dark:text-amber-200">Private Key Detected</p>
-                            <p class="mt-1 text-amber-700 dark:text-amber-300">dledger will derive the public address and discard the private material immediately.</p>
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
                             <label class="mt-2 flex items-center gap-2">
                                 <input type="checkbox" bind:checked={solPrivateKeyAck} />
-                                <span class="text-amber-800 dark:text-amber-200">I understand — derive address and continue</span>
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
                             </label>
                         </div>
                     {/if}
 
                     {#if solDeriving}
-                        <div class="text-xs text-muted-foreground">Deriving addresses...</div>
+                        <div class="text-xs text-muted-foreground">{m.sources_deriving_addresses()}</div>
                     {/if}
 
                     {#if solDerivedAddresses.length > 0}
@@ -1947,19 +1946,19 @@
                                     </Button>
                                     <Input
                                         class="h-6 w-24 text-xs"
-                                        placeholder="Label"
+                                        placeholder={m.label_label()}
                                         value={solItemLabels.get(derived.index) ?? ""}
                                         oninput={(e) => { const next = new Map(solItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); solItemLabels = next; }}
                                     />
                                     {#if exists}
-                                        <Badge variant="outline" class="text-xs">Added</Badge>
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
                                     {/if}
                                 </label>
                             {/each}
                             <div class="flex items-center justify-between">
-                                <span class="text-xs text-muted-foreground">{solSelectedIndexes.size} address(es) selected</span>
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: solSelectedIndexes.size })}</span>
                                 <Button variant="outline" size="sm" onclick={() => { solDeriveCount += 5; }}>
-                                    Load more
+                                    {m.sources_load_more()}
                                 </Button>
                             </div>
                         </div>
@@ -1971,23 +1970,23 @@
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
                     <div class="flex items-center justify-between">
-                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Blockchain Accounts</h4>
+                        <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">{m.sources_blockchain_accounts()}</h4>
                         <span class="text-xs text-muted-foreground">
-                            API keys: <a href="/settings" class="underline hover:text-foreground">Settings</a>
+                            {m.sources_api_keys()}: <a href="/settings" class="underline hover:text-foreground">{m.nav_settings()}</a>
                             {#if groupedAddresses.length > 0 && !settings.etherscanApiKey}
-                                <span class="text-amber-600 dark:text-amber-400 ml-1">(not set)</span>
+                                <span class="text-amber-600 dark:text-amber-400 ml-1">({m.sources_not_set()})</span>
                             {/if}
                         </span>
                     </div>
                     <Table.Root>
                         <Table.Header>
                             <Table.Row>
-                                <SortableHeader active={sortBlockchain.key === "address"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("address")}>Address / Key</SortableHeader>
-                                <SortableHeader active={sortBlockchain.key === "label"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("label")}>Label</SortableHeader>
-                                <SortableHeader active={sortBlockchain.key === "type"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("type")}>Type</SortableHeader>
-                                <SortableHeader active={sortBlockchain.key === "networks"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("networks")}>Networks</SortableHeader>
-                                <SortableHeader active={sortBlockchain.key === "lastSync"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("lastSync")}>Last Sync</SortableHeader>
-                                <Table.Head class="text-right">Actions</Table.Head>
+                                <SortableHeader active={sortBlockchain.key === "address"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("address")}>{m.sources_address_key()}</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "label"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("label")}>{m.label_label()}</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "type"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("type")}>{m.label_type()}</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "networks"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("networks")}>{m.sources_networks()}</SortableHeader>
+                                <SortableHeader active={sortBlockchain.key === "lastSync"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("lastSync")}>{m.sources_last_sync()}</SortableHeader>
+                                <Table.Head class="text-right">{m.label_actions()}</Table.Head>
                             </Table.Row>
                         </Table.Header>
                         <Table.Body>
@@ -2007,7 +2006,7 @@
                                                     </Tooltip.Trigger>
                                                     <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{account.address_or_xpub}</p></Tooltip.Content>
                                                 </Tooltip.Root>
-                                                <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                                     <Copy class="h-3 w-3" />
                                                 </button>
                                             </div>
@@ -2015,16 +2014,16 @@
                                         <Table.Cell>{account.label}</Table.Cell>
                                         <Table.Cell>
                                             <Badge variant="secondary">
-                                                {account.account_type === "address" ? "BTC Address" : "HD Wallet"}
+                                                {account.account_type === "address" ? m.sources_btc_address() : m.sources_hd_wallet()}
                                             </Badge>
                                         </Table.Cell>
                                         <Table.Cell>
-                                            <Badge variant="secondary">Bitcoin</Badge>
+                                            <Badge variant="secondary">{m.sources_bitcoin()}</Badge>
                                         </Table.Cell>
                                         <Table.Cell class="text-sm text-muted-foreground">
                                             {account.last_sync
                                                 ? new Date(account.last_sync).toLocaleDateString()
-                                                : "Never"}
+                                                : m.sources_never()}
                                         </Table.Cell>
                                         <Table.Cell class="text-right">
                                             <div class="flex justify-end gap-1">
@@ -2035,7 +2034,7 @@
                                                     disabled={btcBusy}
                                                 >
                                                     <RefreshCw class="mr-1 h-3 w-3" />
-                                                    {isSyncing ? "Syncing..." : "Sync"}
+                                                    {isSyncing ? m.state_syncing() : m.sources_sync()}
                                                 </Button>
                                                 <Button
                                                     variant="outline"
@@ -2062,22 +2061,22 @@
                                                     </Tooltip.Trigger>
                                                     <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{solAccount.address}</p></Tooltip.Content>
                                                 </Tooltip.Root>
-                                                <button onclick={() => copyToClipboard(solAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                <button onclick={() => copyToClipboard(solAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                                     <Copy class="h-3 w-3" />
                                                 </button>
                                             </div>
                                         </Table.Cell>
                                         <Table.Cell>{solAccount.label}</Table.Cell>
                                         <Table.Cell>
-                                            <Badge variant="secondary">Solana Address</Badge>
+                                            <Badge variant="secondary">{m.sources_solana_address()}</Badge>
                                         </Table.Cell>
                                         <Table.Cell>
-                                            <Badge variant="secondary">Solana</Badge>
+                                            <Badge variant="secondary">{m.sources_solana()}</Badge>
                                         </Table.Cell>
                                         <Table.Cell class="text-sm text-muted-foreground">
                                             {solAccount.last_sync
                                                 ? new Date(solAccount.last_sync).toLocaleDateString()
-                                                : "Never"}
+                                                : m.sources_never()}
                                         </Table.Cell>
                                         <Table.Cell class="text-right">
                                             <div class="flex justify-end gap-1">
@@ -2088,7 +2087,7 @@
                                                     disabled={solBusy}
                                                 >
                                                     <RefreshCw class="mr-1 h-3 w-3" />
-                                                    {isSolSyncing ? "Syncing..." : "Sync"}
+                                                    {isSolSyncing ? m.state_syncing() : m.sources_sync()}
                                                 </Button>
                                                 <Button
                                                     variant="outline"
@@ -2120,33 +2119,33 @@
                                                             <Tooltip.Trigger class="font-mono text-sm text-muted-foreground">{formatAddress(group.address)}</Tooltip.Trigger>
                                                             <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
                                                         </Tooltip.Root>
-                                                        <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
+                                                        <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy_address()}>
                                                             <Copy class="h-3 w-3" />
                                                         </button>
                                                         <div class="flex-1">
-                                                            <Input placeholder="Label" bind:value={editLabel} />
+                                                            <Input placeholder={m.label_label()} bind:value={editLabel} />
                                                         </div>
                                                     </div>
 
                                                     <!-- Chain multi-select -->
                                                     <div class="space-y-2">
-                                                        <span class="text-xs font-medium">Chains</span>
+                                                        <span class="text-xs font-medium">{m.sources_chains()}</span>
                                                         <Popover.Root bind:open={editChainPopoverOpen}>
                                                             <Popover.Trigger>
                                                                 <Button variant="outline" class="w-[300px] justify-between">
                                                                     {#if editChainIds.size === 0}
-                                                                        Select chains...
+                                                                        {m.sources_select_chains()}
                                                                     {:else}
-                                                                        {editChainIds.size} chain{editChainIds.size === 1 ? "" : "s"} selected
+                                                                        {m.sources_chains_selected({ count: editChainIds.size })}
                                                                     {/if}
                                                                     <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                                 </Button>
                                                             </Popover.Trigger>
                                                             <Popover.Content class="w-[300px] p-0">
                                                                 <Command.Root>
-                                                                    <Command.Input placeholder="Search chains..." />
+                                                                    <Command.Input placeholder={m.sources_search_chains()} />
                                                                     <Command.List>
-                                                                        <Command.Empty>No chain found.</Command.Empty>
+                                                                        <Command.Empty>{m.sources_no_chain_found()}</Command.Empty>
                                                                         <Command.Group>
                                                                             {#each SUPPORTED_CHAINS as chain}
                                                                                 <Command.Item
@@ -2193,10 +2192,10 @@
 
                                                     <div class="flex gap-2">
                                                         <Button size="sm" onclick={saveEdit} disabled={savingEdit}>
-                                                            {savingEdit ? "Saving..." : "Save"}
+                                                            {savingEdit ? m.state_saving() : m.btn_save()}
                                                         </Button>
                                                         <Button variant="outline" size="sm" onclick={cancelEdit} disabled={savingEdit}>
-                                                            Cancel
+                                                            {m.btn_cancel()}
                                                         </Button>
                                                     </div>
                                                 </div>
@@ -2212,14 +2211,14 @@
                                                         <Tooltip.Trigger class="truncate">{formatAddress(group.address)}</Tooltip.Trigger>
                                                         <Tooltip.Content><p class="font-mono text-xs">{group.address}</p></Tooltip.Content>
                                                     </Tooltip.Root>
-                                                    <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy address">
+                                                    <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy_address()}>
                                                         <Copy class="h-3 w-3" />
                                                     </button>
                                                 </div>
                                             </Table.Cell>
                                             <Table.Cell>{group.label}</Table.Cell>
                                             <Table.Cell>
-                                                <Badge variant="secondary">EVM</Badge>
+                                                <Badge variant="secondary">{m.sources_evm()}</Badge>
                                             </Table.Cell>
                                             <Table.Cell>
                                                 <div class="flex flex-wrap gap-1">
@@ -2238,7 +2237,7 @@
                                                         disabled={ethBusy || reprocessing || applyingReprocess}
                                                     >
                                                         <RefreshCw class="mr-1 h-3 w-3" />
-                                                        {isSyncingGroup ? "Syncing..." : "Sync"}
+                                                        {isSyncingGroup ? m.state_syncing() : m.sources_sync()}
                                                     </Button>
                                                     <Button
                                                         variant="outline"
@@ -2247,7 +2246,7 @@
                                                         disabled={ethBusy || reprocessing || applyingReprocess}
                                                     >
                                                         <RotateCw class="mr-1 h-3 w-3" />
-                                                        Reprocess
+                                                        {m.sources_reprocess()}
                                                     </Button>
                                                     <Button
                                                         variant="outline"
@@ -2279,15 +2278,15 @@
             <!-- Exchanges sub-section -->
             {#if cexAccounts.length > 0}
                 <div class="space-y-2">
-                    <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Exchanges</h4>
+                    <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">{m.sources_exchanges()}</h4>
                     <Table.Root>
                         <Table.Header>
                             <Table.Row>
-                                <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>Exchange</SortableHeader>
-                                <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>Label</SortableHeader>
-                                <Table.Head class="hidden md:table-cell">Opened / Closed</Table.Head>
-                                <SortableHeader active={sortCex.key === "lastSync"} direction={sortCex.direction} onclick={() => sortCex.toggle("lastSync")} class="hidden sm:table-cell">Last Sync</SortableHeader>
-                                <Table.Head class="text-right">Actions</Table.Head>
+                                <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>{m.label_exchange()}</SortableHeader>
+                                <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>{m.label_label()}</SortableHeader>
+                                <Table.Head class="hidden md:table-cell">{m.sources_opened_closed()}</Table.Head>
+                                <SortableHeader active={sortCex.key === "lastSync"} direction={sortCex.direction} onclick={() => sortCex.toggle("lastSync")} class="hidden sm:table-cell">{m.sources_last_sync()}</SortableHeader>
+                                <Table.Head class="text-right">{m.label_actions()}</Table.Head>
                             </Table.Row>
                         </Table.Header>
                         <Table.Body>
@@ -2309,7 +2308,7 @@
                                                     getBackend().updateExchangeAccount(account.id, { opened_at: val });
                                                     account.opened_at = val;
                                                 }}
-                                                title="Opened date"
+                                                title={m.sources_opened_date()}
                                             />
                                             <span class="text-muted-foreground">—</span>
                                             <input
@@ -2321,10 +2320,10 @@
                                                     getBackend().updateExchangeAccount(account.id, { closed_at: val });
                                                     account.closed_at = val;
                                                 }}
-                                                title="Closed date"
+                                                title={m.sources_closed_date()}
                                             />
                                             {#if isAccountClosed(account)}
-                                                <Badge variant="outline" class="text-muted-foreground">Closed</Badge>
+                                                <Badge variant="outline" class="text-muted-foreground">{m.sources_closed()}</Badge>
                                             {/if}
                                         </div>
                                     </Table.Cell>
@@ -2332,7 +2331,7 @@
                                         {#if account.last_sync}
                                             <span class="text-xs text-muted-foreground">{new Date(account.last_sync).toLocaleDateString()}</span>
                                         {:else}
-                                            <span class="text-xs text-muted-foreground">Never</span>
+                                            <span class="text-xs text-muted-foreground">{m.sources_never()}</span>
                                         {/if}
                                     </Table.Cell>
                                     <Table.Cell class="text-right">
@@ -2371,7 +2370,7 @@
 
             <!-- Empty state -->
             {#if cexAccounts.length === 0 && blockchainRows.length === 0 && addSourceMode === "idle"}
-                <p class="text-sm text-muted-foreground">No online sources configured yet.</p>
+                <p class="text-sm text-muted-foreground">{m.empty_no_online_sources()}</p>
             {/if}
         </Card.Content>
 
@@ -2386,7 +2385,7 @@
                         onclick={handleConsolidateCex}
                     >
                         <Link2 class="mr-1 h-4 w-4" />
-                        {cexConsolidating ? "Consolidating..." : "Consolidate"}
+                        {cexConsolidating ? m.state_consolidating() : m.sources_consolidate()}
                     </Button>
                 {/if}
                 {#if ethAccounts.length > 0}
@@ -2397,7 +2396,7 @@
                         disabled={ethBusy || reprocessing || applyingReprocess || ethAccounts.length === 0}
                     >
                         <RotateCw class="mr-1 h-4 w-4" />
-                        {taskQueue.isActive("reprocess-dryrun:all") ? "Scanning..." : "Reprocess All"}
+                        {taskQueue.isActive("reprocess-dryrun:all") ? m.state_scanning() : m.btn_reprocess_all()}
                     </Button>
                 {/if}
                 <Button
@@ -2406,7 +2405,7 @@
                     disabled={anyBusy || reprocessing || applyingReprocess}
                 >
                     <RefreshCw class="mr-1 h-4 w-4 {anyBusy ? 'animate-spin' : ''}" />
-                    {anyBusy ? "Syncing..." : "Sync All"}
+                    {anyBusy ? m.state_syncing() : m.sources_sync_all()}
                 </Button>
             </Card.Footer>
         {/if}
@@ -2415,9 +2414,9 @@
     <!-- Categorization Rules -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Categorization Rules</Card.Title>
+            <Card.Title>{m.sources_categorization_rules()}</Card.Title>
             <Card.Description>
-                Match keywords in descriptions to auto-assign accounts during import. First match wins.
+                {m.sources_categorization_rules_desc()}
             </Card.Description>
         </Card.Header>
         <Card.Content>
@@ -2440,18 +2439,17 @@
     <!-- Transaction Handlers -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>Transaction Handlers</Card.Title>
+            <Card.Title>{m.sources_transaction_handlers()}</Card.Title>
             <Card.Description
-                >{handlers.length} protocol handlers active. All handlers are always
-                enabled; the best match is selected automatically by scoring.</Card.Description
+                >{m.sources_transaction_handlers_desc({ count: handlers.length })}</Card.Description
             >
         </Card.Header>
         <Card.Content>
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">API Enrichment</p>
+                    <p class="text-sm font-medium">{m.sources_api_enrichment()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Enable external API calls for richer transaction data (e.g., Aave interest rates)
+                        {m.sources_api_enrichment_desc()}
                     </p>
                 </div>
                 <Switch
@@ -2465,14 +2463,14 @@
             <div class="mt-4 border-t pt-4">
                 <Collapsible.Root>
                     <Collapsible.Trigger class="flex w-full items-center justify-between text-sm font-medium hover:text-foreground/80 transition-colors">
-                        <span>Supported Protocols ({protocolInfos.length})</span>
+                        <span>{m.sources_supported_protocols({ count: protocolInfos.length })}</span>
                         <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />
                     </Collapsible.Trigger>
                     <Collapsible.Content>
                         <div class="mt-2">
                             <Input
                                 type="text"
-                                placeholder="Filter protocols or networks…"
+                                placeholder={m.sources_filter_protocols()}
                                 class="mb-2 h-8 text-sm"
                                 bind:value={protocolFilter}
                             />
@@ -2482,7 +2480,7 @@
                                         <Collapsible.Trigger class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors">
                                             <div class="flex items-center gap-2">
                                                 <span class="font-medium">{proto.name}</span>
-                                                <span class="text-xs text-muted-foreground">{proto.chains.length} {proto.chains.length === 1 ? 'network' : 'networks'}</span>
+                                                <span class="text-xs text-muted-foreground">{m.sources_network_count({ count: proto.chains.length })}</span>
                                             </div>
                                             <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />
                                         </Collapsible.Trigger>

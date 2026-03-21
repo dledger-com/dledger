@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onDestroy, onMount, tick } from "svelte";
+    import * as m from "$paraglide/messages.js";
     import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
     import { page } from "$app/state";
     import { goto, pushState, replaceState } from "$app/navigation";
@@ -195,29 +196,29 @@
         const _dd = detectingDuplicates;
         const _ri = reinterpreting;
         setTopBarActions([
-            { type: 'button', label: 'New Entry', onclick: () => openEntryDrawer("new"), fab: true, fabIcon: Plus },
+            { type: 'button', label: m.journal_new_entry(), onclick: () => openEntryDrawer("new"), fab: true, fabIcon: Plus },
             {
                 type: 'menu',
                 items: [
-                    { label: 'Analysis', header: true },
+                    { label: m.journal_analysis(), header: true },
                     { label: '', separator: true },
                     {
-                        label: _fm ? 'Finding...' : 'Find Matches',
+                        label: _fm ? m.journal_finding() : m.journal_find_matches(),
                         disabled: _fm,
                         onclick: handleFindMatches,
                     },
                     {
-                        label: _dd ? 'Detecting...' : 'Detect Duplicates',
+                        label: _dd ? m.journal_detecting() : m.journal_detect_duplicates(),
                         disabled: _dd,
                         onclick: handleDetectDuplicates,
                     },
                     {
-                        label: _ri ? 'Reinterpreting...' : 'Reinterpret',
+                        label: _ri ? m.journal_reinterpreting() : m.journal_reinterpret(),
                         disabled: _ri,
                         onclick: handleReinterpret,
                     },
                     { label: '', separator: true },
-                    { label: 'Export', header: true },
+                    { label: m.btn_export(), header: true },
                     { label: '', separator: true },
                     { label: 'Beancount (.beancount)', onclick: () => handleExport('beancount') },
                     { label: 'hledger (.journal)', onclick: () => handleExport('hledger') },
@@ -337,10 +338,10 @@
 
     const columns: ColumnDef<JournalRow>[] = [
         { id: "select", enableSorting: false, enableHiding: false },
-        { id: "date", header: "Date", enableHiding: true },
-        { id: "description", header: "Description", enableHiding: true },
-        { id: "account", header: "Account", enableHiding: true },
-        { id: "amount", header: "Amount", enableHiding: true },
+        { id: "date", header: m.label_date(), enableHiding: true },
+        { id: "description", header: m.label_description(), enableHiding: true },
+        { id: "account", header: m.label_account(), enableHiding: true },
+        { id: "amount", header: m.label_amount(), enableHiding: true },
     ];
 
     let rowSelection = $state<RowSelectionState>({});
@@ -1045,10 +1046,10 @@
             invalidate("journal", "reports");
             if (failed === 0) {
                 toast.success(
-                    `${success} ${success === 1 ? "entry" : "entries"} voided`,
+                    m.toast_entries_voided({ count: success }),
                 );
             } else {
-                toast.warning(`${success} voided, ${failed} failed`);
+                toast.warning(m.toast_entries_voided_partial({ success, failed }));
             }
         } catch (err) {
             toast.error(String(err));
@@ -1096,13 +1097,8 @@
                 tagOptions = tags.map((t) => ({ value: t, label: t }));
             });
             entryTags = new Map();
-            const verb = batchTagMode === "add" ? "added to" : "removed from";
-            const label =
-                batchTags.length === 1
-                    ? `"${batchTags[0]}"`
-                    : `${batchTags.length} tags`;
             toast.success(
-                `${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`,
+                m.toast_batch_tags_updated({ count: changed, tags: batchTags.length, mode: batchTagMode }),
             );
             batchTags = [];
             batchTagOpen = false;
@@ -1148,13 +1144,8 @@
                 linkOptions = ls.map((l) => ({ value: l, label: l }));
             });
             entryLinks = new Map();
-            const verb = batchLinkMode === "add" ? "added to" : "removed from";
-            const label =
-                batchLinks.length === 1
-                    ? `"${batchLinks[0]}"`
-                    : `${batchLinks.length} links`;
             toast.success(
-                `${label} ${verb} ${changed} ${changed === 1 ? "entry" : "entries"}`,
+                m.toast_batch_links_updated({ count: changed, links: batchLinks.length, mode: batchLinkMode }),
             );
             batchLinks = [];
             batchLinkOpen = false;
@@ -1890,12 +1881,12 @@
         try {
             const rules = settings.settings.csvCategorizationRules ?? [];
             if (rules.length === 0) {
-                toast.info("No categorization rules defined");
+                toast.info(m.toast_no_categorization_rules());
                 return;
             }
             const result = await findReinterpretCandidates(getBackend(), rules);
             if (result.candidates.length === 0) {
-                toast.info("No transactions to reinterpret");
+                toast.info(m.toast_no_transactions_to_reinterpret());
                 return;
             }
             reinterpretCandidates = result.candidates;
@@ -1921,7 +1912,7 @@
             a.download = `dledger-export${formatExtension(format)}`;
             a.click();
             URL.revokeObjectURL(url);
-            toast.success("Ledger file exported");
+            toast.success(m.toast_ledger_exported());
         } catch (err) {
             toast.error(String(err));
         } finally {
@@ -1943,7 +1934,7 @@
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                     <button class="text-[10px] px-1.5 py-0.5 rounded bg-muted/70 hover:bg-muted text-muted-foreground">
-                        {manualGranularity ? manualGranularity[0].toUpperCase() + manualGranularity.slice(1) : "Auto"}
+                        {manualGranularity ? manualGranularity[0].toUpperCase() + manualGranularity.slice(1) : m.label_auto_detect()}
                     </button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
@@ -1994,12 +1985,12 @@
                 series={[
                     {
                         key: "expense",
-                        label: "Expenses",
+                        label: m.report_expenses(),
                         color: "var(--color-red-500)",
                     },
                     {
                         key: "income",
-                        label: "Income",
+                        label: m.report_revenue(),
                         color: "var(--color-green-500)",
                     },
                 ]}
@@ -2084,12 +2075,12 @@
                     !table.getIsAllPageRowsSelected()}
                 onCheckedChange={(v) =>
                     table.toggleAllPageRowsSelected(!!v)}
-                aria-label="Select all"
+                aria-label={m.journal_select_all()}
             />
         {/if}
         <ListFilter
             bind:value={searchTerm}
-            placeholder="Filter entries..."
+            placeholder={m.placeholder_filter_entries()}
             class="min-w-0 w-[200px] lg:w-[250px] shrink"
         />
         <Popover.Root bind:open={filterPopoverOpen}>
@@ -2097,7 +2088,7 @@
                 {#snippet child({ props })}
                     <Button variant="outline" size="sm" class="h-8 border-dashed" {...props}>
                         <Filter class="size-4" />
-                        <span class="hidden sm:inline">Filter</span>
+                        <span class="hidden sm:inline">{m.journal_filter()}</span>
                         {#if totalFilterCount > 0}
                             <Separator orientation="vertical" class="mx-1 h-4" />
                             <Badge variant="secondary" class="rounded-sm px-1 font-normal">
@@ -2109,7 +2100,7 @@
             </Popover.Trigger>
             <Popover.Content class="w-[280px] p-0" align="start" forceMount>
                 <div class="flex border-b">
-                    {#each [["account", "Account", selectedAccounts.size] as const, ["tags", "Tags", selectedTags.size] as const, ["links", "Links", selectedLinks.size] as const] as [tab, label, count]}
+                    {#each [["account", m.label_account(), selectedAccounts.size] as const, ["tags", m.label_tags(), selectedTags.size] as const, ["links", m.label_links(), selectedLinks.size] as const] as [tab, label, count]}
                         <button
                             class="flex-1 px-2 py-1.5 text-sm font-medium transition-colors
                                 {filterTab === tab ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'}"
@@ -2124,7 +2115,7 @@
                         <SearchIcon class="size-4 shrink-0 opacity-50" />
                         <input
                             type="text"
-                            placeholder="Search account..."
+                            placeholder={m.placeholder_search_accounts()}
                             bind:value={accountSearch}
                             bind:this={accountInputRef}
                             class="placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden"
@@ -2136,7 +2127,7 @@
                                 {#each {length: 5} as _}<Skeleton class="h-8 w-full rounded-sm" />{/each}
                             </div>
                         {:else if filteredAccountOptions.length === 0}
-                            <p class="py-6 text-center text-sm">No results.</p>
+                            <p class="py-6 text-center text-sm">{m.empty_no_results()}</p>
                         {:else}
                             <div class="text-foreground overflow-hidden p-1">
                                 {#each filteredAccountOptions as option (option.value)}
@@ -2154,7 +2145,7 @@
                                 <div class="bg-border -mx-1 h-px"></div>
                                 <div class="text-foreground overflow-hidden p-1">
                                     <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
-                                        Clear filters
+                                        {m.journal_clear_filters()}
                                     </button>
                                 </div>
                             {/if}
@@ -2166,7 +2157,7 @@
                         <SearchIcon class="size-4 shrink-0 opacity-50" />
                         <input
                             type="text"
-                            placeholder="Search tags..."
+                            placeholder={m.placeholder_search_tags()}
                             bind:value={tagSearch}
                             bind:this={tagInputRef}
                             class="placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden"
@@ -2178,7 +2169,7 @@
                                 {#each {length: 5} as _}<Skeleton class="h-8 w-full rounded-sm" />{/each}
                             </div>
                         {:else if filteredTagOptions.length === 0}
-                            <p class="py-6 text-center text-sm">No results.</p>
+                            <p class="py-6 text-center text-sm">{m.empty_no_results()}</p>
                         {:else}
                             <div class="text-foreground overflow-hidden p-1">
                                 {#each filteredTagOptions as option (option.value)}
@@ -2196,7 +2187,7 @@
                                 <div class="bg-border -mx-1 h-px"></div>
                                 <div class="text-foreground overflow-hidden p-1">
                                     <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
-                                        Clear filters
+                                        {m.journal_clear_filters()}
                                     </button>
                                 </div>
                             {/if}
@@ -2208,7 +2199,7 @@
                         <SearchIcon class="size-4 shrink-0 opacity-50" />
                         <input
                             type="text"
-                            placeholder="Search links..."
+                            placeholder={m.placeholder_search_links()}
                             bind:value={linkSearch}
                             bind:this={linkInputRef}
                             class="placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden"
@@ -2220,7 +2211,7 @@
                                 {#each {length: 5} as _}<Skeleton class="h-8 w-full rounded-sm" />{/each}
                             </div>
                         {:else if filteredLinkOptions.length === 0}
-                            <p class="py-6 text-center text-sm">No results.</p>
+                            <p class="py-6 text-center text-sm">{m.empty_no_results()}</p>
                         {:else}
                             <div class="text-foreground overflow-hidden p-1">
                                 {#each filteredLinkOptions as option (option.value)}
@@ -2238,7 +2229,7 @@
                                 <div class="bg-border -mx-1 h-px"></div>
                                 <div class="text-foreground overflow-hidden p-1">
                                     <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
-                                        Clear filters
+                                        {m.journal_clear_filters()}
                                     </button>
                                 </div>
                             {/if}
@@ -2258,7 +2249,7 @@
                     selectedLinks = new Set();
                 }}
             >
-                <span class="hidden sm:inline">Reset</span>
+                <span class="hidden sm:inline">{m.btn_reset()}</span>
                 <X class="size-4" />
             </Button>
         {/if}
@@ -2273,7 +2264,7 @@
                             {...props}
                         >
                             <SlidersHorizontal class="size-4" />
-                            <span class="hidden sm:inline">View</span>
+                            <span class="hidden sm:inline">{m.journal_view()}</span>
                         </Button>
                     {/snippet}
                 </DropdownMenu.Trigger>
@@ -2281,7 +2272,7 @@
                     <DropdownMenu.Item
                         disabled
                         class="text-xs font-medium opacity-70"
-                        >Toggle columns</DropdownMenu.Item
+                        >{m.journal_toggle_columns()}</DropdownMenu.Item
                     >
                     <DropdownMenu.Separator />
                     {#each table
@@ -2301,25 +2292,25 @@
                             columnVisibility = { ...columnVisibility, tags: !!v };
                             settings.update({ journalColumnVisibility: columnVisibility });
                         }}
-                    >Tags</DropdownMenu.CheckboxItem>
+                    >{m.label_tags()}</DropdownMenu.CheckboxItem>
                     <DropdownMenu.CheckboxItem
                         checked={columnVisibility.links !== false}
                         onCheckedChange={(v) => {
                             columnVisibility = { ...columnVisibility, links: !!v };
                             settings.update({ journalColumnVisibility: columnVisibility });
                         }}
-                    >Links</DropdownMenu.CheckboxItem>
+                    >{m.label_links()}</DropdownMenu.CheckboxItem>
                     <DropdownMenu.Separator />
-                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Charts</DropdownMenu.Item>
+                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">{m.journal_charts()}</DropdownMenu.Item>
                     <DropdownMenu.Separator />
                     <DropdownMenu.CheckboxItem
                         checked={showChart}
                         onCheckedChange={(v) => { showChart = !!v; settings.update({ journalShowChart: !!v }); }}
-                    >Timeline</DropdownMenu.CheckboxItem>
+                    >{m.journal_timeline()}</DropdownMenu.CheckboxItem>
                     <DropdownMenu.CheckboxItem
                         checked={settings.settings.journalAmountBars !== false}
                         onCheckedChange={(v) => settings.update({ journalAmountBars: !!v })}
-                    >Amount Bars</DropdownMenu.CheckboxItem>
+                    >{m.journal_amount_bars()}</DropdownMenu.CheckboxItem>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
@@ -2353,7 +2344,7 @@
                     <Button
                         variant="outline"
                         size="sm"
-                        onclick={() => store.load()}>Retry</Button
+                        onclick={() => store.load()}>{m.journal_retry()}</Button
                     >
                 </div>
             </Card.Content>
@@ -2362,7 +2353,7 @@
         <Card.Root class="border-x-0 rounded-none shadow-none">
             <Card.Content class="py-8">
                 <p class="text-sm text-muted-foreground text-center">
-                    No entries match the current filters.
+                    {m.journal_no_entries_match_filters()}
                 </p>
                 <div class="flex justify-center mt-2">
                     <Button
@@ -2373,7 +2364,7 @@
                             selectedAccounts = new Set();
                             selectedTags = new Set();
                             selectedLinks = new Set();
-                        }}>Clear all filters</Button
+                        }}>{m.journal_clear_all_filters()}</Button
                     >
                 </div>
             </Card.Content>
@@ -2382,8 +2373,7 @@
         <Card.Root class="border-x-0 rounded-none shadow-none">
             <Card.Content class="py-8">
                 <p class="text-sm text-muted-foreground text-center">
-                    No journal entries yet. Create your first entry to start
-                    recording transactions.
+                    {m.empty_no_journal_entries()}
                 </p>
             </Card.Content>
         </Card.Root>
@@ -2412,7 +2402,7 @@
                                                             table.toggleAllPageRowsSelected(
                                                                 !!v,
                                                             )}
-                                                        aria-label="Select all"
+                                                        aria-label={m.journal_select_all()}
                                                     />
                                                 </Table.Head>
                                             {:else if header.column.id === "date"}
@@ -2422,7 +2412,7 @@
                                                     onclick={() =>
                                                         sort.toggle("date")}
                                                     class="w-28"
-                                                    >Date</SortableHeader
+                                                    >{m.label_date()}</SortableHeader
                                                 >
                                             {:else if header.column.id === "description"}
                                                 <SortableHeader
@@ -2434,7 +2424,7 @@
                                                             "description",
                                                         )}
                                                     class=""
-                                                    >Description</SortableHeader
+                                                    >{m.label_description()}</SortableHeader
                                                 >
                                             {:else if header.column.id === "account"}
                                                 <SortableHeader
@@ -2444,7 +2434,7 @@
                                                     onclick={() =>
                                                         sort.toggle("account")}
                                                     class="hidden lg:table-cell"
-                                                    >Account</SortableHeader
+                                                    >{m.label_account()}</SortableHeader
                                                 >
                                             {:else if header.column.id === "amount"}
                                                 <SortableHeader
@@ -2454,7 +2444,7 @@
                                                     onclick={() =>
                                                         sort.toggle("amount")}
                                                     class="text-right"
-                                                    >Amount</SortableHeader
+                                                    >{m.label_amount()}</SortableHeader
                                                 >
                                             {/if}
                                         {/each}
@@ -2518,7 +2508,7 @@
                                                             row.toggleSelected(
                                                                 !!v,
                                                             )}
-                                                        aria-label="Select row"
+                                                        aria-label={m.journal_select_row()}
                                                     />
                                                 </td>
                                             {/if}
@@ -2649,7 +2639,7 @@
                                                                 row.toggleSelected(
                                                                     !!v,
                                                                 )}
-                                                            aria-label="Select row"
+                                                            aria-label={m.journal_select_row()}
                                                         />
                                                     </Table.Cell>
                                                 {:else if cell.column.id === "date"}
@@ -2751,7 +2741,7 @@
                       bg-background/95 px-3 py-1 text-xs text-muted-foreground
                       shadow-sm backdrop-blur-sm"
                     >
-                        {positionLabel} of {store.totalCount} entries
+                        {m.journal_position_of({ position: positionLabel, total: store.totalCount })}
                     </div>
                 {/if}
 
@@ -2766,7 +2756,7 @@
                             virtualizer.scrollToOffset(0, {
                                 behavior: "smooth",
                             })}
-                        title="Back to top"
+                        title={m.btn_back_to_top()}
                     >
                         <ArrowUp class="size-4" />
                     </button>
@@ -2782,15 +2772,14 @@
                         px-4 py-2.5 shadow-lg backdrop-blur-sm"
             >
                 <span class="text-sm text-muted-foreground whitespace-nowrap">
-                    {selectedCount}
-                    {selectedCount === 1 ? "entry" : "entries"} selected
+                    {m.journal_entries_selected({ count: selectedCount })}
                 </span>
                 <div class="hidden sm:block h-4 w-px bg-border"></div>
                 <Popover.Root bind:open={batchTagOpen}>
                     <Popover.Trigger>
                         {#snippet child({ props })}
                             <Button variant="outline" size="sm" {...props}>
-                                <Tag class="size-3.5 mr-1" />Tags
+                                <Tag class="size-3.5 mr-1" />{m.label_tags()}
                             </Button>
                         {/snippet}
                     </Popover.Trigger>
@@ -2805,7 +2794,7 @@
                                     class="flex-1"
                                     onclick={() => {
                                         batchTagMode = "add";
-                                    }}>Add</Button
+                                    }}>{m.btn_add()}</Button
                                 >
                                 <Button
                                     variant={batchTagMode === "remove"
@@ -2815,7 +2804,7 @@
                                     class="flex-1"
                                     onclick={() => {
                                         batchTagMode = "remove";
-                                    }}>Remove</Button
+                                    }}>{m.btn_remove()}</Button
                                 >
                             </ButtonGroup.Root>
                             <TagInput
@@ -2835,10 +2824,7 @@
                                 {#if batchTagBusy}<Loader
                                         class="size-3 mr-1 animate-spin"
                                     />{/if}
-                                {batchTagMode === "add" ? "Add" : "Remove"}
-                                {batchTags.length} tag{batchTags.length !== 1
-                                    ? "s"
-                                    : ""}
+                                {m.journal_batch_tags_action({ mode: batchTagMode, count: batchTags.length })}
                             </Button>
                         </div>
                     </Popover.Content>
@@ -2847,7 +2833,7 @@
                     <Popover.Trigger>
                         {#snippet child({ props })}
                             <Button variant="outline" size="sm" {...props}>
-                                <Link2 class="size-3.5 mr-1" />Links
+                                <Link2 class="size-3.5 mr-1" />{m.label_links()}
                             </Button>
                         {/snippet}
                     </Popover.Trigger>
@@ -2862,7 +2848,7 @@
                                     class="flex-1"
                                     onclick={() => {
                                         batchLinkMode = "add";
-                                    }}>Add</Button
+                                    }}>{m.btn_add()}</Button
                                 >
                                 <Button
                                     variant={batchLinkMode === "remove"
@@ -2872,7 +2858,7 @@
                                     class="flex-1"
                                     onclick={() => {
                                         batchLinkMode = "remove";
-                                    }}>Remove</Button
+                                    }}>{m.btn_remove()}</Button
                                 >
                             </ButtonGroup.Root>
                             <LinkInput
@@ -2892,10 +2878,7 @@
                                 {#if batchLinkBusy}<Loader
                                         class="size-3 mr-1 animate-spin"
                                     />{/if}
-                                {batchLinkMode === "add" ? "Add" : "Remove"}
-                                {batchLinks.length} link{batchLinks.length !== 1
-                                    ? "s"
-                                    : ""}
+                                {m.journal_batch_links_action({ mode: batchLinkMode, count: batchLinks.length })}
                             </Button>
                         </div>
                     </Popover.Content>
@@ -2908,7 +2891,7 @@
                 >
                     {#if batchVoiding}<Loader
                             class="size-3.5 mr-1 animate-spin"
-                        />Voiding...{:else}Void Selected{/if}
+                        />{m.journal_voiding()}{:else}{m.journal_void_selected()}{/if}
                 </Button>
                 <Button variant="ghost" size="sm" onclick={clearSelection}>
                     <X class="size-4" />
@@ -2939,14 +2922,14 @@
         class="w-fit max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto"
     >
         <Dialog.Header>
-            <Dialog.Title>Duplicate Detection</Dialog.Title>
+            <Dialog.Title>{m.dialog_duplicate_detection()}</Dialog.Title>
             <Dialog.Description>
-                Entries with the same date and amounts that may be duplicates.
+                {m.journal_duplicate_description()}
             </Dialog.Description>
         </Dialog.Header>
         {#if duplicateGroups.length === 0}
             <p class="text-sm text-muted-foreground py-8 text-center">
-                No potential duplicates found.
+                {m.journal_no_duplicates_found()}
             </p>
         {:else}
             <div class="space-y-4">
@@ -2959,11 +2942,11 @@
                                     : "secondary"}
                             >
                                 {group.confidence === "likely"
-                                    ? "Likely duplicate"
-                                    : "Possible duplicate"}
+                                    ? m.journal_likely_duplicate()
+                                    : m.journal_possible_duplicate()}
                             </Badge>
                             <span class="text-xs text-muted-foreground"
-                                >{group.entries.length} entries</span
+                                >{m.journal_n_entries({ count: group.entries.length })}</span
                             >
                         </div>
                         {#each group.entries as [entry, items]}
@@ -3013,12 +2996,12 @@
                                                     );
                                                     await store.load();
                                                     toast.success(
-                                                        "Entry voided",
+                                                        m.toast_entry_voided(),
                                                     );
                                                 } catch (e) {
                                                     toast.error(String(e));
                                                 }
-                                            }}>Void</Button
+                                            }}>{m.journal_void()}</Button
                                         >
                                     {/if}
                                 </div>

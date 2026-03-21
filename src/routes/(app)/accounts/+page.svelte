@@ -27,6 +27,7 @@
   import ChevronRight from "lucide-svelte/icons/chevron-right";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
+  import * as m from "$paraglide/messages.js";
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
 
   const store = new AccountStore();
@@ -37,7 +38,7 @@
 
   $effect(() => {
     setTopBarActions([
-      { type: 'button', label: 'New Account', onclick: () => { dialogOpen = true; }, fab: true, fabIcon: Plus }
+      { type: 'button', label: m.btn_new_account(), onclick: () => { dialogOpen = true; }, fab: true, fabIcon: Plus }
     ]);
   });
 
@@ -120,11 +121,11 @@
 
   function getEditError(account: Account, newFullName: string): string | null {
     const trimmed = newFullName.trim();
-    if (!trimmed) return "Name is required";
-    if (!trimmed.includes(":")) return "Must contain at least two segments (e.g. Assets:Bank)";
+    if (!trimmed) return m.error_name_required();
+    if (!trimmed.includes(":")) return m.error_segments_required();
     const prefixes = TYPE_PREFIXES[account.account_type];
     if (!prefixes.some((p) => trimmed.startsWith(p))) {
-      return `Must start with ${prefixes[0]}`;
+      return m.error_must_start_with({ prefix: prefixes[0] });
     }
     return null;
   }
@@ -235,7 +236,7 @@
     const ok = await store.update(editingId, updates);
     editSaving = false;
     if (ok) {
-      toast.success(`Account "${editFullName.trim()}" updated`);
+      toast.success(m.toast_account_updated({ name: editFullName.trim() }));
       cancelEdit();
     } else {
       toast.error(store.error ?? "Failed to update account");
@@ -255,7 +256,7 @@
 
     if (result) {
       const moved = result.lineItems + result.lots + result.assertions + result.reconciliations;
-      toast.success(`Merged "${account?.full_name}" into "${mergeTarget.full_name}" (${moved} items moved)`);
+      toast.success(m.toast_account_merged({ source: account?.full_name ?? "", target: mergeTarget.full_name, count: String(moved) }));
       cancelEdit();
     } else {
       toast.error(store.error ?? "Failed to merge accounts");
@@ -415,14 +416,14 @@
         const { invalidate } = await import("$lib/data/invalidation.js");
         invalidate("journal", "accounts", "reports");
       } catch (e) {
-        toast.error(`Account created but opening balance failed: ${e instanceof Error ? e.message : String(e)}`);
+        toast.error(m.toast_opening_balance_failed({ message: e instanceof Error ? e.message : String(e) }));
         dialogOpen = false;
         resetForm();
         return;
       }
     }
 
-    toast.success(`Account "${fullName}" created`);
+    toast.success(m.toast_account_created({ name: fullName }));
     dialogOpen = false;
     resetForm();
   }
@@ -430,7 +431,7 @@
   async function handleArchive(id: string, name: string) {
     const ok = await store.archive(id);
     if (ok) {
-      toast.success(`Account "${name}" archived`);
+      toast.success(m.toast_account_archived({ name }));
     } else {
       toast.error(store.error ?? "Failed to archive account");
     }
@@ -439,7 +440,7 @@
   async function handleUnarchive(id: string, name: string) {
     const ok = await store.unarchive(id);
     if (ok) {
-      toast.success(`Account "${name}" restored`);
+      toast.success(m.toast_account_restored({ name }));
     } else {
       toast.error(store.error ?? "Failed to unarchive account");
     }
@@ -453,7 +454,7 @@
     creatingDefaults = true;
     try {
       const result = await createDefaultAccounts(getBackend(), defaultSet);
-      toast.success(`Created ${result.created} accounts`);
+      toast.success(m.toast_accounts_created_count({ count: String(result.created) }));
       await store.load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -469,11 +470,11 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <ListFilter bind:value={searchTerm} placeholder="Filter accounts..." class="order-last sm:order-none" />
+    <ListFilter bind:value={searchTerm} placeholder={m.placeholder_filter_accounts()} class="order-last sm:order-none" />
     {#if store.archivedCount > 0}
       <label class="flex items-center gap-2 text-sm">
         <Switch checked={showArchived} onCheckedChange={(v) => (showArchived = v)} />
-        Show archived ({store.archivedCount})
+        {m.label_show_archived({ count: String(store.archivedCount) })}
       </label>
     {/if}
   </div>
@@ -481,22 +482,22 @@
     <Dialog.Root bind:open={dialogOpen}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Create Account</Dialog.Title>
-          <Dialog.Description>Add a new account to your chart of accounts.</Dialog.Description>
+          <Dialog.Title>{m.dialog_create_account()}</Dialog.Title>
+          <Dialog.Description>{m.dialog_create_account_desc()}</Dialog.Description>
         </Dialog.Header>
         <form onsubmit={(e) => { e.preventDefault(); handleCreate(); }} class="space-y-4">
           <div class="space-y-2">
-            <label for="name" class="text-sm font-medium">Name</label>
+            <label for="name" class="text-sm font-medium">{m.label_name()}</label>
             <Input id="name" bind:value={formName} placeholder="e.g. Checking" required />
             {#if formParentId}
               {@const parent = store.accounts.find(a => a.id === formParentId)}
               {#if parent}
-                <p class="text-xs text-muted-foreground">Path: {parent.full_name}:{formName || "..."}</p>
+                <p class="text-xs text-muted-foreground">{m.label_path({ path: `${parent.full_name}:${formName || "..."}` })}</p>
               {/if}
             {/if}
           </div>
           <div class="space-y-2">
-            <span class="text-sm font-medium">Type</span>
+            <span class="text-sm font-medium">{m.label_type()}</span>
             <Select.Root type="single" bind:value={formType}>
               <Select.Trigger class="w-full">
                 {formType.charAt(0).toUpperCase() + formType.slice(1)}
@@ -509,18 +510,18 @@
             </Select.Root>
           </div>
           <div class="space-y-2">
-            <span class="text-sm font-medium">Parent Account</span>
+            <span class="text-sm font-medium">{m.label_parent_account()}</span>
             <Select.Root type="single" value={formParentId ?? ""} onValueChange={(val) => { formParentId = val === "" ? null : val; }}>
               <Select.Trigger class="w-full">
                 {#if formParentId}
                   {@const parent = store.accounts.find(a => a.id === formParentId)}
                   {parent?.full_name ?? formParentId}
                 {:else}
-                  None (top-level)
+                  {m.option_none_top_level()}
                 {/if}
               </Select.Trigger>
               <Select.Content>
-                <Select.Item value="">None (top-level)</Select.Item>
+                <Select.Item value="">{m.option_none_top_level()}</Select.Item>
                 {#each store.accounts.filter(a => !a.is_postable || a.account_type === formType) as acc (acc.id)}
                   <Select.Item value={acc.id}>{acc.full_name}</Select.Item>
                 {/each}
@@ -529,15 +530,15 @@
           </div>
           <div class="flex items-center gap-2">
             <Switch id="postable" bind:checked={formIsPostable} />
-            <label for="postable" class="text-sm font-medium">Postable (can receive transactions)</label>
+            <label for="postable" class="text-sm font-medium">{m.label_postable()}</label>
           </div>
           {#if formType === "asset" || formType === "liability"}
             <div class="space-y-2">
-              <label for="openedAt" class="text-sm font-medium">Opening Date</label>
+              <label for="openedAt" class="text-sm font-medium">{m.label_opening_date()}</label>
               <Input id="openedAt" type="date" bind:value={formOpenedAt} />
             </div>
             <div class="space-y-2">
-              <label class="text-sm font-medium">Opening Balance</label>
+              <label class="text-sm font-medium">{m.label_opening_balance()}</label>
               <div class="flex gap-2">
                 <Input type="number" step="any" bind:value={formOpeningBalance} placeholder="0.00" class="flex-1" />
                 <Input bind:value={formOpeningCurrency} placeholder="USD" class="w-24 uppercase" />
@@ -545,7 +546,7 @@
             </div>
           {/if}
           <Dialog.Footer>
-            <Button type="submit" disabled={!formName.trim()}>Create</Button>
+            <Button type="submit" disabled={!formName.trim()}>{m.btn_create()}</Button>
           </Dialog.Footer>
         </form>
       </Dialog.Content>
@@ -565,21 +566,21 @@
     <Card.Root>
       <Card.Content class="py-8 space-y-4">
         <p class="text-sm text-muted-foreground text-center">
-          No accounts configured yet. Start with a default chart of accounts, or add accounts manually.
+          {m.empty_no_accounts_configured()}
         </p>
         <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Select.Root type="single" bind:value={defaultSet}>
             <Select.Trigger>
-              {defaultSet === "minimal" ? "Minimal (~25 accounts)" : defaultSet === "standard" ? "Standard (~45 accounts)" : "Comprehensive (~65 accounts)"}
+              {defaultSet === "minimal" ? m.account_set_minimal() : defaultSet === "standard" ? m.account_set_standard() : m.account_set_comprehensive()}
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="minimal">Minimal (~25 accounts)</Select.Item>
-              <Select.Item value="standard">Standard (~45 accounts)</Select.Item>
-              <Select.Item value="comprehensive">Comprehensive (~65 accounts)</Select.Item>
+              <Select.Item value="minimal">{m.account_set_minimal()}</Select.Item>
+              <Select.Item value="standard">{m.account_set_standard()}</Select.Item>
+              <Select.Item value="comprehensive">{m.account_set_comprehensive()}</Select.Item>
             </Select.Content>
           </Select.Root>
           <Button onclick={handleCreateDefaults} disabled={creatingDefaults}>
-            {creatingDefaults ? "Creating..." : "Create default accounts"}
+            {creatingDefaults ? m.state_creating() : m.btn_create_default_accounts()}
           </Button>
         </div>
       </Card.Content>
@@ -588,7 +589,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          All accounts are archived. Toggle "Show archived" above to view and restore them.
+          {m.empty_all_archived()}
         </p>
       </Card.Content>
     </Card.Root>
@@ -596,10 +597,10 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No accounts match "{searchTerm}".
+          {m.empty_no_accounts_match({ search: searchTerm })}
         </p>
         <div class="flex justify-center mt-2">
-          <Button variant="outline" size="sm" onclick={() => (searchTerm = "")}>Clear search</Button>
+          <Button variant="outline" size="sm" onclick={() => (searchTerm = "")}>{m.btn_clear_search()}</Button>
         </div>
       </Card.Content>
     </Card.Root>
@@ -609,10 +610,10 @@
       <Table.Root>
         <Table.Header class="sticky top-0 z-10 bg-background">
           <Table.Row>
-            <Table.Head>Account</Table.Head>
-            <Table.Head>Type</Table.Head>
-            <Table.Head class="hidden md:table-cell">Postable</Table.Head>
-            <Table.Head class="text-right hidden sm:table-cell">Actions</Table.Head>
+            <Table.Head>{m.label_account()}</Table.Head>
+            <Table.Head>{m.label_type()}</Table.Head>
+            <Table.Head class="hidden md:table-cell">{m.label_postable_short()}</Table.Head>
+            <Table.Head class="text-right hidden sm:table-cell">{m.label_actions()}</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -647,7 +648,7 @@
                         <Popover.Content class="w-[320px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                           <Command.Root shouldFilter={false}>
                             <Command.List class="max-h-[200px]">
-                              <Command.Group heading="Suggestions">
+                              <Command.Group heading={m.label_suggestions()}>
                                 {#each editSuggestions as suggestion}
                                   <Command.Item
                                     value={suggestion.full_name}
@@ -666,7 +667,7 @@
                     {#if editError}
                       <p class="text-xs text-destructive">{editError}</p>
                     {:else if isMerge}
-                      <p class="text-xs text-yellow-600 dark:text-yellow-400">Will merge into "{(pendingMergeTarget ?? matchedExisting)?.full_name}"</p>
+                      <p class="text-xs text-yellow-600 dark:text-yellow-400">{m.label_will_merge({ name: (pendingMergeTarget ?? matchedExisting)?.full_name ?? "" })}</p>
                     {/if}
                   </div>
                   </div>
@@ -686,15 +687,15 @@
                       disabled={!!editError || !editHasChanges || editSaving}
                     >
                       {#if editSaving}
-                        Saving...
+                        {m.state_saving()}
                       {:else if isMerge}
-                        Merge
+                        {m.btn_merge()}
                       {:else}
-                        Save
+                        {m.btn_save()}
                       {/if}
                     </Button>
                     <Button variant="ghost" size="sm" onclick={cancelEdit} disabled={editSaving}>
-                      Cancel
+                      {m.btn_cancel()}
                     </Button>
                   </div>
                 </Table.Cell>
@@ -729,26 +730,26 @@
                 <Table.Cell>
                   <AccountTypeBadge type={account.account_type} />
                 </Table.Cell>
-                <Table.Cell class="hidden md:table-cell">{account.is_postable ? "Yes" : "No"}</Table.Cell>
+                <Table.Cell class="hidden md:table-cell">{account.is_postable ? m.label_yes() : m.label_no()}</Table.Cell>
                 <Table.Cell class="text-right hidden sm:table-cell">
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
                       {#snippet child({ props })}
                         <Button variant="ghost" size="icon-sm" {...props}>
                           <EllipsisVertical class="h-4 w-4" />
-                          <span class="sr-only">Actions</span>
+                          <span class="sr-only">{m.label_actions()}</span>
                         </Button>
                       {/snippet}
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content>
-                      <DropdownMenu.Item onclick={() => startSubAccount(account)}>Add Sub-Account</DropdownMenu.Item>
+                      <DropdownMenu.Item onclick={() => startSubAccount(account)}>{m.btn_add_sub_account()}</DropdownMenu.Item>
                       {#if account.parent_id !== null}
-                        <DropdownMenu.Item onclick={() => startEdit(account)}>Edit</DropdownMenu.Item>
+                        <DropdownMenu.Item onclick={() => startEdit(account)}>{m.btn_edit()}</DropdownMenu.Item>
                       {/if}
                       {#if account.is_archived}
-                        <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>Unarchive</DropdownMenu.Item>
+                        <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>{m.btn_unarchive()}</DropdownMenu.Item>
                       {:else}
-                        <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>Archive</DropdownMenu.Item>
+                        <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>{m.btn_archive()}</DropdownMenu.Item>
                       {/if}
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
@@ -770,19 +771,19 @@
 <Dialog.Root bind:open={mergeDialogOpen}>
   <Dialog.Content>
     <Dialog.Header>
-      <Dialog.Title>Merge Account?</Dialog.Title>
+      <Dialog.Title>{m.dialog_merge_account()}</Dialog.Title>
       <Dialog.Description>
         {#if editingId}
           {@const source = store.accounts.find((a) => a.id === editingId)}
           {@const target = pendingMergeTarget ?? matchedExisting}
-          Move all transactions from "{source?.full_name}" into "{target?.full_name}", then delete "{source?.full_name}". This cannot be undone.
+          {m.dialog_merge_account_desc({ source: source?.full_name ?? "", target: target?.full_name ?? "" })}
         {/if}
       </Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (mergeDialogOpen = false)} disabled={merging}>Cancel</Button>
+      <Button variant="outline" onclick={() => (mergeDialogOpen = false)} disabled={merging}>{m.btn_cancel()}</Button>
       <Button variant="destructive" onclick={confirmMerge} disabled={merging}>
-        {merging ? "Merging..." : "Merge"}
+        {merging ? m.state_merging() : m.btn_merge()}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

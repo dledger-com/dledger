@@ -17,6 +17,7 @@
   import { matchesFilter } from "$lib/utils/list-filter.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   type BudgetSortKey = "accountPattern" | "period" | "limit";
   const sort = createSortState<BudgetSortKey>();
@@ -80,7 +81,7 @@
 
   async function handleAdd() {
     if (!newPattern.trim() || !String(newAmount).trim()) {
-      toast.error("Account pattern and amount are required");
+      toast.error(m.error_pattern_amount_required());
       return;
     }
     adding = true;
@@ -98,7 +99,7 @@
       newPattern = "";
       newAmount = "";
       await loadBudgets();
-      toast.success("Budget created");
+      toast.success(m.toast_budget_created());
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -123,7 +124,7 @@
       });
       editingId = null;
       await loadBudgets();
-      toast.success("Budget updated");
+      toast.success(m.toast_budget_updated());
     } catch (err) {
       toast.error(String(err));
     }
@@ -133,7 +134,7 @@
     try {
       await getBackend().deleteBudget(id);
       await loadBudgets();
-      toast.success("Budget deleted");
+      toast.success(m.toast_budget_deleted());
     } catch (err) {
       toast.error(String(err));
     }
@@ -142,19 +143,19 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <ListFilter bind:value={searchTerm} placeholder="Filter budgets..." />
+    <ListFilter bind:value={searchTerm} placeholder={m.placeholder_filter_budgets()} />
   </div>
 
   <!-- Add Budget -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Add Budget</Card.Title>
+      <Card.Title>{m.section_add_budget()}</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
       <div class="space-y-1">
       <div class="flex items-end gap-3 flex-wrap">
         <div class="flex-1 min-w-[200px] space-y-1">
-          <label for="budget-pattern" class="text-xs font-medium">Account Pattern</label>
+          <label for="budget-pattern" class="text-xs font-medium">{m.label_account_pattern()}</label>
           <Input
             id="budget-pattern"
             placeholder="Expenses:Food"
@@ -168,31 +169,31 @@
           </datalist>
         </div>
         <div class="space-y-1 w-28">
-          <label for="budget-period" class="text-xs font-medium">Period</label>
+          <label for="budget-period" class="text-xs font-medium">{m.label_period()}</label>
           <Select.Root type="single" bind:value={newPeriod}>
             <Select.Trigger class="w-full">
-              {newPeriod === "monthly" ? "Monthly" : "Yearly"}
+              {newPeriod === "monthly" ? m.option_monthly() : m.option_yearly()}
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="monthly">Monthly</Select.Item>
-              <Select.Item value="yearly">Yearly</Select.Item>
+              <Select.Item value="monthly">{m.option_monthly()}</Select.Item>
+              <Select.Item value="yearly">{m.option_yearly()}</Select.Item>
             </Select.Content>
           </Select.Root>
         </div>
         <div class="space-y-1 w-32">
-          <label for="budget-amount" class="text-xs font-medium">Amount</label>
+          <label for="budget-amount" class="text-xs font-medium">{m.label_amount()}</label>
           <Input id="budget-amount" type="number" step="0.01" placeholder="500.00" bind:value={newAmount} />
         </div>
         <div class="space-y-1 w-20">
-          <label for="budget-currency" class="text-xs font-medium">Currency</label>
+          <label for="budget-currency" class="text-xs font-medium">{m.label_currency()}</label>
           <Input id="budget-currency" placeholder="USD" bind:value={newCurrency} />
         </div>
         <Button onclick={handleAdd} disabled={adding || !newPattern.trim() || !String(newAmount).trim()}>
           <Plus class="mr-1 h-4 w-4" />
-          Add
+          {m.btn_add()}
         </Button>
       </div>
-      <p class="text-xs text-muted-foreground">Exact match or prefix (e.g. "Expenses:Food" includes "Expenses:Food:Groceries")</p>
+      <p class="text-xs text-muted-foreground">{m.budget_pattern_hint()}</p>
       </div>
     </Card.Content>
   </Card.Root>
@@ -201,15 +202,15 @@
   {#if filteredBudgets.length > 0}
     <Card.Root>
       <Card.Header>
-        <Card.Title>Budget Rules ({filteredBudgets.length})</Card.Title>
+        <Card.Title>{m.section_budget_rules({ count: String(filteredBudgets.length) })}</Card.Title>
       </Card.Header>
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>Account Pattern</SortableHeader>
-            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>Period</SortableHeader>
-            <SortableHeader active={sort.key === "limit"} direction={sort.direction} onclick={() => sort.toggle("limit")} class="text-right">Limit</SortableHeader>
-            <Table.Head class="text-right">Actions</Table.Head>
+            <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>{m.label_account_pattern()}</SortableHeader>
+            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>{m.label_period()}</SortableHeader>
+            <SortableHeader active={sort.key === "limit"} direction={sort.direction} onclick={() => sort.toggle("limit")} class="text-right">{m.label_limit()}</SortableHeader>
+            <Table.Head class="text-right">{m.label_actions()}</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -223,7 +224,7 @@
                 <Table.Cell>
                   <Select.Root type="single" bind:value={editPeriod}>
                     <Select.Trigger class="w-full h-8">
-                      {editPeriod === "monthly" ? "Monthly" : "Yearly"}
+                      {editPeriod === "monthly" ? m.option_monthly() : m.option_yearly()}
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Item value="monthly">Monthly</Select.Item>
@@ -236,8 +237,8 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   <div class="flex justify-end gap-1">
-                    <Button size="sm" onclick={() => saveEdit(budget)}>Save</Button>
-                    <Button size="sm" variant="outline" onclick={() => { editingId = null; }}>Cancel</Button>
+                    <Button size="sm" onclick={() => saveEdit(budget)}>{m.btn_save()}</Button>
+                    <Button size="sm" variant="outline" onclick={() => { editingId = null; }}>{m.btn_cancel()}</Button>
                   </div>
                 </Table.Cell>
               {:else}
@@ -250,7 +251,7 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   <div class="flex justify-end gap-1">
-                    <Button size="sm" variant="outline" onclick={() => startEdit(budget)}>Edit</Button>
+                    <Button size="sm" variant="outline" onclick={() => startEdit(budget)}>{m.btn_edit()}</Button>
                     <Button size="sm" variant="outline" onclick={() => handleDelete(budget.id)}>
                       <Trash2 class="h-3 w-3" />
                     </Button>
@@ -266,7 +267,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No budgets match "{searchTerm}".
+          {m.empty_no_budgets_match({ search: searchTerm })}
         </p>
       </Card.Content>
     </Card.Root>
@@ -274,7 +275,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No budgets configured yet. Add one above to start tracking spending.
+          {m.empty_no_budgets()}
         </p>
       </Card.Content>
     </Card.Root>

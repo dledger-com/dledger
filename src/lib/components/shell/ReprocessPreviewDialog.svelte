@@ -11,6 +11,7 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { invalidate } from "$lib/data/invalidation.js";
   import { toast } from "svelte-sonner";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   const handlerRegistry = getDefaultRegistry();
@@ -92,7 +93,7 @@
         if (combined.errors.length > 0) {
           toast.warning(`Reprocessed ${combined.changed} transaction(s) with ${combined.errors.length} error(s)`);
         } else {
-          toast.success(`Reprocessed ${combined.changed} transaction(s)`);
+          toast.success(m.toast_reprocessed({ count: String(combined.changed) }));
         }
 
         return { summary: `Reprocessed ${combined.changed} transaction(s)`, data: combined };
@@ -110,11 +111,15 @@
 >
   <Dialog.Content class="max-w-[90vw] sm:max-w-[90vw] max-h-[85vh] flex flex-col">
     <Dialog.Header>
-      <Dialog.Title>Reprocess Preview</Dialog.Title>
+      <Dialog.Title>{m.dialog_reprocess_preview_title()}</Dialog.Title>
       {#if reprocessStore.preview}
         <Dialog.Description>
-          {reprocessStore.preview.changed} of {reprocessStore.preview.total} transaction(s) would change.
-          {reprocessStore.preview.unchanged} unchanged, {reprocessStore.preview.skipped} skipped.
+          {m.dialog_reprocess_summary({
+            changed: String(reprocessStore.preview.changed),
+            total: String(reprocessStore.preview.total),
+            unchanged: String(reprocessStore.preview.unchanged),
+            skipped: String(reprocessStore.preview.skipped),
+          })}
         </Dialog.Description>
       {/if}
     </Dialog.Header>
@@ -125,11 +130,11 @@
           <Table.Root>
             <Table.Header>
               <Table.Row>
-                <Table.Head>Tx Hash</Table.Head>
-                <Table.Head>Old Handler</Table.Head>
-                <Table.Head>New Handler</Table.Head>
-                <Table.Head>Old Description</Table.Head>
-                <Table.Head>New Description</Table.Head>
+                <Table.Head>{m.table_tx_hash()}</Table.Head>
+                <Table.Head>{m.table_old_handler()}</Table.Head>
+                <Table.Head>{m.table_new_handler()}</Table.Head>
+                <Table.Head>{m.table_old_description()}</Table.Head>
+                <Table.Head>{m.table_new_description()}</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -149,7 +154,7 @@
         {#if reprocessStore.preview.errors.length > 0}
           <div>
             <p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-              Errors ({reprocessStore.preview.errors.length})
+              {m.label_errors_count({ count: String(reprocessStore.preview.errors.length) })}
             </p>
             <ul class="mt-1 max-h-32 overflow-y-auto text-xs text-muted-foreground">
               {#each reprocessStore.preview.errors as error}
@@ -162,10 +167,10 @@
 
       <Dialog.Footer>
         <Button variant="outline" onclick={() => reprocessStore.clear()}>
-          Cancel
+          {m.btn_cancel()}
         </Button>
         <Button onclick={handleApplyReprocess} disabled={applyingReprocess}>
-          {applyingReprocess ? "Applying..." : `Apply ${reprocessStore.preview.changed} Change(s)`}
+          {applyingReprocess ? m.state_applying() : m.dialog_apply_changes({ count: String(reprocessStore.preview.changed) })}
         </Button>
       </Dialog.Footer>
     {/if}

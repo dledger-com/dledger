@@ -25,6 +25,7 @@
   import X from "lucide-svelte/icons/x";
   import ArrowRightLeft from "lucide-svelte/icons/arrow-right-left";
   import TableIcon from "lucide-svelte/icons/table";
+  import * as m from "$paraglide/messages.js";
 
   interface Props {
     open: boolean;
@@ -151,7 +152,7 @@
     if (!entry) return;
     const reversal = await journalStore.void_(entry.id);
     if (reversal) {
-      toast.success("Entry voided");
+      toast.success(m.toast_entry_voided());
       invalidate("journal", "accounts", "reports");
       await loadEntry(entry.id);
     } else {
@@ -190,11 +191,11 @@
   <Drawer.Content class={isMobile ? '' : 'sm:max-w-xl'}>
     <Drawer.Header class="space-y-1">
       <div class="flex items-center justify-between">
-        <Drawer.Title class="text-sm font-medium text-muted-foreground">Entry Details</Drawer.Title>
+        <Drawer.Title class="text-sm font-medium text-muted-foreground">{m.dialog_entry_details()}</Drawer.Title>
         <div class="flex items-center gap-1">
           {#if entry && entry.status === "confirmed"}
             <Button variant="outline" size="sm" onclick={() => { onedit?.(); }}>
-              <Pencil class="h-3.5 w-3.5 mr-1" /> Edit
+              <Pencil class="h-3.5 w-3.5 mr-1" /> {m.btn_edit()}
             </Button>
           {/if}
           <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }}>
@@ -215,24 +216,24 @@
           {/each}
         </div>
       {:else if !entry}
-        <p class="text-sm text-muted-foreground text-center py-8">Entry not found.</p>
+        <p class="text-sm text-muted-foreground text-center py-8">{m.error_entry_not_found()}</p>
       {:else}
         {#if isHidden}
           <div class="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
-            This entry involves hidden currencies.
+            {m.label_involves_hidden()}
           </div>
         {/if}
 
         <!-- Details -->
         <section>
-          <h3 class="text-sm font-medium text-muted-foreground mb-2">Details</h3>
+          <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.section_details()}</h3>
           <dl class="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <dt class="text-muted-foreground">Date</dt>
+              <dt class="text-muted-foreground">{m.label_date()}</dt>
               <dd class="font-medium">{entry.date}</dd>
             </div>
             <div>
-              <dt class="text-muted-foreground">Status</dt>
+              <dt class="text-muted-foreground">{m.label_status()}</dt>
               <dd>
                 <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
                   {entry.status}
@@ -241,35 +242,35 @@
             </div>
           </dl>
           <details class="mt-2">
-            <summary class="text-xs text-muted-foreground cursor-pointer">More details</summary>
+            <summary class="text-xs text-muted-foreground cursor-pointer">{m.btn_more_details()}</summary>
             <dl class="grid grid-cols-2 gap-3 text-sm mt-2">
               <div>
-                <dt class="text-muted-foreground">Source</dt>
+                <dt class="text-muted-foreground">{m.label_source()}</dt>
                 <dd class="font-medium">{entry.source}</dd>
               </div>
               <div>
-                <dt class="text-muted-foreground">Created</dt>
+                <dt class="text-muted-foreground">{m.label_created()}</dt>
                 <dd class="font-medium">{entry.created_at}</dd>
               </div>
               {#if viewMetadata["edit:original_id"]}
                 <div>
-                  <dt class="text-muted-foreground">Edit of</dt>
+                  <dt class="text-muted-foreground">{m.account_edit_of()}</dt>
                   <dd>
                     <button
                       class="text-blue-600 hover:underline dark:text-blue-400 text-left"
                       onclick={() => { entryId = viewMetadata['edit:original_id']; }}
-                    >Original entry</button>
+                    >{m.account_original_entry()}</button>
                   </dd>
                 </div>
               {/if}
               {#if entry.voided_by}
                 <div>
-                  <dt class="text-muted-foreground">Voided by</dt>
+                  <dt class="text-muted-foreground">{m.account_voided_by()}</dt>
                   <dd>
                     <button
                       class="text-blue-600 hover:underline dark:text-blue-400 text-left"
                       onclick={() => { entryId = entry!.voided_by; }}
-                    >Reversal entry</button>
+                    >{m.account_reversal_entry()}</button>
                   </dd>
                 </div>
               {/if}
@@ -280,19 +281,19 @@
         <!-- Metadata -->
         {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== NOTE_META_KEY && k !== "links")}
         <section>
-            <h3 class="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
+            <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.section_metadata()}</h3>
             <div class="space-y-3 text-sm">
               <div class="space-y-2">
                   <div>
-                    <dt class="text-muted-foreground">Tags</dt>
+                    <dt class="text-muted-foreground">{m.label_tags()}</dt>
                     <dd><TagInput tags={viewTags} onchange={handleViewTagsChange} /></dd>
                   </div>
                   <div>
-                    <dt class="text-muted-foreground">Links</dt>
+                    <dt class="text-muted-foreground">{m.label_links()}</dt>
                     <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
                   </div>
                   <div>
-                    <dt class="text-muted-foreground">Note</dt>
+                    <dt class="text-muted-foreground">{m.label_note()}</dt>
                     <dd><NoteInput note={viewNote} onchange={handleViewNoteChange} /></dd>
                   </div>
               </div>
@@ -318,12 +319,12 @@
         <!-- Line Items -->
         <section>
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-medium text-muted-foreground">Line Items</h3>
+            <h3 class="text-sm font-medium text-muted-foreground">{m.section_line_items()}</h3>
             <Button
               variant="ghost"
               size="icon"
               class="h-7 w-7"
-              title={lineItemView === "table" ? "Switch to flow view" : "Switch to table view"}
+              title={lineItemView === "table" ? m.table_switch_to_flow() : m.table_switch_to_table()}
               onclick={() => { const v = lineItemView === "table" ? "flow" : "table"; lineItemView = v; settings.update({ journalLineItemView: v }); }}
             >
               {#if lineItemView === "table"}
@@ -340,9 +341,9 @@
               <table class="w-full table-fixed text-sm">
                 <thead>
                   <tr class="border-b bg-muted/50">
-                    <th class="text-left font-medium px-3 py-2">Account</th>
-                    <th class="text-right font-medium px-3 py-2 w-[100px]">Debit</th>
-                    <th class="text-right font-medium px-3 py-2 w-[100px]">Credit</th>
+                    <th class="text-left font-medium px-3 py-2">{m.label_account()}</th>
+                    <th class="text-right font-medium px-3 py-2 w-[100px]">{m.label_debit()}</th>
+                    <th class="text-right font-medium px-3 py-2 w-[100px]">{m.label_credit()}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -375,11 +376,11 @@
             if (!entry) return;
             const template = templateFromEntry(entry, viewItems);
             await getBackend().createRecurringTemplate(template);
-            toast.success("Recurring template created");
+            toast.success(m.toast_recurring_created());
             open = false;
             goto("/journal/recurring");
-          }}>Make Recurring</Button>
-          <Button variant="destructive" size="sm" onclick={handleVoid}>Void Entry</Button>
+          }}>{m.btn_make_recurring()}</Button>
+          <Button variant="destructive" size="sm" onclick={handleVoid}>{m.btn_void_entry()}</Button>
         </div>
       </Drawer.Footer>
     {/if}

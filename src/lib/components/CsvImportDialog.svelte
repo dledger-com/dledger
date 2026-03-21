@@ -51,6 +51,7 @@
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import BrainCircuit from "lucide-svelte/icons/brain-circuit";
   import Loader from "lucide-svelte/icons/loader";
+  import * as m from "$paraglide/messages.js";
 
   let {
     open = $bindable(false),
@@ -151,8 +152,8 @@
 
     const taskId = taskQueue.enqueue({
       key: "ml-classify",
-      label: "Classifying transactions...",
-      description: "Using ML to suggest account categories for uncategorized transactions",
+      label: m.state_classifying_transactions(),
+      description: m.ml_description(),
       run: async (ctx) => {
         const classifier = new TransactionClassifier();
         try {
@@ -179,7 +180,7 @@
 
           const total = previewRecords.length;
           const classified = suggestions.size;
-          return { summary: `Classified ${classified}/${total} transactions` };
+          return { summary: m.import_ml_classified_summary({ classified: String(classified), total: String(total) }) };
         } finally {
           classifier.dispose();
           mlClassifying = false;
@@ -189,7 +190,7 @@
 
     if (!taskId) {
       mlClassifying = false;
-      toast.error("ML classification is already running");
+      toast.error(m.error_ml_already_running());
     }
   }
 
@@ -225,7 +226,7 @@
     previewRecords = updated;
     mlSuggestions = new Map();
     mlAccepted = new Set();
-    toast.success("ML suggestions applied");
+    toast.success(m.toast_ml_applied());
   }
 
   // Load rules from settings
@@ -251,7 +252,7 @@
 
   function handleParse() {
     if (!rawContent.trim()) {
-      toast.error("Please provide CSV content");
+      toast.error(m.error_provide_csv());
       return;
     }
 
@@ -263,7 +264,7 @@
     rows = parsed.rows;
 
     if (headers.length === 0) {
-      toast.error("No headers found in CSV");
+      toast.error(m.error_no_headers_csv());
       return;
     }
 
@@ -329,16 +330,16 @@
     if (importDrop.batchActive) {
       toast.info(
         records.length === 0
-          ? `Skipped ${fileName}: no entries found`
-          : `Skipped ${fileName}: all ${records.length} entries are duplicates`,
+          ? m.toast_skipped_no_entries({ name: fileName })
+          : m.toast_skipped_all_duplicates({ name: fileName, count: String(records.length) }),
       );
       importDrop.skipFile();
     } else {
       open = false;
       toast.info(
         records.length === 0
-          ? `No entries found in ${fileName}`
-          : `All ${records.length} entries in ${fileName} are duplicates`,
+          ? m.toast_no_entries_found({ name: fileName })
+          : m.toast_all_duplicates({ count: String(records.length), name: fileName }),
       );
     }
     return true;
@@ -368,7 +369,7 @@
           step = 3;
           return;
         } else {
-          toast.error("Preset transform failed. Try manual mapping.");
+          toast.error(m.error_preset_transform_failed());
           return;
         }
       }
@@ -428,7 +429,7 @@
 
     const taskId = enqueueRecordImport({
       key: "csv-import",
-      label: "CSV Import",
+      label: m.import_csv_task_label(),
       records: recordsSnapshot,
       presetId: presetIdSnapshot,
       postImport: async (backend, result) => {
@@ -476,7 +477,7 @@
     if (taskId) {
       open = false;
     } else {
-      toast.error("An import is already in progress");
+      toast.error(m.error_import_in_progress());
     }
   }
 
@@ -527,20 +528,20 @@
     <Dialog.Header>
       <Dialog.Title>
         {#if step === 1}
-          CSV Import — Upload
+          {m.import_csv_title_upload()}
         {:else if step === 2}
-          CSV Import — Format & Mapping
+          {m.import_csv_title_mapping()}
         {:else}
-          CSV Import — Preview & Import
+          {m.import_csv_title_preview()}
         {/if}
       </Dialog.Title>
       <Dialog.Description>
         {#if step === 1}
-          Upload a CSV file or paste content directly.
+          {m.import_csv_desc_upload()}
         {:else if step === 2}
-          Configure how columns map to journal entries.
+          {m.import_csv_desc_mapping()}
         {:else}
-          Review entries before importing.
+          {m.import_csv_desc_preview()}
         {/if}
       </Dialog.Description>
     </Dialog.Header>
@@ -553,30 +554,30 @@
             class="flex cursor-pointer items-center gap-2 rounded-md border border-input px-4 py-2 text-sm hover:bg-accent"
           >
             <Upload class="h-4 w-4" />
-            <span>{fileName || "Choose file"}</span>
+            <span>{fileName || m.btn_choose_file()}</span>
             <input type="file" accept=".csv,.tsv,.txt" class="hidden" onchange={handleFileChange} />
           </label>
           <div class="flex items-center gap-2">
-            <label for="csv-delimiter" class="text-sm">Delimiter:</label>
+            <label for="csv-delimiter" class="text-sm">{m.label_delimiter()}:</label>
             <select
               id="csv-delimiter"
               class="h-8 rounded-md border border-input bg-background px-2 text-sm"
               bind:value={delimiter}
             >
-              <option value=",">, (comma)</option>
-              <option value=";">; (semicolon)</option>
-              <option value="&#9">Tab</option>
+              <option value=",">{m.import_delimiter_comma()}</option>
+              <option value=";">{m.import_delimiter_semicolon()}</option>
+              <option value="&#9">{m.import_delimiter_tab()}</option>
             </select>
           </div>
         </div>
         <textarea
           class="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          placeholder="Or paste CSV content here..."
+          placeholder={m.import_paste_placeholder()}
           bind:value={rawContent}
         ></textarea>
         <div class="flex justify-end">
           <Button onclick={handleParse} disabled={!rawContent.trim()}>
-            <FileText class="mr-2 h-4 w-4" /> Parse & Continue
+            <FileText class="mr-2 h-4 w-4" /> {m.import_parse_continue()}
           </Button>
         </div>
       </div>
@@ -591,8 +592,8 @@
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-medium">
-                  Detected format: <strong>{selectedPreset?.preset.name ?? bestPreset.preset.name}</strong>
-                  <Badge variant="secondary" class="ml-1">{selectedPreset?.confidence ?? bestPreset.confidence}% confidence</Badge>
+                  {m.import_detected_format()} <strong>{selectedPreset?.preset.name ?? bestPreset.preset.name}</strong>
+                  <Badge variant="secondary" class="ml-1">{selectedPreset?.confidence ?? bestPreset.confidence}%</Badge>
                 </p>
                 <p class="text-xs text-muted-foreground mt-1">{selectedPreset?.preset.description ?? bestPreset.preset.description}</p>
               </div>
@@ -626,7 +627,7 @@
                 class="text-xs h-7"
                 onclick={() => { usePreset = false; mainAccount = ASSETS_BANK_IMPORT; }}
               >
-                Manual Mapping
+                {m.import_manual_mapping()}
               </Button>
             </div>
           </div>
@@ -635,29 +636,29 @@
         <!-- File header info card (preset mode with preamble metadata) -->
         {#if usePreset && fileHeader}
           <div class="rounded-md border bg-muted/30 p-3 space-y-2">
-            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">File Header</h4>
+            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{m.import_file_header()}</h4>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               {#if fileHeader.accountMetadata?.accountID}
                 <div>
-                  <span class="text-xs text-muted-foreground">Account #</span>
+                  <span class="text-xs text-muted-foreground">{m.import_account_number()}</span>
                   <p class="font-mono text-xs">{fileHeader.accountMetadata.accountID}</p>
                 </div>
               {/if}
               {#if fileHeader.balanceCurrency}
                 <div>
-                  <span class="text-xs text-muted-foreground">Currency</span>
+                  <span class="text-xs text-muted-foreground">{m.label_currency()}</span>
                   <p class="font-mono text-xs">{fileHeader.balanceCurrency}</p>
                 </div>
               {/if}
               {#if fileHeader.balanceDate}
                 <div>
-                  <span class="text-xs text-muted-foreground">Balance Date</span>
+                  <span class="text-xs text-muted-foreground">{m.import_balance_date()}</span>
                   <p class="font-mono text-xs">{fileHeader.balanceDate}</p>
                 </div>
               {/if}
               {#if fileHeader.balanceAmount}
                 <div>
-                  <span class="text-xs text-muted-foreground">Balance</span>
+                  <span class="text-xs text-muted-foreground">{m.label_balance()}</span>
                   <p class="font-mono text-xs">{fileHeader.balanceAmount} {fileHeader.balanceCurrency ?? ""}</p>
                 </div>
               {/if}
@@ -668,8 +669,8 @@
         <!-- Editable main account (preset mode) -->
         {#if usePreset}
           <div class="space-y-1">
-            <label for="d-presetMainAcct" class="text-sm font-medium">Main Account</label>
-            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
+            <label for="d-presetMainAcct" class="text-sm font-medium">{m.label_main_account()}</label>
+            <Input id="d-presetMainAcct" bind:value={mainAccount} placeholder={m.placeholder_account_example()} />
           </div>
         {/if}
 
@@ -677,7 +678,7 @@
         {#if !usePreset}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div class="space-y-1">
-              <label for="d-skipLines" class="text-sm font-medium">Skip Header Lines</label>
+              <label for="d-skipLines" class="text-sm font-medium">{m.import_skip_header_lines()}</label>
               <Input
                 id="d-skipLines"
                 type="number"
@@ -687,22 +688,22 @@
               />
             </div>
             <div class="space-y-1">
-              <label for="d-delimiter" class="text-sm font-medium">Delimiter</label>
+              <label for="d-delimiter" class="text-sm font-medium">{m.label_delimiter()}</label>
               <select
                 id="d-delimiter"
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 bind:value={delimiter}
                 onchange={handleReParse}
               >
-                <option value=",">, (comma)</option>
-                <option value=";">; (semicolon)</option>
-                <option value="&#9">Tab</option>
+                <option value=",">{m.import_delimiter_comma()}</option>
+                <option value=";">{m.import_delimiter_semicolon()}</option>
+                <option value="&#9">{m.import_delimiter_tab()}</option>
               </select>
             </div>
             <div class="space-y-1">
               <label for="d-dateFormat" class="text-sm font-medium">
-                Date Format
-                {#if detection?.dateFormat}<Badge variant="outline" class="ml-1 text-xs">auto</Badge>{/if}
+                {m.import_date_format()}
+                {#if detection?.dateFormat}<Badge variant="outline" class="ml-1 text-xs">{m.import_auto_badge()}</Badge>{/if}
               </label>
               <select
                 id="d-dateFormat"
@@ -716,15 +717,15 @@
             </div>
             <div class="space-y-1">
               <label for="d-dateCol" class="text-sm font-medium">
-                Date Column *
-                {#if detection?.dateColumn}<Badge variant="outline" class="ml-1 text-xs">auto</Badge>{/if}
+                {m.import_date_column()}
+                {#if detection?.dateColumn}<Badge variant="outline" class="ml-1 text-xs">{m.import_auto_badge()}</Badge>{/if}
               </label>
               <select
                 id="d-dateCol"
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 bind:value={dateColumn}
               >
-                <option value="">-- select --</option>
+                <option value="">{m.import_select_placeholder()}</option>
                 {#each headers as h}
                   <option value={h}>{h}</option>
                 {/each}
@@ -732,45 +733,45 @@
             </div>
             <div class="space-y-1">
               <label for="d-descCol" class="text-sm font-medium">
-                Description Column
-                {#if detection?.descriptionColumn}<Badge variant="outline" class="ml-1 text-xs">auto</Badge>{/if}
+                {m.import_description_column()}
+                {#if detection?.descriptionColumn}<Badge variant="outline" class="ml-1 text-xs">{m.import_auto_badge()}</Badge>{/if}
               </label>
               <select
                 id="d-descCol"
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 bind:value={descriptionColumn}
               >
-                <option value="">-- none --</option>
+                <option value="">{m.import_none_placeholder()}</option>
                 {#each headers as h}
                   <option value={h}>{h}</option>
                 {/each}
               </select>
             </div>
             <div class="space-y-1">
-              <label for="d-currMode" class="text-sm font-medium">Currency</label>
+              <label for="d-currMode" class="text-sm font-medium">{m.label_currency()}</label>
               <select
                 id="d-currMode"
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 bind:value={currencyMode}
               >
-                <option value="fixed">Fixed value</option>
-                <option value="column">From column</option>
+                <option value="fixed">{m.import_fixed_value()}</option>
+                <option value="column">{m.import_from_column()}</option>
               </select>
             </div>
             {#if currencyMode === "fixed"}
               <div class="space-y-1">
-                <label for="d-fixedCurr" class="text-sm font-medium">Currency Code</label>
+                <label for="d-fixedCurr" class="text-sm font-medium">{m.import_currency_code()}</label>
                 <Input id="d-fixedCurr" bind:value={fixedCurrency} placeholder="USD" />
               </div>
             {:else}
               <div class="space-y-1">
-                <label for="d-currCol" class="text-sm font-medium">Currency Column</label>
+                <label for="d-currCol" class="text-sm font-medium">{m.import_currency_column()}</label>
                 <select
                   id="d-currCol"
                   class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   bind:value={currencyColumn}
                 >
-                  <option value="">-- select --</option>
+                  <option value="">{m.import_select_placeholder()}</option>
                   {#each headers as h}
                     <option value={h}>{h}</option>
                   {/each}
@@ -782,26 +783,26 @@
           <!-- Amount mode -->
           <div class="space-y-3">
             <div class="flex items-center gap-4">
-              <span class="text-sm font-medium">Amount Mode:</span>
+              <span class="text-sm font-medium">{m.import_amount_mode()}</span>
               <div class="flex gap-2">
                 <Button
                   size="sm"
                   variant={amountMode === "single" ? "default" : "outline"}
                   onclick={() => { amountMode = "single"; }}
                 >
-                  Single column (signed)
+                  {m.import_single_column_signed()}
                 </Button>
                 <Button
                   size="sm"
                   variant={amountMode === "split" ? "default" : "outline"}
                   onclick={() => { amountMode = "split"; }}
                 >
-                  Separate debit/credit
+                  {m.import_separate_debit_credit()}
                 </Button>
               </div>
               <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" bind:checked={europeanNumbers} class="rounded" />
-                European numbers (1.234,56)
+                {m.import_european_numbers()}
               </label>
             </div>
 
@@ -809,64 +810,64 @@
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="space-y-1">
                   <label for="d-amtCol" class="text-sm font-medium">
-                    Amount Column *
-                    {#if detection?.amountColumn}<Badge variant="outline" class="ml-1 text-xs">auto</Badge>{/if}
+                    {m.import_amount_column()}
+                    {#if detection?.amountColumn}<Badge variant="outline" class="ml-1 text-xs">{m.import_auto_badge()}</Badge>{/if}
                   </label>
                   <select
                     id="d-amtCol"
                     class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     bind:value={amountColumn}
                   >
-                    <option value="">-- select --</option>
+                    <option value="">{m.import_select_placeholder()}</option>
                     {#each headers as h}
                       <option value={h}>{h}</option>
                     {/each}
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label for="d-mainAcct" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
+                  <label for="d-mainAcct" class="text-sm font-medium">{m.label_main_account()}</label>
+                  <Input id="d-mainAcct" bind:value={mainAccount} placeholder={m.placeholder_account_example()} />
                 </div>
                 <div class="space-y-1">
-                  <label for="d-counterAcct" class="text-sm font-medium">Counter Account</label>
-                  <Input id="d-counterAcct" bind:value={counterAccount} placeholder="Expenses:Uncategorized" />
+                  <label for="d-counterAcct" class="text-sm font-medium">{m.label_counter_account()}</label>
+                  <Input id="d-counterAcct" bind:value={counterAccount} placeholder={m.placeholder_account_example()} />
                 </div>
               </div>
             {:else}
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="space-y-1">
-                  <label for="d-debitCol" class="text-sm font-medium">Debit Column</label>
+                  <label for="d-debitCol" class="text-sm font-medium">{m.import_debit_column()}</label>
                   <select
                     id="d-debitCol"
                     class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     bind:value={debitAmountColumn}
                   >
-                    <option value="">-- select --</option>
+                    <option value="">{m.import_select_placeholder()}</option>
                     {#each headers as h}
                       <option value={h}>{h}</option>
                     {/each}
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label for="d-creditCol" class="text-sm font-medium">Credit Column</label>
+                  <label for="d-creditCol" class="text-sm font-medium">{m.import_credit_column()}</label>
                   <select
                     id="d-creditCol"
                     class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     bind:value={creditAmountColumn}
                   >
-                    <option value="">-- select --</option>
+                    <option value="">{m.import_select_placeholder()}</option>
                     {#each headers as h}
                       <option value={h}>{h}</option>
                     {/each}
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label for="d-mainAcct2" class="text-sm font-medium">Main Account</label>
-                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder="Assets:Bank:MyBank:Checking" />
+                  <label for="d-mainAcct2" class="text-sm font-medium">{m.label_main_account()}</label>
+                  <Input id="d-mainAcct2" bind:value={mainAccount} placeholder={m.placeholder_account_example()} />
                 </div>
                 <div class="space-y-1">
-                  <label for="d-counterAcct2" class="text-sm font-medium">Counter Account</label>
-                  <Input id="d-counterAcct2" bind:value={counterAccount} placeholder="Expenses:Uncategorized" />
+                  <label for="d-counterAcct2" class="text-sm font-medium">{m.label_counter_account()}</label>
+                  <Input id="d-counterAcct2" bind:value={counterAccount} placeholder={m.placeholder_account_example()} />
                 </div>
               </div>
             {/if}
@@ -883,7 +884,7 @@
         <!-- Preview table (first 5 rows) -->
         {#if rows.length > 0}
           <details>
-            <summary class="text-sm text-muted-foreground cursor-pointer">CSV Preview ({rows.length} data rows)</summary>
+            <summary class="text-sm text-muted-foreground cursor-pointer">{m.import_csv_preview_rows({ count: String(rows.length) })}</summary>
             <div class="overflow-x-auto mt-2 max-h-40">
               <Table.Root>
                 <Table.Header>
@@ -908,9 +909,9 @@
         {/if}
 
         <div class="flex justify-between">
-          <Button variant="outline" onclick={() => { step = 1; }}>Back</Button>
+          <Button variant="outline" onclick={() => { step = 1; }}>{m.btn_back()}</Button>
           <Button onclick={() => generatePreview()} disabled={!usePreset && !dateColumn}>
-            Preview &rarr;
+            {m.import_preview_arrow()} &rarr;
           </Button>
         </div>
       </div>
@@ -922,19 +923,19 @@
           <!-- Preview -->
           <div class="flex items-center justify-between">
             <p class="text-sm">
-              <strong>{nonDuplicateCount}</strong> entries to import
+              {m.import_entries_to_import({ count: String(nonDuplicateCount) })}
               {#if duplicateCount > 0}
-                <Badge variant="secondary" class="ml-2">{duplicateCount} duplicates (will skip)</Badge>
+                <Badge variant="secondary" class="ml-2">{m.import_duplicates_will_skip({ count: String(duplicateCount) })}</Badge>
               {/if}
               {#if previewWarnings.length > 0}
-                <Badge variant="destructive" class="ml-2">{previewWarnings.length} warnings</Badge>
+                <Badge variant="destructive" class="ml-2">{m.import_warnings_count({ count: String(previewWarnings.length) })}</Badge>
               {/if}
             </p>
             <div class="flex items-center gap-2">
               {#if mlSuggestions.size > 0}
-                <Badge variant="outline" class="text-xs">{mlSuggestions.size} ML suggestions</Badge>
+                <Badge variant="outline" class="text-xs">{m.import_ml_suggestions_count({ count: String(mlSuggestions.size) })}</Badge>
                 <Button size="sm" variant="default" class="h-7 text-xs" onclick={applyMlSuggestions}>
-                  Accept {mlAccepted.size} suggestions
+                  {m.import_accept_suggestions({ count: String(mlAccepted.size) })}
                 </Button>
               {/if}
               {#if mlEnabled}
@@ -950,7 +951,7 @@
                   {:else}
                     <BrainCircuit class="h-3 w-3 mr-1" />
                   {/if}
-                  {mlClassifying ? "Classifying..." : "Classify with AI"}
+                  {mlClassifying ? m.state_classifying() : m.btn_classify_with_ai()}
                 </Button>
               {/if}
             </div>
@@ -958,13 +959,13 @@
 
           <!-- Batch tags for all imported entries -->
           <div class="flex items-center gap-2">
-            <span class="text-xs text-muted-foreground shrink-0">Tags for all:</span>
+            <span class="text-xs text-muted-foreground shrink-0">{m.import_tags_for_all()}</span>
             <TagInput tags={importTags} onchange={(t) => { importTags = t; }} class="flex-1" />
           </div>
 
           {#if previewWarnings.length > 0}
             <details>
-              <summary class="text-xs text-muted-foreground cursor-pointer">Show warnings</summary>
+              <summary class="text-xs text-muted-foreground cursor-pointer">{m.btn_show_warnings()}</summary>
               <div class="max-h-24 overflow-y-auto mt-1 space-y-0.5">
                 {#each previewWarnings.slice(0, 20) as w}
                   <p class="text-xs text-muted-foreground">{w}</p>
@@ -978,10 +979,10 @@
             <Table.Root>
               <Table.Header>
                 <Table.Row>
-                  <Table.Head class="w-24">Date</Table.Head>
-                  <Table.Head>Description</Table.Head>
-                  <Table.Head class="min-w-[260px]">Line Items</Table.Head>
-                  <Table.Head class="w-16 text-center">Balance</Table.Head>
+                  <Table.Head class="w-24">{m.label_date()}</Table.Head>
+                  <Table.Head>{m.label_description()}</Table.Head>
+                  <Table.Head class="min-w-[260px]">{m.label_line_items()}</Table.Head>
+                  <Table.Head class="w-16 text-center">{m.label_balance()}</Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -996,7 +997,7 @@
                     {@const recTags = parseTags(rec.metadata?.[TAGS_META_KEY])}
                     <Table.Cell class="text-xs max-w-[250px] whitespace-normal">
                       <span>{rec.description}</span>
-                      {#if dup}<Badge variant="outline" class="ml-1 text-xs">dup</Badge>{/if}
+                      {#if dup}<Badge variant="outline" class="ml-1 text-xs">{m.import_dup_badge()}</Badge>{/if}
                       {#if recTags.length > 0}
                         <div class="flex flex-wrap gap-0.5 mt-0.5">
                           {#each recTags as tag}
@@ -1019,13 +1020,13 @@
                         </div>
                       {/each}
                       {#if rec.lines.length > 4}
-                        <span class="text-muted-foreground text-xs">+{rec.lines.length - 4} more</span>
+                        <span class="text-muted-foreground text-xs">{m.import_more_lines({ count: String(rec.lines.length - 4) })}</span>
                       {/if}
                       {#if mlSuggestion}
                         <button
                           class="flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs cursor-pointer {mlIsAccepted ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-muted text-muted-foreground line-through'}"
                           onclick={() => toggleMlAccept(recIdx)}
-                          title={mlIsAccepted ? "Click to reject suggestion" : "Click to accept suggestion"}
+                          title={mlIsAccepted ? m.ml_click_to_reject() : m.ml_click_to_accept()}
                         >
                           <BrainCircuit class="h-3 w-3" />
                           <span class="font-mono truncate max-w-[140px]">{mlSuggestion.account}</span>
@@ -1052,7 +1053,7 @@
                 {#if previewRecords.length > 50}
                   <Table.Row>
                     <Table.Cell colspan={4} class="text-center text-xs text-muted-foreground py-2">
-                      ... and {previewRecords.length - 50} more entries
+                      {m.import_more_entries({ count: String(previewRecords.length - 50) })}
                     </Table.Cell>
                   </Table.Row>
                 {/if}
@@ -1061,16 +1062,16 @@
           </div>
 
           <div class="flex justify-between">
-            <Button variant="outline" onclick={() => { step = 2; }}>Back</Button>
+            <Button variant="outline" onclick={() => { step = 2; }}>{m.btn_back()}</Button>
             {#if nonDuplicateCount === 0}
               {#if importDrop.batchActive}
-                <Button variant="outline" onclick={() => importDrop.skipFile()}>Skip</Button>
+                <Button variant="outline" onclick={() => importDrop.skipFile()}>{m.btn_skip()}</Button>
               {:else}
-                <Button variant="outline" onclick={() => { open = false; }}>Cancel</Button>
+                <Button variant="outline" onclick={() => { open = false; }}>{m.btn_cancel()}</Button>
               {/if}
             {:else}
               <Button onclick={doImport} disabled={taskQueue.isActive("csv-import")}>
-                {taskQueue.isActive("csv-import") ? "Importing..." : `Import ${nonDuplicateCount} entries`}
+                {taskQueue.isActive("csv-import") ? m.state_importing() : m.import_n_entries({ count: String(nonDuplicateCount) })}
               </Button>
             {/if}
           </div>

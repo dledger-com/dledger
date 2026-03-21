@@ -9,6 +9,7 @@
   import X from "lucide-svelte/icons/x";
   import Loader from "lucide-svelte/icons/loader";
   import ListTodo from "lucide-svelte/icons/list-todo";
+  import * as m from "$paraglide/messages.js";
 
   interface Props {
     open: boolean;
@@ -66,14 +67,14 @@
 <Drawer.Root bind:open direction={isMobile ? 'bottom' : 'right'}>
   <Drawer.Content class={isMobile ? '' : 'sm:max-w-[400px]'}>
     <Drawer.Header>
-      <Drawer.Title>Background Tasks</Drawer.Title>
+      <Drawer.Title>{m.section_background_tasks()}</Drawer.Title>
     </Drawer.Header>
 
     <div class="flex-1 overflow-y-auto px-1">
       {#if taskQueue.queue.length === 0}
         <div class="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <ListTodo class="mb-2 h-8 w-8" />
-          <p class="text-sm">No background tasks</p>
+          <p class="text-sm">{m.empty_no_background_tasks()}</p>
         </div>
       {:else}
         <!-- Running -->
@@ -85,7 +86,7 @@
                 <span class="text-sm font-medium">{task.label}</span>
               </div>
               <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" onclick={() => taskQueue.cancel(task.id)}>
-                Cancel
+                {m.btn_cancel()}
               </Button>
             </div>
             {#if task.description}
@@ -108,13 +109,13 @@
                 <p class="mt-2 text-xs text-muted-foreground">{task.progress.message}</p>
               {/if}
             {/if}
-            <p class="mt-1 text-xs text-muted-foreground">Elapsed: {formatElapsed(elapsed)}</p>
+            <p class="mt-1 text-xs text-muted-foreground">{m.label_elapsed({ time: formatElapsed(elapsed) })}</p>
           </div>
         {/each}
 
         <!-- Pending -->
         {#if taskQueue.pending.length > 0}
-          <h4 class="mb-1 mt-3 text-xs font-medium text-muted-foreground uppercase">Queued</h4>
+          <h4 class="mb-1 mt-3 text-xs font-medium text-muted-foreground uppercase">{m.label_queued()}</h4>
           {#each taskQueue.pending as task (task.id)}
             <div class="mb-2 flex items-center justify-between rounded-lg border p-2">
               <span class="text-sm">{task.label}</span>
@@ -128,9 +129,9 @@
         <!-- History -->
         {#if taskQueue.history.length > 0}
           <div class="mt-3 flex items-center justify-between">
-            <h4 class="text-xs font-medium text-muted-foreground uppercase">History</h4>
+            <h4 class="text-xs font-medium text-muted-foreground uppercase">{m.section_history()}</h4>
             <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" onclick={() => taskQueue.clearHistory()}>
-              Clear
+              {m.btn_clear()}
             </Button>
           </div>
           {#each taskQueue.history as task (task.id)}
@@ -161,7 +162,7 @@
                 {:else if task.status === "failed" && task.error}
                   <p class="text-xs text-red-500">{task.error}</p>
                 {:else if task.status === "cancelled"}
-                  <p class="text-xs text-muted-foreground">Cancelled</p>
+                  <p class="text-xs text-muted-foreground">{m.label_cancelled()}</p>
                 {/if}
                 {#if task.status === "completed" && task.result?.actionRequired}
                   <Button
@@ -169,7 +170,7 @@
                     class="mt-1 h-6 text-xs"
                     onclick={() => { open = false; taskQueue.handleAction(task.id); }}
                   >
-                    {task.result.actionLabel ?? "Review"}
+                    {task.result.actionLabel ?? m.label_review()}
                   </Button>
                 {/if}
                 {#if task.finishedAt}

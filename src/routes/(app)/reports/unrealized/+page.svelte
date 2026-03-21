@@ -23,6 +23,7 @@
   import ListFilter from "$lib/components/ListFilter.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -109,11 +110,11 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="asOf" class="text-sm font-medium">As of Date</label>
+      <label for="asOf" class="text-sm font-medium">{m.report_as_of_date()}</label>
       <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
-      {loading ? "Loading..." : "Generate"}
+      {loading ? m.state_loading_report() : m.btn_generate()}
     </Button>
     {#if report}
       <Button variant="outline" onclick={() => exportUnrealizedGainLossCsv(report!)}>
@@ -123,13 +124,13 @@
     {/if}
     {#if hasProtocols}
       <div class="space-y-2">
-        <span class="text-sm font-medium">Protocol</span>
+        <span class="text-sm font-medium">{m.report_protocol()}</span>
         <Select.Root type="single" bind:value={filterProtocol}>
           <Select.Trigger class="w-40">
-            {filterProtocol || "All"}
+            {filterProtocol || m.range_all()}
           </Select.Trigger>
           <Select.Content>
-            <Select.Item value="">All</Select.Item>
+            <Select.Item value="">{m.range_all()}</Select.Item>
             {#each uniqueProtocols as protocol (protocol)}
               <Select.Item value={protocol}>{protocol}</Select.Item>
             {/each}
@@ -137,7 +138,7 @@
         </Select.Root>
       </div>
     {/if}
-    <ListFilter bind:value={searchTerm} placeholder="Filter positions..." />
+    <ListFilter bind:value={searchTerm} placeholder={m.placeholder_filter_positions()} />
   </div>
 
   <MissingRateBanner requests={missingRateRequests} onFetched={generate} />
@@ -157,7 +158,7 @@
     {@const total = parseFloat(report.total_unrealized)}
     <Card.Root>
       <Card.Header>
-        <Card.Description>Total Unrealized Gain/Loss</Card.Description>
+        <Card.Description>{m.report_total_unrealized_gain_loss()}</Card.Description>
         <Card.Title class="text-2xl {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
           {total >= 0 ? "+" : ""}{formatCurrency(total, report.base_currency)}
         </Card.Title>
@@ -168,7 +169,7 @@
       <Card.Root>
         <Card.Content class="py-8">
           <p class="text-sm text-muted-foreground text-center">
-            No open lots. All positions have been fully disposed.
+            {m.report_no_open_lots()}
           </p>
         </Card.Content>
       </Card.Root>
@@ -177,16 +178,16 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortU.key === "currency"} direction={sortU.direction} onclick={() => sortU.toggle("currency")}>Currency</SortableHeader>
+              <SortableHeader active={sortU.key === "currency"} direction={sortU.direction} onclick={() => sortU.toggle("currency")}>{m.label_currency()}</SortableHeader>
               {#if hasProtocols}
-                <SortableHeader active={sortU.key === "protocol"} direction={sortU.direction} onclick={() => sortU.toggle("protocol")}>Protocol</SortableHeader>
+                <SortableHeader active={sortU.key === "protocol"} direction={sortU.direction} onclick={() => sortU.toggle("protocol")}>{m.report_protocol()}</SortableHeader>
               {/if}
-              <SortableHeader active={sortU.key === "account"} direction={sortU.direction} onclick={() => sortU.toggle("account")} class="hidden md:table-cell">Account</SortableHeader>
-              <SortableHeader active={sortU.key === "acquired"} direction={sortU.direction} onclick={() => sortU.toggle("acquired")} class="hidden lg:table-cell">Acquired</SortableHeader>
-              <SortableHeader active={sortU.key === "quantity"} direction={sortU.direction} onclick={() => sortU.toggle("quantity")} class="text-right hidden md:table-cell">Quantity</SortableHeader>
-              <SortableHeader active={sortU.key === "costUnit"} direction={sortU.direction} onclick={() => sortU.toggle("costUnit")} class="text-right hidden sm:table-cell">Cost/Unit</SortableHeader>
-              <SortableHeader active={sortU.key === "currentValue"} direction={sortU.direction} onclick={() => sortU.toggle("currentValue")} class="text-right hidden sm:table-cell">Current Value</SortableHeader>
-              <SortableHeader active={sortU.key === "unrealizedGL"} direction={sortU.direction} onclick={() => sortU.toggle("unrealizedGL")} class="text-right">Unrealized G/L</SortableHeader>
+              <SortableHeader active={sortU.key === "account"} direction={sortU.direction} onclick={() => sortU.toggle("account")} class="hidden md:table-cell">{m.label_account()}</SortableHeader>
+              <SortableHeader active={sortU.key === "acquired"} direction={sortU.direction} onclick={() => sortU.toggle("acquired")} class="hidden lg:table-cell">{m.report_acquired()}</SortableHeader>
+              <SortableHeader active={sortU.key === "quantity"} direction={sortU.direction} onclick={() => sortU.toggle("quantity")} class="text-right hidden md:table-cell">{m.report_quantity()}</SortableHeader>
+              <SortableHeader active={sortU.key === "costUnit"} direction={sortU.direction} onclick={() => sortU.toggle("costUnit")} class="text-right hidden sm:table-cell">{m.report_cost_per_unit()}</SortableHeader>
+              <SortableHeader active={sortU.key === "currentValue"} direction={sortU.direction} onclick={() => sortU.toggle("currentValue")} class="text-right hidden sm:table-cell">{m.report_current_value()}</SortableHeader>
+              <SortableHeader active={sortU.key === "unrealizedGL"} direction={sortU.direction} onclick={() => sortU.toggle("unrealizedGL")} class="text-right">{m.report_unrealized_gl()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -217,7 +218,7 @@
           </Table.Body>
           <Table.Footer>
             <Table.Row>
-              <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">Total</Table.Cell>
+              <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">{m.report_total()}</Table.Cell>
               <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
                 {total >= 0 ? "+" : ""}{formatCurrency(total, report.base_currency)}
               </Table.Cell>

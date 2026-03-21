@@ -6,6 +6,7 @@
   import { getBackend } from "$lib/backend.js";
   import { runIntegrityChecks, type IntegrityIssue } from "$lib/utils/integrity-check.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   let running = $state(false);
   let issues = $state<IntegrityIssue[] | null>(null);
@@ -31,7 +32,7 @@
 
   $effect(() => {
     setTopBarActions([
-      { type: 'button', label: running ? 'Running...' : 'Run Checks', onclick: runChecks, disabled: running }
+      { type: 'button', label: running ? m.report_running() : m.report_run_checks(), onclick: runChecks, disabled: running }
     ]);
   });
 
@@ -56,8 +57,8 @@
       <Card.Root class="border-green-200 dark:border-green-800">
         <Card.Content class="py-8">
           <div class="text-center space-y-2">
-            <p class="text-lg font-medium text-green-600 dark:text-green-400">All checks passed</p>
-            <p class="text-sm text-muted-foreground">No issues detected in your ledger data.</p>
+            <p class="text-lg font-medium text-green-600 dark:text-green-400">{m.report_all_checks_passed()}</p>
+            <p class="text-sm text-muted-foreground">{m.report_no_issues_detected()}</p>
           </div>
         </Card.Content>
       </Card.Root>
@@ -67,7 +68,7 @@
         {#if errors.length > 0}
           <Card.Root class="flex-1 border-red-200 dark:border-red-800">
             <Card.Header>
-              <Card.Description>Errors</Card.Description>
+              <Card.Description>{m.report_errors()}</Card.Description>
               <Card.Title class="text-2xl text-red-600 dark:text-red-400">{errors.length}</Card.Title>
             </Card.Header>
           </Card.Root>
@@ -75,7 +76,7 @@
         {#if warnings.length > 0}
           <Card.Root class="flex-1 border-yellow-200 dark:border-yellow-800">
             <Card.Header>
-              <Card.Description>Warnings</Card.Description>
+              <Card.Description>{m.report_warnings()}</Card.Description>
               <Card.Title class="text-2xl text-yellow-600 dark:text-yellow-400">{warnings.length}</Card.Title>
             </Card.Header>
           </Card.Root>
@@ -86,7 +87,7 @@
       {#if errors.length > 0}
         <Card.Root>
           <Card.Header>
-            <Card.Title class="text-red-600 dark:text-red-400">Errors</Card.Title>
+            <Card.Title class="text-red-600 dark:text-red-400">{m.report_errors()}</Card.Title>
           </Card.Header>
           <Card.Content>
             <div class="space-y-3">
@@ -98,7 +99,7 @@
                     {#if issue.entityType && issue.entityId}
                       <a href="/{issue.entityType === 'journal_entry' ? 'journal' : 'accounts'}/{issue.entityId}"
                          class="text-xs text-muted-foreground hover:underline mt-1 block">
-                        View {issue.entityType}
+                        {m.report_view_entity({ entityType: issue.entityType })}
                       </a>
                     {/if}
                   </div>
@@ -113,7 +114,7 @@
       {#if warnings.length > 0}
         <Card.Root>
           <Card.Header>
-            <Card.Title class="text-yellow-600 dark:text-yellow-400">Warnings</Card.Title>
+            <Card.Title class="text-yellow-600 dark:text-yellow-400">{m.report_warnings()}</Card.Title>
           </Card.Header>
           <Card.Content>
             <div class="space-y-3">
@@ -132,7 +133,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          Click "Run Checks" to verify your ledger data integrity.
+          {m.report_click_run_checks()}
         </p>
       </Card.Content>
     </Card.Root>

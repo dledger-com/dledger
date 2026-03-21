@@ -20,6 +20,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -74,20 +75,20 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="asOf" class="text-sm font-medium">As of Date</label>
+      <label for="asOf" class="text-sm font-medium">{m.report_as_of_date()}</label>
       <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
-      {loading ? "Loading..." : "Generate"}
+      {loading ? m.state_loading() : m.btn_generate()}
     </Button>
     {#if hasWallets && report}
       <Button variant="outline" onclick={() => exportPortfolioCsv(report!)}>
-        Export CSV
+        {m.report_export_csv()}
       </Button>
     {/if}
     <div class="flex items-center gap-2">
       <Switch checked={settings.showHidden} onCheckedChange={(v) => { settings.update({ showHidden: v }); generate(); }} />
-      <span class="text-sm text-muted-foreground">Show Hidden</span>
+      <span class="text-sm text-muted-foreground">{m.report_show_hidden()}</span>
     </div>
   </div>
 
@@ -107,7 +108,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No wallet holdings found. Add etherscan accounts and sync transactions to see your portfolio here.
+          {m.empty_no_wallet_holdings()}
         </p>
       </Card.Content>
     </Card.Root>
@@ -116,13 +117,13 @@
       <Card.Root>
         <Card.Header>
           <div class="flex items-center justify-between">
-            <Card.Title>Aggregate Total</Card.Title>
+            <Card.Title>{m.report_aggregate_total()}</Card.Title>
             <span class="text-xl font-bold">
               {formatCurrency(parseFloat(report.aggregate_total), settings.currency)}
             </span>
           </div>
           <Card.Description>
-            Combined value across {report.wallets.length} wallet{report.wallets.length !== 1 ? "s" : ""} as of {report.as_of}
+            {m.report_combined_value({ count: String(report.wallets.length), date: report.as_of })}
           </Card.Description>
         </Card.Header>
       </Card.Root>
@@ -150,9 +151,9 @@
           <Table.Root>
             <Table.Header>
               <Table.Row>
-                <Table.Head>Currency</Table.Head>
-                <Table.Head class="text-right">Amount</Table.Head>
-                <Table.Head class="text-right">Value ({settings.currency})</Table.Head>
+                <Table.Head>{m.label_currency()}</Table.Head>
+                <Table.Head class="text-right">{m.label_amount()}</Table.Head>
+                <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -171,7 +172,7 @@
               {/each}
               {#if wallet.totalBaseValue !== null}
                 <Table.Row class="font-semibold border-t-2">
-                  <Table.Cell>Total</Table.Cell>
+                  <Table.Cell>{m.report_total()}</Table.Cell>
                   <Table.Cell></Table.Cell>
                   <Table.Cell class="text-right font-mono">
                     {formatCurrency(parseFloat(wallet.totalBaseValue), settings.currency)}

@@ -24,6 +24,7 @@
   import Download from "lucide-svelte/icons/download";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection, CurrencyBalance } from "$lib/types/index.js";
+  import * as m from "$paraglide/messages.js";
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -103,11 +104,11 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="asOf" class="text-sm font-medium">As of Date</label>
+      <label for="asOf" class="text-sm font-medium">{m.report_as_of_date()}</label>
       <Input id="asOf" type="date" bind:value={asOf} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={store.loading}>
-      {store.loading ? "Loading..." : "Generate"}
+      {store.loading ? m.state_loading_report() : m.btn_generate()}
     </Button>
     {#if store.balanceSheet}
       <Button variant="outline" onclick={() => exportBalanceSheetCsv(store.balanceSheet!)}>
@@ -116,7 +117,7 @@
       </Button>
       <label class="flex items-center gap-2 text-sm">
         <Switch checked={convertToBase} onCheckedChange={handleToggleConvert} />
-        Convert to {settings.currency}
+        {m.report_convert_to({ currency: settings.currency })}
       </label>
     {/if}
   </div>
@@ -133,7 +134,7 @@
     {#if convertToBase && assetsSummary && liabilitiesSummary}
       <Card.Root class="border-primary/30">
         <Card.Header>
-          <Card.Description>Net Worth</Card.Description>
+          <Card.Description>{m.chart_net_worth()}</Card.Description>
           <Card.Title class="text-2xl">
             {formatCurrency(
               (assetsSummary?.total ?? 0) + (liabilitiesSummary?.total ?? 0),
@@ -156,7 +157,7 @@
         </Card.Header>
         {#if filteredLines.length === 0}
           <Card.Content>
-            <p class="text-sm text-muted-foreground py-4 text-center">No accounts with balances.</p>
+            <p class="text-sm text-muted-foreground py-4 text-center">{m.empty_no_accounts()}</p>
           </Card.Content>
         {:else}
           <Table.Root>
@@ -172,14 +173,14 @@
             </Table.Body>
             <Table.Footer>
               <Table.Row class="font-bold">
-                <Table.Cell>Total {section.title}</Table.Cell>
+                <Table.Cell>{m.report_total()} {section.title}</Table.Cell>
                 <Table.Cell class="text-right font-mono">
                   {renderTotals(section)}
                   {#if convertToBase && summary}
                     <span class="ml-2 text-primary">({renderConvertedTotal(summary)})</span>
                     {#if summary.unconverted.length > 0}
                       <span class="ml-1 text-xs text-amber-600">
-                        +{summary.unconverted.length} unconverted
+                        {m.report_unconverted_count({ count: summary.unconverted.length })}
                       </span>
                     {/if}
                     {#if settings.debugMode}
@@ -197,7 +198,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No data available. Post journal entries to generate the balance sheet.
+          {m.empty_no_balance_sheet_data()}
         </p>
       </Card.Content>
     </Card.Root>

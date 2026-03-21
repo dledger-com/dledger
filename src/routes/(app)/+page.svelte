@@ -22,6 +22,7 @@
   import { countDueTemplates } from "$lib/utils/recurring.js";
   import { toast } from "svelte-sonner";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
+  import * as m from "$paraglide/messages.js";
   import {
     getCachedRecentEntries, setCachedRecentEntries,
     getCachedSummaries, setCachedSummary,
@@ -276,8 +277,8 @@
       .then((count) => {
         if (signal.aborted) return;
         if (count > 0) {
-          toast.info(`${count} recurring ${count === 1 ? "template" : "templates"} due`, {
-            action: { label: "Generate", onClick: () => { window.location.href = "/journal/recurring"; } },
+          toast.info(count === 1 ? m.dashboard_recurring_due_one() : m.dashboard_recurring_due_other({ count: String(count) }), {
+            action: { label: m.btn_generate(), onClick: () => { window.location.href = "/journal/recurring"; } },
           });
         }
       })
@@ -400,7 +401,7 @@
         {#if count > 1 || summary.unconverted.length > 0}
           <button onclick={toggleBreakdown}
                   class="text-xs text-muted-foreground hover:underline text-left">
-            {count} {count === 1 ? "currency" : "currencies"}{#if summary.unconverted.length > 0}, {summary.unconverted.length} without rate{/if}
+            {count === 1 ? m.dashboard_currencies_one() : m.dashboard_currencies_other({ count: String(count) })}{#if summary.unconverted.length > 0}{m.dashboard_without_rate({ count: String(summary.unconverted.length) })}{/if}
           </button>
           {#if showBreakdown}
             <div class="mt-2 text-xs space-y-0.5">
@@ -412,7 +413,7 @@
               {/each}
               {#each summary.unconverted as c}
                 <div class="flex justify-between gap-4 text-muted-foreground">
-                  <span>{c.currency} (no rate)</span>
+                  <span>{c.currency} ({m.dashboard_no_rate()})</span>
                   <span class="font-mono">{formatCurrency(c.amount, c.currency)}</span>
                 </div>
               {/each}
@@ -430,7 +431,7 @@
       <Button variant={rangePreset === "mtd" ? "default" : "outline"} size="sm" onclick={() => selectRange("mtd")}>MTD</Button>
       <Button variant={rangePreset === "ytd" ? "default" : "outline"} size="sm" onclick={() => selectRange("ytd")}>YTD</Button>
       <Button variant={rangePreset === "12m" ? "default" : "outline"} size="sm" onclick={() => selectRange("12m")}>12M</Button>
-      <Button variant={rangePreset === "all" ? "default" : "outline"} size="sm" onclick={() => selectRange("all")}>All</Button>
+      <Button variant={rangePreset === "all" ? "default" : "outline"} size="sm" onclick={() => selectRange("all")}>{m.range_all()}</Button>
     </div>
   </div>
 
@@ -445,28 +446,28 @@
 
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     {@render summaryCard(
-      "Total Assets",
+      m.report_total_assets(),
       assetsSummary,
       reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.assets.totals, hidden) : undefined,
       showAssets,
       () => { showAssets = !showAssets },
     )}
     {@render summaryCard(
-      "Total Liabilities",
+      m.report_total_liabilities(),
       liabilitiesSummary,
       reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden) : undefined,
       showLiabilities,
       () => { showLiabilities = !showLiabilities },
     )}
     {@render summaryCard(
-      `Revenue (${rangePreset.toUpperCase()})`,
+      m.dashboard_revenue_period({ period: rangePreset.toUpperCase() }),
       revenueSummary,
       reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden) : undefined,
       showRevenue,
       () => { showRevenue = !showRevenue },
     )}
     {@render summaryCard(
-      `Net Income (${rangePreset.toUpperCase()})`,
+      m.dashboard_net_income_period({ period: rangePreset.toUpperCase() }),
       netIncomeSummary,
       reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, hidden) : undefined,
       showNetIncome,
@@ -479,15 +480,15 @@
     <!-- Net Worth Trend -->
     <Card.Root class="lg:col-span-2">
       <Card.Header>
-        <Card.Title>Net Worth</Card.Title>
-        <Card.Description>Asset + liability totals in {settings.currency} over time.</Card.Description>
+        <Card.Title>{m.chart_net_worth()}</Card.Title>
+        <Card.Description>{m.chart_net_worth_desc({ currency: settings.currency })}</Card.Description>
       </Card.Header>
       <Card.Content>
         {#if chartsLoading || !AreaChart || !scaleTime || !scaleLinear}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
           <p class="text-sm text-muted-foreground py-12 text-center">
-            Not enough data for chart. Import transactions spanning multiple months.
+            {m.empty_not_enough_chart_data()}
           </p>
         {:else}
           <div class="h-48">
@@ -497,7 +498,7 @@
               xScale={scaleTime()}
               y="value"
               yScale={scaleLinear()}
-              series={[{ key: "value", label: "Net Worth", color: "hsl(var(--chart-1))" }]}
+              series={[{ key: "value", label: m.chart_net_worth(), color: "hsl(var(--chart-1))" }]}
               props={{ area: { opacity: 0.15 } }}
             />
           </div>
@@ -508,14 +509,14 @@
     <!-- Expense Breakdown -->
     <Card.Root>
       <Card.Header>
-        <Card.Title>Expenses</Card.Title>
-        <Card.Description>Breakdown by category.</Card.Description>
+        <Card.Title>{m.chart_expenses()}</Card.Title>
+        <Card.Description>{m.chart_expenses_desc()}</Card.Description>
       </Card.Header>
       <Card.Content>
         {#if chartsLoading || !PieChart}
           <Skeleton class="h-48 w-full" />
         {:else if expenseData.length === 0}
-          <p class="text-sm text-muted-foreground py-12 text-center">No expenses in period.</p>
+          <p class="text-sm text-muted-foreground py-12 text-center">{m.empty_no_expenses()}</p>
         {:else}
           <div class="h-48">
             <PieChart
@@ -547,8 +548,8 @@
 
   <!-- Recent Journal Entries -->
   <div class="flex items-center justify-between">
-    <h2 class="text-lg font-semibold tracking-tight">Recent Journal Entries</h2>
-    <Button variant="link" size="sm" href="/journal">View all</Button>
+    <h2 class="text-lg font-semibold tracking-tight">{m.section_recent_entries()}</h2>
+    <Button variant="link" size="sm" href="/journal">{m.btn_view_all()}</Button>
   </div>
   {#if !recentLoaded}
     <Card.Root class="border-x-0 rounded-none shadow-none">
@@ -564,7 +565,7 @@
     <Card.Root class="border-x-0 rounded-none shadow-none">
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No journal entries yet. Create your first entry to get started.
+          {m.empty_no_journal_entries()}
         </p>
       </Card.Content>
     </Card.Root>
@@ -573,9 +574,9 @@
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head class="w-0 hidden sm:table-cell">Date</Table.Head>
-            <Table.Head>Description</Table.Head>
-            <Table.Head class="text-right hidden sm:table-cell">Amount</Table.Head>
+            <Table.Head class="w-0 hidden sm:table-cell">{m.label_date()}</Table.Head>
+            <Table.Head>{m.label_description()}</Table.Head>
+            <Table.Head class="text-right hidden sm:table-cell">{m.label_amount()}</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>

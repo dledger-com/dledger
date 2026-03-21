@@ -17,6 +17,7 @@
   import ListFilter from "$lib/components/ListFilter.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   const reportStore = new ReportStore();
   const settings = new SettingsStore();
@@ -82,20 +83,20 @@
 <div class="space-y-6">
   <Card.Root>
     <Card.Header>
-      <Card.Title>Report Period</Card.Title>
+      <Card.Title>{m.report_report_period()}</Card.Title>
     </Card.Header>
     <Card.Content>
       <div class="flex flex-wrap items-end gap-3">
         <div class="space-y-1">
-          <label for="from" class="text-sm font-medium">From</label>
+          <label for="from" class="text-sm font-medium">{m.label_from()}</label>
           <Input id="from" type="date" bind:value={fromDate} class="w-full sm:w-40" />
         </div>
         <div class="space-y-1">
-          <label for="to" class="text-sm font-medium">To</label>
+          <label for="to" class="text-sm font-medium">{m.label_to()}</label>
           <Input id="to" type="date" bind:value={toDate} class="w-full sm:w-40" />
         </div>
         <Button onclick={generate} disabled={reportStore.loading}>
-          {reportStore.loading ? "Generating..." : "Generate"}
+          {reportStore.loading ? m.state_generating() : m.btn_generate()}
         </Button>
         {#if reportStore.gainLossReport}
           <Button variant="outline" onclick={() => exportGainLossCsv(reportStore.gainLossReport!)}>
@@ -105,13 +106,13 @@
         {/if}
         {#if hasProtocols}
           <div class="space-y-1">
-            <span class="text-sm font-medium">Protocol</span>
+            <span class="text-sm font-medium">{m.report_protocol()}</span>
             <Select.Root type="single" bind:value={filterProtocol}>
               <Select.Trigger class="w-40">
-                {filterProtocol || "All"}
+                {filterProtocol || m.range_all()}
               </Select.Trigger>
               <Select.Content>
-                <Select.Item value="">All</Select.Item>
+                <Select.Item value="">{m.range_all()}</Select.Item>
                 {#each uniqueProtocols as protocol (protocol)}
                   <Select.Item value={protocol}>{protocol}</Select.Item>
                 {/each}
@@ -119,7 +120,7 @@
             </Select.Root>
           </div>
         {/if}
-        <ListFilter bind:value={searchTerm} placeholder="Filter lots..." />
+        <ListFilter bind:value={searchTerm} placeholder={m.placeholder_filter_lots()} />
       </div>
     </Card.Content>
   </Card.Root>
@@ -138,7 +139,7 @@
     <!-- Summary -->
     <Card.Root>
       <Card.Header>
-        <Card.Description>Total Realized Gain/Loss</Card.Description>
+        <Card.Description>{m.report_total_realized_gain_loss()}</Card.Description>
         {@const total = totalGainLoss()}
         <Card.Title class="text-2xl {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
           {total >= 0 ? "+" : ""}{formatCurrency(total, settings.currency)}
@@ -151,7 +152,7 @@
       <Card.Root>
         <Card.Content class="py-8">
           <p class="text-sm text-muted-foreground text-center">
-            No lot disposals in this period.
+            {m.report_no_lot_disposals()}
           </p>
         </Card.Content>
       </Card.Root>
@@ -160,16 +161,16 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sort.key === "currency"} direction={sort.direction} onclick={() => sort.toggle("currency")}>Currency</SortableHeader>
+              <SortableHeader active={sort.key === "currency"} direction={sort.direction} onclick={() => sort.toggle("currency")}>{m.label_currency()}</SortableHeader>
               {#if hasProtocols}
-                <SortableHeader active={sort.key === "protocol"} direction={sort.direction} onclick={() => sort.toggle("protocol")}>Protocol</SortableHeader>
+                <SortableHeader active={sort.key === "protocol"} direction={sort.direction} onclick={() => sort.toggle("protocol")}>{m.report_protocol()}</SortableHeader>
               {/if}
-              <SortableHeader active={sort.key === "acquired"} direction={sort.direction} onclick={() => sort.toggle("acquired")} class="hidden lg:table-cell">Acquired</SortableHeader>
-              <SortableHeader active={sort.key === "disposed"} direction={sort.direction} onclick={() => sort.toggle("disposed")} class="hidden lg:table-cell">Disposed</SortableHeader>
-              <SortableHeader active={sort.key === "quantity"} direction={sort.direction} onclick={() => sort.toggle("quantity")} class="text-right hidden md:table-cell">Quantity</SortableHeader>
-              <SortableHeader active={sort.key === "costBasis"} direction={sort.direction} onclick={() => sort.toggle("costBasis")} class="text-right hidden sm:table-cell">Cost Basis</SortableHeader>
-              <SortableHeader active={sort.key === "proceeds"} direction={sort.direction} onclick={() => sort.toggle("proceeds")} class="text-right hidden sm:table-cell">Proceeds</SortableHeader>
-              <SortableHeader active={sort.key === "gainLoss"} direction={sort.direction} onclick={() => sort.toggle("gainLoss")} class="text-right">Gain/Loss</SortableHeader>
+              <SortableHeader active={sort.key === "acquired"} direction={sort.direction} onclick={() => sort.toggle("acquired")} class="hidden lg:table-cell">{m.report_acquired()}</SortableHeader>
+              <SortableHeader active={sort.key === "disposed"} direction={sort.direction} onclick={() => sort.toggle("disposed")} class="hidden lg:table-cell">{m.report_disposed()}</SortableHeader>
+              <SortableHeader active={sort.key === "quantity"} direction={sort.direction} onclick={() => sort.toggle("quantity")} class="text-right hidden md:table-cell">{m.report_quantity()}</SortableHeader>
+              <SortableHeader active={sort.key === "costBasis"} direction={sort.direction} onclick={() => sort.toggle("costBasis")} class="text-right hidden sm:table-cell">{m.report_cost_basis()}</SortableHeader>
+              <SortableHeader active={sort.key === "proceeds"} direction={sort.direction} onclick={() => sort.toggle("proceeds")} class="text-right hidden sm:table-cell">{m.report_proceeds()}</SortableHeader>
+              <SortableHeader active={sort.key === "gainLoss"} direction={sort.direction} onclick={() => sort.toggle("gainLoss")} class="text-right">{m.report_gain_loss_col()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -196,7 +197,7 @@
           </Table.Body>
           <Table.Footer>
             <Table.Row>
-              <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">Total</Table.Cell>
+              <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">{m.report_total()}</Table.Cell>
               {@const total = totalGainLoss()}
               <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
                 {total >= 0 ? "+" : ""}{formatCurrency(total, settings.currency)}

@@ -10,6 +10,7 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { getBackend } from "$lib/backend.js";
   import { computeProtocolPnL, type ProtocolPnL } from "$lib/utils/protocol-pnl.js";
+  import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   let fromDate = $state(`${new Date().getFullYear()}-01-01`);
@@ -42,15 +43,15 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end gap-3">
     <div class="space-y-2">
-      <label for="from" class="text-sm font-medium">From</label>
+      <label for="from" class="text-sm font-medium">{m.label_from()}</label>
       <Input id="from" type="date" bind:value={fromDate} class="w-full sm:w-48" />
     </div>
     <div class="space-y-2">
-      <label for="to" class="text-sm font-medium">To</label>
+      <label for="to" class="text-sm font-medium">{m.label_to()}</label>
       <Input id="to" type="date" bind:value={toDate} class="w-full sm:w-48" />
     </div>
     <Button onclick={generate} disabled={loading}>
-      {loading ? "Loading..." : "Generate"}
+      {loading ? m.state_loading() : m.btn_generate()}
     </Button>
   </div>
 
@@ -68,7 +69,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No DeFi protocol activity found. Protocol accounts (e.g. Income:Aave:*, Income:Uniswap:*) are created during DeFi transaction import.
+          {m.empty_no_defi_activity()}
         </p>
       </Card.Content>
     </Card.Root>
@@ -90,16 +91,16 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <Table.Head>Type</Table.Head>
-              <Table.Head>Currency</Table.Head>
-              <Table.Head class="text-right">Amount</Table.Head>
+              <Table.Head>{m.label_type()}</Table.Head>
+              <Table.Head>{m.label_currency()}</Table.Head>
+              <Table.Head class="text-right">{m.label_amount()}</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {#each proto.revenue as line}
               <Table.Row>
                 <Table.Cell>
-                  <Badge variant="outline" class="text-green-600 dark:text-green-400 border-green-300 dark:border-green-700">Revenue</Badge>
+                  <Badge variant="outline" class="text-green-600 dark:text-green-400 border-green-300 dark:border-green-700">{m.report_revenue()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
                   <Badge variant="outline">{line.currency}</Badge>
@@ -112,7 +113,7 @@
             {#each proto.expenses as line}
               <Table.Row>
                 <Table.Cell>
-                  <Badge variant="outline" class="text-red-600 dark:text-red-400 border-red-300 dark:border-red-700">Expense</Badge>
+                  <Badge variant="outline" class="text-red-600 dark:text-red-400 border-red-300 dark:border-red-700">{m.report_expense()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
                   <Badge variant="outline">{line.currency}</Badge>
@@ -127,7 +128,7 @@
             <Table.Footer>
               {#if proto.revenueBase !== undefined}
                 <Table.Row>
-                  <Table.Cell colspan={2} class="font-medium">Total Revenue ({settings.currency})</Table.Cell>
+                  <Table.Cell colspan={2} class="font-medium">{m.report_total_revenue_currency({ currency: settings.currency })}</Table.Cell>
                   <Table.Cell class="text-right font-mono font-medium text-green-600 dark:text-green-400">
                     +{formatCurrency(parseFloat(proto.revenueBase), settings.currency)}
                   </Table.Cell>
@@ -135,7 +136,7 @@
               {/if}
               {#if proto.expensesBase !== undefined}
                 <Table.Row>
-                  <Table.Cell colspan={2} class="font-medium">Total Expenses ({settings.currency})</Table.Cell>
+                  <Table.Cell colspan={2} class="font-medium">{m.report_total_expenses_currency({ currency: settings.currency })}</Table.Cell>
                   <Table.Cell class="text-right font-mono font-medium text-red-600 dark:text-red-400">
                     -{formatCurrency(parseFloat(proto.expensesBase), settings.currency)}
                   </Table.Cell>
@@ -144,7 +145,7 @@
               {#if proto.netIncomeBase !== undefined}
                 {@const net = parseFloat(proto.netIncomeBase)}
                 <Table.Row class="font-bold">
-                  <Table.Cell colspan={2}>Net Income ({settings.currency})</Table.Cell>
+                  <Table.Cell colspan={2}>{m.report_net_income_currency({ currency: settings.currency })}</Table.Cell>
                   <Table.Cell class="text-right font-mono {net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
                     {net >= 0 ? "+" : ""}{formatCurrency(net, settings.currency)}
                   </Table.Cell>
