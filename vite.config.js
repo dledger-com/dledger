@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -12,7 +13,14 @@ const gitHash = execSync("git rev-parse --short HEAD").toString().trim();
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [tailwindcss(), sveltekit()],
+  plugins: [
+    tailwindcss(),
+    paraglideVitePlugin({
+      project: "./project.inlang",
+      outdir: "./src/paraglide",
+    }),
+    sveltekit(),
+  ],
 
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),

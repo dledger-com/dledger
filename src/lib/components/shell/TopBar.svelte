@@ -10,6 +10,7 @@
   import ReprocessPreviewDialog from "./ReprocessPreviewDialog.svelte";
   import { getBreadcrumbOverrides } from "$lib/data/breadcrumb.svelte.js";
   import { getTopBarActions, type PageAction } from "$lib/data/page-actions.svelte.js";
+  import * as m from "$paraglide/messages.js";
 
   interface Props {
     showSidebarTrigger?: boolean;
@@ -18,13 +19,23 @@
   let { showSidebarTrigger = true }: Props = $props();
   let drawerOpen = $state(false);
 
+  const segmentLabels: Record<string, () => string> = {
+    accounts: () => m.nav_accounts(),
+    journal: () => m.nav_journal(),
+    reports: () => m.nav_reports(),
+    budgets: () => m.nav_budgets(),
+    currencies: () => m.nav_currencies(),
+    sources: () => m.nav_sources(),
+    settings: () => m.nav_settings(),
+  };
+
   const breadcrumbs = $derived.by(() => {
     const path = page.url?.pathname ?? "/";
     const segments = path.split("/").filter(Boolean);
-    if (segments.length === 0) return [{ label: "Dashboard", href: "/" }];
+    if (segments.length === 0) return [{ label: m.nav_dashboard(), href: "/" }];
     const overrides = getBreadcrumbOverrides();
     return segments.map((seg, i) => ({
-      label: overrides.get(seg) ?? seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
+      label: overrides.get(seg) ?? segmentLabels[seg]?.() ?? seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
       href: "/" + segments.slice(0, i + 1).join("/"),
     }));
   });
@@ -72,7 +83,7 @@
             {#snippet child({ props })}
               <Button variant="outline" size="icon-sm" {...props}>
                 <EllipsisVertical class="h-4 w-4" />
-                <span class="sr-only">More actions</span>
+                <span class="sr-only">{m.nav_more_actions()}</span>
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>

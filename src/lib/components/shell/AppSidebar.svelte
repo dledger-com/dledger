@@ -11,17 +11,18 @@
   import PiggyBank from "lucide-svelte/icons/piggy-bank";
   import Coins from "lucide-svelte/icons/coins";
   import ThemeToggle from "./ThemeToggle.svelte";
+  import * as m from "$paraglide/messages.js";
 
   const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
 
   const navItems = [
-    { title: "Dashboard", href: "/", icon: LayoutDashboard },
-    { title: "Accounts", href: "/accounts", icon: BookOpen },
-    { title: "Journal", href: "/journal", icon: FileText },
-    { title: "Reports", href: "/reports", icon: BarChart3 },
-    { title: "Budgets", href: "/budgets", icon: PiggyBank },
-    { title: "Currencies", href: "/currencies", icon: Coins },
-    { title: "Sources", href: "/sources", icon: ArrowUpDown },
+    { title: () => m.nav_dashboard(), href: "/", icon: LayoutDashboard },
+    { title: () => m.nav_accounts(), href: "/accounts", icon: BookOpen },
+    { title: () => m.nav_journal(), href: "/journal", icon: FileText },
+    { title: () => m.nav_reports(), href: "/reports", icon: BarChart3 },
+    { title: () => m.nav_budgets(), href: "/budgets", icon: PiggyBank },
+    { title: () => m.nav_currencies(), href: "/currencies", icon: Coins },
+    { title: () => m.nav_sources(), href: "/sources", icon: ArrowUpDown },
   ];
 
   function isActive(href: string): boolean {
@@ -43,10 +44,10 @@
 
   <Sidebar.Content>
     <Sidebar.Group>
-      <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
+      <Sidebar.GroupLabel>{m.nav_navigation()}</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
-          {#each navItems as item (item.title)}
+          {#each navItems as item (item.href)}
             <Sidebar.MenuItem>
               <Sidebar.MenuButton>
                 {#snippet child({ props })}
@@ -56,7 +57,7 @@
                     data-active={isActive(item.href) ? "true" : undefined}
                   >
                     <item.icon class="h-4 w-4" />
-                    <span>{item.title}</span>
+                    <span>{item.title()}</span>
                   </a>
                 {/snippet}
               </Sidebar.MenuButton>

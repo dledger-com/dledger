@@ -56,6 +56,9 @@
         testDprice,
         type TestResult,
     } from "$lib/service-test.js";
+    import * as msg from "$paraglide/messages.js";
+    import { setLocale } from "$paraglide/runtime.js";
+    import type { Locale } from "$paraglide/runtime.js";
     const settings = new SettingsStore();
 
     // Service test state
@@ -396,6 +399,23 @@
         settings.update({ locale: val === "auto" ? undefined : val });
     }
 
+    const languageOptions = [
+        { value: "en", label: "English" },
+        { value: "fr", label: "Français" },
+    ];
+
+    const currentLanguage = $derived.by(() => {
+        const locale = settings.settings.locale ?? (typeof navigator !== "undefined" ? navigator.language : "en");
+        return locale.startsWith("fr") ? "fr" : "en";
+    });
+
+    function handleLanguageChange(val: string) {
+        // Store full locale if switching to French, otherwise English
+        const newLocale = val === "fr" ? "fr-FR" : "en-US";
+        settings.update({ locale: newLocale });
+        setLocale(val as Locale);
+    }
+
     const clearing = $derived(
         taskQueue.isActive("clear-exchange-rates") ||
             taskQueue.isActive("clear-ledger-data") ||
@@ -713,6 +733,21 @@
                             {/each}
                         </Select.Content>
                     </Select.Root>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-sm font-medium">{msg.settings_language()}</span>
+                    <Select.Root type="single" value={currentLanguage} onValueChange={handleLanguageChange}>
+                        <Select.Trigger class="w-full">
+                            {languageOptions.find((l) => l.value === currentLanguage)?.label ?? currentLanguage}
+                        </Select.Trigger>
+                        <Select.Content>
+                            {#each languageOptions as lang (lang.value)}
+                                <Select.Item value={lang.value}>{lang.label}</Select.Item>
+                            {/each}
+                        </Select.Content>
+                    </Select.Root>
+                    <p class="text-xs text-muted-foreground">{msg.settings_language_description()}</p>
                 </div>
 
                 <div class="space-y-2">

@@ -11,7 +11,13 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { createDpriceClient } from "$lib/dprice-client.js";
   import { isSpamCurrency } from "$lib/currency-validation.js";
+  import { initLocale } from "$lib/i18n.js";
+  import { loadSettings } from "$lib/data/settings.svelte.js";
   import { onMount } from "svelte";
+
+  // Initialize locale BEFORE any rendering so message functions resolve correctly
+  const savedSettings = loadSettings();
+  initLocale(savedSettings.locale);
 
   let { children } = $props();
 

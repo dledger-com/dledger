@@ -1,3 +1,5 @@
+import * as m from "$paraglide/messages.js";
+
 let _locale: string = typeof navigator !== "undefined" ? navigator.language : "en-US";
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
@@ -132,9 +134,9 @@ export function formatDateRelative(dateStr: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays === 0) return m.date_today();
+  if (diffDays === 1) return m.date_yesterday();
+  if (diffDays < 7) return m.date_days_ago({ count: diffDays });
+  if (diffDays < 30) return m.date_weeks_ago({ count: Math.floor(diffDays / 7) });
   return formatDate(dateStr);
 }

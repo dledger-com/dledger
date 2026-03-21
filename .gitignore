@@ -76,6 +76,7 @@ dev-debug.log
 # Node modules (if any tooling uses Node)
 node_modules/
 /.svelte-kit
+/src/paraglide
 
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

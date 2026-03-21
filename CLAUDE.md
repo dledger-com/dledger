@@ -65,3 +65,17 @@ cargo test --manifest-path src-tauri/Cargo.toml     # Run Rust tests
 - Vite dev server runs on port 1420 (strict)
 - Tauri `beforeDevCommand` and `beforeBuildCommand` use `bun run dev` / `bun run build`
 - TypeScript strict mode enabled
+
+### i18n (Paraglide JS v2)
+
+- **Library**: `@inlang/paraglide-js` — compiler-based, tree-shakeable message functions
+- **Config**: `project.inlang/settings.json` — inlang project config
+- **Messages**: `messages/en.json` (source), `messages/fr.json` (French)
+- **Generated output**: `src/paraglide/` (gitignored, auto-compiled by Vite plugin)
+- **Alias**: `$paraglide` → `src/paraglide/` (configured in `svelte.config.js` `kit.alias`)
+- **Locale init**: `src/lib/i18n.ts` — `initLocale()` called in root `+layout.svelte` before rendering
+- **Usage**: `import * as m from "$paraglide/messages.js"` then `m.key_name()` in templates
+- **Locale switching**: Settings page → Language dropdown → `setLocale()` → page reload
+- **Key naming**: flat namespace with prefixes: `nav_*`, `btn_*`, `label_*`, `toast_*`, `dialog_*`, `date_*`, `error_*`, `report_*`, `settings_*`, `empty_*`, `state_*`
+- **Adding translations**: Add key to both `messages/en.json` and `messages/fr.json`, then use `m.key_name()` in component
+- **Parameters**: `"hello {name}"` → `m.hello({ name: "world" })`
