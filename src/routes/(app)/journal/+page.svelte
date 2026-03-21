@@ -614,6 +614,20 @@
         return accountTail(unique[0]);
     }
 
+    function mainCounterpartyFull(items: LineItem[]): string {
+        const meaningful = items.filter((i) => {
+            const name = accountIdToName.get(i.account_id) ?? "";
+            return name !== "Equity:Trading" && !name.startsWith("Equity:Trading:");
+        });
+        const unique = [...new Set(meaningful.map((i) => accountIdToName.get(i.account_id) ?? ""))];
+        if (unique.length === 0) return "";
+        if (unique.length === 1) return unique[0];
+        const categories = unique.filter((a) => a.startsWith("Expenses:") || a.startsWith("Income:"));
+        if (categories.length === 1) return categories[0];
+        if (categories.length > 1) return categories.join(" | ");
+        return unique[0];
+    }
+
     type AmountDirection = "income" | "expense" | "default";
 
     type AmountPart = { text: string; direction: AmountDirection };
@@ -2690,8 +2704,8 @@
                                                     </Table.Cell>
                                                 {:else if cell.column.id === "account"}
                                                     <Table.Cell class="text-muted-foreground text-sm p-2 hidden lg:table-cell">
-                                                        <span class="hidden xl:inline">{mainCounterparty(items)}</span>
-                                                        <span class="xl:hidden">{mainCounterpartyShort(items)}</span>
+                                                        <span class="hidden xl:inline" title={mainCounterpartyFull(items)}>{mainCounterparty(items)}</span>
+                                                        <span class="xl:hidden" title={mainCounterpartyFull(items)}>{mainCounterpartyShort(items)}</span>
                                                     </Table.Cell>
                                                 {:else if cell.column.id === "amount"}
                                                     <Table.Cell
