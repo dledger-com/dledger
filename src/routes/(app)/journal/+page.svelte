@@ -1363,6 +1363,12 @@
     $effect(() => {
         const entries = displayEntries;
         const granularity = effectiveGranularity;
+        const { groups, backendText } = searchFilters;
+
+        // Stay in sync with table: skip chart update for short plain-text searches
+        const skipSearch = backendText.length > 0 && backendText.length < 3;
+        if (skipSearch) return;
+
         convertedChartData = null;
         rawChartData = [];
         if (entries.length === 0) return;
@@ -1371,7 +1377,6 @@
         if (backend.getJournalChartAggregation) {
             // Build the same filter used for the current load
             const filter: TransactionFilter = {};
-            const { groups, backendText } = searchFilters;
             if (backendText) filter.description_search = backendText;
             if (groups.length === 1) {
                 if (groups[0].tags.length > 0) filter.tag_filters = groups[0].tags;
