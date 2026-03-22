@@ -23,6 +23,9 @@
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import Copy from "lucide-svelte/icons/copy";
+  import Check from "lucide-svelte/icons/check";
 
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
@@ -70,6 +73,25 @@
   }
   let loading = $state(true);
 
+  const TRUNCATE_THRESHOLD = 20;
+  function isLongValue(value: string): boolean {
+    return value.length > TRUNCATE_THRESHOLD;
+  }
+
+  const MULTI_ADDR_KEYS = new Set(["btc:from", "btc:to", "tx:contracts"]);
+  function isMultiAddressKey(key: string): boolean {
+    return MULTI_ADDR_KEYS.has(key);
+  }
+
+  let copiedKey = $state<string | null>(null);
+
+  function copyMetaValue(key: string, value: string) {
+    navigator.clipboard.writeText(value).then(() => {
+      copiedKey = key;
+      setTimeout(() => { copiedKey = null; }, 1500);
+    });
+  }
+
   function formatMetaKey(key: string): string {
     let display = key
       .replace(/^handler:/, "")
@@ -78,12 +100,13 @@
       .replace(/^deposit:/, "")
       .replace(/^withdrawal:/, "")
       .replace(/^ledger:/, "")
-      .replace(/^v2:/, "");
+      .replace(/^v2:/, "")
+      .replace(/^btc:/, "");
     return display.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   function truncateAddress(addr: string): string {
-    if (addr.length > 16 && addr.startsWith("0x")) {
+    if (addr.length > 16) {
       return `${addr.slice(0, 6)}...${addr.slice(-6)}`;
     }
     return addr;
@@ -94,7 +117,8 @@
     if (key.endsWith("implied_apy")) return `${value}%`;
     if (key === "tx:from" || key === "tx:to" || key === "tx:hash") return truncateAddress(value);
     if (key === "tx:gas_price_gwei") return `${value} gwei`;
-    if (key === "tx:contracts") return value.split(",").map(truncateAddress).join(", ");
+    if (key === "tx:contracts") return truncateAddress(value);
+    if (key === "btc:from" || key === "btc:to") return truncateAddress(value);
     return value;
   }
 
@@ -261,11 +285,59 @@
         {#if displayMeta.length > 0}
           <dl class="grid grid-cols-2 gap-4 text-sm">
             {#each displayMeta as [key, value]}
-              <div>
+              <div class={isMultiAddressKey(key) && value.includes(",") ? "min-w-0 col-span-2" : "min-w-0"}>
                 <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
                 <dd>
                   {#if key === "handler"}
                     <Badge variant="secondary">{value}</Badge>
+                  {:else if isMultiAddressKey(key) && value.includes(",")}
+                    <div class="flex flex-col gap-1 min-w-0">
+                      {#each value.split(",") as addr, i}
+                        <div class="flex items-center gap-1 min-w-0">
+                          <Tooltip.Root>
+                            <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
+                              {truncateAddress(addr)}
+                            </Tooltip.Trigger>
+                            <Tooltip.Content side="top" class="max-w-xs break-all">
+                              {addr}
+                            </Tooltip.Content>
+                          </Tooltip.Root>
+                          <button
+                            onclick={() => copyMetaValue(key + ":" + i, addr)}
+                            class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Copy"
+                          >
+                            {#if copiedKey === key + ":" + i}
+                              <Check class="h-3 w-3" />
+                            {:else}
+                              <Copy class="h-3 w-3" />
+                            {/if}
+                          </button>
+                        </div>
+                      {/each}
+                    </div>
+                  {:else if isLongValue(value)}
+                    <div class="flex items-center gap-1 min-w-0">
+                      <Tooltip.Root>
+                        <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
+                          {formatMetaValue(key, value)}
+                        </Tooltip.Trigger>
+                        <Tooltip.Content side="top" class="max-w-xs break-all">
+                          {value}
+                        </Tooltip.Content>
+                      </Tooltip.Root>
+                      <button
+                        onclick={() => copyMetaValue(key, value)}
+                        class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Copy"
+                      >
+                        {#if copiedKey === key}
+                          <Check class="h-3 w-3" />
+                        {:else}
+                          <Copy class="h-3 w-3" />
+                        {/if}
+                      </button>
+                    </div>
                   {:else}
                     <span class="font-medium">{formatMetaValue(key, value)}</span>
                   {/if}

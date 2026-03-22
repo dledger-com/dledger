@@ -49,6 +49,11 @@
     return value.length > TRUNCATE_THRESHOLD;
   }
 
+  const MULTI_ADDR_KEYS = new Set(["btc:from", "btc:to", "tx:contracts"]);
+  function isMultiAddressKey(key: string): boolean {
+    return MULTI_ADDR_KEYS.has(key);
+  }
+
   let copiedKey = $state<string | null>(null);
 
   function copyMetaValue(key: string, value: string) {
@@ -106,8 +111,8 @@
     if (key.endsWith("implied_apy")) return `${value}%`;
     if (key === "tx:from" || key === "tx:to" || key === "tx:hash") return truncateAddress(value);
     if (key === "tx:gas_price_gwei") return `${value} gwei`;
-    if (key === "tx:contracts") return value.split(",").map(truncateAddress).join(", ");
-    if (key === "btc:from" || key === "btc:to") return value.split(",").map(truncateAddress).join(", ");
+    if (key === "tx:contracts") return truncateAddress(value);
+    if (key === "btc:from" || key === "btc:to") return truncateAddress(value);
     return value;
   }
 
@@ -345,11 +350,37 @@
               {#if displayMeta.length > 0}
                 <dl class="grid grid-cols-2 gap-3">
                   {#each displayMeta as [key, value]}
-                    <div class="min-w-0">
+                    <div class={isMultiAddressKey(key) && value.includes(",") ? "min-w-0 col-span-2" : "min-w-0"}>
                       <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
                       <dd>
                         {#if key === "handler"}
                           <Badge variant="secondary">{value}</Badge>
+                        {:else if isMultiAddressKey(key) && value.includes(",")}
+                          <div class="flex flex-col gap-1 min-w-0">
+                            {#each value.split(",") as addr, i}
+                              <div class="flex items-center gap-1 min-w-0">
+                                <Tooltip.Root>
+                                  <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
+                                    {truncateAddress(addr)}
+                                  </Tooltip.Trigger>
+                                  <Tooltip.Content side="top" class="max-w-xs break-all">
+                                    {addr}
+                                  </Tooltip.Content>
+                                </Tooltip.Root>
+                                <button
+                                  onclick={() => copyMetaValue(key + ":" + i, addr)}
+                                  class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  title="Copy"
+                                >
+                                  {#if copiedKey === key + ":" + i}
+                                    <Check class="h-3 w-3" />
+                                  {:else}
+                                    <Copy class="h-3 w-3" />
+                                  {/if}
+                                </button>
+                              </div>
+                            {/each}
+                          </div>
                         {:else if isLongValue(value)}
                           <div class="flex items-center gap-1 min-w-0">
                             <Tooltip.Root>
