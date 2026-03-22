@@ -48,6 +48,8 @@ desktop.ini
 *.key
 
 # AI agent configurations and instructions
+.agents
+.claude
 .mcp.json
 .rules
 opencode.json
@@ -55,6 +57,7 @@ AGENT.md
 AGENTS.md
 # CLAUDE.md
 GEMINI.md
+skills-lock.json
 .clinerules/
 .gemini/
 .kilo/
