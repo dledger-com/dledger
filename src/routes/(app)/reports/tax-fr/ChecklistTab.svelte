@@ -104,7 +104,7 @@
       <!-- Progress bar -->
       <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
         <div
-          class="h-full rounded-full transition-all duration-300 {progressPct === 100 ? 'bg-green-500' : 'bg-primary'}"
+          class="h-full rounded-full transition-[width] duration-200 {progressPct === 100 ? 'bg-green-500' : 'bg-primary'}"
           style="width: {progressPct}%"
         ></div>
       </div>

@@ -97,7 +97,7 @@
               {#if pct !== null}
                 <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    class="h-full bg-primary transition-all duration-300"
+                    class="h-full bg-primary transition-[width] duration-200"
                     style="width: {pct}%"
                   ></div>
                 </div>

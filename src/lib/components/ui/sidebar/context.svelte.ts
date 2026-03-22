@@ -27,6 +27,8 @@ class SidebarState {
 	setOpen: SidebarStateProps["setOpen"];
 	#isMobile: IsMobile;
 	state = $derived.by(() => (this.open ? "expanded" : "collapsed"));
+	/** When true, sidebar transition should be skipped (keyboard-initiated toggle) */
+	skipTransition = $state(false);
 
 	constructor(props: SidebarStateProps) {
 		this.setOpen = props.setOpen;
@@ -44,7 +46,13 @@ class SidebarState {
 	handleShortcutKeydown = (e: KeyboardEvent) => {
 		if (e.key === SIDEBAR_KEYBOARD_SHORTCUT && (e.metaKey || e.ctrlKey)) {
 			e.preventDefault();
+			// Keyboard-initiated: skip transition animation
+			this.skipTransition = true;
 			this.toggle();
+			// Re-enable transitions after the state change has been applied
+			requestAnimationFrame(() => {
+				this.skipTransition = false;
+			});
 		}
 	};
 

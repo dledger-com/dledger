@@ -149,7 +149,7 @@
                 <div class="flex items-center gap-2">
                   <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
                     <div
-                      class="h-full transition-all duration-300 {progressColor(comp.percent_used)}"
+                      class="h-full transition-[width] duration-200 {progressColor(comp.percent_used)}"
                       style="width: {Math.min(comp.percent_used, 100)}%"
                     ></div>
                   </div>
