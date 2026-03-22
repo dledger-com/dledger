@@ -19,3 +19,4 @@ export { laBanquePostalePreset, setLaBanquePostaleRules } from "./la-banque-post
 export { n26Preset, setN26Rules } from "./n26.js";
 export { kucoinPreset } from "./kucoin.js";
 export { voletPreset } from "./volet.js";
+export { celsiusPreset } from "./celsius.js";

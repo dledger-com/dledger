@@ -21,6 +21,7 @@ import {
   n26Preset,
   kucoinPreset,
   voletPreset,
+  celsiusPreset,
 } from "../../csv-presets/presets/index.js";
 
 export const builtinCsvPresets: CsvPreset[] = [
@@ -43,6 +44,7 @@ export const builtinCsvPresets: CsvPreset[] = [
   n26Preset,
   kucoinPreset,
   voletPreset,
+  celsiusPreset,
   revolutPreset,
   bankStatementPreset, // lowest priority (score 40-60)
 ];
