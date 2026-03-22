@@ -610,7 +610,7 @@
                             accounts={accountPaths}
                             onchange={(v) => updateLineAccount(recIdx, lineIdx, v)}
                           />
-                          <span class={parseFloat(line.amount) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                          <span class={parseFloat(line.amount) >= 0 ? "text-positive" : "text-negative"}>
                             {parseFloat(line.amount) >= 0 ? "+" : ""}{line.amount} {line.currency}
                           </span>
                         </div>

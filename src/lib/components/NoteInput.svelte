@@ -51,16 +51,15 @@
     <textarea
       bind:this={textareaEl}
       bind:value={draft}
-      class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus:border-primary resize-none min-h-[3lh] max-h-[12lh] overflow-y-auto"
+      class="w-full rounded border border-input bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-1 resize-none min-h-[3lh] max-h-[12lh] overflow-y-auto"
       onblur={save}
       onkeydown={handleKeydown}
       oninput={(e) => autoResize(e.currentTarget)}
     ></textarea>
   {:else}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div
-      class="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50 min-h-[1.75rem] {note ? 'prose prose-xs dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0' : 'text-muted-foreground italic'}"
+    <button
+      type="button"
+      class="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50 min-h-[1.75rem] w-full text-left focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-1 {note ? 'prose prose-xs dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0' : 'text-muted-foreground italic'}"
       onclick={startEditing}
     >
       {#if note}
@@ -69,6 +68,6 @@
       {:else}
         Add a note...
       {/if}
-    </div>
+    </button>
   {/if}
 </div>

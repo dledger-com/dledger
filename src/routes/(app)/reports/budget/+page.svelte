@@ -142,7 +142,7 @@
               <Table.Cell class="text-right font-mono">
                 {formatCurrency(comp.actual, comp.budget.currency)}
               </Table.Cell>
-              <Table.Cell class="text-right font-mono {comp.remaining < 0 ? 'text-red-600 dark:text-red-400' : ''}">
+              <Table.Cell class="text-right font-mono {comp.remaining < 0 ? 'text-negative' : ''}">
                 {formatCurrency(comp.remaining, comp.budget.currency)}
               </Table.Cell>
               <Table.Cell>

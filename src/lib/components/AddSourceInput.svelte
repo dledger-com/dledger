@@ -89,7 +89,7 @@
       <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
     </Button>
   </Popover.Trigger>
-  <Popover.Content class="w-[360px] p-0" align="start">
+  <Popover.Content class="w-[360px] max-w-[calc(100vw-2rem)] p-0" align="start">
     <Command.Root shouldFilter={true}>
       <Command.Input placeholder="Search exchanges or paste address..." bind:value={search} />
       <Command.List class="max-h-[280px]">

@@ -31,7 +31,7 @@
       </div>
     {:else if isGain}
       <div class="flex flex-col items-center gap-1">
-        <p class="text-3xl font-bold text-green-600 dark:text-green-400">
+        <p class="text-3xl font-bold text-positive">
           {formatCurrency(taxDue, "EUR")}
         </p>
         <p class="text-sm text-muted-foreground">
@@ -46,7 +46,7 @@
       </div>
     {:else}
       <div class="flex flex-col items-center gap-1">
-        <p class="text-2xl font-bold text-red-600 dark:text-red-400">
+        <p class="text-2xl font-bold text-negative">
           Net loss of {formatCurrency(Math.abs(totalPV), "EUR")}
         </p>
         <p class="text-sm text-muted-foreground">No tax due</p>

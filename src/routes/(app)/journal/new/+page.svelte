@@ -577,7 +577,7 @@
               </div>
               <div>
                 <span class="text-muted-foreground">Difference:</span>
-                <span class="ml-2 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                <span class="ml-2 font-mono font-medium {isBalanced ? 'text-positive' : 'text-negative'}">
                   {Math.abs(totalDebit - totalCredit).toFixed(2)}
                 </span>
               </div>
@@ -611,7 +611,7 @@
                         <tr class="border-b last:border-b-0">
                           <td class="px-3 py-2 font-mono text-xs">{line.account}</td>
                           <td class="px-3 py-2">{line.currency}</td>
-                          <td class="px-3 py-2 text-right font-mono {line.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">
+                          <td class="px-3 py-2 text-right font-mono {line.amount < 0 ? 'text-negative' : 'text-positive'}">
                             {line.amount < 0 ? "" : "+"}{line.amount}
                           </td>
                         </tr>
@@ -623,7 +623,7 @@
                   {#each Object.entries(exchangeBalances) as [cur, bal]}
                     <span>
                       {cur}: {bal.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")}
-                      <span class="{Math.abs(bal) < 0.0001 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                      <span class="{Math.abs(bal) < 0.0001 ? 'text-positive' : 'text-negative'}">
                         {Math.abs(bal) < 0.0001 ? "✓" : "✗"}
                       </span>
                     </span>

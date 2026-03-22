@@ -66,7 +66,7 @@
   >
     {value || placeholder}
   </Popover.Trigger>
-  <Popover.Content class="w-[280px] p-0" align="start">
+  <Popover.Content class="w-[280px] max-w-[calc(100vw-2rem)] p-0" align="start">
     <Command.Root shouldFilter={true}>
       <Command.Input placeholder={m.placeholder_search_accounts()} bind:value={search} />
       <Command.List class="max-h-[200px]">

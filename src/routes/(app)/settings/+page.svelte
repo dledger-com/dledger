@@ -1174,7 +1174,7 @@
                                     {testResults.dprice?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                                 {#if testResults.dprice?.status === 'success'}
-                                    <span class="text-xs text-green-600 dark:text-green-400">{testResults.dprice.message ?? 'OK'}</span>
+                                    <span class="text-xs text-positive">{testResults.dprice.message ?? 'OK'}</span>
                                 {:else if testResults.dprice?.status === 'error'}
                                     <span class="text-xs text-destructive">{testResults.dprice.message}</span>
                                 {/if}
@@ -1260,7 +1260,7 @@
                                 {testResults.frankfurter?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                             </Button>
                             {#if testResults.frankfurter?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.frankfurter.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.frankfurter.message ?? 'OK'}</span>
                             {:else if testResults.frankfurter?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.frankfurter.message}</span>
                             {/if}
@@ -1303,7 +1303,7 @@
                                 </Button>
                             </div>
                             {#if testResults.finnhub?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.finnhub.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.finnhub.message ?? 'OK'}</span>
                             {:else if testResults.finnhub?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.finnhub.message}</span>
                             {/if}
@@ -1359,7 +1359,7 @@
                                 <label for="coingecko-pro" class="text-sm">{msg.label_pro_api()}</label>
                             </div>
                             {#if testResults.coingecko?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.coingecko.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.coingecko.message ?? 'OK'}</span>
                             {:else if testResults.coingecko?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.coingecko.message}</span>
                             {/if}
@@ -1412,7 +1412,7 @@
                                 </Button>
                             </div>
                             {#if testResults.cryptocompare?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.cryptocompare.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.cryptocompare.message ?? 'OK'}</span>
                             {:else if testResults.cryptocompare?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.cryptocompare.message}</span>
                             {/if}
@@ -1445,7 +1445,7 @@
                                 {testResults.defillama?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                             </Button>
                             {#if testResults.defillama?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.defillama.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.defillama.message ?? 'OK'}</span>
                             {:else if testResults.defillama?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.defillama.message}</span>
                             {/if}
@@ -1475,7 +1475,7 @@
                                 {testResults.binance?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                             </Button>
                             {#if testResults.binance?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.binance.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.binance.message ?? 'OK'}</span>
                             {:else if testResults.binance?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.binance.message}</span>
                             {/if}
@@ -1520,7 +1520,7 @@
                                 </Button>
                             </div>
                             {#if testResults.etherscan?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.etherscan.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.etherscan.message ?? 'OK'}</span>
                             {:else if testResults.etherscan?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.etherscan.message}</span>
                             {/if}
@@ -1569,7 +1569,7 @@
                                 </Button>
                             </div>
                             {#if testResults.routescan?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.routescan.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.routescan.message ?? 'OK'}</span>
                             {:else if testResults.routescan?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.routescan.message}</span>
                             {/if}
@@ -1617,7 +1617,7 @@
                                 </Button>
                             </div>
                             {#if testResults.thegraph?.status === 'success'}
-                                <span class="text-xs text-green-600 dark:text-green-400">{testResults.thegraph.message ?? 'OK'}</span>
+                                <span class="text-xs text-positive">{testResults.thegraph.message ?? 'OK'}</span>
                             {:else if testResults.thegraph?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.thegraph.message}</span>
                             {/if}

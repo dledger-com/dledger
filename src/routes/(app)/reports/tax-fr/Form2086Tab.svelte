@@ -120,7 +120,7 @@
                 <Table.Cell class="text-right font-mono hidden md:table-cell">{formatCurrency(d.portfolioValue, "EUR")}</Table.Cell>
                 <Table.Cell class="text-right font-mono hidden md:table-cell">{formatCurrency(d.acquisitionCostBefore, "EUR")}</Table.Cell>
                 <Table.Cell class="text-right font-mono hidden lg:table-cell">{formatCurrency(d.costFraction, "EUR")}</Table.Cell>
-                <Table.Cell class="text-right font-mono {pv >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                <Table.Cell class="text-right font-mono {pv >= 0 ? 'text-positive' : 'text-negative'}">
                   {pv >= 0 ? "+" : ""}{formatCurrency(pv, "EUR")}
                 </Table.Cell>
               </Table.Row>
@@ -133,7 +133,7 @@
               <Table.Cell class="hidden md:table-cell"></Table.Cell>
               <Table.Cell class="hidden md:table-cell"></Table.Cell>
               <Table.Cell class="hidden lg:table-cell"></Table.Cell>
-              <Table.Cell class="text-right font-mono font-medium {totalPV >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+              <Table.Cell class="text-right font-mono font-medium {totalPV >= 0 ? 'text-positive' : 'text-negative'}">
                 {totalPV >= 0 ? "+" : ""}{formatCurrency(totalPV, "EUR")}
               </Table.Cell>
             </Table.Row>

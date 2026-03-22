@@ -634,8 +634,8 @@
     type AmountPart = { text: string; direction: AmountDirection };
 
     function amountColorClass(dir: AmountDirection): string {
-        if (dir === "income") return "text-green-600 dark:text-green-400";
-        if (dir === "expense") return "text-red-600 dark:text-red-400";
+        if (dir === "income") return "text-positive";
+        if (dir === "expense") return "text-negative";
         return "";
     }
 
@@ -1448,6 +1448,7 @@
     let chartContext = $state<any>(null);
     let isDragging = $state(false);
     let chartContainerWidth = $state(0);
+    let cachedChartRect: DOMRect | null = null;
 
     const BAND_PADDING = 0.15;
 
@@ -1455,7 +1456,7 @@
 
     function handleChartPointer(e: PointerEvent) {
         if (!chartContext || !isDragging) return;
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const rect = cachedChartRect ?? (e.currentTarget as HTMLElement).getBoundingClientRect();
         const x = e.clientX - rect.left - (chartContext.padding?.left ?? 0);
         const xScale = chartContext.xScale;
         if (!xScale || typeof xScale.domain !== "function") return;
@@ -1956,19 +1957,22 @@
             class="h-36 px-2 cursor-col-resize select-none touch-none"
             onpointerdown={(e) => {
                 isDragging = true;
+                cachedChartRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                 handleChartPointer(e);
             }}
             onpointermove={handleChartPointer}
             onpointerup={(e) => {
                 isDragging = false;
+                cachedChartRect = null;
                 (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
             }}
-            onpointercancel={() => (isDragging = false)}
+            onpointercancel={() => { isDragging = false; cachedChartRect = null; }}
             onwheel={(e) => {
                 if (scrollEl) {
                     e.preventDefault();
-                    scrollEl.scrollTop += e.deltaY;
+                    const dy = e.deltaY;
+                    requestAnimationFrame(() => { scrollEl!.scrollTop += dy; });
                 }
             }}
         >

@@ -6,10 +6,10 @@
   import BottomTabBar from "$lib/components/shell/BottomTabBar.svelte";
   import GlobalDropZone from "$lib/components/GlobalDropZone.svelte";
   import BatchImportBar from "$lib/components/BatchImportBar.svelte";
-  import CsvImportDialog from "$lib/components/CsvImportDialog.svelte";
-  import OfxImportDialog from "$lib/components/OfxImportDialog.svelte";
-  import PdfImportDialog from "$lib/components/PdfImportDialog.svelte";
-  import LedgerImportDialog from "$lib/components/LedgerImportDialog.svelte";
+  const CsvImportDialog = () => import("$lib/components/CsvImportDialog.svelte");
+  const OfxImportDialog = () => import("$lib/components/OfxImportDialog.svelte");
+  const PdfImportDialog = () => import("$lib/components/PdfImportDialog.svelte");
+  const LedgerImportDialog = () => import("$lib/components/LedgerImportDialog.svelte");
   import { importDrop } from "$lib/data/import-drop.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { setFormatLocale } from "$lib/utils/format.js";
@@ -72,23 +72,39 @@
 <GlobalDropZone />
 <BatchImportBar />
 
-<LedgerImportDialog
-  bind:open={importDrop.ledgerOpen}
-  initialContent={importDrop.ledgerContent}
-  initialFileName={importDrop.ledgerFileName}
-/>
-<CsvImportDialog
-  bind:open={importDrop.csvOpen}
-  initialContent={importDrop.csvContent}
-  initialFileName={importDrop.csvFileName}
-/>
-<OfxImportDialog
-  bind:open={importDrop.ofxOpen}
-  initialContent={importDrop.ofxContent}
-  initialFileName={importDrop.ofxFileName}
-/>
-<PdfImportDialog
-  bind:open={importDrop.pdfOpen}
-  initialFile={importDrop.pdfFile}
-  initialFileName={importDrop.pdfFileName}
-/>
+{#if importDrop.ledgerOpen}
+  {#await LedgerImportDialog() then mod}
+    <mod.default
+      bind:open={importDrop.ledgerOpen}
+      initialContent={importDrop.ledgerContent}
+      initialFileName={importDrop.ledgerFileName}
+    />
+  {/await}
+{/if}
+{#if importDrop.csvOpen}
+  {#await CsvImportDialog() then mod}
+    <mod.default
+      bind:open={importDrop.csvOpen}
+      initialContent={importDrop.csvContent}
+      initialFileName={importDrop.csvFileName}
+    />
+  {/await}
+{/if}
+{#if importDrop.ofxOpen}
+  {#await OfxImportDialog() then mod}
+    <mod.default
+      bind:open={importDrop.ofxOpen}
+      initialContent={importDrop.ofxContent}
+      initialFileName={importDrop.ofxFileName}
+    />
+  {/await}
+{/if}
+{#if importDrop.pdfOpen}
+  {#await PdfImportDialog() then mod}
+    <mod.default
+      bind:open={importDrop.pdfOpen}
+      initialFile={importDrop.pdfFile}
+      initialFileName={importDrop.pdfFileName}
+    />
+  {/await}
+{/if}

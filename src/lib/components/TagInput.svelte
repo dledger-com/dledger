@@ -58,7 +58,7 @@
   {#each tags as tag (tag)}
     <Badge variant="outline" class={cn(tagColor(tag), "border-transparent text-[11px] px-1.5 py-0 gap-0.5")}>
       {tag}
-      <button type="button" class="ml-0.5 hover:opacity-70 cursor-pointer" onclick={() => removeTag(tag)}>
+      <button type="button" class="relative ml-0.5 hover:opacity-70 cursor-pointer after:absolute after:-inset-2" onclick={() => removeTag(tag)} aria-label="Remove tag {tag}">
         <X class="h-3 w-3" />
       </button>
     </Badge>
@@ -69,8 +69,9 @@
       bind:this={inputEl}
       bind:value={inputValue}
       list={listId}
-      class="h-5 w-20 rounded border border-dashed border-muted-foreground/40 bg-transparent px-1.5 text-xs outline-none focus:border-primary"
+      class="h-5 w-20 rounded border border-dashed border-muted-foreground/40 bg-transparent px-1.5 text-xs outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-1"
       placeholder="tag"
+      aria-label="New tag"
       onkeydown={handleKeydown}
       onblur={handleBlur}
     />
@@ -86,6 +87,7 @@
       type="button"
       class="flex h-5 items-center gap-0.5 rounded border border-dashed border-muted-foreground/40 px-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary cursor-pointer"
       onclick={startEditing}
+      aria-label="Add tag"
     >
       <Plus class="h-3 w-3" />
     </button>

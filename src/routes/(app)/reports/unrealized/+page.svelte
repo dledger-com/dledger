@@ -159,7 +159,7 @@
     <Card.Root>
       <Card.Header>
         <Card.Description>{m.report_total_unrealized_gain_loss()}</Card.Description>
-        <Card.Title class="text-2xl {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+        <Card.Title class="text-2xl {total >= 0 ? 'text-positive' : 'text-negative'}">
           {total >= 0 ? "+" : ""}{formatCurrency(total, report.base_currency)}
         </Card.Title>
       </Card.Header>
@@ -210,7 +210,7 @@
                 <Table.Cell class="text-right font-mono hidden sm:table-cell">
                   {formatCurrency(parseFloat(line.current_value), report.base_currency)}
                 </Table.Cell>
-                <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-positive' : 'text-negative'}">
                   {gl >= 0 ? "+" : ""}{formatCurrency(gl, report.base_currency)}
                 </Table.Cell>
               </Table.Row>
@@ -219,7 +219,7 @@
           <Table.Footer>
             <Table.Row>
               <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">{m.report_total()}</Table.Cell>
-              <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+              <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-positive' : 'text-negative'}">
                 {total >= 0 ? "+" : ""}{formatCurrency(total, report.base_currency)}
               </Table.Cell>
             </Table.Row>

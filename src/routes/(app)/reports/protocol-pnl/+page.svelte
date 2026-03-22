@@ -100,12 +100,12 @@
             {#each proto.revenue as line}
               <Table.Row>
                 <Table.Cell>
-                  <Badge variant="outline" class="text-green-600 dark:text-green-400 border-green-300 dark:border-green-700">{m.report_revenue()}</Badge>
+                  <Badge variant="outline" class="text-positive border-green-300 dark:border-green-700">{m.report_revenue()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
                   <Badge variant="outline">{line.currency}</Badge>
                 </Table.Cell>
-                <Table.Cell class="text-right font-mono text-green-600 dark:text-green-400">
+                <Table.Cell class="text-right font-mono text-positive">
                   +{formatCurrency(parseFloat(line.amount), line.currency)}
                 </Table.Cell>
               </Table.Row>
@@ -113,12 +113,12 @@
             {#each proto.expenses as line}
               <Table.Row>
                 <Table.Cell>
-                  <Badge variant="outline" class="text-red-600 dark:text-red-400 border-red-300 dark:border-red-700">{m.report_expense()}</Badge>
+                  <Badge variant="outline" class="text-negative border-red-300 dark:border-red-700">{m.report_expense()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
                   <Badge variant="outline">{line.currency}</Badge>
                 </Table.Cell>
-                <Table.Cell class="text-right font-mono text-red-600 dark:text-red-400">
+                <Table.Cell class="text-right font-mono text-negative">
                   -{formatCurrency(parseFloat(line.amount), line.currency)}
                 </Table.Cell>
               </Table.Row>
@@ -129,7 +129,7 @@
               {#if proto.revenueBase !== undefined}
                 <Table.Row>
                   <Table.Cell colspan={2} class="font-medium">{m.report_total_revenue_currency({ currency: settings.currency })}</Table.Cell>
-                  <Table.Cell class="text-right font-mono font-medium text-green-600 dark:text-green-400">
+                  <Table.Cell class="text-right font-mono font-medium text-positive">
                     +{formatCurrency(parseFloat(proto.revenueBase), settings.currency)}
                   </Table.Cell>
                 </Table.Row>
@@ -137,7 +137,7 @@
               {#if proto.expensesBase !== undefined}
                 <Table.Row>
                   <Table.Cell colspan={2} class="font-medium">{m.report_total_expenses_currency({ currency: settings.currency })}</Table.Cell>
-                  <Table.Cell class="text-right font-mono font-medium text-red-600 dark:text-red-400">
+                  <Table.Cell class="text-right font-mono font-medium text-negative">
                     -{formatCurrency(parseFloat(proto.expensesBase), settings.currency)}
                   </Table.Cell>
                 </Table.Row>
@@ -146,7 +146,7 @@
                 {@const net = parseFloat(proto.netIncomeBase)}
                 <Table.Row class="font-bold">
                   <Table.Cell colspan={2}>{m.report_net_income_currency({ currency: settings.currency })}</Table.Cell>
-                  <Table.Cell class="text-right font-mono {net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                  <Table.Cell class="text-right font-mono {net >= 0 ? 'text-positive' : 'text-negative'}">
                     {net >= 0 ? "+" : ""}{formatCurrency(net, settings.currency)}
                   </Table.Cell>
                 </Table.Row>

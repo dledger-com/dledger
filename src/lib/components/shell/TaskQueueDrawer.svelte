@@ -97,8 +97,8 @@
               {#if pct !== null}
                 <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    class="h-full bg-primary transition-[width] duration-200"
-                    style="width: {pct}%"
+                    class="h-full w-full origin-left bg-primary transition-transform duration-200"
+                    style="transform: scaleX({(pct ?? 0) / 100})"
                   ></div>
                 </div>
                 <p class="mt-1 text-xs text-muted-foreground">
@@ -151,8 +151,9 @@
                   <Button
                     variant="ghost"
                     size="sm"
-                    class="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
+                    class="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
                     onclick={() => taskQueue.dismiss(task.id)}
+                    aria-label="Dismiss"
                   >
                     <X class="h-3 w-3" />
                   </Button>

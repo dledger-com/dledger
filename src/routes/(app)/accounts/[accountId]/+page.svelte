@@ -497,7 +497,7 @@
                   <Table.Cell class="text-right font-mono">
                     {#each relevantItems as item}
                       {@const amt = parseFloat(item.amount)}
-                      <span class={amt >= 0 ? "" : "text-red-600 dark:text-red-400"}>
+                      <span class={amt >= 0 ? "" : "text-negative"}>
                         {formatCurrency(amt, item.currency)}
                       </span>
                     {/each}

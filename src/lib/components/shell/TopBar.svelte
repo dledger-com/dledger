@@ -49,17 +49,20 @@
     <Separator orientation="vertical" class="mr-2 !h-4" />
   {/if}
 
-  <nav class="flex items-center gap-1 text-sm">
+  <nav class="flex items-center gap-1 text-sm min-w-0 overflow-hidden">
     {#each breadcrumbs as crumb, i}
       {#if i > 0}
-        <span class="text-muted-foreground">/</span>
+        <span class="text-muted-foreground shrink-0">/</span>
       {/if}
       {#if i === breadcrumbs.length - 1}
-        <span class="font-medium">{crumb.label}</span>
+        <span class="font-medium truncate">{crumb.label}</span>
       {:else}
-        <a href={crumb.href} class="text-muted-foreground hover:text-foreground">
+        <a href={crumb.href} class="text-muted-foreground hover:text-foreground shrink-0 hidden sm:inline {i === 0 ? '' : 'max-sm:hidden'}">
           {crumb.label}
         </a>
+        {#if breadcrumbs.length > 2 && i === 0}
+          <span class="text-muted-foreground sm:hidden shrink-0">...</span>
+        {/if}
       {/if}
     {/each}
   </nav>

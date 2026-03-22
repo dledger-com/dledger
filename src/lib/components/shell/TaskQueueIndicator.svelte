@@ -18,7 +18,7 @@
 </script>
 
 {#if visible}
-  <Button variant="ghost" size="icon" class="relative h-8 w-8" {onclick}>
+  <Button variant="ghost" size="icon" class="relative h-8 w-8" {onclick} aria-label="Task queue">
     {#if hasActive}
       <Loader class="h-4 w-4 animate-spin" />
       <span

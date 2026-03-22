@@ -81,7 +81,7 @@
             <Card.Title>{proto.displayName}</Card.Title>
             {#if proto.totalBaseValue !== undefined}
               {@const total = parseFloat(proto.totalBaseValue)}
-              <span class="text-lg font-semibold {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+              <span class="text-lg font-semibold {total >= 0 ? 'text-positive' : 'text-negative'}">
                 {formatCurrency(total, settings.currency)}
               </span>
             {/if}
@@ -143,9 +143,9 @@
                         <Badge variant="outline">{pos.currency}</Badge>
                       </Table.Cell>
                       <Table.Cell class="text-sm">{pos.account}</Table.Cell>
-                      <Table.Cell class="text-right font-mono text-red-600 dark:text-red-400">{pos.balance}</Table.Cell>
+                      <Table.Cell class="text-right font-mono text-negative">{pos.balance}</Table.Cell>
                       {#if proto.borrows.some((p) => p.baseValue !== undefined)}
-                        <Table.Cell class="text-right font-mono text-red-600 dark:text-red-400">
+                        <Table.Cell class="text-right font-mono text-negative">
                           {pos.baseValue !== undefined ? formatCurrency(parseFloat(pos.baseValue), settings.currency) : "-"}
                         </Table.Cell>
                       {/if}
@@ -177,9 +177,9 @@
                         <Badge variant="outline">{pos.currency}</Badge>
                       </Table.Cell>
                       <Table.Cell class="text-sm">{pos.account}</Table.Cell>
-                      <Table.Cell class="text-right font-mono text-green-600 dark:text-green-400">{pos.balance}</Table.Cell>
+                      <Table.Cell class="text-right font-mono text-positive">{pos.balance}</Table.Cell>
                       {#if proto.rewards.some((p) => p.baseValue !== undefined)}
-                        <Table.Cell class="text-right font-mono text-green-600 dark:text-green-400">
+                        <Table.Cell class="text-right font-mono text-positive">
                           {pos.baseValue !== undefined ? formatCurrency(parseFloat(pos.baseValue), settings.currency) : "-"}
                         </Table.Cell>
                       {/if}

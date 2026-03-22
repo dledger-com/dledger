@@ -134,7 +134,7 @@
             </Tooltip.Content>
           </Tooltip.Root>
         </div>
-        <Card.Title class="text-xl {totalPV >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+        <Card.Title class="text-xl {totalPV >= 0 ? 'text-positive' : 'text-negative'}">
           {totalPV >= 0 ? "+" : ""}{formatCurrency(totalPV, "EUR")}
         </Card.Title>
       </Card.Header>
@@ -270,14 +270,14 @@
                           {h.currency}
                         {/if}
                       </td>
-                      <td class="px-2 py-1 font-mono text-right {isNeg ? 'text-red-600 dark:text-red-400 font-semibold' : ''}">{h.amount}</td>
+                      <td class="px-2 py-1 font-mono text-right {isNeg ? 'text-negative font-semibold' : ''}">{h.amount}</td>
                       <td class="px-2 py-1 text-right text-muted-foreground">{h.accounts.length}</td>
                     </tr>
                     {#if expanded}
                       {#each h.accounts as acct}
                         <tr class="border-t border-dashed bg-muted/30">
                           <td class="px-2 py-0.5 pl-6 text-xs text-muted-foreground truncate max-w-64" title={acct.name}>{acct.name}</td>
-                          <td class="px-2 py-0.5 font-mono text-xs text-right {parseFloat(acct.amount) < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}">{acct.amount}</td>
+                          <td class="px-2 py-0.5 font-mono text-xs text-right {parseFloat(acct.amount) < 0 ? 'text-negative' : 'text-muted-foreground'}">{acct.amount}</td>
                           <td></td>
                         </tr>
                       {/each}

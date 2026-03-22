@@ -141,7 +141,7 @@
       <Card.Header>
         <Card.Description>{m.report_total_realized_gain_loss()}</Card.Description>
         {@const total = totalGainLoss()}
-        <Card.Title class="text-2xl {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+        <Card.Title class="text-2xl {total >= 0 ? 'text-positive' : 'text-negative'}">
           {total >= 0 ? "+" : ""}{formatCurrency(total, settings.currency)}
         </Card.Title>
       </Card.Header>
@@ -189,7 +189,7 @@
                 <Table.Cell class="text-right font-mono hidden md:table-cell">{line.quantity}</Table.Cell>
                 <Table.Cell class="text-right font-mono hidden sm:table-cell">{formatCurrency(line.cost_basis, settings.currency)}</Table.Cell>
                 <Table.Cell class="text-right font-mono hidden sm:table-cell">{formatCurrency(line.proceeds, settings.currency)}</Table.Cell>
-                <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-positive' : 'text-negative'}">
                   {gl >= 0 ? "+" : ""}{formatCurrency(gl, settings.currency)}
                 </Table.Cell>
               </Table.Row>
@@ -199,7 +199,7 @@
             <Table.Row>
               <Table.Cell colspan={hasProtocols ? 7 : 6} class="font-medium">{m.report_total()}</Table.Cell>
               {@const total = totalGainLoss()}
-              <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+              <Table.Cell class="text-right font-mono font-medium {total >= 0 ? 'text-positive' : 'text-negative'}">
                 {total >= 0 ? "+" : ""}{formatCurrency(total, settings.currency)}
               </Table.Cell>
             </Table.Row>

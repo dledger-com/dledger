@@ -535,7 +535,7 @@
               </div>
 
               {#if entryMode === "simple"}
-                <p class="text-xs text-muted-foreground mb-3">{m.error_debits_must_equal_credits()}</p>
+                <p class="text-xs text-muted-foreground mb-3" id="balance-hint" role="status">{m.error_debits_must_equal_credits()}</p>
                 <div class="space-y-3">
                   {#each lines as line, i (line.key)}
                     <div class="rounded-md border p-2 space-y-2">
@@ -602,7 +602,7 @@
                   </div>
                   <div>
                     <span class="text-muted-foreground">Diff:</span>
-                    <span class="ml-1 font-mono font-medium {isBalanced ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                    <span class="ml-1 font-mono font-medium {isBalanced ? 'text-positive' : 'text-negative'}">
                       {Math.abs(totalDebit - totalCredit).toFixed(2)}
                     </span>
                   </div>

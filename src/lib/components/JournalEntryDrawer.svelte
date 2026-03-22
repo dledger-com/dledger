@@ -222,7 +222,7 @@
               <Pencil class="h-3.5 w-3.5 mr-1" /> {m.btn_edit()}
             </Button>
           {/if}
-          <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }}>
+          <Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => { onclose?.(); }} aria-label={m.btn_cancel()}>
             <X class="h-4 w-4" />
           </Button>
         </div>
@@ -285,6 +285,7 @@
                         onclick={() => copyMetaValue("__source", entry!.source)}
                         class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                         title="Copy"
+                        aria-label="Copy source"
                       >
                         {#if copiedKey === "__source"}
                           <Check class="h-3 w-3" />
@@ -307,7 +308,7 @@
                   <dt class="text-muted-foreground">{m.account_edit_of()}</dt>
                   <dd>
                     <button
-                      class="text-blue-600 hover:underline dark:text-blue-400 text-left"
+                      class="text-link hover:underline text-left"
                       onclick={() => { entryId = viewMetadata['edit:original_id']; }}
                     >{m.account_original_entry()}</button>
                   </dd>
@@ -318,7 +319,7 @@
                   <dt class="text-muted-foreground">{m.account_voided_by()}</dt>
                   <dd>
                     <button
-                      class="text-blue-600 hover:underline dark:text-blue-400 text-left"
+                      class="text-link hover:underline text-left"
                       onclick={() => { entryId = entry!.voided_by; }}
                     >{m.account_reversal_entry()}</button>
                   </dd>
@@ -371,6 +372,7 @@
                                   onclick={() => copyMetaValue(key + ":" + i, addr)}
                                   class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                                   title="Copy"
+                                  aria-label="Copy address"
                                 >
                                   {#if copiedKey === key + ":" + i}
                                     <Check class="h-3 w-3" />
@@ -395,6 +397,7 @@
                               onclick={() => copyMetaValue(key, value)}
                               class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                               title="Copy"
+                              aria-label="Copy {formatMetaKey(key)}"
                             >
                               {#if copiedKey === key}
                                 <Check class="h-3 w-3" />

@@ -21,7 +21,7 @@
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted-foreground: 240 3.8% 44%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
@@ -38,6 +38,10 @@
     --destructive-foreground: 0 0% 98%;
     --ring: 240 10% 3.9%;
     --radius: 0.5rem;
+    --positive: 142 71% 45%;
+    --negative: 0 84% 60%;
+    --link: 221 83% 53%;
+    --warning-accent: 45 93% 47%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -73,6 +77,10 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --ring: 240 4.9% 83.9%;
+    --positive: 142 69% 58%;
+    --negative: 0 91% 71%;
+    --link: 213 94% 68%;
+    --warning-accent: 48 96% 53%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -122,6 +130,10 @@
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
+  --color-positive: hsl(var(--positive));
+  --color-negative: hsl(var(--negative));
+  --color-link: hsl(var(--link));
+  --color-warning-accent: hsl(var(--warning-accent));
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

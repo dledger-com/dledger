@@ -148,7 +148,7 @@
       <Card.Root>
         <Card.Header class="pb-2">
           <Card.Description>{m.report_short_term_gains()}</Card.Description>
-          <Card.Title class="text-xl text-green-600 dark:text-green-400">
+          <Card.Title class="text-xl text-positive">
             +{formatCurrency(stGains, settings.currency)}
           </Card.Title>
         </Card.Header>
@@ -157,7 +157,7 @@
       <Card.Root>
         <Card.Header class="pb-2">
           <Card.Description>{m.report_short_term_losses()}</Card.Description>
-          <Card.Title class="text-xl text-red-600 dark:text-red-400">
+          <Card.Title class="text-xl text-negative">
             {formatCurrency(stLosses, settings.currency)}
           </Card.Title>
         </Card.Header>
@@ -166,7 +166,7 @@
       <Card.Root>
         <Card.Header class="pb-2">
           <Card.Description>{m.report_long_term_gains()}</Card.Description>
-          <Card.Title class="text-xl text-green-600 dark:text-green-400">
+          <Card.Title class="text-xl text-positive">
             +{formatCurrency(ltGains, settings.currency)}
           </Card.Title>
         </Card.Header>
@@ -175,7 +175,7 @@
       <Card.Root>
         <Card.Header class="pb-2">
           <Card.Description>{m.report_long_term_losses()}</Card.Description>
-          <Card.Title class="text-xl text-red-600 dark:text-red-400">
+          <Card.Title class="text-xl text-negative">
             {formatCurrency(ltLosses, settings.currency)}
           </Card.Title>
         </Card.Header>
@@ -184,7 +184,7 @@
       <Card.Root>
         <Card.Header class="pb-2">
           <Card.Description>{m.report_total_realized()}</Card.Description>
-          <Card.Title class="text-xl {totalRealized >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+          <Card.Title class="text-xl {totalRealized >= 0 ? 'text-positive' : 'text-negative'}">
             {totalRealized >= 0 ? "+" : ""}{formatCurrency(totalRealized, settings.currency)}
           </Card.Title>
         </Card.Header>
@@ -193,7 +193,7 @@
       <Card.Root>
         <Card.Header class="pb-2">
           <Card.Description>{m.report_unrealized_label()}</Card.Description>
-          <Card.Title class="text-xl {totalUnrealized >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+          <Card.Title class="text-xl {totalUnrealized >= 0 ? 'text-positive' : 'text-negative'}">
             {totalUnrealized >= 0 ? "+" : ""}{formatCurrency(totalUnrealized, settings.currency)}
           </Card.Title>
         </Card.Header>
@@ -246,7 +246,7 @@
                 <Table.Cell class="text-right font-mono">{line.quantity}</Table.Cell>
                 <Table.Cell class="text-right font-mono">{formatCurrency(line.cost_basis, settings.currency)}</Table.Cell>
                 <Table.Cell class="text-right font-mono">{formatCurrency(line.proceeds, settings.currency)}</Table.Cell>
-                <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-positive' : 'text-negative'}">
                   {gl >= 0 ? "+" : ""}{formatCurrency(gl, settings.currency)}
                 </Table.Cell>
               </Table.Row>

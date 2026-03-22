@@ -236,7 +236,7 @@
                   </Table.Cell>
                   <Table.Cell class="text-right font-mono">
                     {@const amt = parseFloat(item.amount)}
-                    <span class={amt < 0 ? "text-red-600 dark:text-red-400" : ""}>
+                    <span class={amt < 0 ? "text-negative" : ""}>
                       {formatCurrency(amt, item.currency)}
                     </span>
                   </Table.Cell>
@@ -253,7 +253,7 @@
                 </p>
                 {#if difference}
                   <p class="text-sm">
-                    Difference: <span class="font-mono font-medium {parseFloat(difference) === 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}">
+                    Difference: <span class="font-mono font-medium {parseFloat(difference) === 0 ? 'text-positive' : 'text-orange-600 dark:text-orange-400'}">
                       {formatCurrency(difference, currency)}
                     </span>
                   </p>

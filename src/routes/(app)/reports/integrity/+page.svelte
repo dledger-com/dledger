@@ -57,7 +57,7 @@
       <Card.Root class="border-green-200 dark:border-green-800">
         <Card.Content class="py-8">
           <div class="text-center space-y-2">
-            <p class="text-lg font-medium text-green-600 dark:text-green-400">{m.report_all_checks_passed()}</p>
+            <p class="text-lg font-medium text-positive">{m.report_all_checks_passed()}</p>
             <p class="text-sm text-muted-foreground">{m.report_no_issues_detected()}</p>
           </div>
         </Card.Content>
@@ -69,7 +69,7 @@
           <Card.Root class="flex-1 border-red-200 dark:border-red-800">
             <Card.Header>
               <Card.Description>{m.report_errors()}</Card.Description>
-              <Card.Title class="text-2xl text-red-600 dark:text-red-400">{errors.length}</Card.Title>
+              <Card.Title class="text-2xl text-negative">{errors.length}</Card.Title>
             </Card.Header>
           </Card.Root>
         {/if}
@@ -87,7 +87,7 @@
       {#if errors.length > 0}
         <Card.Root>
           <Card.Header>
-            <Card.Title class="text-red-600 dark:text-red-400">{m.report_errors()}</Card.Title>
+            <Card.Title class="text-negative">{m.report_errors()}</Card.Title>
           </Card.Header>
           <Card.Content>
             <div class="space-y-3">

@@ -24,9 +24,9 @@
   };
 
   const arrowClasses: Record<FlowType, string> = {
-    income:   "text-green-600 dark:text-green-400",
-    expense:  "text-red-600 dark:text-red-400",
-    transfer: "text-blue-600 dark:text-blue-400",
+    income:   "text-positive",
+    expense:  "text-negative",
+    transfer: "text-link",
     equity:   "text-purple-600 dark:text-purple-400",
     mixed:    "text-muted-foreground",
   };
