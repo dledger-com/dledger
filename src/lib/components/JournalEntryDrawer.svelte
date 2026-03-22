@@ -25,6 +25,9 @@
   import X from "lucide-svelte/icons/x";
   import ArrowRightLeft from "lucide-svelte/icons/arrow-right-left";
   import TableIcon from "lucide-svelte/icons/table";
+  import Copy from "lucide-svelte/icons/copy";
+  import Check from "lucide-svelte/icons/check";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import * as m from "$paraglide/messages.js";
 
   interface Props {
@@ -40,6 +43,20 @@
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
   const settings = new SettingsStore();
+
+  const TRUNCATE_THRESHOLD = 20;
+  function isLongValue(value: string): boolean {
+    return value.length > TRUNCATE_THRESHOLD;
+  }
+
+  let copiedKey = $state<string | null>(null);
+
+  function copyMetaValue(key: string, value: string) {
+    navigator.clipboard.writeText(value).then(() => {
+      copiedKey = key;
+      setTimeout(() => { copiedKey = null; }, 1500);
+    });
+  }
 
   // ── Responsive ──
   let isMobile = $state(false);
@@ -300,11 +317,33 @@
               {#if displayMeta.length > 0}
                 <dl class="grid grid-cols-2 gap-3">
                   {#each displayMeta as [key, value]}
-                    <div>
+                    <div class="min-w-0">
                       <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
                       <dd>
                         {#if key === "handler"}
                           <Badge variant="secondary">{value}</Badge>
+                        {:else if isLongValue(value)}
+                          <div class="flex items-center gap-1 min-w-0">
+                            <Tooltip.Root>
+                              <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
+                                {formatMetaValue(key, value)}
+                              </Tooltip.Trigger>
+                              <Tooltip.Content side="top" class="max-w-xs break-all">
+                                {value}
+                              </Tooltip.Content>
+                            </Tooltip.Root>
+                            <button
+                              onclick={() => copyMetaValue(key, value)}
+                              class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                              title="Copy"
+                            >
+                              {#if copiedKey === key}
+                                <Check class="h-3 w-3" />
+                              {:else}
+                                <Copy class="h-3 w-3" />
+                              {/if}
+                            </button>
+                          </div>
                         {:else}
                           <span class="font-medium">{formatMetaValue(key, value)}</span>
                         {/if}
