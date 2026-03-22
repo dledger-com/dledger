@@ -408,6 +408,23 @@ export async function syncBitcoinAccount(
       if (tx.status.block_height) {
         meta["btc:block_height"] = String(tx.status.block_height);
       }
+      // Store sender/receiver addresses
+      if (classification.type === "receive") {
+        const senders = tx.vin
+          .filter(v => v.prevout && !ownedAddresses.has(v.prevout.scriptpubkey_address))
+          .map(v => v.prevout!.scriptpubkey_address);
+        if (senders.length > 0) meta["btc:from"] = senders.join(",");
+        const receivers = tx.vout
+          .filter(v => v.scriptpubkey_address && ownedAddresses.has(v.scriptpubkey_address))
+          .map(v => v.scriptpubkey_address);
+        if (receivers.length > 0) meta["btc:to"] = receivers.join(",");
+      } else if (classification.type === "send") {
+        const senders = tx.vin
+          .filter(v => v.prevout && ownedAddresses.has(v.prevout.scriptpubkey_address))
+          .map(v => v.prevout!.scriptpubkey_address);
+        if (senders.length > 0) meta["btc:from"] = senders.join(",");
+        if (classification.externalRecipients.length > 0) meta["btc:to"] = classification.externalRecipients.join(",");
+      }
       await backend.setMetadata(entryId, meta);
 
       existingSources.add(source);

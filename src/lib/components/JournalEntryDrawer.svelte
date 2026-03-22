@@ -89,12 +89,13 @@
       .replace(/^deposit:/, "")
       .replace(/^withdrawal:/, "")
       .replace(/^ledger:/, "")
-      .replace(/^v2:/, "");
+      .replace(/^v2:/, "")
+      .replace(/^btc:/, "");
     return display.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   function truncateAddress(addr: string): string {
-    if (addr.length > 16 && addr.startsWith("0x")) {
+    if (addr.length > 16) {
       return `${addr.slice(0, 6)}...${addr.slice(-6)}`;
     }
     return addr;
@@ -106,6 +107,7 @@
     if (key === "tx:from" || key === "tx:to" || key === "tx:hash") return truncateAddress(value);
     if (key === "tx:gas_price_gwei") return `${value} gwei`;
     if (key === "tx:contracts") return value.split(",").map(truncateAddress).join(", ");
+    if (key === "btc:from" || key === "btc:to") return value.split(",").map(truncateAddress).join(", ");
     return value;
   }
 
@@ -261,11 +263,37 @@
           <details class="mt-2">
             <summary class="text-xs text-muted-foreground cursor-pointer">{m.btn_more_details()}</summary>
             <dl class="grid grid-cols-2 gap-3 text-sm mt-2">
-              <div>
+              <div class="min-w-0">
                 <dt class="text-muted-foreground">{m.label_source()}</dt>
-                <dd class="font-medium">{entry.source}</dd>
+                <dd>
+                  {#if isLongValue(entry.source)}
+                    <div class="flex items-center gap-1 min-w-0">
+                      <Tooltip.Root>
+                        <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
+                          {entry.source}
+                        </Tooltip.Trigger>
+                        <Tooltip.Content side="top" class="max-w-xs break-all">
+                          {entry.source}
+                        </Tooltip.Content>
+                      </Tooltip.Root>
+                      <button
+                        onclick={() => copyMetaValue("__source", entry!.source)}
+                        class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Copy"
+                      >
+                        {#if copiedKey === "__source"}
+                          <Check class="h-3 w-3" />
+                        {:else}
+                          <Copy class="h-3 w-3" />
+                        {/if}
+                      </button>
+                    </div>
+                  {:else}
+                    <span class="font-medium">{entry.source}</span>
+                  {/if}
+                </dd>
               </div>
-              <div>
+              <div class="min-w-0">
                 <dt class="text-muted-foreground">{m.label_created()}</dt>
                 <dd class="font-medium">{entry.created_at}</dd>
               </div>
