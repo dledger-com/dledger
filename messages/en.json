@@ -348,6 +348,11 @@
   "report_french_crypto_tax": "French Crypto Tax",
   "report_french_crypto_tax_desc": "Art. 150 VH bis — Weighted average method for crypto-to-fiat dispositions.",
 
+  "report_group_accounting": "Accounting",
+  "report_group_investments": "Investments",
+  "report_group_crypto": "Crypto & DeFi",
+  "report_group_tax": "Tax & Compliance",
+
   "btn_new_account": "New Account",
   "btn_add_sub_account": "Add Sub-Account",
   "btn_archive": "Archive",

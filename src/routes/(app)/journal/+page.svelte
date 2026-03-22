@@ -1927,7 +1927,7 @@
         {@const BarChartComp = BarChart_imported}
         <div class="relative">
         {#if chartDateLabel}
-            <div class="absolute top-0 left-2 z-10 rounded-full border bg-background/95 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm pointer-events-none">
+            <div class="absolute top-0 left-2 z-10 rounded-md border bg-background px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm pointer-events-none">
                 {chartDateLabel}
             </div>
         {/if}
@@ -2741,9 +2741,9 @@
 
                 {#if showPill && positionLabel}
                     <div
-                        class="fixed md:absolute bottom-[11.75rem] md:bottom-12 right-4 z-20 rounded-full border
-                      bg-background/95 px-3 py-1 text-xs text-muted-foreground
-                      shadow-sm backdrop-blur-sm"
+                        class="fixed md:absolute bottom-[11.75rem] md:bottom-12 right-4 z-20 rounded-md border
+                      bg-background px-3 py-1 text-xs text-muted-foreground
+                      shadow-sm"
                     >
                         {m.journal_position_of({ position: positionLabel, total: store.totalCount })}
                     </div>
@@ -2753,8 +2753,8 @@
                     <button
                         type="button"
                         class="fixed md:absolute bottom-[9.5rem] md:bottom-3 right-4 z-20 flex h-8 w-8 items-center
-                   justify-center rounded-full border bg-background/95
-                   text-muted-foreground shadow-sm backdrop-blur-sm
+                   justify-center rounded-full border bg-background
+                   text-muted-foreground shadow-sm
                    hover:text-foreground"
                         onclick={() =>
                             virtualizer.scrollToOffset(0, {
@@ -2772,8 +2772,8 @@
             <div
                 class="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-50
                         flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5
-                        max-w-[calc(100vw-2rem)] rounded-lg border bg-background/95
-                        px-4 py-2.5 shadow-lg backdrop-blur-sm"
+                        max-w-[calc(100vw-2rem)] rounded-lg border bg-background
+                        px-4 py-2.5 shadow-md"
             >
                 <span class="text-sm text-muted-foreground whitespace-nowrap">
                     {m.journal_entries_selected({ count: selectedCount })}

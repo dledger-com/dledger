@@ -348,6 +348,11 @@
   "report_french_crypto_tax": "Fiscalité crypto française",
   "report_french_crypto_tax_desc": "Art. 150 VH bis — Méthode du prix moyen pondéré pour les cessions crypto vers fiat.",
 
+  "report_group_accounting": "Comptabilité",
+  "report_group_investments": "Investissements",
+  "report_group_crypto": "Crypto & DeFi",
+  "report_group_tax": "Fiscalité & Conformité",
+
   "btn_new_account": "Nouveau compte",
   "btn_add_sub_account": "Ajouter un sous-compte",
   "btn_archive": "Archiver",

@@ -11,7 +11,7 @@
         class="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center p-2 pointer-events-none"
     >
         <div
-            class="flex items-center gap-3 rounded-full bg-background/95 backdrop-blur-sm border shadow-lg px-4 py-2 pointer-events-auto"
+            class="flex items-center gap-3 rounded-lg bg-background border shadow-md px-4 py-2 pointer-events-auto"
         >
             <FileStack class="h-4 w-4 text-muted-foreground shrink-0" />
             <span class="text-sm font-medium">
