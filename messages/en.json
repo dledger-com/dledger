@@ -1,5 +1,6 @@
 {
   "nav_dashboard": "Dashboard",
+  "nav_dashboard_short": "Home",
   "nav_accounts": "Accounts",
   "nav_journal": "Journal",
   "nav_reports": "Reports",
@@ -78,6 +79,12 @@
   "date_yesterday": "Yesterday",
   "date_days_ago": "{count} days ago",
   "date_weeks_ago": "{count} weeks ago",
+  "date_day": "Day",
+  "date_week": "Week",
+  "date_month": "Month",
+  "date_quarter": "Quarter",
+  "date_year": "Year",
+  "label_auto_granularity": "Auto ({granularity})",
 
   "month_january": "January",
   "month_february": "February",

@@ -1,5 +1,6 @@
 {
   "nav_dashboard": "Tableau de bord",
+  "nav_dashboard_short": "Accueil",
   "nav_accounts": "Comptes",
   "nav_journal": "Journal",
   "nav_reports": "Rapports",
@@ -78,6 +79,12 @@
   "date_yesterday": "Hier",
   "date_days_ago": "Il y a {count} jours",
   "date_weeks_ago": "Il y a {count} semaines",
+  "date_day": "Jour",
+  "date_week": "Semaine",
+  "date_month": "Mois",
+  "date_quarter": "Trimestre",
+  "date_year": "Année",
+  "label_auto_granularity": "Auto ({granularity})",
 
   "month_january": "Janvier",
   "month_february": "Février",
@@ -382,7 +389,7 @@
   "label_base": "Base",
   "label_rate_source": "Source de taux",
   "label_actions": "Actions",
-  "label_auto_detect": "auto-détection",
+  "label_auto_detect": "auto",
   "label_account_pattern": "Modèle de compte",
   "label_period": "Période",
   "label_limit": "Limite",

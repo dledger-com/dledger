@@ -90,6 +90,14 @@
     } from "@tanstack/table-core";
     import { invalidate } from "$lib/data/invalidation.js";
 
+    const granularityLabel: Record<ChartGranularity, () => string> = {
+        day: () => m.date_day(),
+        week: () => m.date_week(),
+        month: () => m.date_month(),
+        quarter: () => m.date_quarter(),
+        year: () => m.date_year(),
+    };
+
     const store = new JournalStore();
     const settings = new SettingsStore();
     let loadController: AbortController | undefined;
@@ -1935,19 +1943,19 @@
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                     <button class="text-[10px] px-1.5 py-0.5 rounded bg-muted/70 hover:bg-muted text-muted-foreground">
-                        {manualGranularity ? manualGranularity[0].toUpperCase() + manualGranularity.slice(1) : m.label_auto_detect()}
+                        {manualGranularity ? granularityLabel[manualGranularity]() : m.label_auto_detect()}
                     </button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                     <DropdownMenu.Item inset onclick={() => { manualGranularity = null; settings.update({ journalChartGranularity: null }); }}>
                         {#if !manualGranularity}<Check class="absolute left-2 size-4" />{/if}
-                        Auto ({autoGranularity[0].toUpperCase() + autoGranularity.slice(1)})
+                        {m.label_auto_granularity({ granularity: granularityLabel[autoGranularity]() })}
                     </DropdownMenu.Item>
                     <DropdownMenu.Separator />
                     {#each (["day","week","month","quarter","year"] as const) as g}
                         <DropdownMenu.Item inset onclick={() => { manualGranularity = g; settings.update({ journalChartGranularity: g }); }}>
                             {#if manualGranularity === g}<Check class="absolute left-2 size-4" />{/if}
-                            {g[0].toUpperCase() + g.slice(1)}
+                            {granularityLabel[g]()}
                         </DropdownMenu.Item>
                     {/each}
                 </DropdownMenu.Content>

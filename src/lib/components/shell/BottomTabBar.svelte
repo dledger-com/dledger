@@ -8,7 +8,7 @@
   import * as m from "$paraglide/messages.js";
 
   const tabs = [
-    { title: () => m.nav_dashboard(), href: "/", icon: LayoutDashboard },
+    { title: () => m.nav_dashboard_short(), href: "/", icon: LayoutDashboard },
     { title: () => m.nav_accounts(), href: "/accounts", icon: BookOpen },
     { title: () => m.nav_journal(), href: "/journal", icon: FileText },
     { title: () => m.nav_reports(), href: "/reports", icon: BarChart3 },
