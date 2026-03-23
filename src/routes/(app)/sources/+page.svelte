@@ -48,6 +48,7 @@
     import { detectSolInputType as detectSolInputTypeJs } from "$lib/solana/derive-js.js";
     import { deriveSolAddresses as deriveSolAddressesJs } from "$lib/solana/derive-js.js";
     import type { SolanaAccount } from "$lib/solana/types.js";
+    import type { HyperliquidAccount } from "$lib/hyperliquid/types.js";
     import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
@@ -188,17 +189,19 @@
         return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
     });
 
-    // Merged blockchain rows (BTC + EVM + SOL)
+    // Merged blockchain rows (BTC + EVM + SOL + HL)
     type BlockchainRow =
         | { kind: "btc"; data: import("$lib/bitcoin/types.js").BitcoinAccount }
         | { kind: "evm"; data: GroupedAddress }
-        | { kind: "sol"; data: SolanaAccount };
+        | { kind: "sol"; data: SolanaAccount }
+        | { kind: "hl"; data: HyperliquidAccount };
 
     const blockchainRows = $derived.by((): BlockchainRow[] => {
         const rows: BlockchainRow[] = [];
         for (const account of btcAccounts) rows.push({ kind: "btc", data: account });
         for (const group of groupedAddresses) rows.push({ kind: "evm", data: group });
         for (const account of solAccounts) rows.push({ kind: "sol", data: account });
+        for (const account of hlAccounts) rows.push({ kind: "hl", data: account });
         return rows;
     });
 
@@ -241,15 +244,15 @@
     type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
     const sortBlockchain = createSortState<BlockchainSortKey>();
     const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
-        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.data.address,
+        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.data.address,
         label: (r) => r.data.label,
         type: (r) => r.kind === "btc"
             ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
-            : r.kind === "sol" ? "Solana" : "EVM",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : "EVM",
         networks: (r) => r.kind === "btc"
             ? "Bitcoin"
-            : r.kind === "sol" ? "Solana" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
-        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : "",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
+        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : "",
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -257,7 +260,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -327,6 +330,13 @@
     let btcItemLabels = $state<Map<number, string>>(new Map());
     let btcDerivedXpubs = $state<import("$lib/bitcoin/derive-js.js").DerivedBtcXpub[]>([]);
     let btcDeriving = $state(false);
+
+    // Hyperliquid state
+    let hlAccounts = $state<HyperliquidAccount[]>([]);
+    let hlNewAddress = $state("");
+    let hlNewLabel = $state("");
+    let hlAddingAccount = $state(false);
+    const hlBusy = $derived(taskQueue.isActive("hl-sync"));
 
     // Solana state
     let solAccounts = $state<SolanaAccount[]>([]);
@@ -813,7 +823,101 @@
         }
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy);
+    // -- Hyperliquid functions --
+
+    function startAddHyperliquid(prefillAddress?: string) {
+        addSourceMode = "hyperliquid";
+        if (prefillAddress) hlNewAddress = prefillAddress;
+    }
+
+    async function loadHlAccounts() {
+        try {
+            hlAccounts = await getBackend().listHyperliquidAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Hyperliquid accounts: ${err}`);
+        }
+    }
+
+    async function handleAddHyperliquidAccount() {
+        const address = hlNewAddress.trim().toLowerCase();
+        const label = hlNewLabel.trim();
+        if (!address || !/^0x[a-f0-9]{40}$/.test(address)) {
+            toast.error("Invalid EVM address");
+            return;
+        }
+
+        const existing = hlAccounts.find(a => a.address.toLowerCase() === address);
+        if (existing) {
+            toast.info("This address is already tracked on Hyperliquid");
+            return;
+        }
+
+        hlAddingAccount = true;
+        try {
+            await getBackend().addHyperliquidAccount({
+                id: uuidv7(),
+                address,
+                label: label || `${address.slice(0, 6)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            hlNewAddress = "";
+            hlNewLabel = "";
+            addSourceMode = "idle";
+            await loadHlAccounts();
+            toast.success("Hyperliquid account added");
+        } catch (err) {
+            toast.error(`Failed to add Hyperliquid account: ${err}`);
+        } finally {
+            hlAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveHlAccount(id: string) {
+        try {
+            await getBackend().removeHyperliquidAccount(id);
+            await loadHlAccounts();
+            toast.success("Hyperliquid account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncHlAccount(account: HyperliquidAccount) {
+        taskQueue.enqueue({
+            key: `hl-sync:${account.id}`,
+            label: `Sync ${account.label} (Hyperliquid)`,
+            async run(ctx) {
+                const r = await getBackend().syncHyperliquid(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadHlAccounts();
+                const imported = r.fills_imported + r.funding_imported + r.ledger_imported;
+                if (imported > 0) invalidate("journal", "accounts", "reports");
+                if (imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.fills_imported} fills, ${r.funding_imported} funding, ${r.ledger_imported} ledger`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllHl() {
+        for (const account of hlAccounts) {
+            syncHlAccount(account);
+        }
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy);
 
     async function loadCexAccounts() {
         try {
@@ -973,6 +1077,7 @@
         loadCexAccounts();
         loadBtcAccounts();
         loadSolAccounts();
+        loadHlAccounts();
     });
 
     // -- Etherscan handlers --
@@ -1478,6 +1583,7 @@
                     onSelectBlockchain={startAddBlockchain}
                     onSelectBitcoin={startAddBitcoin}
                     onSelectSolana={startAddSolana}
+                    onSelectHyperliquid={startAddHyperliquid}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -1966,6 +2072,39 @@
                 </div>
             {/if}
 
+            {#if addSourceMode === "hyperliquid"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Hyperliquid Account</span>
+                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; hlNewAddress = ""; hlNewLabel = ""; }}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Hyperliquid uses your EVM address. No API key needed — all data is public.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-hl-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-hl-address"
+                                placeholder="0x..."
+                                autocomplete="off"
+                                bind:value={hlNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-hl-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-hl-label" placeholder="My Hyperliquid" bind:value={hlNewLabel} />
+                        </div>
+                        <Button onclick={handleAddHyperliquidAccount} disabled={hlAddingAccount || (!hlNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+                </div>
+            {/if}
+
             <!-- Blockchain Accounts sub-section (merged BTC + EVM + SOL) -->
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
@@ -2094,6 +2233,57 @@
                                                     size="sm"
                                                     onclick={() => handleRemoveSolAccount(solAccount.id)}
                                                     disabled={solBusy}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "hl"}
+                                    {@const hlAccount = row.data}
+                                    {@const isHlSyncing = taskQueue.isActive(`hl-sync:${hlAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {hlAccount.address.slice(0, 6)}...{hlAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{hlAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(hlAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>{hlAccount.label}</Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Hyperliquid</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Hyperliquid</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {hlAccount.last_sync
+                                                ? new Date(hlAccount.last_sync).toLocaleDateString()
+                                                : "Never"}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncHlAccount(hlAccount)}
+                                                    disabled={hlBusy}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isHlSyncing ? "Syncing..." : "Sync"}
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveHlAccount(hlAccount.id)}
+                                                    disabled={hlBusy}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>

@@ -88,6 +88,11 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/volet/, ''),
       },
+      '/api/hyperliquid': {
+        target: 'https://api.hyperliquid.xyz',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/hyperliquid/, ''),
+      },
     },
   },
 }));

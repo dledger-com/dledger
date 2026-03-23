@@ -503,7 +503,35 @@ export class SqlJsBackend implements Backend {
       PRIMARY KEY (journal_entry_id, link_name)
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_entry_link_name ON entry_link(link_name)");
-    db.exec("INSERT INTO schema_version (version) VALUES (22)");
+    // Bitcoin (v23)
+    db.exec(`CREATE TABLE IF NOT EXISTS bitcoin_account (
+      id TEXT PRIMARY KEY NOT NULL, address_or_xpub TEXT NOT NULL,
+      account_type TEXT NOT NULL DEFAULT 'address', derivation_bip INTEGER,
+      network TEXT NOT NULL DEFAULT 'mainnet', label TEXT NOT NULL,
+      last_receive_index INTEGER NOT NULL DEFAULT -1, last_change_index INTEGER NOT NULL DEFAULT -1,
+      last_sync TEXT, created_at TEXT NOT NULL
+    )`);
+    db.exec(`CREATE TABLE IF NOT EXISTS btc_derived_address (
+      address TEXT PRIMARY KEY NOT NULL,
+      bitcoin_account_id TEXT NOT NULL REFERENCES bitcoin_account(id) ON DELETE CASCADE,
+      change_chain INTEGER NOT NULL DEFAULT 0, address_index INTEGER NOT NULL,
+      has_transactions INTEGER NOT NULL DEFAULT 0
+    )`);
+    db.exec("CREATE INDEX IF NOT EXISTS idx_btc_derived_account ON btc_derived_address(bitcoin_account_id)");
+    // Solana (v24)
+    db.exec(`CREATE TABLE IF NOT EXISTS solana_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL UNIQUE,
+      network TEXT NOT NULL DEFAULT 'mainnet-beta', label TEXT NOT NULL,
+      last_signature TEXT, last_sync TEXT, created_at TEXT NOT NULL
+    )`);
+    // Hyperliquid (v25)
+    db.exec(`CREATE TABLE IF NOT EXISTS hyperliquid_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync_time INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_hl_account_address ON hyperliquid_account(address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (25)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -966,6 +994,19 @@ PRAGMA foreign_keys = ON;
           )`);
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (24)");
+        }
+        if (currentVersion < 25) {
+          db.exec(`CREATE TABLE IF NOT EXISTS hyperliquid_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_sync_time INTEGER,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_hl_account_address ON hyperliquid_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (25)");
         }
       }
     }
@@ -4059,6 +4100,62 @@ PRAGMA foreign_keys = ON;
     this.beginTransaction();
     try {
       const result = await syncSolanaAccount(this, account, loadSettings(), onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Hyperliquid accounts ----
+
+  async listHyperliquidAccounts(): Promise<import("./hyperliquid/types.js").HyperliquidAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync_time, last_sync, created_at FROM hyperliquid_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string,
+        address: row.address as string,
+        label: row.label as string,
+        last_sync_time: (row.last_sync_time as number) ?? null,
+        last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addHyperliquidAccount(account: Omit<import("./hyperliquid/types.js").HyperliquidAccount, "last_sync" | "last_sync_time">): Promise<void> {
+    this.run(
+      `INSERT INTO hyperliquid_account (id, address, label, last_sync_time, last_sync, created_at)
+       VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async removeHyperliquidAccount(id: string): Promise<void> {
+    this.run("DELETE FROM hyperliquid_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateHyperliquidSyncCursor(id: string, lastSyncTime: number): Promise<void> {
+    this.run(
+      "UPDATE hyperliquid_account SET last_sync_time = ?, last_sync = ? WHERE id = ?",
+      [lastSyncTime, new Date().toISOString(), id],
+    );
+    this.scheduleSave();
+  }
+
+  async syncHyperliquid(
+    account: import("./hyperliquid/types.js").HyperliquidAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./hyperliquid/types.js").HyperliquidSyncResult> {
+    const { syncHyperliquidAccount } = await import("./hyperliquid/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncHyperliquidAccount(this, account, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {

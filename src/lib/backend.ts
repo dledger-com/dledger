@@ -21,6 +21,7 @@ import type {
 } from "./types/index.js";
 import type { BitcoinAccount, BitcoinSyncResult } from "./bitcoin/types.js";
 import type { SolanaAccount, SolanaSyncResult } from "./solana/types.js";
+import type { HyperliquidAccount, HyperliquidSyncResult } from "./hyperliquid/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -171,6 +172,13 @@ export interface Backend {
   removeSolanaAccount(id: string): Promise<void>;
   updateSolanaLastSignature(id: string, signature: string): Promise<void>;
   syncSolana(account: SolanaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SolanaSyncResult>;
+
+  // Hyperliquid
+  listHyperliquidAccounts(): Promise<HyperliquidAccount[]>;
+  addHyperliquidAccount(account: Omit<HyperliquidAccount, "last_sync" | "last_sync_time">): Promise<void>;
+  removeHyperliquidAccount(id: string): Promise<void>;
+  updateHyperliquidSyncCursor(id: string, lastSyncTime: number): Promise<void>;
+  syncHyperliquid(account: HyperliquidAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HyperliquidSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -608,6 +616,24 @@ class TauriBackend implements Backend {
     const { syncSolanaAccount } = await import("./solana/sync.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
     return syncSolanaAccount(this, account, loadSettings(), onProgress, signal);
+  }
+
+  // Hyperliquid
+  async listHyperliquidAccounts(): Promise<HyperliquidAccount[]> {
+    return this.invoke("list_hyperliquid_accounts");
+  }
+  async addHyperliquidAccount(account: Omit<HyperliquidAccount, "last_sync" | "last_sync_time">): Promise<void> {
+    return this.invoke("add_hyperliquid_account", { account });
+  }
+  async removeHyperliquidAccount(id: string): Promise<void> {
+    return this.invoke("remove_hyperliquid_account", { id });
+  }
+  async updateHyperliquidSyncCursor(id: string, lastSyncTime: number): Promise<void> {
+    return this.invoke("update_hyperliquid_sync_cursor", { id, lastSyncTime });
+  }
+  async syncHyperliquid(account: HyperliquidAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HyperliquidSyncResult> {
+    const { syncHyperliquidAccount } = await import("./hyperliquid/sync.js");
+    return syncHyperliquidAccount(this, account, onProgress, signal);
   }
 
   // Exchange accounts (CEX)

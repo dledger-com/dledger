@@ -11,12 +11,14 @@
     onSelectBlockchain,
     onSelectBitcoin,
     onSelectSolana,
+    onSelectHyperliquid,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
     onSelectBlockchain: (prefillAddress?: string) => void;
     onSelectBitcoin?: (prefillInput?: string) => void;
     onSelectSolana?: (prefillAddress?: string) => void;
+    onSelectHyperliquid?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -80,6 +82,12 @@
     search = "";
     onSelectSolana?.(prefillAddress);
   }
+
+  function selectHyperliquid(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectHyperliquid?.(prefillAddress);
+  }
 </script>
 
 <Popover.Root bind:open onOpenChange={(v) => { if (!v) search = ""; }}>
@@ -104,6 +112,16 @@
             >
               Add {detectedAddress.slice(0, 6)}...{detectedAddress.slice(-4)} as EVM address
             </Command.Item>
+            {#if onSelectHyperliquid}
+              <Command.Item
+                value="detected-hl-{detectedAddress}"
+                keywords={["hyperliquid", "hl", "perp", "futures"]}
+                onSelect={() => selectHyperliquid(detectedAddress)}
+                class="font-mono text-xs"
+              >
+                Add {detectedAddress.slice(0, 6)}...{detectedAddress.slice(-4)} as Hyperliquid account
+              </Command.Item>
+            {/if}
           </Command.Group>
         {/if}
         {#if detectedBtcInput}
@@ -154,6 +172,15 @@
               onSelect={() => selectSolana()}
             >
               Solana Address / HD Wallet
+            </Command.Item>
+          {/if}
+          {#if onSelectHyperliquid}
+            <Command.Item
+              value="Hyperliquid Account"
+              keywords={["hyperliquid", "hl", "perp", "futures", "dex"]}
+              onSelect={() => selectHyperliquid()}
+            >
+              Hyperliquid Account
             </Command.Item>
           {/if}
         </Command.Group>
