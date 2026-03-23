@@ -72,6 +72,7 @@
   let entryLinks = $state<Map<string, string[]>>(new Map());
 
   // Onboarding state
+  let sourceCount = $state(0);
   const showOnboardingWizard = $derived(!settings.onboardingCompleted && recentEntries.length === 0 && !loadingActive);
   const showOnboardingChecklist = $derived(!!settings.onboardingCompleted && !settings.onboardingDismissedChecklist);
 
@@ -202,6 +203,17 @@
       scaleTime = d3.scaleTime;
       scaleLinear = d3.scaleLinear;
     });
+
+    // 1b. Load source count for onboarding checklist
+    try {
+      const backend = getBackend();
+      const [eth, btc, sol, hl, cex] = await Promise.all([
+        backend.listEtherscanAccounts(), backend.listBitcoinAccounts(),
+        backend.listSolanaAccounts(), backend.listHyperliquidAccounts(),
+        backend.listExchangeAccounts(),
+      ]);
+      sourceCount = eth.length + btc.length + sol.length + hl.length + cex.length;
+    } catch { /* non-critical */ }
 
     // 2. Yield to guarantee browser paints skeleton/cached state before heavy queries.
     //    rAF enters the rendering pipeline → browser paints → setTimeout fires in next macrotask.
@@ -440,7 +452,7 @@
     <OnboardingChecklist
       hasBaseCurrency={!!settings.currency}
       hasAccounts={accountStore.accounts.length > 0}
-      hasSources={recentEntries.length > 0}
+      hasSources={sourceCount > 0}
       hasTransactions={recentEntries.length > 0}
       onDismiss={() => settings.update({ onboardingDismissedChecklist: true })}
     />
