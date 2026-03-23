@@ -4600,6 +4600,10 @@ PRAGMA foreign_keys = ON;
       "account_metadata", "account_closure", "account", "currency",
     ]);
     try { this.db.exec("UPDATE exchange_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE bitcoin_account SET last_sync = NULL, last_receive_index = -1, last_change_index = -1"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE btc_derived_address SET has_transactions = 0"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE solana_account SET last_signature = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE hyperliquid_account SET last_sync_time = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }
