@@ -1,3 +1,5 @@
+import { gunzipSync } from "fflate";
+
 export type ImportTarget = "csv" | "ofx" | "pdf" | "ledger";
 
 export interface DetectResult {
@@ -89,6 +91,15 @@ function looksLikeLedger(text: string): boolean {
 export async function detectImportTarget(
   file: File,
 ): Promise<DetectResult | null> {
+  // Gzip: decompress and re-detect with inner filename
+  if (file.name.toLowerCase().endsWith(".gz")) {
+    const buf = await file.arrayBuffer();
+    const decompressed = gunzipSync(new Uint8Array(buf));
+    const innerName = file.name.slice(0, -3);
+    const innerFile = new File([decompressed], innerName, { type: file.type });
+    return detectImportTarget(innerFile);
+  }
+
   const extGuess = guessFromExtension(file.name);
 
   // For PDFs, read as binary
