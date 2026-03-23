@@ -12,7 +12,7 @@ export type DescriptionData =
   | { type: "btc-transfer"; direction: "sent" | "received" | "self" | "consolidation"; counterparty?: string; txid: string }
   | { type: "sol-transfer"; direction: "sent" | "received" | "self"; counterparty?: string; signature: string; tokenSymbol?: string }
   | { type: "sol-defi"; protocol: string; action: string; signature: string; summary?: string }
-  | { type: "hl-fill"; coin: string; side: "long" | "short"; closedPnl?: string }
+  | { type: "hl-fill"; coin: string; side: "long" | "short"; closedPnl?: string; spent?: string; received?: string }
   | { type: "hl-funding"; coin: string; usdc: string }
   | { type: "hl-ledger"; action: "deposit" | "withdrawal" | "liquidation" | "transfer"; usdc?: string }
   | { type: "system"; action: "reversal" | "pad" | "recurring"; ref?: string };
@@ -60,6 +60,9 @@ export function renderDescription(data: DescriptionData): string {
     case "sol-defi":
       return data.summary ?? `${data.protocol}: ${data.action} on Solana`;
     case "hl-fill": {
+      if (data.spent && data.received) {
+        return `Hyperliquid trade: ${data.spent} → ${data.received}`;
+      }
       const pnl = data.closedPnl && data.closedPnl !== "0" ? ` PnL ${data.closedPnl} USDC` : "";
       return `Hyperliquid ${data.coin} ${data.side} trade${pnl}`;
     }

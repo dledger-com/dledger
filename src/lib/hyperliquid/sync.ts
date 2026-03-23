@@ -7,6 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription } from "../types/description-data.js";
 import { defiAssets, defiIncome, defiExpense, EQUITY_TRADING } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
+import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
 import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
 import type { HlSpotMeta } from "./api.js";
 import type {
@@ -324,12 +325,27 @@ export async function syncHyperliquidAccount(
 				items.push({ account: hlUsdcAccount(), currency: "USDC", amount: totalFee.neg().toFixed() });
 			}
 
-			const descData = { type: "hl-fill" as const, coin: base, side: (isBuy ? "long" : "short") as "long" | "short" };
+			const descData = {
+				type: "hl-fill" as const,
+				coin: base,
+				side: (isBuy ? "long" : "short") as "long" | "short",
+				spent: isBuy ? "USDC" : base,
+				received: isBuy ? base : "USDC",
+			};
 			const posted = await postEntry(source, date, renderDescription(descData), descData, items, {
 				hl_coin: first.coin, hl_side: first.side, hl_hash: hash,
 			});
-			if (posted) result.fills_imported++;
-			else result.skipped++;
+			if (posted) {
+				const rateItems: TradeRateItem[] = items.map((i) => ({
+					account_name: i.account,
+					currency: i.currency,
+					amount: i.amount,
+				}));
+				await deriveAndRecordTradeRate(backend, date, rateItems);
+				result.fills_imported++;
+			} else {
+				result.skipped++;
+			}
 		} else {
 			// Perp trade: only record realized PnL and fees
 			const totalClosedPnl = group.reduce((sum, f) => sum.plus(f.closedPnl), new Decimal(0));
