@@ -22,6 +22,8 @@ import type {
 import type { BitcoinAccount, BitcoinSyncResult } from "./bitcoin/types.js";
 import type { SolanaAccount, SolanaSyncResult } from "./solana/types.js";
 import type { HyperliquidAccount, HyperliquidSyncResult } from "./hyperliquid/types.js";
+import type { SuiAccount, SuiSyncResult } from "./sui/types.js";
+import type { AptosAccount, AptosSyncResult } from "./aptos/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -182,6 +184,22 @@ export interface Backend {
   updateHyperliquidAccountLabel(id: string, label: string): Promise<void>;
   updateHyperliquidSyncCursor(id: string, lastSyncTime: number): Promise<void>;
   syncHyperliquid(account: HyperliquidAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HyperliquidSyncResult>;
+
+  // Sui
+  listSuiAccounts(): Promise<SuiAccount[]>;
+  addSuiAccount(account: Omit<SuiAccount, "last_sync" | "last_cursor">): Promise<void>;
+  removeSuiAccount(id: string): Promise<void>;
+  updateSuiAccountLabel(id: string, label: string): Promise<void>;
+  updateSuiSyncCursor(id: string, cursor: string): Promise<void>;
+  syncSui(account: SuiAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SuiSyncResult>;
+
+  // Aptos
+  listAptosAccounts(): Promise<AptosAccount[]>;
+  addAptosAccount(account: Omit<AptosAccount, "last_sync" | "last_version">): Promise<void>;
+  removeAptosAccount(id: string): Promise<void>;
+  updateAptosAccountLabel(id: string, label: string): Promise<void>;
+  updateAptosSyncVersion(id: string, version: number): Promise<void>;
+  syncAptos(account: AptosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AptosSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -646,6 +664,28 @@ class TauriBackend implements Backend {
   async syncHyperliquid(account: HyperliquidAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HyperliquidSyncResult> {
     const { syncHyperliquidAccount } = await import("./hyperliquid/sync.js");
     return syncHyperliquidAccount(this, account, onProgress, signal);
+  }
+
+  // Sui
+  async listSuiAccounts(): Promise<SuiAccount[]> { return this.invoke("list_sui_accounts"); }
+  async addSuiAccount(account: Omit<SuiAccount, "last_sync" | "last_cursor">): Promise<void> { return this.invoke("add_sui_account", { account }); }
+  async removeSuiAccount(id: string): Promise<void> { return this.invoke("remove_sui_account", { id }); }
+  async updateSuiAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_sui_account_label", { id, label }); }
+  async updateSuiSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_sui_sync_cursor", { id, cursor }); }
+  async syncSui(account: SuiAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SuiSyncResult> {
+    const { syncSuiAccount } = await import("./sui/sync.js");
+    return syncSuiAccount(this, account, onProgress, signal);
+  }
+
+  // Aptos
+  async listAptosAccounts(): Promise<AptosAccount[]> { return this.invoke("list_aptos_accounts"); }
+  async addAptosAccount(account: Omit<AptosAccount, "last_sync" | "last_version">): Promise<void> { return this.invoke("add_aptos_account", { account }); }
+  async removeAptosAccount(id: string): Promise<void> { return this.invoke("remove_aptos_account", { id }); }
+  async updateAptosAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_aptos_account_label", { id, label }); }
+  async updateAptosSyncVersion(id: string, version: number): Promise<void> { return this.invoke("update_aptos_sync_version", { id, version }); }
+  async syncAptos(account: AptosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AptosSyncResult> {
+    const { syncAptosAccount } = await import("./aptos/sync.js");
+    return syncAptosAccount(this, account, onProgress, signal);
   }
 
   // Exchange accounts (CEX)

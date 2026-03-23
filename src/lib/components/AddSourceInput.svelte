@@ -12,6 +12,8 @@
     onSelectBitcoin,
     onSelectSolana,
     onSelectHyperliquid,
+    onSelectSui,
+    onSelectAptos,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -19,6 +21,8 @@
     onSelectBitcoin?: (prefillInput?: string) => void;
     onSelectSolana?: (prefillAddress?: string) => void;
     onSelectHyperliquid?: (prefillAddress?: string) => void;
+    onSelectSui?: (prefillAddress?: string) => void;
+    onSelectAptos?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -50,6 +54,12 @@
     if (/^[xyztuvXYZTUV]pub[1-9A-HJ-NP-Za-km-z]{100,112}$/.test(s))
       return { type: "xpub" as const, display: s };
     return null;
+  });
+
+  // Move-based chains (Sui/Aptos): 0x + 64 hex chars (vs EVM's 40)
+  const detectedMoveAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^0x[a-fA-F0-9]{64}$/.test(s) ? s : null;
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -88,6 +98,18 @@
     search = "";
     onSelectHyperliquid?.(prefillAddress);
   }
+
+  function selectSui(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectSui?.(prefillAddress);
+  }
+
+  function selectAptos(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectAptos?.(prefillAddress);
+  }
 </script>
 
 <Popover.Root bind:open onOpenChange={(v) => { if (!v) search = ""; }}>
@@ -120,6 +142,30 @@
                 class="font-mono text-xs"
               >
                 Add {detectedAddress.slice(0, 6)}...{detectedAddress.slice(-4)} as Hyperliquid account
+              </Command.Item>
+            {/if}
+          </Command.Group>
+        {/if}
+        {#if detectedMoveAddress}
+          <Command.Group heading="Detected Move Address">
+            {#if onSelectSui}
+              <Command.Item
+                value="detected-sui-{detectedMoveAddress}"
+                keywords={["sui", "move"]}
+                onSelect={() => selectSui(detectedMoveAddress)}
+                class="font-mono text-xs"
+              >
+                Add {detectedMoveAddress.slice(0, 6)}...{detectedMoveAddress.slice(-4)} as Sui address
+              </Command.Item>
+            {/if}
+            {#if onSelectAptos}
+              <Command.Item
+                value="detected-aptos-{detectedMoveAddress}"
+                keywords={["aptos", "apt", "move"]}
+                onSelect={() => selectAptos(detectedMoveAddress)}
+                class="font-mono text-xs"
+              >
+                Add {detectedMoveAddress.slice(0, 6)}...{detectedMoveAddress.slice(-4)} as Aptos address
               </Command.Item>
             {/if}
           </Command.Group>
@@ -181,6 +227,24 @@
               onSelect={() => selectHyperliquid()}
             >
               Hyperliquid Account
+            </Command.Item>
+          {/if}
+          {#if onSelectSui}
+            <Command.Item
+              value="Sui Address"
+              keywords={["sui", "move"]}
+              onSelect={() => selectSui()}
+            >
+              Sui Address
+            </Command.Item>
+          {/if}
+          {#if onSelectAptos}
+            <Command.Item
+              value="Aptos Address"
+              keywords={["aptos", "apt", "move"]}
+              onSelect={() => selectAptos()}
+            >
+              Aptos Address
             </Command.Item>
           {/if}
         </Command.Group>

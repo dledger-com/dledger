@@ -531,7 +531,21 @@ export class SqlJsBackend implements Backend {
       created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_hl_account_address ON hyperliquid_account(address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (25)");
+    // Sui (v26)
+    db.exec(`CREATE TABLE IF NOT EXISTS sui_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sui_account_address ON sui_account(address)");
+    // Aptos (v26)
+    db.exec(`CREATE TABLE IF NOT EXISTS aptos_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_version INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_aptos_account_address ON aptos_account(address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (26)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1007,6 +1021,28 @@ PRAGMA foreign_keys = ON;
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_hl_account_address ON hyperliquid_account(address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (25)");
+        }
+        if (currentVersion < 26) {
+          db.exec(`CREATE TABLE IF NOT EXISTS sui_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_cursor TEXT,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sui_account_address ON sui_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS aptos_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_version INTEGER,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_aptos_account_address ON aptos_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (26)");
         }
       }
     }
@@ -4179,6 +4215,114 @@ PRAGMA foreign_keys = ON;
     }
   }
 
+  // ---- Sui accounts ----
+
+  async listSuiAccounts(): Promise<import("./sui/types.js").SuiAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_cursor, last_sync, created_at FROM sui_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_cursor: (row.last_cursor as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addSuiAccount(account: Omit<import("./sui/types.js").SuiAccount, "last_sync" | "last_cursor">): Promise<void> {
+    this.run(
+      `INSERT INTO sui_account (id, address, label, last_cursor, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateSuiAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE sui_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeSuiAccount(id: string): Promise<void> {
+    this.run("DELETE FROM sui_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateSuiSyncCursor(id: string, cursor: string): Promise<void> {
+    this.run("UPDATE sui_account SET last_cursor = ?, last_sync = ? WHERE id = ?", [cursor, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncSui(
+    account: import("./sui/types.js").SuiAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./sui/types.js").SuiSyncResult> {
+    const { syncSuiAccount } = await import("./sui/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncSuiAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Aptos accounts ----
+
+  async listAptosAccounts(): Promise<import("./aptos/types.js").AptosAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_version, last_sync, created_at FROM aptos_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_version: (row.last_version as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addAptosAccount(account: Omit<import("./aptos/types.js").AptosAccount, "last_sync" | "last_version">): Promise<void> {
+    this.run(
+      `INSERT INTO aptos_account (id, address, label, last_version, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateAptosAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE aptos_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeAptosAccount(id: string): Promise<void> {
+    this.run("DELETE FROM aptos_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateAptosSyncVersion(id: string, version: number): Promise<void> {
+    this.run("UPDATE aptos_account SET last_version = ?, last_sync = ? WHERE id = ?", [version, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncAptos(
+    account: import("./aptos/types.js").AptosAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./aptos/types.js").AptosSyncResult> {
+    const { syncAptosAccount } = await import("./aptos/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncAptosAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   // ---- Exchange accounts (CEX) ----
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
@@ -4619,6 +4763,8 @@ PRAGMA foreign_keys = ON;
     try { this.db.exec("UPDATE btc_derived_address SET has_transactions = 0"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE solana_account SET last_signature = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE hyperliquid_account SET last_sync_time = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE sui_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE aptos_account SET last_version = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }

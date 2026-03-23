@@ -93,6 +93,16 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/hyperliquid/, ''),
       },
+      '/api/sui': {
+        target: 'https://graphql.mainnet.sui.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/sui/, ''),
+      },
+      '/api/aptos': {
+        target: 'https://api.mainnet.aptoslabs.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/aptos/, ''),
+      },
     },
   },
 }));

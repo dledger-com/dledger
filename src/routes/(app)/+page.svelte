@@ -207,12 +207,13 @@
     // 1b. Load source count for onboarding checklist
     try {
       const backend = getBackend();
-      const [eth, btc, sol, hl, cex] = await Promise.all([
+      const [eth, btc, sol, hl, sui, apt, cex] = await Promise.all([
         backend.listEtherscanAccounts(), backend.listBitcoinAccounts(),
         backend.listSolanaAccounts(), backend.listHyperliquidAccounts(),
+        backend.listSuiAccounts(), backend.listAptosAccounts(),
         backend.listExchangeAccounts(),
       ]);
-      sourceCount = eth.length + btc.length + sol.length + hl.length + cex.length;
+      sourceCount = eth.length + btc.length + sol.length + hl.length + sui.length + apt.length + cex.length;
     } catch { /* non-critical */ }
 
     // 2. Yield to guarantee browser paints skeleton/cached state before heavy queries.

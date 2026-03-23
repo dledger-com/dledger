@@ -49,6 +49,8 @@
     import { deriveSolAddresses as deriveSolAddressesJs } from "$lib/solana/derive-js.js";
     import type { SolanaAccount } from "$lib/solana/types.js";
     import type { HyperliquidAccount } from "$lib/hyperliquid/types.js";
+    import type { SuiAccount } from "$lib/sui/types.js";
+    import type { AptosAccount } from "$lib/aptos/types.js";
     import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
@@ -180,7 +182,7 @@
         editingRowLabel = currentLabel;
     }
 
-    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "cex") {
+    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "cex") {
         if (!editingRowId) return;
         const label = editingRowLabel.trim();
         if (!label) { editingRowId = null; return; }
@@ -194,6 +196,12 @@
             } else if (kind === "hl") {
                 await getBackend().updateHyperliquidAccountLabel(editingRowId, label);
                 await loadHlAccounts();
+            } else if (kind === "sui") {
+                await getBackend().updateSuiAccountLabel(editingRowId, label);
+                await loadSuiAccounts();
+            } else if (kind === "aptos") {
+                await getBackend().updateAptosAccountLabel(editingRowId, label);
+                await loadAptosAccounts();
             } else if (kind === "cex") {
                 await getBackend().updateExchangeAccount(editingRowId, { label });
                 await loadCexAccounts();
@@ -242,7 +250,9 @@
         | { kind: "btc"; data: import("$lib/bitcoin/types.js").BitcoinAccount }
         | { kind: "evm"; data: GroupedAddress }
         | { kind: "sol"; data: SolanaAccount }
-        | { kind: "hl"; data: HyperliquidAccount };
+        | { kind: "hl"; data: HyperliquidAccount }
+        | { kind: "sui"; data: SuiAccount }
+        | { kind: "aptos"; data: AptosAccount };
 
     const blockchainRows = $derived.by((): BlockchainRow[] => {
         const rows: BlockchainRow[] = [];
@@ -250,6 +260,8 @@
         for (const group of groupedAddresses) rows.push({ kind: "evm", data: group });
         for (const account of solAccounts) rows.push({ kind: "sol", data: account });
         for (const account of hlAccounts) rows.push({ kind: "hl", data: account });
+        for (const account of suiAccounts) rows.push({ kind: "sui", data: account });
+        for (const account of aptosAccounts) rows.push({ kind: "aptos", data: account });
         return rows;
     });
 
@@ -292,15 +304,15 @@
     type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
     const sortBlockchain = createSortState<BlockchainSortKey>();
     const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
-        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.data.address,
+        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.kind === "sui" ? r.data.address : r.kind === "aptos" ? r.data.address : r.data.address,
         label: (r) => r.data.label,
         type: (r) => r.kind === "btc"
             ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : "EVM",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : "EVM",
         networks: (r) => r.kind === "btc"
             ? "Bitcoin"
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
-        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : "",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
+        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : r.kind === "sui" ? (r.data.last_sync || "") : r.kind === "aptos" ? (r.data.last_sync || "") : "",
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -308,7 +320,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -363,6 +375,10 @@
         evmSelectedIndexes = new Set([0]);
         evmItemLabels = new Map();
         btcItemLabels = new Map();
+        suiNewAddress = "";
+        suiNewLabel = "";
+        aptosNewAddress = "";
+        aptosNewLabel = "";
     }
 
     // -- Bitcoin state --
@@ -385,6 +401,20 @@
     let hlNewLabel = $state("");
     let hlAddingAccount = $state(false);
     const hlBusy = $derived(taskQueue.isActive("hl-sync"));
+
+    // Sui state
+    let suiAccounts = $state<SuiAccount[]>([]);
+    let suiNewAddress = $state("");
+    let suiNewLabel = $state("");
+    let suiAddingAccount = $state(false);
+    const suiBusy = $derived(taskQueue.isActive("sui-sync"));
+
+    // Aptos state
+    let aptosAccounts = $state<AptosAccount[]>([]);
+    let aptosNewAddress = $state("");
+    let aptosNewLabel = $state("");
+    let aptosAddingAccount = $state(false);
+    const aptosBusy = $derived(taskQueue.isActive("aptos-sync"));
 
     // Solana state
     let solAccounts = $state<SolanaAccount[]>([]);
@@ -965,7 +995,193 @@
         }
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy);
+    // -- Sui functions --
+
+    function startAddSui(prefillAddress?: string) {
+        addSourceMode = "sui";
+        if (prefillAddress) suiNewAddress = prefillAddress;
+    }
+
+    async function loadSuiAccounts() {
+        try {
+            suiAccounts = await getBackend().listSuiAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Sui accounts: ${err}`);
+        }
+    }
+
+    async function handleAddSuiAccount() {
+        const address = suiNewAddress.trim().toLowerCase();
+        const label = suiNewLabel.trim();
+        if (!address || !/^0x[a-f0-9]{64}$/.test(address)) {
+            toast.error("Invalid Sui address (expected 0x + 64 hex chars)");
+            return;
+        }
+
+        const existing = suiAccounts.find(a => a.address.toLowerCase() === address);
+        if (existing) {
+            toast.info("This address is already tracked on Sui");
+            return;
+        }
+
+        suiAddingAccount = true;
+        try {
+            await getBackend().addSuiAccount({
+                id: uuidv7(),
+                address,
+                label: label || `${address.slice(0, 6)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            suiNewAddress = "";
+            suiNewLabel = "";
+            addSourceMode = "idle";
+            await loadSuiAccounts();
+            toast.success("Sui account added");
+        } catch (err) {
+            toast.error(`Failed to add Sui account: ${err}`);
+        } finally {
+            suiAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveSuiAccount(id: string) {
+        try {
+            await getBackend().removeSuiAccount(id);
+            await loadSuiAccounts();
+            toast.success("Sui account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncSuiAccount(account: SuiAccount) {
+        taskQueue.enqueue({
+            key: `sui-sync:${account.id}`,
+            label: `Sync ${account.label} (Sui)`,
+            async run(ctx) {
+                const r = await getBackend().syncSui(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadSuiAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllSui() {
+        for (const account of suiAccounts) {
+            syncSuiAccount(account);
+        }
+    }
+
+    // -- Aptos functions --
+
+    function startAddAptos(prefillAddress?: string) {
+        addSourceMode = "aptos";
+        if (prefillAddress) aptosNewAddress = prefillAddress;
+    }
+
+    async function loadAptosAccounts() {
+        try {
+            aptosAccounts = await getBackend().listAptosAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Aptos accounts: ${err}`);
+        }
+    }
+
+    async function handleAddAptosAccount() {
+        const address = aptosNewAddress.trim().toLowerCase();
+        const label = aptosNewLabel.trim();
+        if (!address || !/^0x[a-f0-9]{64}$/.test(address)) {
+            toast.error("Invalid Aptos address (expected 0x + 64 hex chars)");
+            return;
+        }
+
+        const existing = aptosAccounts.find(a => a.address.toLowerCase() === address);
+        if (existing) {
+            toast.info("This address is already tracked on Aptos");
+            return;
+        }
+
+        aptosAddingAccount = true;
+        try {
+            await getBackend().addAptosAccount({
+                id: uuidv7(),
+                address,
+                label: label || `${address.slice(0, 6)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            aptosNewAddress = "";
+            aptosNewLabel = "";
+            addSourceMode = "idle";
+            await loadAptosAccounts();
+            toast.success("Aptos account added");
+        } catch (err) {
+            toast.error(`Failed to add Aptos account: ${err}`);
+        } finally {
+            aptosAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveAptosAccount(id: string) {
+        try {
+            await getBackend().removeAptosAccount(id);
+            await loadAptosAccounts();
+            toast.success("Aptos account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncAptosAccount(account: AptosAccount) {
+        taskQueue.enqueue({
+            key: `aptos-sync:${account.id}`,
+            label: `Sync ${account.label} (Aptos)`,
+            async run(ctx) {
+                const r = await getBackend().syncAptos(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadAptosAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllAptos() {
+        for (const account of aptosAccounts) {
+            syncAptosAccount(account);
+        }
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy);
 
     async function loadCexAccounts() {
         try {
@@ -1126,6 +1342,8 @@
         loadBtcAccounts();
         loadSolAccounts();
         loadHlAccounts();
+        loadSuiAccounts();
+        loadAptosAccounts();
     });
 
     // -- Etherscan handlers --
@@ -1632,6 +1850,8 @@
                     onSelectBitcoin={startAddBitcoin}
                     onSelectSolana={startAddSolana}
                     onSelectHyperliquid={startAddHyperliquid}
+                    onSelectSui={startAddSui}
+                    onSelectAptos={startAddAptos}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -2153,6 +2373,72 @@
                 </div>
             {/if}
 
+            {#if addSourceMode === "sui"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Sui Account</span>
+                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; suiNewAddress = ""; suiNewLabel = ""; }}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Sui address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-sui-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-sui-address"
+                                placeholder="0x..."
+                                autocomplete="off"
+                                bind:value={suiNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-sui-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-sui-label" placeholder="My Sui Wallet" bind:value={suiNewLabel} />
+                        </div>
+                        <Button onclick={handleAddSuiAccount} disabled={suiAddingAccount || (!suiNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+                </div>
+            {/if}
+
+            {#if addSourceMode === "aptos"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Aptos Account</span>
+                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; aptosNewAddress = ""; aptosNewLabel = ""; }}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track an Aptos address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-aptos-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-aptos-address"
+                                placeholder="0x..."
+                                autocomplete="off"
+                                bind:value={aptosNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-aptos-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-aptos-label" placeholder="My Aptos Wallet" bind:value={aptosNewLabel} />
+                        </div>
+                        <Button onclick={handleAddAptosAccount} disabled={aptosAddingAccount || (!aptosNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+                </div>
+            {/if}
+
             <!-- Blockchain Accounts sub-section (merged BTC + EVM + SOL) -->
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
@@ -2359,6 +2645,126 @@
                                                     size="sm"
                                                     onclick={() => handleRemoveHlAccount(hlAccount.id)}
                                                     disabled={hlBusy || editingRowId === hlAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "sui"}
+                                    {@const suiAccount = row.data}
+                                    {@const isSuiSyncing = taskQueue.isActive(`sui-sync:${suiAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {suiAccount.address.slice(0, 6)}...{suiAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{suiAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(suiAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === suiAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("sui"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {suiAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Sui</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Sui</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {suiAccount.last_sync
+                                                ? new Date(suiAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncSuiAccount(suiAccount)}
+                                                    disabled={suiBusy || editingRowId === suiAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isSuiSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === suiAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === suiAccount.id ? (editingRowId = null) : startEditLabel(suiAccount.id, suiAccount.label)} disabled={suiBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveSuiAccount(suiAccount.id)}
+                                                    disabled={suiBusy || editingRowId === suiAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "aptos"}
+                                    {@const aptosAccount = row.data}
+                                    {@const isAptosSyncing = taskQueue.isActive(`aptos-sync:${aptosAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {aptosAccount.address.slice(0, 6)}...{aptosAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{aptosAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(aptosAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === aptosAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("aptos"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {aptosAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Aptos</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Aptos</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {aptosAccount.last_sync
+                                                ? new Date(aptosAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncAptosAccount(aptosAccount)}
+                                                    disabled={aptosBusy || editingRowId === aptosAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isAptosSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === aptosAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === aptosAccount.id ? (editingRowId = null) : startEditLabel(aptosAccount.id, aptosAccount.label)} disabled={aptosBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveAptosAccount(aptosAccount.id)}
+                                                    disabled={aptosBusy || editingRowId === aptosAccount.id}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>
@@ -2635,7 +3041,7 @@
         </Card.Content>
 
         <!-- Footer with unified actions -->
-        {#if cexAccounts.length > 0 || ethAccounts.length > 0 || btcAccounts.length > 0}
+        {#if cexAccounts.length > 0 || ethAccounts.length > 0 || btcAccounts.length > 0 || suiAccounts.length > 0 || aptosAccounts.length > 0}
             <Card.Footer class="flex justify-end gap-2">
                 {#if ethAccounts.length > 0 && cexAccounts.length > 0}
                     <Button
