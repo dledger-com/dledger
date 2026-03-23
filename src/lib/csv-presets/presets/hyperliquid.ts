@@ -165,8 +165,8 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 			: { type: "hl-fill", coin: base, side: dir.toLowerCase().includes("long") ? "long" : "short", closedPnl: closedPnl !== 0 ? closedPnl.toString() : undefined };
 
 		const sourceKey = hash
-			? `hyperliquid:fill:${hash}`
-			: `hyperliquid:csv:${row[timeIdx]}:${row[coinIdx]}:${row[szIdx]}`;
+			? `fill:${hash}`
+			: `csv:${row[timeIdx]}:${row[coinIdx]}:${row[szIdx]}`;
 
 		records.push({
 			date,
@@ -221,7 +221,7 @@ function transformFunding(headers: string[], rows: string[][]): CsvRecord[] {
 			description: renderDescription(descData),
 			descriptionData: descData,
 			lines,
-			sourceKey: `hyperliquid:funding:csv:${row[timeIdx]}:${coin}`,
+			sourceKey: `funding:csv:${row[timeIdx]}:${coin}`,
 		});
 	}
 

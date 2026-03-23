@@ -115,7 +115,7 @@ describe("hyperliquidPreset", () => {
 				["2025-01-25 01:01:34", "@130", "Buy", "0.013", "1000", "13", "0.1", "", "", "0xhash123"],
 			];
 			const records = hyperliquidPreset.transform(hypeDexerHeaders, rows)!;
-			expect(records[0].sourceKey).toBe("hyperliquid:fill:0xhash123");
+			expect(records[0].sourceKey).toBe("fill:0xhash123");
 		});
 
 		it("sets sourceKey from row data when no hash", () => {
@@ -123,7 +123,8 @@ describe("hyperliquidPreset", () => {
 				["08/01/2025 00:07:26", "DEPIN/USDC", "Buy", "0.01", "100", "1", "0", "0"],
 			];
 			const records = hyperliquidPreset.transform(hlUiHeaders, rows)!;
-			expect(records[0].sourceKey).toContain("hyperliquid:csv:");
+			expect(records[0].sourceKey).toContain("csv:");
+			expect(records[0].sourceKey).not.toContain("hyperliquid:");
 		});
 
 		it("skips empty rows", () => {

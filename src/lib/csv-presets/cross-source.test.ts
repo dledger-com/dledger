@@ -52,6 +52,18 @@ describe("crossSourceAliases", () => {
     expect(crossSourceAliases("etherscan:1:0xabc")).toEqual([]);
   });
 
+  it("maps CSV hyperliquid source to API sync format", () => {
+    expect(crossSourceAliases("csv-import:hyperliquid:fill:0xabc")).toEqual([
+      "hyperliquid:fill:0xabc",
+    ]);
+  });
+
+  it("maps API sync hyperliquid source to CSV format", () => {
+    expect(crossSourceAliases("hyperliquid:fill:0xabc")).toEqual([
+      "csv-import:hyperliquid:fill:0xabc",
+    ]);
+  });
+
   it("handles sourceKey containing colons", () => {
     // CEX refids shouldn't have colons, but ensure robustness
     expect(crossSourceAliases("csv-import:kraken-ledger:A:B")).toEqual([

@@ -13,6 +13,7 @@
 const PRESET_TO_EXCHANGE: Record<string, string> = {
   "kraken-ledger": "kraken",
   "volet": "volet",
+  "hyperliquid": "hyperliquid",
 };
 
 /** Reverse lookup: CEX exchange ID → CSV preset ID. */
