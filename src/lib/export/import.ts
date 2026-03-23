@@ -113,16 +113,30 @@ export async function importData(
 		}
 	}
 
+	// Build dedup indexes for merge-skip mode
+	let existingCurrencyKeys: Set<string> | null = null;
+	let existingAccountPaths: Set<string> | null = null;
+	let existingEntryIds: Set<string> | null = null;
+	let existingEntrySources: Set<string> | null = null;
+
+	if (mode === "merge-skip") {
+		onProgress?.({ phase: "importing", current: 0, total: totalEntities, entity: "building dedup index" });
+		existingCurrencyKeys = new Set((await backend.listCurrencies()).map(c => `${c.code}\0${c.asset_type}\0${c.param}`));
+		existingAccountPaths = new Set((await backend.listAccounts()).map(a => a.full_name));
+		const allEntries = await backend.queryJournalEntries({});
+		existingEntryIds = new Set(allEntries.map(([e]) => e.id));
+		existingEntrySources = new Set(allEntries.map(([e]) => e.source).filter(Boolean));
+	}
+
 	// Currencies first (other entities reference them)
 	onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "currencies" });
 	for (const currency of currencies) {
+		const key = `${currency.code}\0${currency.asset_type}\0${currency.param}`;
+		if (existingCurrencyKeys?.has(key)) { result.skipped++; processed++; continue; }
 		try {
 			await backend.createCurrency(currency);
 			result.currencies_imported++;
-		} catch {
-			if (mode === "replace") result.warnings.push(`currency ${currency.code}: already exists`);
-			result.skipped++;
-		}
+		} catch { result.skipped++; }
 		processed++;
 		if (processed % 50 === 0) onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "currencies" });
 	}
@@ -136,13 +150,11 @@ export async function importData(
 	});
 
 	for (const account of sortedAccounts) {
+		if (existingAccountPaths?.has(account.full_name)) { result.skipped++; processed++; continue; }
 		try {
 			await backend.createAccount(account);
 			result.accounts_imported++;
-		} catch {
-			if (mode === "replace") result.warnings.push(`account ${account.full_name}: already exists`);
-			result.skipped++;
-		}
+		} catch { result.skipped++; }
 		processed++;
 		if (processed % 50 === 0) onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "accounts" });
 	}
@@ -150,6 +162,10 @@ export async function importData(
 	// Journal entries with line items
 	onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "journal" });
 	for (const raw of journalRaw) {
+		// Dedup by ID or source key
+		if (existingEntryIds?.has(raw.id)) { result.skipped++; processed++; continue; }
+		if (raw.source && existingEntrySources?.has(raw.source)) { result.skipped++; processed++; continue; }
+
 		const entry: JournalEntry = {
 			id: raw.id,
 			date: raw.date,
@@ -170,33 +186,25 @@ export async function importData(
 				await backend.setEntryLinks(entry.id, raw.links);
 			}
 			result.entries_imported++;
-		} catch {
-			result.skipped++;
-		}
+		} catch { result.skipped++; }
 		processed++;
 		if (processed % 100 === 0) onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "journal" });
 	}
 
-	// Exchange rates
+	// Exchange rates (recordExchangeRate already handles priority-based dedup internally)
 	onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "rates" });
 	for (const rate of exchangeRates) {
 		try {
 			await backend.recordExchangeRate(rate);
 			result.rates_imported++;
-		} catch {
-			result.skipped++;
-		}
+		} catch { result.skipped++; }
 		processed++;
 		if (processed % 500 === 0) onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "rates" });
 	}
 
 	// Budgets
 	for (const budget of budgets) {
-		try {
-			await backend.createBudget(budget);
-		} catch {
-			result.skipped++;
-		}
+		try { await backend.createBudget(budget); } catch { result.skipped++; }
 	}
 
 	// Source accounts (from sources.json)
