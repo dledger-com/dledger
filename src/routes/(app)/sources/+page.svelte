@@ -52,6 +52,10 @@
     import type { SuiAccount } from "$lib/sui/types.js";
     import type { AptosAccount } from "$lib/aptos/types.js";
     import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
+    import { detectSuiInputType, deriveSuiAddresses } from "$lib/sui/derive-js.js";
+    import type { DerivedSuiAddress } from "$lib/sui/derive-js.js";
+    import { detectAptosInputType, deriveAptosAddresses } from "$lib/aptos/derive-js.js";
+    import type { DerivedAptosAddress } from "$lib/aptos/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
@@ -375,10 +379,27 @@
         evmSelectedIndexes = new Set([0]);
         evmItemLabels = new Map();
         btcItemLabels = new Map();
+        hlNewAddress = "";
+        hlNewLabel = "";
+        hlPrivateKeyAck = false;
+        hlDeriveCount = 5;
+        hlSelectedIndexes = new Set([0]);
+        hlItemLabels = new Map();
+        hlDerivedAddresses = [];
         suiNewAddress = "";
         suiNewLabel = "";
+        suiPrivateKeyAck = false;
+        suiDeriveCount = 5;
+        suiSelectedIndexes = new Set([0]);
+        suiItemLabels = new Map();
+        suiDerivedAddresses = [];
         aptosNewAddress = "";
         aptosNewLabel = "";
+        aptosPrivateKeyAck = false;
+        aptosDeriveCount = 5;
+        aptosSelectedIndexes = new Set([0]);
+        aptosItemLabels = new Map();
+        aptosDerivedAddresses = [];
     }
 
     // -- Bitcoin state --
@@ -401,6 +422,11 @@
     let hlNewLabel = $state("");
     let hlAddingAccount = $state(false);
     const hlBusy = $derived(taskQueue.isActive("hl-sync"));
+    let hlPrivateKeyAck = $state(false);
+    let hlDeriveCount = $state(5);
+    let hlSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let hlItemLabels = $state<Map<number, string>>(new Map());
+    let hlDerivedAddresses = $state<{index: number; address: string}[]>([]);
 
     // Sui state
     let suiAccounts = $state<SuiAccount[]>([]);
@@ -408,6 +434,11 @@
     let suiNewLabel = $state("");
     let suiAddingAccount = $state(false);
     const suiBusy = $derived(taskQueue.isActive("sui-sync"));
+    let suiPrivateKeyAck = $state(false);
+    let suiDeriveCount = $state(5);
+    let suiSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let suiItemLabels = $state<Map<number, string>>(new Map());
+    let suiDerivedAddresses = $state<DerivedSuiAddress[]>([]);
 
     // Aptos state
     let aptosAccounts = $state<AptosAccount[]>([]);
@@ -415,6 +446,11 @@
     let aptosNewLabel = $state("");
     let aptosAddingAccount = $state(false);
     const aptosBusy = $derived(taskQueue.isActive("aptos-sync"));
+    let aptosPrivateKeyAck = $state(false);
+    let aptosDeriveCount = $state(5);
+    let aptosSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let aptosItemLabels = $state<Map<number, string>>(new Map());
+    let aptosDerivedAddresses = $state<DerivedAptosAddress[]>([]);
 
     // Solana state
     let solAccounts = $state<SolanaAccount[]>([]);
@@ -530,6 +566,54 @@
         }
 
         return () => { cancelled = true; };
+    });
+
+    // Hyperliquid detection and derivation (EVM-compatible)
+    const hlDetection = $derived.by(() => detectEvmInputType(hlNewAddress.trim()));
+    const existingHlAddresses = $derived(new Set(hlAccounts.map(a => a.address.toLowerCase())));
+    const hlShowAddressPicker = $derived((() => {
+        const det = hlDetection;
+        return det.type === "seed" && hlPrivateKeyAck && hlNewAddress.trim() !== "";
+    })());
+    const hlDerivedAddressesComputed = $derived.by(() => {
+        if (!hlShowAddressPicker) return [];
+        const input = hlNewAddress.trim();
+        try { return deriveEvmAddressesFromSeed(input, hlDeriveCount); } catch { return []; }
+    });
+    $effect(() => { hlDerivedAddresses = hlDerivedAddressesComputed; });
+
+    // Sui detection and derivation
+    const suiDetection = $derived.by(() => detectSuiInputType(suiNewAddress.trim()));
+    const existingSuiAddresses = $derived(new Set(suiAccounts.map(a => a.address.toLowerCase())));
+    $effect(() => {
+        const det = suiDetection;
+        if (det.input_type !== "seed" || !suiPrivateKeyAck || !suiNewAddress.trim()) {
+            suiDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveSuiAddresses(suiNewAddress.trim(), suiDeriveCount);
+            suiDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingSuiAddresses.has(a.address.toLowerCase()));
+            suiSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { suiDerivedAddresses = []; }
+    });
+
+    // Aptos detection and derivation
+    const aptosDetection = $derived.by(() => detectAptosInputType(aptosNewAddress.trim()));
+    const existingAptosAddresses = $derived(new Set(aptosAccounts.map(a => a.address.toLowerCase())));
+    $effect(() => {
+        const det = aptosDetection;
+        if (det.input_type !== "seed" || !aptosPrivateKeyAck || !aptosNewAddress.trim()) {
+            aptosDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveAptosAddresses(aptosNewAddress.trim(), aptosDeriveCount);
+            aptosDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingAptosAddresses.has(a.address.toLowerCase()));
+            aptosSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { aptosDerivedAddresses = []; }
     });
 
     // Async derivation of multi-index xpubs from seed phrase
@@ -917,25 +1001,63 @@
     }
 
     async function handleAddHyperliquidAccount() {
-        const address = hlNewAddress.trim().toLowerCase();
-        const label = hlNewLabel.trim();
-        if (!address || !/^0x[a-f0-9]{40}$/.test(address)) {
-            toast.error("Invalid EVM address");
-            return;
-        }
-
-        const existing = hlAccounts.find(a => a.address.toLowerCase() === address);
-        if (existing) {
-            toast.info("This address is already tracked on Hyperliquid");
+        const input = hlNewAddress.trim();
+        const baseLabel = hlNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
             return;
         }
 
         hlAddingAccount = true;
         try {
+            // Multi-index path: seed phrase with derived addresses
+            if (hlDerivedAddresses.length > 0) {
+                if (hlSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = hlDerivedAddresses
+                    .filter(a => hlSelectedIndexes.has(a.index))
+                    .filter(a => !existingHlAddresses.has(a.address.toLowerCase()));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                hlNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = hlItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 6)}...${address.slice(-4)}`);
+                    await getBackend().addHyperliquidAccount({
+                        id: uuidv7(),
+                        address: address.toLowerCase(),
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                hlNewLabel = "";
+                hlPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadHlAccounts();
+                toast.success(`${selected.length} Hyperliquid address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input.toLowerCase();
+            if (!/^0x[a-f0-9]{40}$/.test(address)) {
+                toast.error("Invalid EVM address");
+                return;
+            }
+
+            const existing = hlAccounts.find(a => a.address.toLowerCase() === address);
+            if (existing) {
+                toast.info("This address is already tracked on Hyperliquid");
+                return;
+            }
+
             await getBackend().addHyperliquidAccount({
                 id: uuidv7(),
                 address,
-                label: label || `${address.slice(0, 6)}...${address.slice(-4)}`,
+                label: baseLabel || `${address.slice(0, 6)}...${address.slice(-4)}`,
                 created_at: new Date().toISOString(),
             });
             hlNewAddress = "";
@@ -1011,25 +1133,63 @@
     }
 
     async function handleAddSuiAccount() {
-        const address = suiNewAddress.trim().toLowerCase();
-        const label = suiNewLabel.trim();
-        if (!address || !/^0x[a-f0-9]{64}$/.test(address)) {
-            toast.error("Invalid Sui address (expected 0x + 64 hex chars)");
-            return;
-        }
-
-        const existing = suiAccounts.find(a => a.address.toLowerCase() === address);
-        if (existing) {
-            toast.info("This address is already tracked on Sui");
+        const input = suiNewAddress.trim();
+        const baseLabel = suiNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
             return;
         }
 
         suiAddingAccount = true;
         try {
+            // Multi-index path: seed phrase with derived addresses
+            if (suiDerivedAddresses.length > 0) {
+                if (suiSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = suiDerivedAddresses
+                    .filter(a => suiSelectedIndexes.has(a.index))
+                    .filter(a => !existingSuiAddresses.has(a.address.toLowerCase()));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                suiNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = suiItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 6)}...${address.slice(-4)}`);
+                    await getBackend().addSuiAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                suiNewLabel = "";
+                suiPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadSuiAccounts();
+                toast.success(`${selected.length} Sui address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input.toLowerCase();
+            if (!/^0x[a-f0-9]{64}$/.test(address)) {
+                toast.error("Invalid Sui address (expected 0x + 64 hex chars)");
+                return;
+            }
+
+            const existing = suiAccounts.find(a => a.address.toLowerCase() === address);
+            if (existing) {
+                toast.info("This address is already tracked on Sui");
+                return;
+            }
+
             await getBackend().addSuiAccount({
                 id: uuidv7(),
                 address,
-                label: label || `${address.slice(0, 6)}...${address.slice(-4)}`,
+                label: baseLabel || `${address.slice(0, 6)}...${address.slice(-4)}`,
                 created_at: new Date().toISOString(),
             });
             suiNewAddress = "";
@@ -1104,25 +1264,63 @@
     }
 
     async function handleAddAptosAccount() {
-        const address = aptosNewAddress.trim().toLowerCase();
-        const label = aptosNewLabel.trim();
-        if (!address || !/^0x[a-f0-9]{64}$/.test(address)) {
-            toast.error("Invalid Aptos address (expected 0x + 64 hex chars)");
-            return;
-        }
-
-        const existing = aptosAccounts.find(a => a.address.toLowerCase() === address);
-        if (existing) {
-            toast.info("This address is already tracked on Aptos");
+        const input = aptosNewAddress.trim();
+        const baseLabel = aptosNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
             return;
         }
 
         aptosAddingAccount = true;
         try {
+            // Multi-index path: seed phrase with derived addresses
+            if (aptosDerivedAddresses.length > 0) {
+                if (aptosSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = aptosDerivedAddresses
+                    .filter(a => aptosSelectedIndexes.has(a.index))
+                    .filter(a => !existingAptosAddresses.has(a.address.toLowerCase()));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                aptosNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = aptosItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 6)}...${address.slice(-4)}`);
+                    await getBackend().addAptosAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                aptosNewLabel = "";
+                aptosPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadAptosAccounts();
+                toast.success(`${selected.length} Aptos address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input.toLowerCase();
+            if (!/^0x[a-f0-9]{64}$/.test(address)) {
+                toast.error("Invalid Aptos address (expected 0x + 64 hex chars)");
+                return;
+            }
+
+            const existing = aptosAccounts.find(a => a.address.toLowerCase() === address);
+            if (existing) {
+                toast.info("This address is already tracked on Aptos");
+                return;
+            }
+
             await getBackend().addAptosAccount({
                 id: uuidv7(),
                 address,
-                label: label || `${address.slice(0, 6)}...${address.slice(-4)}`,
+                label: baseLabel || `${address.slice(0, 6)}...${address.slice(-4)}`,
                 created_at: new Date().toISOString(),
             });
             aptosNewAddress = "";
@@ -2344,7 +2542,7 @@
                 <div class="space-y-3 rounded-lg border p-4">
                     <div class="flex items-center justify-between">
                         <span class="text-sm font-medium">Add Hyperliquid Account</span>
-                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; hlNewAddress = ""; hlNewLabel = ""; }}>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
@@ -2356,7 +2554,7 @@
                             <label for="new-hl-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-hl-address"
-                                placeholder="0x..."
+                                placeholder="0x address or seed phrase..."
                                 autocomplete="off"
                                 bind:value={hlNewAddress}
                             />
@@ -2370,6 +2568,67 @@
                             Add
                         </Button>
                     </div>
+
+                    {#if hlDetection.type !== "unknown" && hlNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if hlDetection.isPrivate}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{hlDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{hlDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if hlDetection.isPrivate}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={hlPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if hlDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each hlDerivedAddresses as derived}
+                                {@const exists = existingHlAddresses.has(derived.address.toLowerCase())}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={hlSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(hlSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            hlSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={hlItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(hlItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); hlItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: hlSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { hlDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
 
@@ -2377,7 +2636,7 @@
                 <div class="space-y-3 rounded-lg border p-4">
                     <div class="flex items-center justify-between">
                         <span class="text-sm font-medium">Add Sui Account</span>
-                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; suiNewAddress = ""; suiNewLabel = ""; }}>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
@@ -2389,7 +2648,7 @@
                             <label for="new-sui-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-sui-address"
-                                placeholder="0x..."
+                                placeholder="0x address or seed phrase..."
                                 autocomplete="off"
                                 bind:value={suiNewAddress}
                             />
@@ -2403,6 +2662,67 @@
                             Add
                         </Button>
                     </div>
+
+                    {#if suiDetection.input_type !== "unknown" && suiNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if suiDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{suiDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{suiDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if suiDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={suiPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if suiDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each suiDerivedAddresses as derived}
+                                {@const exists = existingSuiAddresses.has(derived.address.toLowerCase())}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={suiSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(suiSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            suiSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={suiItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(suiItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); suiItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: suiSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { suiDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
 
@@ -2410,7 +2730,7 @@
                 <div class="space-y-3 rounded-lg border p-4">
                     <div class="flex items-center justify-between">
                         <span class="text-sm font-medium">Add Aptos Account</span>
-                        <Button variant="ghost" size="sm" onclick={() => { addSourceMode = "idle"; aptosNewAddress = ""; aptosNewLabel = ""; }}>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
                             <X class="h-4 w-4" />
                         </Button>
                     </div>
@@ -2422,7 +2742,7 @@
                             <label for="new-aptos-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-aptos-address"
-                                placeholder="0x..."
+                                placeholder="0x address or seed phrase..."
                                 autocomplete="off"
                                 bind:value={aptosNewAddress}
                             />
@@ -2436,6 +2756,67 @@
                             Add
                         </Button>
                     </div>
+
+                    {#if aptosDetection.input_type !== "unknown" && aptosNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if aptosDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{aptosDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{aptosDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if aptosDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={aptosPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if aptosDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each aptosDerivedAddresses as derived}
+                                {@const exists = existingAptosAddresses.has(derived.address.toLowerCase())}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={aptosSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(aptosSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            aptosSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={aptosItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(aptosItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); aptosItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: aptosSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { aptosDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
 

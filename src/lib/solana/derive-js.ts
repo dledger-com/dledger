@@ -1,88 +1,20 @@
 /**
  * Pure-JS Solana key derivation for browser-only mode.
- * Uses SLIP-0010 (Ed25519 hardened derivation) with @noble/curves and @scure/bip39.
+ * Uses shared SLIP-0010 Ed25519 derivation.
  *
  * Derivation path: m/44'/501'/k'/0' (Phantom standard)
  */
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english.js";
 import { base58 } from "@scure/base";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha512 } from "@noble/hashes/sha2.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { slip0010DeriveKey } from "../crypto/slip0010.js";
 
-const ED25519_CURVE = "ed25519 seed";
+const SOL_COIN_TYPE = 501;
 
 export interface DerivedSolAddress {
   index: number;
   address: string;
-}
-
-/**
- * SLIP-0010 master key derivation for Ed25519.
- */
-function slip0010MasterKey(seed: Uint8Array): { key: Uint8Array; chainCode: Uint8Array } {
-  const I = hmac(sha512, new TextEncoder().encode(ED25519_CURVE), seed);
-  return {
-    key: I.slice(0, 32),
-    chainCode: I.slice(32),
-  };
-}
-
-/**
- * SLIP-0010 hardened child derivation for Ed25519.
- * Ed25519 only supports hardened derivation (index >= 0x80000000).
- */
-function slip0010DeriveChild(
-  parentKey: Uint8Array,
-  parentChainCode: Uint8Array,
-  index: number,
-): { key: Uint8Array; chainCode: Uint8Array } {
-  // index must be hardened
-  const hardenedIndex = index | 0x80000000;
-  const data = new Uint8Array(37);
-  data[0] = 0x00; // padding byte for private key
-  data.set(parentKey, 1);
-  data[33] = (hardenedIndex >>> 24) & 0xff;
-  data[34] = (hardenedIndex >>> 16) & 0xff;
-  data[35] = (hardenedIndex >>> 8) & 0xff;
-  data[36] = hardenedIndex & 0xff;
-  const I = hmac(sha512, parentChainCode, data);
-  return {
-    key: I.slice(0, 32),
-    chainCode: I.slice(32),
-  };
-}
-
-/**
- * Derive a Solana address from a seed phrase using the Phantom standard path.
- * Path: m/44'/501'/accountIndex'/0'
- */
-function deriveKey(seed: Uint8Array, accountIndex: number): Uint8Array {
-  let { key, chainCode } = slip0010MasterKey(seed);
-  // m/44'
-  ({ key, chainCode } = slip0010DeriveChild(key, chainCode, 44));
-  // m/44'/501'
-  ({ key, chainCode } = slip0010DeriveChild(key, chainCode, 501));
-  // m/44'/501'/accountIndex'
-  ({ key, chainCode } = slip0010DeriveChild(key, chainCode, accountIndex));
-  // m/44'/501'/accountIndex'/0'
-  ({ key } = slip0010DeriveChild(key, chainCode, 0));
-  return key;
-}
-
-/**
- * Get Ed25519 public key from private key bytes.
- */
-function getPublicKey(privateKey: Uint8Array): Uint8Array {
-  return ed25519.getPublicKey(privateKey);
-}
-
-/**
- * Encode an Ed25519 public key as a Solana Base58 address.
- */
-function encodeAddress(publicKey: Uint8Array): string {
-  return base58.encode(publicKey);
 }
 
 /**
@@ -99,12 +31,9 @@ export function deriveSolAddresses(
   const results: DerivedSolAddress[] = [];
 
   for (let i = start; i < start + count; i++) {
-    const privateKey = deriveKey(seed, i);
-    const publicKey = getPublicKey(privateKey);
-    results.push({
-      index: i,
-      address: encodeAddress(publicKey),
-    });
+    const privateKey = slip0010DeriveKey(seed, SOL_COIN_TYPE, i);
+    const publicKey = ed25519.getPublicKey(privateKey);
+    results.push({ index: i, address: base58.encode(publicKey) });
   }
 
   return results;
