@@ -195,56 +195,56 @@
           </Command.Group>
         {/if}
         <Command.Group heading="Blockchain">
-          <Command.Item
-            value="EVM Address"
-            keywords={chainKeywords}
-            onSelect={() => selectBlockchain()}
-          >
-            EVM Address
-          </Command.Item>
+          {#if onSelectAptos}
+            <Command.Item
+              value="Aptos"
+              keywords={["aptos", "apt", "move"]}
+              onSelect={() => selectAptos()}
+            >
+              Aptos
+            </Command.Item>
+          {/if}
           {#if onSelectBitcoin}
             <Command.Item
-              value="Bitcoin Address"
+              value="Bitcoin"
               keywords={["bitcoin", "btc", "xpub", "ypub", "zpub"]}
               onSelect={() => selectBitcoin()}
             >
-              Bitcoin Address / HD Wallet
+              Bitcoin
+            </Command.Item>
+          {/if}
+          <Command.Item
+            value="EVM"
+            keywords={chainKeywords}
+            onSelect={() => selectBlockchain()}
+          >
+            EVM (Ethereum, Arbitrum, Base...)
+          </Command.Item>
+          {#if onSelectHyperliquid}
+            <Command.Item
+              value="Hyperliquid"
+              keywords={["hyperliquid", "hl", "perp", "futures", "dex"]}
+              onSelect={() => selectHyperliquid()}
+            >
+              Hyperliquid
             </Command.Item>
           {/if}
           {#if onSelectSolana}
             <Command.Item
-              value="Solana Address"
+              value="Solana"
               keywords={["solana", "sol", "phantom", "solflare"]}
               onSelect={() => selectSolana()}
             >
-              Solana Address / HD Wallet
-            </Command.Item>
-          {/if}
-          {#if onSelectHyperliquid}
-            <Command.Item
-              value="Hyperliquid Account"
-              keywords={["hyperliquid", "hl", "perp", "futures", "dex"]}
-              onSelect={() => selectHyperliquid()}
-            >
-              Hyperliquid Account
+              Solana
             </Command.Item>
           {/if}
           {#if onSelectSui}
             <Command.Item
-              value="Sui Address"
+              value="Sui"
               keywords={["sui", "move"]}
               onSelect={() => selectSui()}
             >
-              Sui Address
-            </Command.Item>
-          {/if}
-          {#if onSelectAptos}
-            <Command.Item
-              value="Aptos Address"
-              keywords={["aptos", "apt", "move"]}
-              onSelect={() => selectAptos()}
-            >
-              Aptos Address
+              Sui
             </Command.Item>
           {/if}
         </Command.Group>
