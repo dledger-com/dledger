@@ -58,7 +58,8 @@
     import type { DerivedSuiAddress } from "$lib/sui/derive-js.js";
     import { detectAptosInputType, deriveAptosAddresses } from "$lib/aptos/derive-js.js";
     import type { DerivedAptosAddress } from "$lib/aptos/derive-js.js";
-    import { detectTonInputType } from "$lib/ton/derive-js.js";
+    import { detectTonInputType, deriveTonAddresses } from "$lib/ton/derive-js.js";
+    import type { DerivedTonAddress } from "$lib/ton/derive-js.js";
     import { detectTezosInputType, deriveTezosAddresses } from "$lib/tezos/derive-js.js";
     import type { DerivedTezosAddress } from "$lib/tezos/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
@@ -417,6 +418,11 @@
         aptosDerivedAddresses = [];
         tonNewAddress = "";
         tonNewLabel = "";
+        tonPrivateKeyAck = false;
+        tonDeriveCount = 5;
+        tonSelectedIndexes = new Set([0]);
+        tonItemLabels = new Map();
+        tonDerivedAddresses = [];
         tezosNewAddress = "";
         tezosNewLabel = "";
         tezosPrivateKeyAck = false;
@@ -482,6 +488,11 @@
     let tonNewLabel = $state("");
     let tonAddingAccount = $state(false);
     const tonBusy = $derived(taskQueue.isActive("ton-sync"));
+    let tonPrivateKeyAck = $state(false);
+    let tonDeriveCount = $state(5);
+    let tonSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let tonItemLabels = $state<Map<number, string>>(new Map());
+    let tonDerivedAddresses = $state<DerivedTonAddress[]>([]);
 
     // Tezos state
     let tezosAccounts = $state<TezosAccount[]>([]);
@@ -659,8 +670,22 @@
         } catch { aptosDerivedAddresses = []; }
     });
 
-    // TON detection (no HD derivation — deriveTonAddresses returns [])
+    // TON detection and derivation
     const tonDetection = $derived.by(() => detectTonInputType(tonNewAddress.trim()));
+    const existingTonAddresses = $derived(new Set(tonAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = tonDetection;
+        if (det.input_type !== "seed" || !tonPrivateKeyAck || !tonNewAddress.trim()) {
+            tonDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveTonAddresses(tonNewAddress.trim(), tonDeriveCount);
+            tonDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingTonAddresses.has(a.address));
+            tonSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { tonDerivedAddresses = []; }
+    });
 
     // Tezos detection and derivation
     const tezosDetection = $derived.by(() => detectTezosInputType(tezosNewAddress.trim()));
@@ -1467,6 +1492,25 @@
 
         tonAddingAccount = true;
         try {
+            // Multi-index path (seed phrase derived)
+            if (tonDerivedAddresses.length > 0) {
+                if (tonSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = tonDerivedAddresses
+                    .filter(a => tonSelectedIndexes.has(a.index))
+                    .filter(a => !existingTonAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                tonNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = tonItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addTonAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                tonNewLabel = ""; tonPrivateKeyAck = false; addSourceMode = "idle";
+                await loadTonAccounts();
+                toast.success(`${selected.length} TON address(es) added`);
+                return;
+            }
+
+            // Single address path
             const address = input;
             if (!/^[UE]Q[A-Za-z0-9_\-\/\+]{44,46}=?=?$/.test(address) && !/^-?[0-9]+:[0-9a-fA-F]{64}$/.test(address)) {
                 toast.error("Invalid TON address");
@@ -2851,7 +2895,7 @@
                             <label for="new-hl-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-hl-address"
-                                placeholder="0x address or seed phrase..."
+                                placeholder="0x..."
                                 autocomplete="off"
                                 bind:value={hlNewAddress}
                             />
@@ -2945,7 +2989,7 @@
                             <label for="new-sui-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-sui-address"
-                                placeholder="0x address or seed phrase..."
+                                placeholder="0x..."
                                 autocomplete="off"
                                 bind:value={suiNewAddress}
                             />
@@ -3039,7 +3083,7 @@
                             <label for="new-aptos-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-aptos-address"
-                                placeholder="0x address or seed phrase..."
+                                placeholder="0x..."
                                 autocomplete="off"
                                 bind:value={aptosNewAddress}
                             />
@@ -3133,7 +3177,7 @@
                             <label for="new-ton-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-ton-address"
-                                placeholder="EQ or UQ address..."
+                                placeholder="EQ... or UQ..."
                                 autocomplete="off"
                                 bind:value={tonNewAddress}
                             />
@@ -3157,6 +3201,38 @@
                             {/if}
                         </div>
                     {/if}
+
+                    {#if tonDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={tonPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if tonDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each tonDerivedAddresses as derived}
+                                {@const exists = existingTonAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input type="checkbox" checked={tonSelectedIndexes.has(derived.index)} disabled={exists}
+                                        onchange={() => { const next = new Set(tonSelectedIndexes); if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index); tonSelectedIndexes = next; }} />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Input class="h-6 w-24 text-xs" placeholder={m.label_label()} value={tonItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(tonItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); tonItemLabels = next; }} />
+                                    {#if exists}<Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>{/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: tonSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { tonDeriveCount += 5; }}>{m.sources_load_more()}</Button>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
 
@@ -3176,7 +3252,7 @@
                             <label for="new-tezos-address" class="text-xs font-medium">Address</label>
                             <Input
                                 id="new-tezos-address"
-                                placeholder="tz1 address or seed phrase..."
+                                placeholder="tz1..."
                                 autocomplete="off"
                                 bind:value={tezosNewAddress}
                             />
