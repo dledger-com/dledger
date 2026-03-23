@@ -1,3 +1,4 @@
+import Decimal from "decimal.js-light";
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { renderDescription, type DescriptionData } from "$lib/types/description-data.js";
@@ -52,6 +53,11 @@ function parseNum(raw: string | undefined): number {
 	return parseFloat(raw) || 0;
 }
 
+function parseDec(raw: string | undefined): Decimal {
+	if (!raw || raw.trim() === "") return new Decimal(0);
+	try { return new Decimal(raw.trim()); } catch { return new Decimal(0); }
+}
+
 export const hyperliquidPreset: CsvPreset = {
 	id: "hyperliquid",
 	name: "Hyperliquid",
@@ -97,63 +103,64 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 		const { base, quote } = parseCoin(row[coinIdx] ?? "");
 		const dir = (row[dirIdx] ?? "").trim();
 		const isBuy = dir.toLowerCase() === "buy";
-		const sz = parseNum(row[szIdx]);
-		const ntl = parseNum(row[ntlIdx]);
-		const fee = parseNum(row[feeIdx]);
-		const closedPnl = parseNum(row[closedPnlIdx]);
+		const sz = parseDec(row[szIdx]);
+		const fee = parseDec(row[feeIdx]);
+		const closedPnl = parseDec(row[closedPnlIdx]);
 		const hash = hashIdx >= 0 ? (row[hashIdx] ?? "").trim() : "";
 
-		if (sz === 0 && ntl === 0) continue;
+		if (sz.isZero() && parseNum(row[ntlIdx]) === 0) continue;
 
 		const isSpot = base.startsWith("@") || (row[coinIdx] ?? "").includes("/");
-		const quoteAmt = ntl || sz * parseNum(row[pxIdx]);
+		// Compute quote amount from sz * px (Decimal precision, matching online sync)
+		const quoteAmt = parseDec(row[szIdx]).times(parseDec(row[pxIdx]));
 
 		const lines: CsvRecord["lines"] = [];
 
 		if (isSpot) {
-			// Spot trade: actual asset exchange
+			// Spot trade: actual asset exchange (matching online sync line structure)
 			const spotAccount = defiAssets(HL, `Spot:${base}`);
 			const usdcAccount = defiAssets(HL, "USDC");
 
 			if (isBuy) {
 				lines.push(
-					{ account: usdcAccount, currency: quote, amount: (-quoteAmt).toString() },
-					{ account: spotAccount, currency: base, amount: sz.toString() },
+					{ account: spotAccount, currency: base, amount: sz.toFixed() },
+					{ account: usdcAccount, currency: "USDC", amount: quoteAmt.neg().toFixed() },
 				);
 			} else {
 				lines.push(
-					{ account: spotAccount, currency: base, amount: (-sz).toString() },
-					{ account: usdcAccount, currency: quote, amount: quoteAmt.toString() },
+					{ account: spotAccount, currency: base, amount: sz.neg().toFixed() },
+					{ account: usdcAccount, currency: "USDC", amount: quoteAmt.toFixed() },
 				);
 			}
 
-			// Equity:Trading balance
-			for (const l of [...lines]) {
-				lines.push({ account: EQUITY_TRADING, currency: l.currency, amount: (-parseFloat(l.amount)).toString() });
-			}
+			// Equity:Trading balance (use Equity:Trading:{base} to match online sync)
+			const equityAmt = isBuy ? quoteAmt.toFixed() : quoteAmt.neg().toFixed();
+			lines.push({ account: `${EQUITY_TRADING}:${base}`, currency: "USDC", amount: equityAmt });
+			const baseEquity = isBuy ? sz.neg().toFixed() : sz.toFixed();
+			lines.push({ account: `${EQUITY_TRADING}:${base}`, currency: base, amount: baseEquity });
 		} else {
 			// Perp trade: only realized PnL
-			if (closedPnl !== 0) {
+			if (!closedPnl.isZero()) {
 				const usdcAccount = defiAssets(HL, "USDC");
-				if (closedPnl > 0) {
+				if (closedPnl.gt(0)) {
 					lines.push(
-						{ account: usdcAccount, currency: "USDC", amount: closedPnl.toString() },
-						{ account: defiIncome(HL, "Trading"), currency: "USDC", amount: (-closedPnl).toString() },
+						{ account: usdcAccount, currency: "USDC", amount: closedPnl.toFixed() },
+						{ account: defiIncome(HL, "Trading"), currency: "USDC", amount: closedPnl.neg().toFixed() },
 					);
 				} else {
 					lines.push(
-						{ account: defiExpense(HL, "Trading"), currency: "USDC", amount: Math.abs(closedPnl).toString() },
-						{ account: usdcAccount, currency: "USDC", amount: closedPnl.toString() },
+						{ account: defiExpense(HL, "Trading"), currency: "USDC", amount: closedPnl.abs().toFixed() },
+						{ account: usdcAccount, currency: "USDC", amount: closedPnl.toFixed() },
 					);
 				}
 			}
 		}
 
 		// Fee
-		if (fee > 0) {
+		if (fee.gt(0)) {
 			lines.push(
-				{ account: defiExpense(HL, "Fees"), currency: "USDC", amount: fee.toString() },
-				{ account: defiAssets(HL, "USDC"), currency: "USDC", amount: (-fee).toString() },
+				{ account: defiExpense(HL, "Fees"), currency: "USDC", amount: fee.toFixed() },
+				{ account: defiAssets(HL, "USDC"), currency: "USDC", amount: fee.neg().toFixed() },
 			);
 		}
 
@@ -161,8 +168,8 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 		if (lines.length === 0) continue;
 
 		const descData: DescriptionData = isSpot
-			? { type: "hl-fill", coin: base, side: isBuy ? "long" : "short", spent: isBuy ? quote : base, received: isBuy ? base : quote }
-			: { type: "hl-fill", coin: base, side: dir.toLowerCase().includes("long") ? "long" : "short", closedPnl: closedPnl !== 0 ? closedPnl.toString() : undefined };
+			? { type: "hl-fill", coin: base, side: isBuy ? "long" : "short", spent: isBuy ? "USDC" : base, received: isBuy ? base : "USDC" }
+			: { type: "hl-fill", coin: base, side: dir.toLowerCase().includes("long") ? "long" : "short", closedPnl: !closedPnl.isZero() ? closedPnl.toFixed() : undefined };
 
 		const sourceKey = hash
 			? `fill:${hash}`
@@ -196,25 +203,25 @@ function transformFunding(headers: string[], rows: string[][]): CsvRecord[] {
 		if (!date) continue;
 
 		const coin = (row[coinIdx] ?? "").trim();
-		const payment = parseNum(row[paymentIdx]);
-		if (payment === 0) continue;
+		const payment = parseDec(row[paymentIdx]);
+		if (payment.isZero()) continue;
 
 		const lines: CsvRecord["lines"] = [];
 		const usdcAccount = defiAssets(HL, "USDC");
 
-		if (payment > 0) {
+		if (payment.gt(0)) {
 			lines.push(
-				{ account: usdcAccount, currency: "USDC", amount: payment.toString() },
-				{ account: defiIncome(HL, "Funding"), currency: "USDC", amount: (-payment).toString() },
+				{ account: usdcAccount, currency: "USDC", amount: payment.toFixed() },
+				{ account: defiIncome(HL, "Funding"), currency: "USDC", amount: payment.neg().toFixed() },
 			);
 		} else {
 			lines.push(
-				{ account: defiExpense(HL, "Funding"), currency: "USDC", amount: Math.abs(payment).toString() },
-				{ account: usdcAccount, currency: "USDC", amount: payment.toString() },
+				{ account: defiExpense(HL, "Funding"), currency: "USDC", amount: payment.abs().toFixed() },
+				{ account: usdcAccount, currency: "USDC", amount: payment.toFixed() },
 			);
 		}
 
-		const descData: DescriptionData = { type: "hl-funding", coin, usdc: payment.toString() };
+		const descData: DescriptionData = { type: "hl-funding", coin, usdc: payment.toFixed() };
 
 		records.push({
 			date,
