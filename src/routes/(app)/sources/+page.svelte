@@ -2251,7 +2251,7 @@
                                                     </Tooltip.Trigger>
                                                     <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{hlAccount.address}</p></Tooltip.Content>
                                                 </Tooltip.Root>
-                                                <button onclick={() => copyToClipboard(hlAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title="Copy">
+                                                <button onclick={() => copyToClipboard(hlAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                                     <Copy class="h-3 w-3" />
                                                 </button>
                                             </div>
@@ -2266,7 +2266,7 @@
                                         <Table.Cell class="text-sm text-muted-foreground">
                                             {hlAccount.last_sync
                                                 ? new Date(hlAccount.last_sync).toLocaleDateString()
-                                                : "Never"}
+                                                : m.sources_never()}
                                         </Table.Cell>
                                         <Table.Cell class="text-right">
                                             <div class="flex justify-end gap-1">
@@ -2277,7 +2277,7 @@
                                                     disabled={hlBusy}
                                                 >
                                                     <RefreshCw class="mr-1 h-3 w-3" />
-                                                    {isHlSyncing ? "Syncing..." : "Sync"}
+                                                    {isHlSyncing ? m.state_syncing() : m.sources_sync()}
                                                 </Button>
                                                 <Button
                                                     variant="outline"
