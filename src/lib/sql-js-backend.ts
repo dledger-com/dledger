@@ -545,7 +545,21 @@ export class SqlJsBackend implements Backend {
       created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_aptos_account_address ON aptos_account(address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (26)");
+    // TON (v27)
+    db.exec(`CREATE TABLE IF NOT EXISTS ton_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_lt TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_ton_account_address ON ton_account(address)");
+    // Tezos (v27)
+    db.exec(`CREATE TABLE IF NOT EXISTS tezos_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_id INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tezos_account_address ON tezos_account(address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (27)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1043,6 +1057,28 @@ PRAGMA foreign_keys = ON;
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_aptos_account_address ON aptos_account(address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (26)");
+        }
+        if (currentVersion < 27) {
+          db.exec(`CREATE TABLE IF NOT EXISTS ton_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_lt TEXT,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_ton_account_address ON ton_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS tezos_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_id INTEGER,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tezos_account_address ON tezos_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (27)");
         }
       }
     }
@@ -4323,6 +4359,114 @@ PRAGMA foreign_keys = ON;
     }
   }
 
+  // ---- TON accounts ----
+
+  async listTonAccounts(): Promise<import("./ton/types.js").TonAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_lt, last_sync, created_at FROM ton_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_lt: (row.last_lt as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addTonAccount(account: Omit<import("./ton/types.js").TonAccount, "last_sync" | "last_lt">): Promise<void> {
+    this.run(
+      `INSERT INTO ton_account (id, address, label, last_lt, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateTonAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE ton_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeTonAccount(id: string): Promise<void> {
+    this.run("DELETE FROM ton_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateTonSyncCursor(id: string, lt: string): Promise<void> {
+    this.run("UPDATE ton_account SET last_lt = ?, last_sync = ? WHERE id = ?", [lt, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncTon(
+    account: import("./ton/types.js").TonAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./ton/types.js").TonSyncResult> {
+    const { syncTonAccount } = await import("./ton/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncTonAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Tezos accounts ----
+
+  async listTezosAccounts(): Promise<import("./tezos/types.js").TezosAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_id, last_sync, created_at FROM tezos_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_id: (row.last_id as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addTezosAccount(account: Omit<import("./tezos/types.js").TezosAccount, "last_sync" | "last_id">): Promise<void> {
+    this.run(
+      `INSERT INTO tezos_account (id, address, label, last_id, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateTezosAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE tezos_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeTezosAccount(id: string): Promise<void> {
+    this.run("DELETE FROM tezos_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateTezosSyncCursor(id: string, lastId: number): Promise<void> {
+    this.run("UPDATE tezos_account SET last_id = ?, last_sync = ? WHERE id = ?", [lastId, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncTezos(
+    account: import("./tezos/types.js").TezosAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./tezos/types.js").TezosSyncResult> {
+    const { syncTezosAccount } = await import("./tezos/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncTezosAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   // ---- Exchange accounts (CEX) ----
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
@@ -4765,6 +4909,8 @@ PRAGMA foreign_keys = ON;
     try { this.db.exec("UPDATE hyperliquid_account SET last_sync_time = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE sui_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE aptos_account SET last_version = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE ton_account SET last_lt = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE tezos_account SET last_id = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }

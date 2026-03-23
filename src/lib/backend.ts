@@ -24,6 +24,8 @@ import type { SolanaAccount, SolanaSyncResult } from "./solana/types.js";
 import type { HyperliquidAccount, HyperliquidSyncResult } from "./hyperliquid/types.js";
 import type { SuiAccount, SuiSyncResult } from "./sui/types.js";
 import type { AptosAccount, AptosSyncResult } from "./aptos/types.js";
+import type { TonAccount, TonSyncResult } from "./ton/types.js";
+import type { TezosAccount, TezosSyncResult } from "./tezos/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -200,6 +202,22 @@ export interface Backend {
   updateAptosAccountLabel(id: string, label: string): Promise<void>;
   updateAptosSyncVersion(id: string, version: number): Promise<void>;
   syncAptos(account: AptosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AptosSyncResult>;
+
+  // TON
+  listTonAccounts(): Promise<TonAccount[]>;
+  addTonAccount(account: Omit<TonAccount, "last_sync" | "last_lt">): Promise<void>;
+  removeTonAccount(id: string): Promise<void>;
+  updateTonAccountLabel(id: string, label: string): Promise<void>;
+  updateTonSyncCursor(id: string, lt: string): Promise<void>;
+  syncTon(account: TonAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TonSyncResult>;
+
+  // Tezos
+  listTezosAccounts(): Promise<TezosAccount[]>;
+  addTezosAccount(account: Omit<TezosAccount, "last_sync" | "last_id">): Promise<void>;
+  removeTezosAccount(id: string): Promise<void>;
+  updateTezosAccountLabel(id: string, label: string): Promise<void>;
+  updateTezosSyncCursor(id: string, lastId: number): Promise<void>;
+  syncTezos(account: TezosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TezosSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -686,6 +704,28 @@ class TauriBackend implements Backend {
   async syncAptos(account: AptosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AptosSyncResult> {
     const { syncAptosAccount } = await import("./aptos/sync.js");
     return syncAptosAccount(this, account, onProgress, signal);
+  }
+
+  // TON
+  async listTonAccounts(): Promise<TonAccount[]> { return this.invoke("list_ton_accounts"); }
+  async addTonAccount(account: Omit<TonAccount, "last_sync" | "last_lt">): Promise<void> { return this.invoke("add_ton_account", { account }); }
+  async removeTonAccount(id: string): Promise<void> { return this.invoke("remove_ton_account", { id }); }
+  async updateTonAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_ton_account_label", { id, label }); }
+  async updateTonSyncCursor(id: string, lt: string): Promise<void> { return this.invoke("update_ton_sync_cursor", { id, lt }); }
+  async syncTon(account: TonAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TonSyncResult> {
+    const { syncTonAccount } = await import("./ton/sync.js");
+    return syncTonAccount(this, account, onProgress, signal);
+  }
+
+  // Tezos
+  async listTezosAccounts(): Promise<TezosAccount[]> { return this.invoke("list_tezos_accounts"); }
+  async addTezosAccount(account: Omit<TezosAccount, "last_sync" | "last_id">): Promise<void> { return this.invoke("add_tezos_account", { account }); }
+  async removeTezosAccount(id: string): Promise<void> { return this.invoke("remove_tezos_account", { id }); }
+  async updateTezosAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_tezos_account_label", { id, label }); }
+  async updateTezosSyncCursor(id: string, lastId: number): Promise<void> { return this.invoke("update_tezos_sync_cursor", { id, lastId }); }
+  async syncTezos(account: TezosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TezosSyncResult> {
+    const { syncTezosAccount } = await import("./tezos/sync.js");
+    return syncTezosAccount(this, account, onProgress, signal);
   }
 
   // Exchange accounts (CEX)

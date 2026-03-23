@@ -103,6 +103,16 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/aptos/, ''),
       },
+      '/api/ton': {
+        target: 'https://tonapi.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ton/, ''),
+      },
+      '/api/tezos': {
+        target: 'https://api.tzkt.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/tezos/, ''),
+      },
     },
   },
 }));

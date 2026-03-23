@@ -14,6 +14,8 @@
     onSelectHyperliquid,
     onSelectSui,
     onSelectAptos,
+    onSelectTon,
+    onSelectTezos,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -23,6 +25,8 @@
     onSelectHyperliquid?: (prefillAddress?: string) => void;
     onSelectSui?: (prefillAddress?: string) => void;
     onSelectAptos?: (prefillAddress?: string) => void;
+    onSelectTon?: (prefillAddress?: string) => void;
+    onSelectTezos?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -60,6 +64,18 @@
   const detectedMoveAddress = $derived.by(() => {
     const s = search.trim();
     return /^0x[a-fA-F0-9]{64}$/.test(s) ? s : null;
+  });
+
+  const detectedTonAddress = $derived.by(() => {
+    const s = search.trim();
+    if (/^[UE]Q[A-Za-z0-9_\-\/\+]{44,46}=?=?$/.test(s)) return s;
+    if (/^-?[0-9]+:[0-9a-fA-F]{64}$/.test(s)) return s;
+    return null;
+  });
+
+  const detectedTezosAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^(tz[1-4]|KT1)[1-9A-HJ-NP-Za-km-z]{33}$/.test(s) ? s : null;
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -109,6 +125,18 @@
     open = false;
     search = "";
     onSelectAptos?.(prefillAddress);
+  }
+
+  function selectTon(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectTon?.(prefillAddress);
+  }
+
+  function selectTezos(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectTezos?.(prefillAddress);
   }
 </script>
 
@@ -168,6 +196,20 @@
                 Add {detectedMoveAddress.slice(0, 6)}...{detectedMoveAddress.slice(-4)} as Aptos address
               </Command.Item>
             {/if}
+          </Command.Group>
+        {/if}
+        {#if detectedTezosAddress}
+          <Command.Group heading="Detected Tezos Address">
+            <Command.Item value="detected-tezos-{detectedTezosAddress}" keywords={["tezos", "xtz"]} onSelect={() => selectTezos(detectedTezosAddress)} class="font-mono text-xs">
+              Add {detectedTezosAddress.slice(0, 8)}...{detectedTezosAddress.slice(-4)} as Tezos address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedTonAddress}
+          <Command.Group heading="Detected TON Address">
+            <Command.Item value="detected-ton-{detectedTonAddress}" keywords={["ton", "toncoin"]} onSelect={() => selectTon(detectedTonAddress)} class="font-mono text-xs">
+              Add {detectedTonAddress.slice(0, 8)}...{detectedTonAddress.slice(-4)} as TON address
+            </Command.Item>
           </Command.Group>
         {/if}
         {#if detectedBtcInput}
@@ -245,6 +287,24 @@
               onSelect={() => selectSui()}
             >
               Sui
+            </Command.Item>
+          {/if}
+          {#if onSelectTezos}
+            <Command.Item
+              value="Tezos"
+              keywords={["tezos", "xtz", "tz1"]}
+              onSelect={() => selectTezos()}
+            >
+              Tezos
+            </Command.Item>
+          {/if}
+          {#if onSelectTon}
+            <Command.Item
+              value="TON"
+              keywords={["ton", "toncoin", "telegram"]}
+              onSelect={() => selectTon()}
+            >
+              TON
             </Command.Item>
           {/if}
         </Command.Group>

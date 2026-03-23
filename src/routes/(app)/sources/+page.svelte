@@ -51,11 +51,16 @@
     import type { HyperliquidAccount } from "$lib/hyperliquid/types.js";
     import type { SuiAccount } from "$lib/sui/types.js";
     import type { AptosAccount } from "$lib/aptos/types.js";
+    import type { TonAccount } from "$lib/ton/types.js";
+    import type { TezosAccount } from "$lib/tezos/types.js";
     import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
     import { detectSuiInputType, deriveSuiAddresses } from "$lib/sui/derive-js.js";
     import type { DerivedSuiAddress } from "$lib/sui/derive-js.js";
     import { detectAptosInputType, deriveAptosAddresses } from "$lib/aptos/derive-js.js";
     import type { DerivedAptosAddress } from "$lib/aptos/derive-js.js";
+    import { detectTonInputType } from "$lib/ton/derive-js.js";
+    import { detectTezosInputType, deriveTezosAddresses } from "$lib/tezos/derive-js.js";
+    import type { DerivedTezosAddress } from "$lib/tezos/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
@@ -186,7 +191,7 @@
         editingRowLabel = currentLabel;
     }
 
-    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "cex") {
+    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "ton" | "tezos" | "cex") {
         if (!editingRowId) return;
         const label = editingRowLabel.trim();
         if (!label) { editingRowId = null; return; }
@@ -206,6 +211,12 @@
             } else if (kind === "aptos") {
                 await getBackend().updateAptosAccountLabel(editingRowId, label);
                 await loadAptosAccounts();
+            } else if (kind === "ton") {
+                await getBackend().updateTonAccountLabel(editingRowId, label);
+                await loadTonAccounts();
+            } else if (kind === "tezos") {
+                await getBackend().updateTezosAccountLabel(editingRowId, label);
+                await loadTezosAccounts();
             } else if (kind === "cex") {
                 await getBackend().updateExchangeAccount(editingRowId, { label });
                 await loadCexAccounts();
@@ -256,7 +267,9 @@
         | { kind: "sol"; data: SolanaAccount }
         | { kind: "hl"; data: HyperliquidAccount }
         | { kind: "sui"; data: SuiAccount }
-        | { kind: "aptos"; data: AptosAccount };
+        | { kind: "aptos"; data: AptosAccount }
+        | { kind: "ton"; data: TonAccount }
+        | { kind: "tezos"; data: TezosAccount };
 
     const blockchainRows = $derived.by((): BlockchainRow[] => {
         const rows: BlockchainRow[] = [];
@@ -266,6 +279,8 @@
         for (const account of hlAccounts) rows.push({ kind: "hl", data: account });
         for (const account of suiAccounts) rows.push({ kind: "sui", data: account });
         for (const account of aptosAccounts) rows.push({ kind: "aptos", data: account });
+        for (const account of tonAccounts) rows.push({ kind: "ton", data: account });
+        for (const account of tezosAccounts) rows.push({ kind: "tezos", data: account });
         return rows;
     });
 
@@ -308,15 +323,15 @@
     type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
     const sortBlockchain = createSortState<BlockchainSortKey>();
     const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
-        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.kind === "sui" ? r.data.address : r.kind === "aptos" ? r.data.address : r.data.address,
+        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.kind === "sui" ? r.data.address : r.kind === "aptos" ? r.data.address : r.kind === "ton" ? r.data.address : r.kind === "tezos" ? r.data.address : r.data.address,
         label: (r) => r.data.label,
         type: (r) => r.kind === "btc"
             ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : "EVM",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : "EVM",
         networks: (r) => r.kind === "btc"
             ? "Bitcoin"
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
-        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : r.kind === "sui" ? (r.data.last_sync || "") : r.kind === "aptos" ? (r.data.last_sync || "") : "",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
+        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : r.kind === "sui" ? (r.data.last_sync || "") : r.kind === "aptos" ? (r.data.last_sync || "") : r.kind === "ton" ? (r.data.last_sync || "") : r.kind === "tezos" ? (r.data.last_sync || "") : "",
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -324,7 +339,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos" | "ton" | "tezos";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -400,6 +415,15 @@
         aptosSelectedIndexes = new Set([0]);
         aptosItemLabels = new Map();
         aptosDerivedAddresses = [];
+        tonNewAddress = "";
+        tonNewLabel = "";
+        tezosNewAddress = "";
+        tezosNewLabel = "";
+        tezosPrivateKeyAck = false;
+        tezosDeriveCount = 5;
+        tezosSelectedIndexes = new Set([0]);
+        tezosItemLabels = new Map();
+        tezosDerivedAddresses = [];
     }
 
     // -- Bitcoin state --
@@ -451,6 +475,25 @@
     let aptosSelectedIndexes = $state<Set<number>>(new Set([0]));
     let aptosItemLabels = $state<Map<number, string>>(new Map());
     let aptosDerivedAddresses = $state<DerivedAptosAddress[]>([]);
+
+    // TON state
+    let tonAccounts = $state<TonAccount[]>([]);
+    let tonNewAddress = $state("");
+    let tonNewLabel = $state("");
+    let tonAddingAccount = $state(false);
+    const tonBusy = $derived(taskQueue.isActive("ton-sync"));
+
+    // Tezos state
+    let tezosAccounts = $state<TezosAccount[]>([]);
+    let tezosNewAddress = $state("");
+    let tezosNewLabel = $state("");
+    let tezosAddingAccount = $state(false);
+    const tezosBusy = $derived(taskQueue.isActive("tezos-sync"));
+    let tezosPrivateKeyAck = $state(false);
+    let tezosDeriveCount = $state(5);
+    let tezosSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let tezosItemLabels = $state<Map<number, string>>(new Map());
+    let tezosDerivedAddresses = $state<DerivedTezosAddress[]>([]);
 
     // Solana state
     let solAccounts = $state<SolanaAccount[]>([]);
@@ -614,6 +657,26 @@
             const firstUnknown = results.find(a => !existingAptosAddresses.has(a.address.toLowerCase()));
             aptosSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
         } catch { aptosDerivedAddresses = []; }
+    });
+
+    // TON detection (no HD derivation — deriveTonAddresses returns [])
+    const tonDetection = $derived.by(() => detectTonInputType(tonNewAddress.trim()));
+
+    // Tezos detection and derivation
+    const tezosDetection = $derived.by(() => detectTezosInputType(tezosNewAddress.trim()));
+    const existingTezosAddresses = $derived(new Set(tezosAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = tezosDetection;
+        if (det.input_type !== "seed" || !tezosPrivateKeyAck || !tezosNewAddress.trim()) {
+            tezosDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveTezosAddresses(tezosNewAddress.trim(), tezosDeriveCount);
+            tezosDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingTezosAddresses.has(a.address));
+            tezosSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { tezosDerivedAddresses = []; }
     });
 
     // Async derivation of multi-index xpubs from seed phrase
@@ -1379,7 +1442,237 @@
         }
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy);
+    // -- TON functions --
+
+    function startAddTon(prefillAddress?: string) {
+        addSourceMode = "ton";
+        if (prefillAddress) tonNewAddress = prefillAddress;
+    }
+
+    async function loadTonAccounts() {
+        try {
+            tonAccounts = await getBackend().listTonAccounts();
+        } catch (err) {
+            toast.error(`Failed to load TON accounts: ${err}`);
+        }
+    }
+
+    async function handleAddTonAccount() {
+        const input = tonNewAddress.trim();
+        const baseLabel = tonNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        tonAddingAccount = true;
+        try {
+            const address = input;
+            if (!/^[UE]Q[A-Za-z0-9_\-\/\+]{44,46}=?=?$/.test(address) && !/^-?[0-9]+:[0-9a-fA-F]{64}$/.test(address)) {
+                toast.error("Invalid TON address");
+                return;
+            }
+
+            const existing = tonAccounts.find(a => a.address === address);
+            if (existing) {
+                toast.info("This address is already tracked on TON");
+                return;
+            }
+
+            await getBackend().addTonAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            tonNewAddress = "";
+            tonNewLabel = "";
+            addSourceMode = "idle";
+            await loadTonAccounts();
+            toast.success("TON account added");
+        } catch (err) {
+            toast.error(`Failed to add TON account: ${err}`);
+        } finally {
+            tonAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveTonAccount(id: string) {
+        try {
+            await getBackend().removeTonAccount(id);
+            await loadTonAccounts();
+            toast.success("TON account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncTonAccount(account: TonAccount) {
+        taskQueue.enqueue({
+            key: `ton-sync:${account.id}`,
+            label: `Sync ${account.label} (TON)`,
+            async run(ctx) {
+                const r = await getBackend().syncTon(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadTonAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllTon() {
+        for (const account of tonAccounts) {
+            syncTonAccount(account);
+        }
+    }
+
+    // -- Tezos functions --
+
+    function startAddTezos(prefillAddress?: string) {
+        addSourceMode = "tezos";
+        if (prefillAddress) tezosNewAddress = prefillAddress;
+    }
+
+    async function loadTezosAccounts() {
+        try {
+            tezosAccounts = await getBackend().listTezosAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Tezos accounts: ${err}`);
+        }
+    }
+
+    async function handleAddTezosAccount() {
+        const input = tezosNewAddress.trim();
+        const baseLabel = tezosNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        tezosAddingAccount = true;
+        try {
+            // Multi-index path: seed phrase with derived addresses
+            if (tezosDerivedAddresses.length > 0) {
+                if (tezosSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = tezosDerivedAddresses
+                    .filter(a => tezosSelectedIndexes.has(a.index))
+                    .filter(a => !existingTezosAddresses.has(a.address));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                tezosNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = tezosItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addTezosAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                tezosNewLabel = "";
+                tezosPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadTezosAccounts();
+                toast.success(`${selected.length} Tezos address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input;
+            if (!/^(tz[1-4]|KT1)[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
+                toast.error("Invalid Tezos address (expected tz1/tz2/tz3/tz4/KT1 format)");
+                return;
+            }
+
+            const existing = tezosAccounts.find(a => a.address === address);
+            if (existing) {
+                toast.info("This address is already tracked on Tezos");
+                return;
+            }
+
+            await getBackend().addTezosAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            tezosNewAddress = "";
+            tezosNewLabel = "";
+            addSourceMode = "idle";
+            await loadTezosAccounts();
+            toast.success("Tezos account added");
+        } catch (err) {
+            toast.error(`Failed to add Tezos account: ${err}`);
+        } finally {
+            tezosAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveTezosAccount(id: string) {
+        try {
+            await getBackend().removeTezosAccount(id);
+            await loadTezosAccounts();
+            toast.success("Tezos account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncTezosAccount(account: TezosAccount) {
+        taskQueue.enqueue({
+            key: `tezos-sync:${account.id}`,
+            label: `Sync ${account.label} (Tezos)`,
+            async run(ctx) {
+                const r = await getBackend().syncTezos(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadTezosAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllTezos() {
+        for (const account of tezosAccounts) {
+            syncTezosAccount(account);
+        }
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy || tonBusy || tezosBusy);
 
     async function loadCexAccounts() {
         try {
@@ -1542,6 +1835,8 @@
         loadHlAccounts();
         loadSuiAccounts();
         loadAptosAccounts();
+        loadTonAccounts();
+        loadTezosAccounts();
     });
 
     // -- Etherscan handlers --
@@ -2050,6 +2345,8 @@
                     onSelectHyperliquid={startAddHyperliquid}
                     onSelectSui={startAddSui}
                     onSelectAptos={startAddAptos}
+                    onSelectTon={startAddTon}
+                    onSelectTezos={startAddTezos}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -2820,6 +3117,143 @@
                 </div>
             {/if}
 
+            {#if addSourceMode === "ton"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add TON Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a TON address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-ton-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-ton-address"
+                                placeholder="EQ or UQ address..."
+                                autocomplete="off"
+                                bind:value={tonNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-ton-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-ton-label" placeholder="My TON Wallet" bind:value={tonNewLabel} />
+                        </div>
+                        <Button onclick={handleAddTonAccount} disabled={tonAddingAccount || (!tonNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if tonDetection.input_type !== "unknown" && tonNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if tonDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{tonDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{tonDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "tezos"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Tezos Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Tezos address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-tezos-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-tezos-address"
+                                placeholder="tz1 address or seed phrase..."
+                                autocomplete="off"
+                                bind:value={tezosNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-tezos-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-tezos-label" placeholder="My Tezos Wallet" bind:value={tezosNewLabel} />
+                        </div>
+                        <Button onclick={handleAddTezosAccount} disabled={tezosAddingAccount || (!tezosNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if tezosDetection.input_type !== "unknown" && tezosNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if tezosDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{tezosDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{tezosDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if tezosDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={tezosPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if tezosDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each tezosDerivedAddresses as derived}
+                                {@const exists = existingTezosAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={tezosSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(tezosSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            tezosSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={tezosItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(tezosItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); tezosItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: tezosSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { tezosDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
             <!-- Blockchain Accounts sub-section (merged BTC + EVM + SOL) -->
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
@@ -3152,6 +3586,126 @@
                                             </div>
                                         </Table.Cell>
                                     </Table.Row>
+                                {:else if row.kind === "ton"}
+                                    {@const tonAccount = row.data}
+                                    {@const isTonSyncing = taskQueue.isActive(`ton-sync:${tonAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {tonAccount.address.slice(0, 8)}...{tonAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{tonAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(tonAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === tonAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("ton"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {tonAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">TON</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">TON</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {tonAccount.last_sync
+                                                ? new Date(tonAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncTonAccount(tonAccount)}
+                                                    disabled={tonBusy || editingRowId === tonAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isTonSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === tonAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === tonAccount.id ? (editingRowId = null) : startEditLabel(tonAccount.id, tonAccount.label)} disabled={tonBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveTonAccount(tonAccount.id)}
+                                                    disabled={tonBusy || editingRowId === tonAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "tezos"}
+                                    {@const tezosAccount = row.data}
+                                    {@const isTezosSyncing = taskQueue.isActive(`tezos-sync:${tezosAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {tezosAccount.address.slice(0, 8)}...{tezosAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{tezosAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(tezosAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === tezosAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("tezos"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {tezosAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Tezos</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Tezos</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {tezosAccount.last_sync
+                                                ? new Date(tezosAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncTezosAccount(tezosAccount)}
+                                                    disabled={tezosBusy || editingRowId === tezosAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isTezosSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === tezosAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === tezosAccount.id ? (editingRowId = null) : startEditLabel(tezosAccount.id, tezosAccount.label)} disabled={tezosBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveTezosAccount(tezosAccount.id)}
+                                                    disabled={tezosBusy || editingRowId === tezosAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
                                 {:else}
                                     {@const group = row.data}
                                     {#if editingAddress === group.address}
@@ -3422,7 +3976,7 @@
         </Card.Content>
 
         <!-- Footer with unified actions -->
-        {#if cexAccounts.length > 0 || ethAccounts.length > 0 || btcAccounts.length > 0 || suiAccounts.length > 0 || aptosAccounts.length > 0}
+        {#if cexAccounts.length > 0 || ethAccounts.length > 0 || btcAccounts.length > 0 || suiAccounts.length > 0 || aptosAccounts.length > 0 || tonAccounts.length > 0 || tezosAccounts.length > 0}
             <Card.Footer class="flex justify-end gap-2">
                 {#if ethAccounts.length > 0 && cexAccounts.length > 0}
                     <Button
