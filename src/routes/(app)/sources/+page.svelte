@@ -62,6 +62,8 @@
     import SortableHeader from "$lib/components/SortableHeader.svelte";
     import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
     import AddSourceInput from "$lib/components/AddSourceInput.svelte";
+    import { getDefaultPresetRegistry } from "$lib/csv-presets/index.js";
+    import { getPluginManager } from "$lib/plugins/manager.js";
     import CategorizationRulesEditor from "$lib/components/CategorizationRulesEditor.svelte";
     import type { ExchangeId } from "$lib/cex/types.js";
     import {
@@ -89,6 +91,12 @@
 
     const handlerRegistry = getDefaultRegistry();
     const handlers = handlerRegistry.getAll();
+
+    const csvPresetNames = getDefaultPresetRegistry().getAll()
+        .filter(p => p.id !== "bank-statement")
+        .map(p => p.name);
+    const pdfParserNames = getPluginManager().pdfParsers.getAll()
+        .map(p => p.name);
 
     const PROTOCOL_CONTRACTS: Record<string, { label: string; address: string }[]> = {
         uniswap: [
@@ -1563,7 +1571,7 @@
                 <span class="mt-2 flex flex-col gap-1.5">
                     <span class="flex flex-wrap items-center gap-1">
                         <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">CSV</span>
-                        {#each ["Binance", "Bisq", "Bitfinex", "Bitstamp", "Bittrex", "Bybit", "Coinbase", "CoinList", "Crypto.com", "Gate.io", "Kraken", "La Banque Postale", "N26", "Nexo", "Poloniex", "Revolut", "Yield App"] as name}
+                        {#each csvPresetNames as name}
                             <Badge variant="outline">{name}</Badge>
                         {/each}
                     </span>
@@ -1572,7 +1580,7 @@
                     </span>
                     <span class="flex flex-wrap items-center gap-1">
                         <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">PDF</span>
-                        {#each ["Deblock", "La Banque Postale", "N26", "Nuri/Bitwala"] as name}
+                        {#each pdfParserNames as name}
                             <Badge variant="outline">{name}</Badge>
                         {/each}
                     </span>
