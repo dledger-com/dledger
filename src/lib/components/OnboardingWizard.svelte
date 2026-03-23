@@ -6,7 +6,7 @@
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { getBackend } from "$lib/backend.js";
     import { SettingsStore } from "$lib/data/settings.svelte.js";
-    import { createDefaultAccounts, type DefaultAccountSet } from "$lib/accounts/defaults.js";
+    import { createDefaultAccounts, DEFAULT_ACCOUNTS, type DefaultAccountSet } from "$lib/accounts/defaults.js";
     import { invalidate } from "$lib/data/invalidation.js";
     import { goto } from "$app/navigation";
     import ChevronRight from "lucide-svelte/icons/chevron-right";
@@ -162,7 +162,18 @@
                                     onclick={() => preset = value as DefaultAccountSet}
                                 >
                                     {label}
+                                    <span class="block text-xs text-muted-foreground">{DEFAULT_ACCOUNTS[value as DefaultAccountSet].length}</span>
                                 </button>
+                            {/each}
+                        </div>
+                        <!-- Account tree preview -->
+                        <div class="max-h-48 overflow-y-auto rounded border bg-muted/30 p-3 text-xs font-mono space-y-0.5">
+                            {#each DEFAULT_ACCOUNTS[preset] as account}
+                                {@const depth = account.full_name.split(":").length - 1}
+                                {@const leaf = account.full_name.split(":").pop()}
+                                <div style="padding-left: {depth * 12}px" class="{account.is_postable ? '' : 'font-semibold text-muted-foreground'}">
+                                    {leaf}
+                                </div>
                             {/each}
                         </div>
                     </div>
