@@ -590,6 +590,20 @@
         return fullPath.split(":").pop() ?? fullPath;
     }
 
+    function highestVolumeAccount(meaningful: LineItem[]): string {
+        const volumeByAccount = new Map<string, number>();
+        for (const item of meaningful) {
+            const name = accountIdToName.get(item.account_id) ?? "";
+            volumeByAccount.set(name, (volumeByAccount.get(name) ?? 0) + Math.abs(parseFloat(item.amount) || 0));
+        }
+        let best = accountIdToName.get(meaningful[0]?.account_id) ?? "";
+        let bestVol = 0;
+        for (const [name, vol] of volumeByAccount) {
+            if (vol > bestVol) { best = name; bestVol = vol; }
+        }
+        return best;
+    }
+
     function mainCounterpartyShort(items: LineItem[]): string {
         const meaningful = items.filter((i) => {
             const name = accountIdToName.get(i.account_id) ?? "";
@@ -601,7 +615,7 @@
         const categories = unique.filter((a) => a.startsWith("Expenses:") || a.startsWith("Income:"));
         if (categories.length === 1) return accountLeaf(categories[0]);
         if (categories.length > 1) return "Split";
-        return accountLeaf(unique[0]);
+        return accountLeaf(highestVolumeAccount(meaningful));
     }
 
     function mainCounterparty(items: LineItem[]): string {
@@ -614,13 +628,13 @@
         const unique = [...new Set(meaningful.map((i) => accountIdToName.get(i.account_id) ?? ""))];
         if (unique.length === 0) return "";
         if (unique.length === 1) return accountTail(unique[0]);
-        // Prefer Expense/Income accounts (they describe the "what")
+        // Prefer Expense/Income accounts for simple transfers
         const categories = unique.filter((a) => a.startsWith("Expenses:") || a.startsWith("Income:"));
         if (categories.length === 1) return accountTail(categories[0]);
         if (categories.length > 1)
             return categories.map((a) => a.split(":").pop() ?? "").join(" | ");
-        // All asset/liability/equity — show tail of first
-        return accountTail(unique[0]);
+        // Multiple mixed accounts — pick highest absolute volume
+        return accountTail(highestVolumeAccount(meaningful));
     }
 
     function mainCounterpartyFull(items: LineItem[]): string {
@@ -634,7 +648,7 @@
         const categories = unique.filter((a) => a.startsWith("Expenses:") || a.startsWith("Income:"));
         if (categories.length === 1) return categories[0];
         if (categories.length > 1) return categories.join(" | ");
-        return unique[0];
+        return highestVolumeAccount(meaningful);
     }
 
     type AmountDirection = "income" | "expense" | "default";

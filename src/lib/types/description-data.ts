@@ -63,17 +63,12 @@ export function renderDescription(data: DescriptionData): string {
       if (data.spent && data.received) {
         return `Hyperliquid trade: ${data.spent} → ${data.received}`;
       }
-      const pnl = data.closedPnl && data.closedPnl !== "0" ? ` PnL ${data.closedPnl} USDC` : "";
-      return `Hyperliquid ${data.coin} ${data.side} trade${pnl}`;
+      return `Hyperliquid ${data.coin} ${data.side} trade`;
     }
-    case "hl-funding": {
-      const sign = data.usdc.startsWith("-") ? "" : "+";
-      return `Hyperliquid funding ${data.coin}: ${sign}${data.usdc} USDC`;
-    }
-    case "hl-ledger": {
-      const amt = data.usdc ? `: ${data.usdc} USDC` : "";
-      return `Hyperliquid ${data.action}${amt}`;
-    }
+    case "hl-funding":
+      return `Hyperliquid funding ${data.coin}`;
+    case "hl-ledger":
+      return `Hyperliquid ${data.action}: USDC`;
     case "generic-import":
       return data.text;
     case "manual":
