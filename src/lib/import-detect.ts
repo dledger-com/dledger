@@ -1,6 +1,6 @@
 import { gunzipSync } from "fflate";
 
-export type ImportTarget = "csv" | "ofx" | "pdf" | "ledger";
+export type ImportTarget = "csv" | "ofx" | "pdf" | "ledger" | "dledger";
 
 export interface DetectResult {
   target: ImportTarget;
@@ -98,6 +98,12 @@ export async function detectImportTarget(
     const innerName = file.name.slice(0, -3);
     const innerFile = new File([decompressed], innerName, { type: file.type });
     return detectImportTarget(innerFile);
+  }
+
+  // .dledger: our own portable export format
+  if (file.name.toLowerCase().endsWith(".dledger")) {
+    const buf = await file.arrayBuffer();
+    return { target: "dledger", bytes: new Uint8Array(buf) };
   }
 
   const extGuess = guessFromExtension(file.name);

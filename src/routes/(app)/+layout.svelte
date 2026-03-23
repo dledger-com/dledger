@@ -10,6 +10,7 @@
   const OfxImportDialog = () => import("$lib/components/OfxImportDialog.svelte");
   const PdfImportDialog = () => import("$lib/components/PdfImportDialog.svelte");
   const LedgerImportDialog = () => import("$lib/components/LedgerImportDialog.svelte");
+  const DledgerImportDialog = () => import("$lib/components/DledgerImportDialog.svelte");
   import { importDrop } from "$lib/data/import-drop.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { setFormatLocale } from "$lib/utils/format.js";
@@ -53,6 +54,12 @@
     if (!importDrop.ledgerOpen) {
       importDrop.ledgerContent = "";
       importDrop.ledgerFileName = "";
+      untrack(() => importDrop.scheduleAdvance());
+    }
+  });
+  $effect(() => {
+    if (!importDrop.dledgerOpen) {
+      importDrop.dledgerFile = null;
       untrack(() => importDrop.scheduleAdvance());
     }
   });
@@ -105,6 +112,14 @@
       bind:open={importDrop.pdfOpen}
       initialFile={importDrop.pdfFile}
       initialFileName={importDrop.pdfFileName}
+    />
+  {/await}
+{/if}
+{#if importDrop.dledgerOpen}
+  {#await DledgerImportDialog() then mod}
+    <mod.default
+      bind:open={importDrop.dledgerOpen}
+      initialFile={importDrop.dledgerFile ?? undefined}
     />
   {/await}
 {/if}

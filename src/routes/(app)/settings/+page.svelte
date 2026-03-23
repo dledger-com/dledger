@@ -59,7 +59,15 @@
     import * as msg from "$paraglide/messages.js";
     import { setLocale } from "$paraglide/runtime.js";
     import type { Locale } from "$paraglide/runtime.js";
+    import Download from "lucide-svelte/icons/download";
+    import Upload from "lucide-svelte/icons/upload";
+    import ExportDialog from "$lib/components/ExportDialog.svelte";
+    import DledgerImportDialog from "$lib/components/DledgerImportDialog.svelte";
     const settings = new SettingsStore();
+
+    // Export/Import dialog state
+    let exportDialogOpen = $state(false);
+    let importDialogOpen = $state(false);
 
     // Service test state
     let testResults = $state<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>>({});
@@ -1814,6 +1822,25 @@
         <Card.Content class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
+                    <p class="text-sm font-medium">Export &amp; Import</p>
+                    <p class="text-sm text-muted-foreground">
+                        Export all data to a .dledger file or import from one.
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <Button variant="outline" size="sm" onclick={() => exportDialogOpen = true}>
+                        <Download class="mr-1 h-4 w-4" />
+                        Export all data
+                    </Button>
+                    <Button variant="outline" size="sm" onclick={() => importDialogOpen = true}>
+                        <Upload class="mr-1 h-4 w-4" />
+                        Import from file
+                    </Button>
+                </div>
+            </div>
+            <Separator />
+            <div class="flex items-center justify-between">
+                <div>
                     <p class="text-sm font-medium">{msg.settings_clear_exchange_rates()}</p>
                     <p class="text-sm text-muted-foreground">
                         {msg.settings_clear_exchange_rates_desc()}
@@ -1892,3 +1919,6 @@
         </Card.Root>
     {/if}
 </div>
+
+<ExportDialog bind:open={exportDialogOpen} />
+<DledgerImportDialog bind:open={importDialogOpen} />

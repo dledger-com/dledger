@@ -27,6 +27,9 @@ class ImportDropStore {
     ledgerContent = $state("");
     ledgerFileName = $state("");
 
+    dledgerOpen = $state(false);
+    dledgerFile = $state<File | null>(null);
+
     dragCounter = $state(0);
     dragging = $derived(this.dragCounter > 0);
 
@@ -47,7 +50,7 @@ class ImportDropStore {
     }
 
     get anyDialogOpen(): boolean {
-        return this.csvOpen || this.ofxOpen || this.pdfOpen || this.ledgerOpen;
+        return this.csvOpen || this.ofxOpen || this.pdfOpen || this.ledgerOpen || this.dledgerOpen;
     }
 
     /**
@@ -89,6 +92,10 @@ class ImportDropStore {
                 this.pdfFile = file;
                 this.pdfFileName = file.name;
                 this.pdfOpen = true;
+                return true;
+            case "dledger":
+                this.dledgerFile = file;
+                this.dledgerOpen = true;
                 return true;
             case "ledger":
                 if (result.bytes && file.name.toLowerCase().endsWith(".zip")) {
@@ -324,6 +331,7 @@ class ImportDropStore {
         else if (this.ofxOpen) this.ofxOpen = false;
         else if (this.pdfOpen) this.pdfOpen = false;
         else if (this.ledgerOpen) this.ledgerOpen = false;
+        else if (this.dledgerOpen) this.dledgerOpen = false;
     }
 
     handleDrop(e: DragEvent): void {

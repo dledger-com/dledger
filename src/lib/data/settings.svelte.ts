@@ -144,7 +144,7 @@ function loadFromStorage(): AppSettings {
   return { ...DEFAULT_SETTINGS };
 }
 
-function saveToStorage(settings: AppSettings) {
+export function saveToStorage(settings: AppSettings) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
