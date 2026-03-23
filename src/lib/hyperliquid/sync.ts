@@ -7,7 +7,8 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription } from "../types/description-data.js";
 import { defiAssets, defiIncome, defiExpense, EQUITY_TRADING } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
-import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates } from "./api.js";
+import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
+import type { HlSpotMeta } from "./api.js";
 import type {
 	HyperliquidAccount,
 	HyperliquidSyncResult,
@@ -65,6 +66,41 @@ export async function syncHyperliquidAccount(
 	}
 
 	onProgress?.(`Found ${fills.length} fills, ${funding.length} funding, ${ledger.length} ledger updates.`);
+
+	// 1b. Fetch spot metadata if any fills use @index format
+	const hasSpotIndexFills = fills.some(f => f.coin.startsWith("@"));
+	let spotTokenMap: Map<number, string> | undefined; // tokenIndex → name
+	let spotUniverseMap: Map<number, { base: string; quote: string }> | undefined; // universeIndex → pair
+	if (hasSpotIndexFills) {
+		onProgress?.("Fetching spot metadata...");
+		try {
+			const meta = await fetchSpotMeta(signal);
+			spotTokenMap = new Map(meta.tokens.map(t => [t.index, t.name]));
+			spotUniverseMap = new Map();
+			for (const u of meta.universe) {
+				const baseName = spotTokenMap.get(u.tokens[0]);
+				const quoteName = spotTokenMap.get(u.tokens[1]);
+				if (baseName && quoteName) {
+					spotUniverseMap.set(u.index, { base: baseName, quote: quoteName });
+				}
+			}
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			result.warnings.push(`Failed to fetch spot metadata: ${msg}. Spot token names may be unresolved.`);
+		}
+	}
+
+	function resolveSpotCoin(coin: string): { base: string; quote: string } | null {
+		if (coin.includes("/")) {
+			const [base, quote] = coin.split("/");
+			return { base, quote: quote || "USDC" };
+		}
+		if (coin.startsWith("@") && spotUniverseMap) {
+			const index = parseInt(coin.slice(1), 10);
+			return spotUniverseMap.get(index) ?? null;
+		}
+		return null;
+	}
 
 	// 2. Build caches
 	const currencySet = new Set(
@@ -243,11 +279,17 @@ export async function syncHyperliquidAccount(
 
 		const first = group[0];
 		const date = new Date(first.time).toISOString().slice(0, 10);
-		const isSpot = first.coin.includes("/");
+		const isSpot = first.coin.includes("/") || first.coin.startsWith("@");
 
 		if (isSpot) {
-			// Spot trade: parse "PURR/USDC" → base=PURR, quote=USDC
-			const [base] = first.coin.split("/");
+			// Spot trade: resolve "@128" → DEPIN or "PURR/USDC" → PURR
+			const resolved = resolveSpotCoin(first.coin);
+			if (!resolved) {
+				result.warnings.push(`Unresolved spot coin: ${first.coin} (hash ${hash})`);
+				result.skipped++;
+				continue;
+			}
+			const base = resolved.base;
 			const totalSz = group.reduce((sum, f) => sum.plus(f.sz), new Decimal(0));
 			const totalFee = group.reduce((sum, f) => sum.plus(f.fee), new Decimal(0));
 			const isBuy = first.side === "B";

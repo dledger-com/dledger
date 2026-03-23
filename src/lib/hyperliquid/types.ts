@@ -21,13 +21,13 @@ export interface HyperliquidSyncResult {
 // ── API Response Types ──────────────────────────────────
 
 export interface HlFill {
-	coin: string; // "BTC" for perps, "PURR/USDC" for spot
+	coin: string; // "BTC" for perps, "@128" or "PURR/USDC" for spot
 	px: string; // price
 	sz: string; // size (unsigned)
 	side: "B" | "A"; // B=buy, A=sell (NOT "S")
 	time: number; // ms timestamp
 	startPosition: string; // position before fill
-	dir: string; // "Open Long", "Close Short", "Open Short", "Close Long"
+	dir: string; // Perp: "Open Long"/"Close Short"/etc. Spot: "Buy"/"Sell"
 	closedPnl: string; // realized PnL (0 if opening)
 	hash: string; // transaction hash
 	oid: number; // order ID

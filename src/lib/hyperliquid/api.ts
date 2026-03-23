@@ -186,3 +186,18 @@ export async function fetchSpotState(
 		user: address,
 	}, signal);
 }
+
+// ── Spot Metadata (token resolution) ────────────────────
+
+export interface HlSpotMeta {
+	tokens: Array<{ name: string; index: number; tokenId: string; szDecimals: number; isCanonical?: boolean }>;
+	universe: Array<{ name: string; index: number; tokens: [number, number] }>;
+}
+
+/**
+ * Fetch spot metadata — maps universe pair indices (@128) to token names.
+ * Call once per sync if any spot fills are present. Weight 2.
+ */
+export async function fetchSpotMeta(signal?: AbortSignal): Promise<HlSpotMeta> {
+	return hlFetch<HlSpotMeta>({ type: "spotMeta" }, signal);
+}

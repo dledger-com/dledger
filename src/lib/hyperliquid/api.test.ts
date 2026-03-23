@@ -14,6 +14,7 @@ import {
 	fetchUserLedgerUpdates,
 	fetchClearinghouseState,
 	fetchSpotState,
+	fetchSpotMeta,
 } from "./api.js";
 
 const mockedCexFetch = vi.mocked(cexFetch);
@@ -151,5 +152,25 @@ describe("fetchSpotState", () => {
 		const result = await fetchSpotState("0x1234567890abcdef1234567890abcdef12345678");
 		expect(result.balances).toHaveLength(1);
 		expect(result.balances[0].coin).toBe("USDC");
+	});
+});
+
+describe("fetchSpotMeta", () => {
+	it("returns token and universe metadata", async () => {
+		const meta = {
+			tokens: [
+				{ name: "USDC", index: 0, tokenId: "0x0", szDecimals: 2 },
+				{ name: "DEPIN", index: 174, tokenId: "0xdepin", szDecimals: 0 },
+			],
+			universe: [
+				{ name: "@128", index: 128, tokens: [174, 0] },
+			],
+		};
+		mockedCexFetch.mockResolvedValueOnce({ status: 200, body: JSON.stringify(meta) });
+
+		const result = await fetchSpotMeta();
+		expect(result.tokens).toHaveLength(2);
+		expect(result.universe).toHaveLength(1);
+		expect(result.universe[0].tokens).toEqual([174, 0]);
 	});
 });

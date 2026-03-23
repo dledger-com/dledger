@@ -6,6 +6,7 @@ vi.mock("./api.js", () => ({
 	fetchUserFills: vi.fn().mockResolvedValue([]),
 	fetchUserFunding: vi.fn().mockResolvedValue([]),
 	fetchUserLedgerUpdates: vi.fn().mockResolvedValue([]),
+	fetchSpotMeta: vi.fn().mockResolvedValue({ tokens: [], universe: [] }),
 }));
 
 // Mock invalidation
@@ -13,13 +14,14 @@ vi.mock("../data/invalidation.js", () => ({
 	invalidate: vi.fn(),
 }));
 
-import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates } from "./api.js";
+import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
 import { syncHyperliquidAccount } from "./sync.js";
 import { SqlJsBackend } from "../sql-js-backend.js";
 
 const mockedFills = vi.mocked(fetchUserFills);
 const mockedFunding = vi.mocked(fetchUserFunding);
 const mockedLedger = vi.mocked(fetchUserLedgerUpdates);
+const mockedSpotMeta = vi.mocked(fetchSpotMeta);
 
 describe("syncHyperliquidAccount", () => {
 	let backend: SqlJsBackend;
@@ -186,5 +188,65 @@ describe("syncHyperliquidAccount", () => {
 		const r2 = await syncHyperliquidAccount(backend, account);
 		expect(r2.fills_imported).toBe(0);
 		expect(r2.skipped).toBe(1);
+	});
+
+	it("imports @index spot trade with resolved token name", async () => {
+		const fill: HlFill = {
+			coin: "@128", px: "0.05", sz: "1000", side: "B", time: 1700000000000,
+			startPosition: "0", dir: "Buy", closedPnl: "0",
+			hash: "0xspot1", oid: 10, crossed: true, fee: "0.025", tid: 500, feeToken: "USDC",
+		};
+		mockedFills.mockResolvedValue([fill]);
+		mockedFunding.mockResolvedValue([]);
+		mockedLedger.mockResolvedValue([]);
+		mockedSpotMeta.mockResolvedValue({
+			tokens: [
+				{ name: "USDC", index: 0, tokenId: "0x0", szDecimals: 2 },
+				{ name: "DEPIN", index: 174, tokenId: "0xdepin", szDecimals: 0 },
+			],
+			universe: [
+				{ name: "@128", index: 128, tokens: [174, 0] },
+			],
+		});
+
+		const result = await syncHyperliquidAccount(backend, account);
+
+		expect(result.fills_imported).toBe(1);
+		expect(mockedSpotMeta).toHaveBeenCalled();
+
+		// Verify the entry has DEPIN currency, not @128
+		const entries = await backend.queryJournalEntries({});
+		const spotEntry = entries.find(([e]) => e.source === "hyperliquid:fill:0xspot1");
+		expect(spotEntry).toBeDefined();
+
+		const [, lineItems] = spotEntry!;
+		const depinItems = lineItems.filter(li => li.currency === "DEPIN");
+		expect(depinItems.length).toBeGreaterThan(0);
+
+		// Should NOT have @128 as a currency
+		const atItems = lineItems.filter(li => li.currency.startsWith("@"));
+		expect(atItems).toHaveLength(0);
+	});
+
+	it("skips @index spot trade when spotMeta resolution fails", async () => {
+		const fill: HlFill = {
+			coin: "@999", px: "1", sz: "100", side: "B", time: 1700000000000,
+			startPosition: "0", dir: "Buy", closedPnl: "0",
+			hash: "0xspot2", oid: 11, crossed: true, fee: "0", tid: 501, feeToken: "USDC",
+		};
+		mockedFills.mockResolvedValue([fill]);
+		mockedFunding.mockResolvedValue([]);
+		mockedLedger.mockResolvedValue([]);
+		mockedSpotMeta.mockResolvedValue({
+			tokens: [{ name: "USDC", index: 0, tokenId: "0x0", szDecimals: 2 }],
+			universe: [], // @999 not in universe
+		});
+
+		const result = await syncHyperliquidAccount(backend, account);
+
+		expect(result.fills_imported).toBe(0);
+		expect(result.skipped).toBe(1);
+		expect(result.warnings.length).toBeGreaterThan(0);
+		expect(result.warnings[0]).toContain("@999");
 	});
 });
