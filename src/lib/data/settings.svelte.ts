@@ -57,6 +57,8 @@ export interface AppSettings {
   locale?: string;
   btcExplorerUrl?: string;  // default: "https://mempool.space"
   heliusApiKey?: string;    // Helius API key for Solana sync
+  onboardingCompleted?: boolean;
+  onboardingDismissedChecklist?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -211,6 +213,14 @@ export class SettingsStore {
 
   get locale(): string {
     return this.settings.locale ?? (typeof navigator !== "undefined" ? navigator.language : "en-US");
+  }
+
+  get onboardingCompleted(): boolean {
+    return this.settings.onboardingCompleted ?? false;
+  }
+
+  get onboardingDismissedChecklist(): boolean {
+    return this.settings.onboardingDismissedChecklist ?? false;
   }
 
   buildRateConfig(): HistoricalFetchConfig {

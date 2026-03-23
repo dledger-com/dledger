@@ -22,6 +22,8 @@
   import { countDueTemplates } from "$lib/utils/recurring.js";
   import { toast } from "svelte-sonner";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
+  import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
+  import OnboardingChecklist from "$lib/components/OnboardingChecklist.svelte";
   import * as m from "$paraglide/messages.js";
   import {
     getCachedRecentEntries, setCachedRecentEntries,
@@ -68,6 +70,10 @@
   let recentEntries = $state<[JournalEntry, LineItem[]][]>(_cachedRecent.entries);
   let entryTags = $state<Map<string, string[]>>(new Map());
   let entryLinks = $state<Map<string, string[]>>(new Map());
+
+  // Onboarding state
+  const showOnboardingWizard = $derived(!settings.onboardingCompleted && recentEntries.length === 0 && !loadingActive);
+  const showOnboardingChecklist = $derived(!!settings.onboardingCompleted && !settings.onboardingDismissedChecklist);
 
   async function loadTagsAndLinks(entries: [JournalEntry, LineItem[]][]) {
     const ids = entries.map(([e]) => e.id);
@@ -425,7 +431,21 @@
   </Card.Root>
 {/snippet}
 
+{#if showOnboardingWizard}
+  <OnboardingWizard onComplete={() => settings.update({ onboardingCompleted: true })} />
+{/if}
+
 <div class="space-y-6">
+  {#if showOnboardingChecklist}
+    <OnboardingChecklist
+      hasBaseCurrency={!!settings.currency}
+      hasAccounts={accountStore.accounts.length > 0}
+      hasSources={recentEntries.length > 0}
+      hasTransactions={recentEntries.length > 0}
+      onDismiss={() => settings.update({ onboardingDismissedChecklist: true })}
+    />
+  {/if}
+
   <div class="flex justify-end">
     <div class="flex gap-1">
       <Button variant={rangePreset === "mtd" ? "default" : "outline"} size="sm" onclick={() => selectRange("mtd")}>MTD</Button>
