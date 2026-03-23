@@ -156,7 +156,40 @@
     let evmItemLabels = $state<Map<number, string>>(new Map());
     const ethBusy = $derived(taskQueue.isActive("etherscan-sync"));
 
-    // -- Inline edit state --
+    // -- Inline label edit state (BTC/SOL/HL/CEX) --
+    let editingRowId = $state<string | null>(null);
+    let editingRowLabel = $state("");
+
+    function startEditLabel(id: string, currentLabel: string) {
+        editingRowId = id;
+        editingRowLabel = currentLabel;
+    }
+
+    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "cex") {
+        if (!editingRowId) return;
+        const label = editingRowLabel.trim();
+        if (!label) { editingRowId = null; return; }
+        try {
+            if (kind === "btc") {
+                await getBackend().updateBitcoinAccountLabel(editingRowId, label);
+                await loadBtcAccounts();
+            } else if (kind === "sol") {
+                await getBackend().updateSolanaAccountLabel(editingRowId, label);
+                await loadSolAccounts();
+            } else if (kind === "hl") {
+                await getBackend().updateHyperliquidAccountLabel(editingRowId, label);
+                await loadHlAccounts();
+            } else if (kind === "cex") {
+                await getBackend().updateExchangeAccount(editingRowId, { label });
+                await loadCexAccounts();
+            }
+        } catch (err) {
+            toast.error(`Failed to update label: ${err}`);
+        }
+        editingRowId = null;
+    }
+
+    // -- Inline edit state (EVM-specific, has chain selection) --
     let editingAddress = $state<string | null>(null);
     let editLabel = $state("");
     let editChainIds = $state<Set<number>>(new Set());
@@ -2150,7 +2183,13 @@
                                                 </button>
                                             </div>
                                         </Table.Cell>
-                                        <Table.Cell>{account.label}</Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === account.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("btc"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {account.label}
+                                            {/if}
+                                        </Table.Cell>
                                         <Table.Cell>
                                             <Badge variant="secondary">
                                                 {account.account_type === "address" ? m.sources_btc_address() : m.sources_hd_wallet()}
@@ -2170,16 +2209,19 @@
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => syncBtcAccount(account)}
-                                                    disabled={btcBusy}
+                                                    disabled={btcBusy || editingRowId === account.id}
                                                 >
                                                     <RefreshCw class="mr-1 h-3 w-3" />
                                                     {isSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === account.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === account.id ? (editingRowId = null) : startEditLabel(account.id, account.label)} disabled={btcBusy}>
+                                                    <Pencil class="h-3 w-3" />
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => handleRemoveBtcAccount(account.id)}
-                                                    disabled={btcBusy}
+                                                    disabled={btcBusy || editingRowId === account.id}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>
@@ -2205,7 +2247,13 @@
                                                 </button>
                                             </div>
                                         </Table.Cell>
-                                        <Table.Cell>{solAccount.label}</Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === solAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("sol"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {solAccount.label}
+                                            {/if}
+                                        </Table.Cell>
                                         <Table.Cell>
                                             <Badge variant="secondary">{m.sources_solana_address()}</Badge>
                                         </Table.Cell>
@@ -2223,16 +2271,19 @@
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => syncSolAccount(solAccount)}
-                                                    disabled={solBusy}
+                                                    disabled={solBusy || editingRowId === solAccount.id}
                                                 >
                                                     <RefreshCw class="mr-1 h-3 w-3" />
                                                     {isSolSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === solAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === solAccount.id ? (editingRowId = null) : startEditLabel(solAccount.id, solAccount.label)} disabled={solBusy}>
+                                                    <Pencil class="h-3 w-3" />
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => handleRemoveSolAccount(solAccount.id)}
-                                                    disabled={solBusy}
+                                                    disabled={solBusy || editingRowId === solAccount.id}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>
@@ -2256,7 +2307,13 @@
                                                 </button>
                                             </div>
                                         </Table.Cell>
-                                        <Table.Cell>{hlAccount.label}</Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === hlAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("hl"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {hlAccount.label}
+                                            {/if}
+                                        </Table.Cell>
                                         <Table.Cell>
                                             <Badge variant="secondary">Hyperliquid</Badge>
                                         </Table.Cell>
@@ -2274,16 +2331,19 @@
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => syncHlAccount(hlAccount)}
-                                                    disabled={hlBusy}
+                                                    disabled={hlBusy || editingRowId === hlAccount.id}
                                                 >
                                                     <RefreshCw class="mr-1 h-3 w-3" />
                                                     {isHlSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === hlAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === hlAccount.id ? (editingRowId = null) : startEditLabel(hlAccount.id, hlAccount.label)} disabled={hlBusy}>
+                                                    <Pencil class="h-3 w-3" />
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => handleRemoveHlAccount(hlAccount.id)}
-                                                    disabled={hlBusy}
+                                                    disabled={hlBusy || editingRowId === hlAccount.id}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>
@@ -2432,15 +2492,6 @@
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        onclick={() => handleReprocessGroup(group)}
-                                                        disabled={ethBusy || reprocessing || applyingReprocess}
-                                                    >
-                                                        <RotateCw class="mr-1 h-3 w-3" />
-                                                        {m.sources_reprocess()}
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
                                                         onclick={() => startEditAddress(group)}
                                                         disabled={ethBusy || reprocessing || applyingReprocess}
                                                     >
@@ -2486,7 +2537,13 @@
                                     <Table.Cell>
                                         <Badge variant="secondary">{account.exchange}</Badge>
                                     </Table.Cell>
-                                    <Table.Cell class="font-medium">{account.label}</Table.Cell>
+                                    <Table.Cell class="font-medium">
+                                        {#if editingRowId === account.id}
+                                            <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("cex"); if (e.key === "Escape") editingRowId = null; }} />
+                                        {:else}
+                                            {account.label}
+                                        {/if}
+                                    </Table.Cell>
                                     <Table.Cell class="hidden md:table-cell">
                                         <div class="flex items-center gap-2">
                                             <input
@@ -2525,29 +2582,27 @@
                                         {/if}
                                     </Table.Cell>
                                     <Table.Cell class="text-right">
+                                        {@const isCexSyncing = taskQueue.queue.some((t) => t.key === `cex-sync:${account.id}` && t.status === "running")}
                                         <div class="flex items-center justify-end gap-1">
                                             <Button
-                                                variant="ghost"
+                                                variant="outline"
                                                 size="sm"
-                                                disabled={cexBusy || isAccountClosed(account)}
+                                                disabled={cexBusy || isAccountClosed(account) || editingRowId === account.id}
                                                 onclick={() => syncCex(account)}
                                             >
-                                                <RefreshCw
-                                                    class="h-4 w-4 {taskQueue.queue.some(
-                                                        (t) =>
-                                                            t.key === `cex-sync:${account.id}` &&
-                                                            t.status === 'running',
-                                                    )
-                                                        ? 'animate-spin'
-                                                        : ''}"
-                                                />
+                                                <RefreshCw class="mr-1 h-3 w-3 {isCexSyncing ? 'animate-spin' : ''}" />
+                                                {isCexSyncing ? m.state_syncing() : m.sources_sync()}
+                                            </Button>
+                                            <Button variant={editingRowId === account.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === account.id ? (editingRowId = null) : startEditLabel(account.id, account.label)}>
+                                                <Pencil class="h-3 w-3" />
                                             </Button>
                                             <Button
-                                                variant="ghost"
+                                                variant="outline"
                                                 size="sm"
+                                                disabled={editingRowId === account.id}
                                                 onclick={() => removeCexAccount(account.id)}
                                             >
-                                                <Trash2 class="h-4 w-4" />
+                                                <Trash2 class="h-3 w-3" />
                                             </Button>
                                         </div>
                                     </Table.Cell>

@@ -164,12 +164,14 @@ export interface Backend {
   getBtcTrackedAddresses(accountId: string): Promise<string[]>;
   storeBtcDerivedAddresses(accountId: string, addresses: Array<{address: string; change: number; index: number}>): Promise<void>;
   updateBtcDerivationIndex(accountId: string, receiveIndex: number, changeIndex: number): Promise<void>;
+  updateBitcoinAccountLabel(id: string, label: string): Promise<void>;
   syncBitcoin(account: BitcoinAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitcoinSyncResult>;
 
   // Solana
   listSolanaAccounts(): Promise<SolanaAccount[]>;
   addSolanaAccount(account: Omit<SolanaAccount, "last_sync">): Promise<void>;
   removeSolanaAccount(id: string): Promise<void>;
+  updateSolanaAccountLabel(id: string, label: string): Promise<void>;
   updateSolanaLastSignature(id: string, signature: string): Promise<void>;
   syncSolana(account: SolanaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SolanaSyncResult>;
 
@@ -177,6 +179,7 @@ export interface Backend {
   listHyperliquidAccounts(): Promise<HyperliquidAccount[]>;
   addHyperliquidAccount(account: Omit<HyperliquidAccount, "last_sync" | "last_sync_time">): Promise<void>;
   removeHyperliquidAccount(id: string): Promise<void>;
+  updateHyperliquidAccountLabel(id: string, label: string): Promise<void>;
   updateHyperliquidSyncCursor(id: string, lastSyncTime: number): Promise<void>;
   syncHyperliquid(account: HyperliquidAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HyperliquidSyncResult>;
 
@@ -592,6 +595,9 @@ class TauriBackend implements Backend {
   async updateBtcDerivationIndex(accountId: string, receiveIndex: number, changeIndex: number): Promise<void> {
     return this.invoke("update_btc_derivation_index", { accountId, receiveIndex, changeIndex });
   }
+  async updateBitcoinAccountLabel(id: string, label: string): Promise<void> {
+    return this.invoke("update_bitcoin_account_label", { id, label });
+  }
   async syncBitcoin(account: BitcoinAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitcoinSyncResult> {
     const { syncBitcoinAccount } = await import("./bitcoin/sync.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
@@ -608,6 +614,9 @@ class TauriBackend implements Backend {
   }
   async removeSolanaAccount(id: string): Promise<void> {
     return this.invoke("remove_solana_account", { id });
+  }
+  async updateSolanaAccountLabel(id: string, label: string): Promise<void> {
+    return this.invoke("update_solana_account_label", { id, label });
   }
   async updateSolanaLastSignature(id: string, signature: string): Promise<void> {
     return this.invoke("update_solana_last_signature", { id, signature });
@@ -627,6 +636,9 @@ class TauriBackend implements Backend {
   }
   async removeHyperliquidAccount(id: string): Promise<void> {
     return this.invoke("remove_hyperliquid_account", { id });
+  }
+  async updateHyperliquidAccountLabel(id: string, label: string): Promise<void> {
+    return this.invoke("update_hyperliquid_account_label", { id, label });
   }
   async updateHyperliquidSyncCursor(id: string, lastSyncTime: number): Promise<void> {
     return this.invoke("update_hyperliquid_sync_cursor", { id, lastSyncTime });

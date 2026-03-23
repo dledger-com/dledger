@@ -3990,6 +3990,11 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
+  async updateBitcoinAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE bitcoin_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
   async removeBitcoinAccount(id: string): Promise<void> {
     this.run("DELETE FROM btc_derived_address WHERE bitcoin_account_id = ?", [id]);
     this.run("DELETE FROM bitcoin_account WHERE id = ?", [id]);
@@ -4077,6 +4082,11 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
+  async updateSolanaAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE solana_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
   async removeSolanaAccount(id: string): Promise<void> {
     this.run("DELETE FROM solana_account WHERE id = ?", [id]);
     this.scheduleSave();
@@ -4131,6 +4141,11 @@ PRAGMA foreign_keys = ON;
        VALUES (?, ?, ?, NULL, NULL, ?)`,
       [account.id, account.address, account.label, account.created_at],
     );
+    this.scheduleSave();
+  }
+
+  async updateHyperliquidAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE hyperliquid_account SET label = ? WHERE id = ?", [label, id]);
     this.scheduleSave();
   }
 
