@@ -787,99 +787,6 @@
         </Card.Content>
     </Card.Root>
 
-    <!-- Backup & Restore -->
-    <Card.Root>
-        <Card.Header>
-            <Card.Title>{msg.settings_backup_restore()}</Card.Title>
-            <Card.Description
-                >{msg.settings_backup_restore_desc()}</Card.Description
-            >
-        </Card.Header>
-        <Card.Content class="space-y-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-sm font-medium">{msg.settings_export_database()}</p>
-                    <p class="text-sm text-muted-foreground">
-                        {msg.settings_export_database_desc()}
-                    </p>
-                </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={exporting}
-                    onclick={async () => {
-                        exporting = true;
-                        try {
-                            const data =
-                                await exportDatabaseBackup(getBackend());
-                            downloadDatabase(data);
-                            toast.success(msg.toast_database_exported());
-                        } catch (e) {
-                            toast.error(
-                                e instanceof Error ? e.message : String(e),
-                            );
-                        } finally {
-                            exporting = false;
-                        }
-                    }}
-                >
-                    {exporting ? msg.state_exporting() : msg.btn_export_dot_db()}
-                </Button>
-            </div>
-            <Separator />
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-sm font-medium">{msg.settings_import_database()}</p>
-                    <p class="text-sm text-muted-foreground">
-                        {msg.settings_import_database_desc()}
-                    </p>
-                </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={importing}
-                    onclick={() => {
-                        const input = document.createElement("input");
-                        input.type = "file";
-                        input.accept = ".db,.sqlite,.sqlite3";
-                        input.onchange = async () => {
-                            const file = input.files?.[0];
-                            if (!file) return;
-                            if (
-                                !window.confirm(msg.confirm_import_db({ name: file.name }))
-                            )
-                                return;
-                            importing = true;
-                            try {
-                                const data = await readFileAsUint8Array(file);
-                                const backend = getBackend();
-                                if (!backend.importDatabase) {
-                                    throw new Error(
-                                        msg.error_import_not_supported(),
-                                    );
-                                }
-                                await backend.importDatabase(data);
-                                toast.success(
-                                    msg.toast_database_imported_reloading(),
-                                );
-                                setTimeout(() => window.location.reload(), 500);
-                            } catch (e) {
-                                toast.error(
-                                    e instanceof Error ? e.message : String(e),
-                                );
-                            } finally {
-                                importing = false;
-                            }
-                        };
-                        input.click();
-                    }}
-                >
-                    {importing ? msg.state_importing() : msg.btn_import_dot_db()}
-                </Button>
-            </div>
-        </Card.Content>
-    </Card.Root>
-
     <!-- ML Classification -->
     <Card.Root>
         <Card.Header>
@@ -1822,19 +1729,82 @@
         <Card.Content class="space-y-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium">Export &amp; Import</p>
+                    <p class="text-sm font-medium">{msg.settings_portable_export()}</p>
                     <p class="text-sm text-muted-foreground">
-                        Export all data to a .dledger file or import from one.
+                        {msg.settings_portable_export_desc()}
                     </p>
                 </div>
                 <div class="flex gap-2">
                     <Button variant="outline" size="sm" onclick={() => exportDialogOpen = true}>
                         <Download class="mr-1 h-4 w-4" />
-                        Export all data
+                        {msg.btn_export_dledger()}
                     </Button>
                     <Button variant="outline" size="sm" onclick={() => importDialogOpen = true}>
                         <Upload class="mr-1 h-4 w-4" />
-                        Import from file
+                        {msg.btn_import_dledger()}
+                    </Button>
+                </div>
+            </div>
+            <Separator />
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">{msg.settings_export_database()}</p>
+                    <p class="text-sm text-muted-foreground">
+                        {msg.settings_export_database_desc()}
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={exporting}
+                        onclick={async () => {
+                            exporting = true;
+                            try {
+                                const data = await exportDatabaseBackup(getBackend());
+                                downloadDatabase(data);
+                                toast.success(msg.toast_database_exported());
+                            } catch (e) {
+                                toast.error(e instanceof Error ? e.message : String(e));
+                            } finally {
+                                exporting = false;
+                            }
+                        }}
+                    >
+                        {exporting ? msg.state_exporting() : msg.btn_export_dot_db()}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={importing}
+                        onclick={() => {
+                            const input = document.createElement("input");
+                            input.type = "file";
+                            input.accept = ".db,.sqlite,.sqlite3";
+                            input.onchange = async () => {
+                                const file = input.files?.[0];
+                                if (!file) return;
+                                if (!window.confirm(msg.confirm_import_db({ name: file.name }))) return;
+                                importing = true;
+                                try {
+                                    const data = await readFileAsUint8Array(file);
+                                    const backend = getBackend();
+                                    if (!backend.importDatabase) {
+                                        throw new Error(msg.error_import_not_supported());
+                                    }
+                                    await backend.importDatabase(data);
+                                    toast.success(msg.toast_database_imported_reloading());
+                                    setTimeout(() => window.location.reload(), 500);
+                                } catch (e) {
+                                    toast.error(e instanceof Error ? e.message : String(e));
+                                } finally {
+                                    importing = false;
+                                }
+                            };
+                            input.click();
+                        }}
+                    >
+                        {importing ? msg.state_importing() : msg.btn_import_dot_db()}
                     </Button>
                 </div>
             </div>
