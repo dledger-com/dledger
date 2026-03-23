@@ -92,11 +92,18 @@
     const handlerRegistry = getDefaultRegistry();
     const handlers = handlerRegistry.getAll();
 
-    const csvPresetNames = getDefaultPresetRegistry().getAll()
-        .filter(p => p.id !== "bank-statement")
-        .map(p => p.name);
-    const pdfParserNames = getPluginManager().pdfParsers.getAll()
-        .map(p => p.name);
+    function shortPresetName(name: string): string {
+        return name.replace(/ (Ledger Export|Trade History|Transactions|Bank Statement|Statement|App|Exchange)$/i, "").trim();
+    }
+    const csvPresetNames = [...new Set(
+        getDefaultPresetRegistry().getAll()
+            .filter(p => p.id !== "bank-statement")
+            .map(p => shortPresetName(p.name))
+    )].sort((a, b) => a.localeCompare(b));
+    const pdfParserNames = [...new Set(
+        getPluginManager().pdfParsers.getAll()
+            .map(p => shortPresetName(p.name))
+    )].sort((a, b) => a.localeCompare(b));
 
     const PROTOCOL_CONTRACTS: Record<string, { label: string; address: string }[]> = {
         uniswap: [
