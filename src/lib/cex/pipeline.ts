@@ -190,6 +190,7 @@ export async function syncCexAccount(
     items: Array<{ account: string; currency: string; amount: Decimal }>,
     metadata?: Record<string, string>,
     descriptionData?: string,
+    rawData?: unknown,
   ): Promise<void> {
     // Merge items by (account, currency) and filter zeros
     const merged = new Map<string, { account: string; currency: string; amount: Decimal }>();
@@ -240,6 +241,9 @@ export async function syncCexAccount(
     await backend.postJournalEntry(entry, lineItems);
     if (metadata && Object.keys(metadata).length > 0) {
       await backend.setMetadata(entryId, metadata);
+    }
+    if (rawData !== undefined) {
+      try { await backend.storeRawTransaction(source, JSON.stringify(rawData)); } catch { /* may already exist */ }
     }
     result.entries_imported++;
   }
@@ -341,7 +345,7 @@ export async function syncCexAccount(
       exchange: adapter.exchangeId,
       refid,
       ...groupMeta,
-    }, tradeDescData ? JSON.stringify(tradeDescData) : undefined);
+    }, tradeDescData ? JSON.stringify(tradeDescData) : undefined, group);
 
     // Derive and record exchange rate from trade items
     const rateItems: TradeRateItem[] = items.map((i) => ({
@@ -438,7 +442,7 @@ export async function syncCexAccount(
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
           ...(record.metadata ?? {}),
-        }, JSON.stringify(depDescData));
+        }, JSON.stringify(depDescData), record);
         break;
       }
 
@@ -457,7 +461,7 @@ export async function syncCexAccount(
           refid: record.refid,
           ...(record.txid ? { txid: normalizeTxid(record.txid) } : {}),
           ...(record.metadata ?? {}),
-        }, JSON.stringify(wdDescData));
+        }, JSON.stringify(wdDescData), record);
         break;
       }
 
@@ -472,7 +476,7 @@ export async function syncCexAccount(
             exchange: adapter.exchangeId,
             refid: record.refid,
             ...(record.metadata ?? {}),
-          }, JSON.stringify(stakingDescData));
+          }, JSON.stringify(stakingDescData), record);
         } else {
           // Staking deduction (e.g., unstaking fee)
           result.warnings.push(`Staking record ${record.refid} has negative amount — skipping`);
