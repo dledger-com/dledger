@@ -100,8 +100,8 @@ export async function detectImportTarget(
     return detectImportTarget(innerFile);
   }
 
-  // .dledger: our own portable export format
-  if (file.name.toLowerCase().endsWith(".dledger")) {
+  // .dledger or .dledger.enc: our own portable export format
+  if (file.name.toLowerCase().endsWith(".dledger") || file.name.toLowerCase().endsWith(".dledger.enc")) {
     const buf = await file.arrayBuffer();
     return { target: "dledger", bytes: new Uint8Array(buf) };
   }

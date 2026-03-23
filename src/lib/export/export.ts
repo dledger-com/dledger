@@ -186,7 +186,7 @@ export async function exportData(
  */
 export function downloadExport(data: Uint8Array, encrypted: boolean): void {
 	const date = new Date().toISOString().slice(0, 10);
-	const filename = `dledger-export-${date}${encrypted ? ".encrypted" : ""}.dledger`;
+	const filename = `dledger-export-${date}.dledger${encrypted ? ".enc" : ""}`;
 	const blob = new Blob([data], { type: "application/octet-stream" });
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement("a");
