@@ -1,6 +1,6 @@
 import type { CsvRecord } from "../types.js";
 import type { DescriptionData } from "$lib/types/description-data.js";
-import { renderDescription } from "$lib/types/description-data.js";
+import { renderDescription, tradeDescription, transferDescription, rewardDescription, operationDescription } from "$lib/types/description-data.js";
 import {
   exchangeAssetsCurrency,
   exchangeFees,
@@ -140,14 +140,14 @@ export function makeTransferDescription(
 export function makeRewardDescription(
   exchange: string, kind: string, currency: string,
 ): string {
-  return renderDescription({ type: "cex-reward", exchange, kind, currency });
+  return renderDescription(rewardDescription(exchange, kind, currency));
 }
 
 /** Build consistent operation description: "Exchange operation: CURRENCY" */
 export function makeOperationDescription(
   exchange: string, operation: string, currency: string,
 ): string {
-  return renderDescription({ type: "cex-operation", exchange, operation, currency });
+  return renderDescription(operationDescription(exchange, operation, currency));
 }
 
 /** Case-insensitive column index lookup */
@@ -157,27 +157,27 @@ export function colIdx(headers: string[], name: string): number {
   return idx >= 0 ? idx : -1;
 }
 
-/** Build structured description data for CEX trades */
+/** Build structured description data for CEX/DEX trades — delegates to centralized builder */
 export function makeTradeDescriptionData(
   exchange: string, base: string, quote: string, side: "BUY" | "SELL",
 ): DescriptionData {
   return side === "BUY"
-    ? { type: "cex-trade", exchange, spent: quote, received: base }
-    : { type: "cex-trade", exchange, spent: base, received: quote };
+    ? tradeDescription(exchange, quote, base)
+    : tradeDescription(exchange, base, quote);
 }
 
-/** Build structured description data for CEX deposits/withdrawals */
+/** Build structured description data for deposits/withdrawals — delegates to centralized builder */
 export function makeTransferDescriptionData(
   exchange: string, currency: string, direction: "deposit" | "withdrawal",
 ): DescriptionData {
-  return { type: "cex-transfer", exchange, direction, currency };
+  return transferDescription(exchange, direction, currency);
 }
 
-/** Build structured description data for CEX fee operations */
+/** Build structured description data for fee operations — delegates to centralized builder */
 export function makeFeeDescriptionData(
   exchange: string, currency: string,
 ): DescriptionData {
-  return { type: "cex-operation", exchange, operation: "fee", currency };
+  return operationDescription(exchange, "fee", currency);
 }
 
 /** Detect and strip null-byte spacing from UTF-16 encoded CSVs */

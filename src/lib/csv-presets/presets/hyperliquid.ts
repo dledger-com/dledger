@@ -1,7 +1,7 @@
 import Decimal from "decimal.js-light";
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { renderDescription, type DescriptionData } from "$lib/types/description-data.js";
+import { renderDescription, tradeDescription, perpTradeDescription, fundingDescription, type DescriptionData } from "$lib/types/description-data.js";
 import { colIdx } from "./shared.js";
 import { defiAssets, defiIncome, defiExpense, EQUITY_TRADING } from "$lib/accounts/paths.js";
 
@@ -168,8 +168,8 @@ function transformTrades(headers: string[], rows: string[][]): CsvRecord[] {
 		if (lines.length === 0) continue;
 
 		const descData: DescriptionData = isSpot
-			? { type: "hl-fill", coin: base, side: isBuy ? "long" : "short", spent: isBuy ? "USDC" : base, received: isBuy ? base : "USDC" }
-			: { type: "hl-fill", coin: base, side: dir.toLowerCase().includes("long") ? "long" : "short", closedPnl: !closedPnl.isZero() ? closedPnl.toFixed() : undefined };
+			? tradeDescription("Hyperliquid", isBuy ? "USDC" : base, isBuy ? base : "USDC")
+			: perpTradeDescription("Hyperliquid", base, dir.toLowerCase().includes("long") ? "long" : "short");
 
 		const sourceKey = hash
 			? `fill:${hash}`
@@ -221,7 +221,7 @@ function transformFunding(headers: string[], rows: string[][]): CsvRecord[] {
 			);
 		}
 
-		const descData: DescriptionData = { type: "hl-funding", coin, usdc: payment.toFixed() };
+		const descData: DescriptionData = fundingDescription("Hyperliquid", coin);
 
 		records.push({
 			date,

@@ -13,6 +13,7 @@ import {
   buildHandlerEntry,
   analyzeErc20Flows,
 } from "./item-builder.js";
+import { onchainTransferDescription, onchainContractDescription } from "../types/description-data.js";
 import type { DescriptionData } from "../types/index.js";
 import { shortAddr } from "../browser-etherscan.js";
 
@@ -58,16 +59,16 @@ export const GenericEtherscanHandler: TransactionHandler = {
       const symbol = chain.native_currency;
 
       if (from === addr && to === addr) {
-        descriptionData = { type: "onchain-transfer", chain: chain.name, currency: symbol, direction: "self", txHash: group.hash };
+        descriptionData = onchainTransferDescription(chain.name, symbol, "self", { txHash: group.hash });
       } else if (!to) {
-        descriptionData = { type: "onchain-contract", chain: chain.name, currency: symbol, action: "creation", txHash: group.hash };
+        descriptionData = onchainContractDescription(chain.name, symbol, "creation", group.hash);
       } else if (from === addr) {
-        descriptionData = { type: "onchain-transfer", chain: chain.name, currency: symbol, direction: "sent", counterparty: shortAddr(to), txHash: group.hash, ...(tokenCount > 0 ? { tokenCount } : {}) };
+        descriptionData = onchainTransferDescription(chain.name, symbol, "sent", { counterparty: shortAddr(to), txHash: group.hash, tokenCount: tokenCount > 0 ? tokenCount : undefined });
       } else {
-        descriptionData = { type: "onchain-transfer", chain: chain.name, currency: symbol, direction: "received", counterparty: shortAddr(from), txHash: group.hash, ...(tokenCount > 0 ? { tokenCount } : {}) };
+        descriptionData = onchainTransferDescription(chain.name, symbol, "received", { counterparty: shortAddr(from), txHash: group.hash, tokenCount: tokenCount > 0 ? tokenCount : undefined });
       }
     } else if (group.internals.length > 0 && tokenCount === 0) {
-      descriptionData = { type: "onchain-contract", chain: chain.name, currency: chain.native_currency, action: "internal-transfer", txHash: group.hash };
+      descriptionData = onchainContractDescription(chain.name, chain.native_currency, "internal-transfer", group.hash);
     } else {
       // ERC20/721/1155 only
       const flows = analyzeErc20Flows(group.erc20s, addr);
@@ -79,7 +80,7 @@ export const GenericEtherscanHandler: TransactionHandler = {
       const counterparty = mainFlow
         ? mainFlow.direction === "out" ? shortAddr(mainFlow.to) : shortAddr(mainFlow.from)
         : undefined;
-      descriptionData = { type: "onchain-transfer", chain: chain.name, currency: mainSymbol, direction, counterparty, txHash: group.hash, ...(flows.length > 1 ? { tokenCount: flows.length } : {}) };
+      descriptionData = onchainTransferDescription(chain.name, mainSymbol, direction, { counterparty, txHash: group.hash, tokenCount: flows.length > 1 ? flows.length : undefined });
     }
 
     const handlerEntry = buildHandlerEntry({

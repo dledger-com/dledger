@@ -16,7 +16,7 @@ interface HandlerRegistryLike {
 import type { TaskProgress } from "../task-queue.svelte.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
-import { renderDescription } from "../types/description-data.js";
+import { renderDescription, tradeDescription, transferDescription, rewardDescription } from "../types/description-data.js";
 import { exchangeAssetsCurrency, exchangeFees, exchangeExternal, exchangeStaking, tradingAccount } from "../accounts/paths.js";
 import { crossSourceAliases } from "../csv-presets/cross-source.js";
 
@@ -328,7 +328,7 @@ export async function syncCexAccount(
     }
 
     const tradeDescData = spentAsset && receivedAsset
-      ? { type: "cex-trade" as const, exchange: exchangeName, spent: spentAsset, received: receivedAsset }
+      ? tradeDescription(exchangeName, spentAsset, receivedAsset)
       : null;
     const description = tradeDescData
       ? renderDescription(tradeDescData)
@@ -428,7 +428,7 @@ export async function syncCexAccount(
 
     switch (record.type) {
       case "deposit": {
-        const depDescData = { type: "cex-transfer" as const, exchange: exchangeName, direction: "deposit" as const, currency: record.asset };
+        const depDescData = transferDescription(exchangeName, "deposit", record.asset);
         const items: Array<{ account: string; currency: string; amount: Decimal }> = [
           { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },
           { account: exchangeExternal(exchangeName), currency: record.asset, amount: amount.neg() },
@@ -443,7 +443,7 @@ export async function syncCexAccount(
       }
 
       case "withdrawal": {
-        const wdDescData = { type: "cex-transfer" as const, exchange: exchangeName, direction: "withdrawal" as const, currency: record.asset };
+        const wdDescData = transferDescription(exchangeName, "withdrawal", record.asset);
         const absAmount = amount.abs();
         const items: Array<{ account: string; currency: string; amount: Decimal }> = [
           { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount: absAmount.neg() },
@@ -462,7 +462,7 @@ export async function syncCexAccount(
       }
 
       case "staking": {
-        const stakingDescData = { type: "cex-reward" as const, exchange: exchangeName, kind: "staking", currency: record.asset };
+        const stakingDescData = rewardDescription(exchangeName, "staking", record.asset);
         if (amount.gt(0)) {
           const items: Array<{ account: string; currency: string; amount: Decimal }> = [
             { account: exchangeAssetsCurrency(exchangeName, record.asset), currency: record.asset, amount },

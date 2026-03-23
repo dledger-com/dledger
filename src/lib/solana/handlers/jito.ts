@@ -3,7 +3,7 @@ import type { HandlerResult, HandlerEntry } from "../../handlers/types.js";
 import type { ItemAccum } from "../../handlers/item-builder.js";
 import { mergeItemAccums } from "../../handlers/item-builder.js";
 import { walletAssets, defiAssets, chainFees } from "../../accounts/paths.js";
-import { renderDescription, type DescriptionData } from "../../types/description-data.js";
+import { renderDescription, solDefiDescription } from "../../types/description-data.js";
 import type { SolTxGroup } from "../types.js";
 import type { SolanaHandler, SolanaHandlerContext } from "./types.js";
 import { lamportsToSol } from "./generic-solana.js";
@@ -90,13 +90,8 @@ export const jitoHandler: SolanaHandler = {
     if (merged.length === 0) return { type: "skip", reason: "No Jito operation detected" };
 
     const date = new Date(tx.timestamp * 1000).toISOString().split("T")[0];
-    const descriptionData: DescriptionData = {
-      type: "sol-defi",
-      protocol: "Jito",
-      action,
-      signature: tx.signature,
-      summary: `Jito: ${action} SOL/jitoSOL`,
-    };
+    const summary = `Jito: ${action} SOL/jitoSOL`;
+    const descriptionData = solDefiDescription("Jito", action, tx.signature, summary);
 
     const entry: HandlerEntry = {
       entry: {

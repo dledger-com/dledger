@@ -17,6 +17,76 @@ export type DescriptionData =
   | { type: "hl-ledger"; action: "deposit" | "withdrawal" | "liquidation" | "transfer"; usdc?: string }
   | { type: "system"; action: "reversal" | "pad" | "recurring"; ref?: string };
 
+// ── Centralized builders (use these instead of constructing DescriptionData inline) ──
+
+/** Trade (CEX or DEX spot): "Exchange trade: SPENT → RECEIVED" */
+export function tradeDescription(source: string, spent: string, received: string): DescriptionData {
+  return { type: "cex-trade", exchange: source, spent, received };
+}
+
+/** Deposit or withdrawal: "Exchange deposit: CURRENCY" */
+export function transferDescription(source: string, direction: "deposit" | "withdrawal", currency: string): DescriptionData {
+  return { type: "cex-transfer", exchange: source, direction, currency };
+}
+
+/** Staking/airdrop reward: "Exchange staking reward: CURRENCY" */
+export function rewardDescription(source: string, kind: string, currency: string): DescriptionData {
+  return { type: "cex-reward", exchange: source, kind, currency };
+}
+
+/** Generic operation: "Exchange conversion: CURRENCY" */
+export function operationDescription(source: string, operation: string, currency: string): DescriptionData {
+  return { type: "cex-operation", exchange: source, operation, currency };
+}
+
+/** On-chain transfer (EVM): "Send ETH on Ethereum to 0x..." */
+export function onchainTransferDescription(
+  chain: string, currency: string, direction: "sent" | "received" | "self",
+  opts?: { counterparty?: string; txHash?: string; tokenCount?: number },
+): DescriptionData {
+  return { type: "onchain-transfer", chain, currency, direction, counterparty: opts?.counterparty, txHash: opts?.txHash ?? "", tokenCount: opts?.tokenCount };
+}
+
+/** On-chain contract interaction */
+export function onchainContractDescription(chain: string, currency: string, action: "creation" | "internal-transfer", txHash: string): DescriptionData {
+  return { type: "onchain-contract", chain, currency, action, txHash };
+}
+
+/** DeFi protocol action: "Uniswap: swap on Ethereum" */
+export function defiActionDescription(protocol: string, action: string, chain: string, txHash: string, summary?: string): DescriptionData {
+  return { type: "defi", protocol, action, chain, txHash, summary };
+}
+
+/** Bitcoin transfer: "Send BTC on Bitcoin to abc..." */
+export function btcTransferDescription(direction: "sent" | "received" | "self" | "consolidation", txid: string, counterparty?: string): DescriptionData {
+  return { type: "btc-transfer", direction, txid, counterparty };
+}
+
+/** Solana transfer: "Send SOL on Solana to abc..." */
+export function solTransferDescription(direction: "sent" | "received" | "self", signature: string, opts?: { counterparty?: string; tokenSymbol?: string }): DescriptionData {
+  return { type: "sol-transfer", direction, signature, counterparty: opts?.counterparty, tokenSymbol: opts?.tokenSymbol };
+}
+
+/** Solana DeFi action: "Jupiter: swap on Solana" */
+export function solDefiDescription(protocol: string, action: string, signature: string, summary?: string): DescriptionData {
+  return { type: "sol-defi", protocol, action, signature, summary };
+}
+
+/** Perpetual futures trade: "Hyperliquid BTC long trade" */
+export function perpTradeDescription(source: string, coin: string, side: "long" | "short"): DescriptionData {
+  return { type: "hl-fill", coin, side };
+}
+
+/** Funding payment: "Hyperliquid funding BTC" */
+export function fundingDescription(_source: string, coin: string): DescriptionData {
+  return { type: "hl-funding", coin, usdc: "" };
+}
+
+/** Bank transaction: "La Banque Postale: Virement" */
+export function bankDescription(bank: string, text: string, reference?: string): DescriptionData {
+  return { type: "bank", bank, text, reference };
+}
+
 export function renderDescription(data: DescriptionData): string {
   switch (data.type) {
     case "cex-trade":

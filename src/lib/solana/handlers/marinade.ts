@@ -3,7 +3,7 @@ import type { HandlerResult, HandlerEntry } from "../../handlers/types.js";
 import type { ItemAccum } from "../../handlers/item-builder.js";
 import { mergeItemAccums } from "../../handlers/item-builder.js";
 import { walletAssets, defiAssets, chainFees } from "../../accounts/paths.js";
-import { renderDescription, type DescriptionData } from "../../types/description-data.js";
+import { renderDescription, solDefiDescription } from "../../types/description-data.js";
 import type { SolTxGroup } from "../types.js";
 import type { SolanaHandler, SolanaHandlerContext } from "./types.js";
 import { lamportsToSol } from "./generic-solana.js";
@@ -91,13 +91,8 @@ export const marinadeHandler: SolanaHandler = {
     if (merged.length === 0) return { type: "skip", reason: "No Marinade operation detected" };
 
     const date = new Date(tx.timestamp * 1000).toISOString().split("T")[0];
-    const descriptionData: DescriptionData = {
-      type: "sol-defi",
-      protocol: "Marinade",
-      action,
-      signature: tx.signature,
-      summary: `Marinade: ${action} SOL/mSOL`,
-    };
+    const summary = `Marinade: ${action} SOL/mSOL`;
+    const descriptionData = solDefiDescription("Marinade", action, tx.signature, summary);
 
     const entry: HandlerEntry = {
       entry: {

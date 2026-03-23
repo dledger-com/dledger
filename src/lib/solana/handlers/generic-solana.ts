@@ -3,7 +3,7 @@ import type { HandlerResult, HandlerEntry } from "../../handlers/types.js";
 import type { ItemAccum } from "../../handlers/item-builder.js";
 import { mergeItemAccums } from "../../handlers/item-builder.js";
 import { walletAssets, walletExternal, chainFees } from "../../accounts/paths.js";
-import { renderDescription, type DescriptionData } from "../../types/description-data.js";
+import { renderDescription, solTransferDescription, type DescriptionData } from "../../types/description-data.js";
 import type { SolTxGroup, SolTokenTransfer } from "../types.js";
 import type { SolanaHandler, SolanaHandlerContext } from "./types.js";
 
@@ -202,12 +202,9 @@ function buildEntry(
     ? tx.nativeTransfers.find(nt => nt.from === ctx.address && nt.to !== ctx.address)?.to
     : tx.nativeTransfers.find(nt => nt.to === ctx.address && nt.from !== ctx.address)?.from;
 
-  const descriptionData: DescriptionData = {
-    type: "sol-transfer",
-    direction,
+  const descriptionData: DescriptionData = solTransferDescription(direction, tx.signature, {
     counterparty: counterpartyAddr ? shortAddr(counterpartyAddr) : undefined,
-    signature: tx.signature,
-  };
+  });
 
   const description = renderDescription(descriptionData);
 

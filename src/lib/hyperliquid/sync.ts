@@ -4,7 +4,7 @@ import { v7 as uuidv7 } from "uuid";
 import Decimal from "decimal.js-light";
 import type { Backend } from "../backend.js";
 import type { Account, JournalEntry, LineItem } from "../types/index.js";
-import { renderDescription } from "../types/description-data.js";
+import { renderDescription, tradeDescription, transferDescription, perpTradeDescription, fundingDescription } from "../types/description-data.js";
 import { defiAssets, defiIncome, defiExpense, EQUITY_TRADING } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
@@ -325,13 +325,7 @@ export async function syncHyperliquidAccount(
 				items.push({ account: hlUsdcAccount(), currency: "USDC", amount: totalFee.neg().toFixed() });
 			}
 
-			const descData = {
-				type: "hl-fill" as const,
-				coin: base,
-				side: (isBuy ? "long" : "short") as "long" | "short",
-				spent: isBuy ? "USDC" : base,
-				received: isBuy ? base : "USDC",
-			};
+			const descData = tradeDescription("Hyperliquid", isBuy ? "USDC" : base, isBuy ? base : "USDC");
 			const posted = await postEntry(source, date, renderDescription(descData), descData, items, {
 				hl_coin: first.coin, hl_side: first.side, hl_hash: hash,
 			});
@@ -377,12 +371,7 @@ export async function syncHyperliquidAccount(
 				continue;
 			}
 
-			const descData = {
-				type: "hl-fill" as const,
-				coin: first.coin,
-				side,
-				closedPnl: totalClosedPnl.isZero() ? undefined : totalClosedPnl.toFixed(),
-			};
+			const descData = perpTradeDescription("Hyperliquid", first.coin, side);
 			const posted = await postEntry(source, date, renderDescription(descData), descData, items, {
 				hl_coin: first.coin, hl_side: first.side, hl_dir: first.dir,
 				hl_hash: hash, hl_pnl: totalClosedPnl.toFixed(),
@@ -440,7 +429,7 @@ export async function syncHyperliquidAccount(
 			items.push({ account: hlUsdcAccount(), currency: "USDC", amount: totalUsdc.toFixed() });
 		}
 
-		const descData = { type: "hl-funding" as const, coin, usdc: totalUsdc.toFixed() };
+		const descData = fundingDescription("Hyperliquid", coin);
 		const posted = await postEntry(source, date, renderDescription(descData), descData, items, {
 			hl_coin: coin, hl_funding_records: String(records.length),
 		});
@@ -476,7 +465,7 @@ export async function syncHyperliquidAccount(
 				const usdc = new Decimal(delta.usdc);
 				if (usdc.isZero()) { result.skipped++; continue; }
 
-				const descData = { type: "hl-ledger" as const, action: "deposit" as const, usdc: delta.usdc };
+				const descData = transferDescription("Hyperliquid", "deposit", "USDC");
 				const posted = await postEntry(source, date, renderDescription(descData), descData, [
 					{ account: hlUsdcAccount(), currency: "USDC", amount: usdc.toFixed() },
 					{ account: hlExternal(), currency: "USDC", amount: usdc.neg().toFixed() },
@@ -500,7 +489,7 @@ export async function syncHyperliquidAccount(
 					items.push({ account: hlUsdcAccount(), currency: "USDC", amount: fee.neg().toFixed() });
 				}
 
-				const descData = { type: "hl-ledger" as const, action: "withdrawal" as const, usdc: delta.usdc };
+				const descData = transferDescription("Hyperliquid", "withdrawal", "USDC");
 				const posted = await postEntry(source, date, renderDescription(descData), descData, items, {
 					hl_hash: update.hash, hl_type: "withdrawal", txid: update.hash,
 				});
@@ -509,7 +498,6 @@ export async function syncHyperliquidAccount(
 				break;
 			}
 			case "liquidation": {
-				const descData = { type: "hl-ledger" as const, action: "liquidation" as const };
 				// Liquidation: we don't have an explicit USDC amount in the delta.
 				// The realized loss comes through as fills with closedPnl, so we just record a marker entry.
 				// Skip if no items to post (the fill processing handles the PnL).

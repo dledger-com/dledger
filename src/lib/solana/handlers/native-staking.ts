@@ -3,7 +3,7 @@ import type { HandlerResult, HandlerEntry } from "../../handlers/types.js";
 import type { ItemAccum } from "../../handlers/item-builder.js";
 import { mergeItemAccums } from "../../handlers/item-builder.js";
 import { walletAssets, defiAssets, defiIncome, chainFees } from "../../accounts/paths.js";
-import { renderDescription, type DescriptionData } from "../../types/description-data.js";
+import { renderDescription, solDefiDescription } from "../../types/description-data.js";
 import type { SolTxGroup } from "../types.js";
 import type { SolanaHandler, SolanaHandlerContext } from "./types.js";
 import { lamportsToSol } from "./generic-solana.js";
@@ -101,13 +101,8 @@ export const nativeStakingHandler: SolanaHandler = {
 
     const date = new Date(tx.timestamp * 1000).toISOString().split("T")[0];
 
-    const descriptionData: DescriptionData = {
-      type: "sol-defi",
-      protocol: "SOL Staking",
-      action,
-      signature: tx.signature,
-      summary: `SOL Staking: ${action}`,
-    };
+    const summary = `SOL Staking: ${action}`;
+    const descriptionData = solDefiDescription("Stake", action, tx.signature, summary);
 
     const entry: HandlerEntry = {
       entry: {

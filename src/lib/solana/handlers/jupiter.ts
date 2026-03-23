@@ -3,7 +3,7 @@ import type { HandlerResult, HandlerEntry } from "../../handlers/types.js";
 import type { ItemAccum } from "../../handlers/item-builder.js";
 import { mergeItemAccums } from "../../handlers/item-builder.js";
 import { walletAssets, defiAssets, chainFees } from "../../accounts/paths.js";
-import { renderDescription, type DescriptionData } from "../../types/description-data.js";
+import { renderDescription, solDefiDescription } from "../../types/description-data.js";
 import type { SolTxGroup, SolTokenTransfer } from "../types.js";
 import type { SolanaHandler, SolanaHandlerContext } from "./types.js";
 import { lamportsToSol } from "./generic-solana.js";
@@ -125,13 +125,8 @@ export const jupiterHandler: SolanaHandler = {
     const spentStr = outflows.map(o => `${o.amount} ${o.symbol}`).join(", ") || "?";
     const receivedStr = inflows.map(i => `${i.amount} ${i.symbol}`).join(", ") || "?";
 
-    const descriptionData: DescriptionData = {
-      type: "sol-defi",
-      protocol: "Jupiter",
-      action: "swap",
-      signature: tx.signature,
-      summary: `Jupiter swap: ${spentStr} → ${receivedStr}`,
-    };
+    const summary = `Jupiter swap: ${spentStr} → ${receivedStr}`;
+    const descriptionData = solDefiDescription("Jupiter", "swap", tx.signature, summary);
 
     const entry: HandlerEntry = {
       entry: {
