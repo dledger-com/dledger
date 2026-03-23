@@ -99,6 +99,7 @@
           />
           <button
             type="button"
+            tabindex={-1}
             class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             onclick={() => showPassphrase = !showPassphrase}
           >
