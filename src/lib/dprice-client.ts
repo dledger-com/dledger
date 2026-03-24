@@ -30,6 +30,8 @@ export interface DpriceAssetInfo {
   coingecko_id?: string;
   contract_chain?: string;
   contract_address?: string;
+  first_price_date?: string | null;
+  last_price_date?: string | null;
 }
 
 export interface DpriceBatchCurrency {

@@ -114,31 +114,75 @@ function autoDetectSource(
 /**
  * Resolve a currency against dprice's asset database using all available metadata.
  * Returns the dprice asset ID on unambiguous match, or "none"/"ambiguous" otherwise.
+ *
+ * Disambiguation cascade (when multiple results):
+ * 1. Contract address match (via filter or local match)
+ * 2. Chain match via originChain hint (e.g., "hyperliquid")
+ * 3. Asset type filter
+ * 4. Has-prices filter (eliminate dead assets)
+ * 5. Name match
  */
 export async function resolveDpriceAsset(
   client: DpriceClient,
   code: string,
   assetType: string,
   tokenAddr?: { chain: string; contract_address: string },
+  hints?: {
+    name?: string;
+    originChain?: string;
+  },
 ): Promise<{ id: string; type: string } | "none" | "ambiguous"> {
+  // Query with symbol only (no type/contract filter) to get ALL candidates,
+  // then disambiguate locally with richer heuristics.
   const filter: DpriceAssetFilter = { symbol: code };
-  if (assetType) filter.type = assetType as DpriceAssetFilter["type"];
-  if (tokenAddr) {
-    filter.contract_chain = tokenAddr.chain;
-    filter.contract_address = tokenAddr.contract_address;
-  }
 
-  const results = await client.queryAssets(filter, 5);
+  const results = await client.queryAssets(filter, 10);
   if (results.length === 0) return "none";
   if (results.length === 1) return { id: results[0].id, type: String(results[0].type) };
 
-  // Ambiguous: try to narrow — if exactly one matches the assetType, pick it
-  if (assetType) {
-    const typed = results.filter((r) => r.type === assetType);
-    if (typed.length === 1) return { id: typed[0].id, type: String(typed[0].type) };
+  const pick = (r: typeof results[0]) => ({ id: r.id, type: String(r.type) });
+  let candidates = results;
+
+  // 1. Contract address match (strongest signal)
+  if (tokenAddr) {
+    const byContract = candidates.filter(
+      (r) => r.contract_address?.toLowerCase() === tokenAddr.contract_address.toLowerCase()
+        && r.contract_chain?.toLowerCase() === tokenAddr.chain.toLowerCase(),
+    );
+    if (byContract.length === 1) return pick(byContract[0]);
+    if (byContract.length > 1) candidates = byContract;
   }
 
-  // Can't disambiguate — skip dprice for this currency (future: disambiguation UI)
+  // 2. Chain match via origin hint (e.g., DEPIN from Hyperliquid → prefer hyperliquid chain)
+  if (hints?.originChain && candidates.length > 1) {
+    const byChain = candidates.filter(
+      (r) => r.contract_chain?.toLowerCase() === hints.originChain!.toLowerCase(),
+    );
+    if (byChain.length === 1) return pick(byChain[0]);
+    if (byChain.length > 1) candidates = byChain;
+  }
+
+  // 3. Asset type filter
+  if (assetType && candidates.length > 1) {
+    const byType = candidates.filter((r) => r.type === assetType);
+    if (byType.length === 1) return pick(byType[0]);
+    if (byType.length > 1) candidates = byType;
+  }
+
+  // 4. Has prices — prefer assets with actual price data
+  if (candidates.length > 1) {
+    const withPrices = candidates.filter((r) => r.first_price_date != null);
+    if (withPrices.length === 1) return pick(withPrices[0]);
+    if (withPrices.length > 1) candidates = withPrices;
+  }
+
+  // 5. Name match — prefer exact name match with currency name
+  if (hints?.name && candidates.length > 1) {
+    const nameLower = hints.name.toLowerCase();
+    const byName = candidates.filter((r) => r.name.toLowerCase() === nameLower);
+    if (byName.length === 1) return pick(byName[0]);
+  }
+
   return "ambiguous";
 }
 
@@ -243,6 +287,17 @@ export async function syncExchangeRates(
 
       // Resolve new currencies that are in dpriceAssets but don't have stored IDs
       const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+      const currencyNameMap = new Map(currencies.map((c) => [c.code, c.name]));
+      // Build origin chain hints from transaction sources
+      const originChainMap = new Map<string, string>();
+      if (backend.getCurrencyOrigins) {
+        const origins = await backend.getCurrencyOrigins();
+        for (const o of origins) {
+          if (o.origin === "hyperliquid") originChainMap.set(o.currency, "hyperliquid");
+          else if (o.origin === "solana") originChainMap.set(o.currency, "solana");
+        }
+      }
+
       const codesToResolve = codes.filter(
         (c) => dpriceAssets!.has(c) && !existingIds.has(c),
       );
@@ -250,7 +305,11 @@ export async function syncExchangeRates(
         try {
           const assetType = currencyTypeMap.get(code) ?? "";
           const tokenInfo = tokenAddrMap.get(code);
-          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo);
+          const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
+          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
+            name: currencyNameMap.get(code),
+            originChain,
+          });
           if (resolved !== "none" && resolved !== "ambiguous") {
             dpriceResolvedIds.set(code, resolved.id);
           }

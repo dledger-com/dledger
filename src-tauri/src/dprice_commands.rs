@@ -138,6 +138,10 @@ pub struct DpriceAssetInfo {
     pub contract_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coinpaprika_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_price_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_price_date: Option<String>,
 }
 
 fn to_asset_query_filter(f: DpriceAssetFilter) -> dprice::db::queries::AssetQueryFilter {
@@ -485,6 +489,8 @@ pub async fn dprice_query_assets(
                 contract_chain: a.contract_chain,
                 contract_address: a.contract_address,
                 coinpaprika_id: a.coinpaprika_id,
+                first_price_date: a.first_price_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                last_price_date: a.last_price_date.map(|d| d.format("%Y-%m-%d").to_string()),
             })
             .collect())
     })

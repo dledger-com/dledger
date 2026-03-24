@@ -24,10 +24,16 @@
   import CircleCheck from "lucide-svelte/icons/circle-check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import Loader from "lucide-svelte/icons/loader";
+  import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
+  import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
   const syncing = $derived(taskQueue.isActive("rate-backfill"));
+  const dpriceEnabled = $derived(isDpriceActive(settings.settings.dpriceMode));
+
+  let dpriceDialogOpen = $state(false);
+  let dpriceDialogCode = $state("");
 
   let currencies = $state<Currency[]>([]);
   let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
@@ -200,6 +206,13 @@
                   onclick={() => handleDontConvert(code)}
                   class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
                 >{m.btn_dont_convert()}</button>
+                {#if dpriceEnabled}
+                  <span class="text-amber-400 dark:text-amber-600">|</span>
+                  <button
+                    onclick={() => { dpriceDialogCode = code; dpriceDialogOpen = true; }}
+                    class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
+                  >{m.btn_link_dprice()}</button>
+                {/if}
               </div>
             {/each}
           </div>
@@ -361,3 +374,7 @@
     </div>
   {/if}
 </div>
+
+{#if dpriceEnabled}
+  <DpriceAssetDialog currencyCode={dpriceDialogCode} bind:open={dpriceDialogOpen} />
+{/if}

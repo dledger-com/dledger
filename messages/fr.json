@@ -695,6 +695,7 @@
   "btn_test": "Tester",
   "btn_sync_latest": "Sync récents",
   "btn_sync_rates": "Synchroniser les taux",
+  "btn_link_dprice": "Lier à dprice",
   "btn_full_sync": "Sync complète",
   "btn_export_db": "Exporter DB",
   "btn_import_db": "Importer DB",
@@ -980,5 +981,9 @@
   "onboarding_check_accounts": "Créer les comptes",
   "onboarding_check_source": "Ajouter une source de données",
   "onboarding_check_transactions": "Importer des transactions",
-  "onboarding_check_portfolio": "Consulter le portefeuille"
+  "onboarding_check_portfolio": "Consulter le portefeuille",
+
+  "dialog_select_dprice_title": "Sélectionner la source de prix pour {code}",
+  "dialog_no_dprice_assets": "Aucun actif trouvé dans dprice",
+  "label_no_prices": "pas de prix"
 }

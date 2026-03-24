@@ -1305,8 +1305,20 @@ export async function autoBackfillRates(
       const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
       const allCurrencies = await backend.listCurrencies();
       const currencyTypeMap = new Map(allCurrencies.map((c) => [c.code, c.asset_type]));
+      const currencyNameMap = new Map(allCurrencies.map((c) => [c.code, c.name]));
       const tokenAddresses = await backend.getCurrencyTokenAddresses();
       const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+
+      // Build origin chain map from transaction sources
+      const originChainMap = new Map<string, string>();
+      if (backend.getCurrencyOrigins) {
+        const origins = await backend.getCurrencyOrigins();
+        for (const o of origins) {
+          if (o.origin === "hyperliquid") originChainMap.set(o.currency, "hyperliquid");
+          else if (o.origin === "solana") originChainMap.set(o.currency, "solana");
+          // etherscan currencies already have token addresses for chain matching
+        }
+      }
 
       // Currencies that need rates but weren't returned by getRates()
       const neededCodes = new Set(currencyDates.map((cd) => cd.currency));
@@ -1318,7 +1330,11 @@ export async function autoBackfillRates(
         try {
           const assetType = currencyTypeMap.get(code) ?? "";
           const tokenInfo = tokenAddrMap.get(code);
-          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo);
+          const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
+          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
+            name: currencyNameMap.get(code),
+            originChain,
+          });
           if (resolved !== "none" && resolved !== "ambiguous") {
             if (!dpriceAssets) dpriceAssets = new Set();
             dpriceAssets.add(code);

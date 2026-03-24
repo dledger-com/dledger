@@ -695,6 +695,7 @@
   "btn_test": "Test",
   "btn_sync_latest": "Sync Latest",
   "btn_sync_rates": "Sync rates",
+  "btn_link_dprice": "Link to dprice",
   "btn_full_sync": "Full Sync",
   "btn_export_db": "Export DB",
   "btn_import_db": "Import DB",
@@ -980,5 +981,9 @@
   "onboarding_check_accounts": "Create accounts",
   "onboarding_check_source": "Add a data source",
   "onboarding_check_transactions": "Import transactions",
-  "onboarding_check_portfolio": "Review portfolio"
+  "onboarding_check_portfolio": "Review portfolio",
+
+  "dialog_select_dprice_title": "Select price source for {code}",
+  "dialog_no_dprice_assets": "No matching assets found in dprice",
+  "label_no_prices": "no prices"
 }
