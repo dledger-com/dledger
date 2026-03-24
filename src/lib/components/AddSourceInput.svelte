@@ -16,6 +16,8 @@
     onSelectAptos,
     onSelectTon,
     onSelectTezos,
+    onSelectCosmos,
+    onSelectPolkadot,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -27,6 +29,8 @@
     onSelectAptos?: (prefillAddress?: string) => void;
     onSelectTon?: (prefillAddress?: string) => void;
     onSelectTezos?: (prefillAddress?: string) => void;
+    onSelectCosmos?: (prefillAddress?: string) => void;
+    onSelectPolkadot?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -76,6 +80,16 @@
   const detectedTezosAddress = $derived.by(() => {
     const s = search.trim();
     return /^(tz[1-4]|KT1)[1-9A-HJ-NP-Za-km-z]{33}$/.test(s) ? s : null;
+  });
+
+  const detectedCosmosAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^cosmos1[02-9ac-hj-np-z]{38}$/.test(s) ? s : null;
+  });
+
+  const detectedPolkadotAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^1[1-9A-HJ-NP-Za-km-z]{45,47}$/.test(s) ? s : null;
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -137,6 +151,18 @@
     open = false;
     search = "";
     onSelectTezos?.(prefillAddress);
+  }
+
+  function selectCosmos(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectCosmos?.(prefillAddress);
+  }
+
+  function selectPolkadot(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectPolkadot?.(prefillAddress);
   }
 </script>
 
@@ -205,6 +231,20 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#if detectedCosmosAddress}
+          <Command.Group heading="Detected Cosmos Address">
+            <Command.Item value="detected-cosmos-{detectedCosmosAddress}" keywords={["cosmos", "atom"]} onSelect={() => selectCosmos(detectedCosmosAddress)} class="font-mono text-xs">
+              Add {detectedCosmosAddress.slice(0, 12)}...{detectedCosmosAddress.slice(-4)} as Cosmos address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedPolkadotAddress}
+          <Command.Group heading="Detected Polkadot Address">
+            <Command.Item value="detected-polkadot-{detectedPolkadotAddress}" keywords={["polkadot", "dot"]} onSelect={() => selectPolkadot(detectedPolkadotAddress)} class="font-mono text-xs">
+              Add {detectedPolkadotAddress.slice(0, 8)}...{detectedPolkadotAddress.slice(-4)} as Polkadot address
+            </Command.Item>
+          </Command.Group>
+        {/if}
         {#if detectedTonAddress}
           <Command.Group heading="Detected TON Address">
             <Command.Item value="detected-ton-{detectedTonAddress}" keywords={["ton", "toncoin"]} onSelect={() => selectTon(detectedTonAddress)} class="font-mono text-xs">
@@ -255,6 +295,15 @@
               Bitcoin
             </Command.Item>
           {/if}
+          {#if onSelectCosmos}
+            <Command.Item
+              value="Cosmos"
+              keywords={["cosmos", "atom", "ibc"]}
+              onSelect={() => selectCosmos()}
+            >
+              Cosmos
+            </Command.Item>
+          {/if}
           <Command.Item
             value="EVM"
             keywords={chainKeywords}
@@ -269,6 +318,15 @@
               onSelect={() => selectHyperliquid()}
             >
               Hyperliquid
+            </Command.Item>
+          {/if}
+          {#if onSelectPolkadot}
+            <Command.Item
+              value="Polkadot"
+              keywords={["polkadot", "dot", "substrate"]}
+              onSelect={() => selectPolkadot()}
+            >
+              Polkadot
             </Command.Item>
           {/if}
           {#if onSelectSolana}

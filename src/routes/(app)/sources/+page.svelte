@@ -53,6 +53,8 @@
     import type { AptosAccount } from "$lib/aptos/types.js";
     import type { TonAccount } from "$lib/ton/types.js";
     import type { TezosAccount } from "$lib/tezos/types.js";
+    import type { CosmosAccount } from "$lib/cosmos/types.js";
+    import type { PolkadotAccount } from "$lib/polkadot/types.js";
     import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
     import { detectSuiInputType, deriveSuiAddresses } from "$lib/sui/derive-js.js";
     import type { DerivedSuiAddress } from "$lib/sui/derive-js.js";
@@ -62,6 +64,10 @@
     import type { DerivedTonAddress } from "$lib/ton/derive-js.js";
     import { detectTezosInputType, deriveTezosAddresses } from "$lib/tezos/derive-js.js";
     import type { DerivedTezosAddress } from "$lib/tezos/derive-js.js";
+    import { detectCosmosInputType, deriveCosmosAddresses } from "$lib/cosmos/derive-js.js";
+    import type { DerivedCosmosAddress } from "$lib/cosmos/derive-js.js";
+    import { detectPolkadotInputType, derivePolkadotAddresses } from "$lib/polkadot/derive-js.js";
+    import type { DerivedPolkadotAddress } from "$lib/polkadot/derive-js.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
@@ -192,7 +198,7 @@
         editingRowLabel = currentLabel;
     }
 
-    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "ton" | "tezos" | "cex") {
+    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "ton" | "tezos" | "cosmos" | "polkadot" | "cex") {
         if (!editingRowId) return;
         const label = editingRowLabel.trim();
         if (!label) { editingRowId = null; return; }
@@ -218,6 +224,12 @@
             } else if (kind === "tezos") {
                 await getBackend().updateTezosAccountLabel(editingRowId, label);
                 await loadTezosAccounts();
+            } else if (kind === "cosmos") {
+                await getBackend().updateCosmosAccountLabel(editingRowId, label);
+                await loadCosmosAccounts();
+            } else if (kind === "polkadot") {
+                await getBackend().updatePolkadotAccountLabel(editingRowId, label);
+                await loadPolkadotAccounts();
             } else if (kind === "cex") {
                 await getBackend().updateExchangeAccount(editingRowId, { label });
                 await loadCexAccounts();
@@ -270,7 +282,9 @@
         | { kind: "sui"; data: SuiAccount }
         | { kind: "aptos"; data: AptosAccount }
         | { kind: "ton"; data: TonAccount }
-        | { kind: "tezos"; data: TezosAccount };
+        | { kind: "tezos"; data: TezosAccount }
+        | { kind: "cosmos"; data: CosmosAccount }
+        | { kind: "polkadot"; data: PolkadotAccount };
 
     const blockchainRows = $derived.by((): BlockchainRow[] => {
         const rows: BlockchainRow[] = [];
@@ -282,6 +296,8 @@
         for (const account of aptosAccounts) rows.push({ kind: "aptos", data: account });
         for (const account of tonAccounts) rows.push({ kind: "ton", data: account });
         for (const account of tezosAccounts) rows.push({ kind: "tezos", data: account });
+        for (const account of cosmosAccounts) rows.push({ kind: "cosmos", data: account });
+        for (const account of polkadotAccounts) rows.push({ kind: "polkadot", data: account });
         return rows;
     });
 
@@ -324,15 +340,15 @@
     type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
     const sortBlockchain = createSortState<BlockchainSortKey>();
     const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
-        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.kind === "sui" ? r.data.address : r.kind === "aptos" ? r.data.address : r.kind === "ton" ? r.data.address : r.kind === "tezos" ? r.data.address : r.data.address,
+        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.kind === "sui" ? r.data.address : r.kind === "aptos" ? r.data.address : r.kind === "ton" ? r.data.address : r.kind === "tezos" ? r.data.address : r.kind === "cosmos" ? r.data.address : r.kind === "polkadot" ? r.data.address : r.data.address,
         label: (r) => r.data.label,
         type: (r) => r.kind === "btc"
             ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : "EVM",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : r.kind === "cosmos" ? "Cosmos" : r.kind === "polkadot" ? "Polkadot" : "EVM",
         networks: (r) => r.kind === "btc"
             ? "Bitcoin"
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
-        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : r.kind === "sui" ? (r.data.last_sync || "") : r.kind === "aptos" ? (r.data.last_sync || "") : r.kind === "ton" ? (r.data.last_sync || "") : r.kind === "tezos" ? (r.data.last_sync || "") : "",
+            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : r.kind === "cosmos" ? "Cosmos" : r.kind === "polkadot" ? "Polkadot" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
+        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : r.kind === "sui" ? (r.data.last_sync || "") : r.kind === "aptos" ? (r.data.last_sync || "") : r.kind === "ton" ? (r.data.last_sync || "") : r.kind === "tezos" ? (r.data.last_sync || "") : r.kind === "cosmos" ? (r.data.last_sync || "") : r.kind === "polkadot" ? (r.data.last_sync || "") : "",
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -340,7 +356,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos" | "ton" | "tezos";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos" | "ton" | "tezos" | "cosmos" | "polkadot";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -430,6 +446,20 @@
         tezosSelectedIndexes = new Set([0]);
         tezosItemLabels = new Map();
         tezosDerivedAddresses = [];
+        cosmosNewAddress = "";
+        cosmosNewLabel = "";
+        cosmosPrivateKeyAck = false;
+        cosmosDeriveCount = 5;
+        cosmosSelectedIndexes = new Set([0]);
+        cosmosItemLabels = new Map();
+        cosmosDerivedAddresses = [];
+        polkadotNewAddress = "";
+        polkadotNewLabel = "";
+        polkadotPrivateKeyAck = false;
+        polkadotDeriveCount = 5;
+        polkadotSelectedIndexes = new Set([0]);
+        polkadotItemLabels = new Map();
+        polkadotDerivedAddresses = [];
     }
 
     // -- Bitcoin state --
@@ -505,6 +535,30 @@
     let tezosSelectedIndexes = $state<Set<number>>(new Set([0]));
     let tezosItemLabels = $state<Map<number, string>>(new Map());
     let tezosDerivedAddresses = $state<DerivedTezosAddress[]>([]);
+
+    // Cosmos state
+    let cosmosAccounts = $state<CosmosAccount[]>([]);
+    let cosmosNewAddress = $state("");
+    let cosmosNewLabel = $state("");
+    let cosmosAddingAccount = $state(false);
+    const cosmosBusy = $derived(taskQueue.isActive("cosmos-sync"));
+    let cosmosPrivateKeyAck = $state(false);
+    let cosmosDeriveCount = $state(5);
+    let cosmosSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let cosmosItemLabels = $state<Map<number, string>>(new Map());
+    let cosmosDerivedAddresses = $state<DerivedCosmosAddress[]>([]);
+
+    // Polkadot state
+    let polkadotAccounts = $state<PolkadotAccount[]>([]);
+    let polkadotNewAddress = $state("");
+    let polkadotNewLabel = $state("");
+    let polkadotAddingAccount = $state(false);
+    const polkadotBusy = $derived(taskQueue.isActive("polkadot-sync"));
+    let polkadotPrivateKeyAck = $state(false);
+    let polkadotDeriveCount = $state(5);
+    let polkadotSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let polkadotItemLabels = $state<Map<number, string>>(new Map());
+    let polkadotDerivedAddresses = $state<DerivedPolkadotAddress[]>([]);
 
     // Solana state
     let solAccounts = $state<SolanaAccount[]>([]);
@@ -702,6 +756,40 @@
             const firstUnknown = results.find(a => !existingTezosAddresses.has(a.address));
             tezosSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
         } catch { tezosDerivedAddresses = []; }
+    });
+
+    // Cosmos detection and derivation
+    const cosmosDetection = $derived.by(() => detectCosmosInputType(cosmosNewAddress.trim()));
+    const existingCosmosAddresses = $derived(new Set(cosmosAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = cosmosDetection;
+        if (det.input_type !== "seed" || !cosmosPrivateKeyAck || !cosmosNewAddress.trim()) {
+            cosmosDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveCosmosAddresses(cosmosNewAddress.trim(), cosmosDeriveCount);
+            cosmosDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingCosmosAddresses.has(a.address));
+            cosmosSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { cosmosDerivedAddresses = []; }
+    });
+
+    // Polkadot detection and derivation
+    const polkadotDetection = $derived.by(() => detectPolkadotInputType(polkadotNewAddress.trim()));
+    const existingPolkadotAddresses = $derived(new Set(polkadotAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = polkadotDetection;
+        if (det.input_type !== "seed" || !polkadotPrivateKeyAck || !polkadotNewAddress.trim()) {
+            polkadotDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = derivePolkadotAddresses(polkadotNewAddress.trim(), polkadotDeriveCount);
+            polkadotDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingPolkadotAddresses.has(a.address));
+            polkadotSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { polkadotDerivedAddresses = []; }
     });
 
     // Async derivation of multi-index xpubs from seed phrase
@@ -1716,7 +1804,269 @@
         }
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy || tonBusy || tezosBusy);
+    // -- Cosmos functions --
+
+    function startAddCosmos(prefillAddress?: string) {
+        addSourceMode = "cosmos";
+        if (prefillAddress) cosmosNewAddress = prefillAddress;
+    }
+
+    async function loadCosmosAccounts() {
+        try {
+            cosmosAccounts = await getBackend().listCosmosAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Cosmos accounts: ${err}`);
+        }
+    }
+
+    async function handleAddCosmosAccount() {
+        const input = cosmosNewAddress.trim();
+        const baseLabel = cosmosNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        cosmosAddingAccount = true;
+        try {
+            // Multi-index path: seed phrase with derived addresses
+            if (cosmosDerivedAddresses.length > 0) {
+                if (cosmosSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = cosmosDerivedAddresses
+                    .filter(a => cosmosSelectedIndexes.has(a.index))
+                    .filter(a => !existingCosmosAddresses.has(a.address));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                cosmosNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = cosmosItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 12)}...${address.slice(-4)}`);
+                    await getBackend().addCosmosAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                cosmosNewLabel = "";
+                cosmosPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadCosmosAccounts();
+                toast.success(`${selected.length} Cosmos address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input;
+            if (!/^cosmos1[02-9ac-hj-np-z]{38}$/.test(address)) {
+                toast.error("Invalid Cosmos address (expected cosmos1... format)");
+                return;
+            }
+
+            const existing = cosmosAccounts.find(a => a.address === address);
+            if (existing) {
+                toast.info("This address is already tracked on Cosmos");
+                return;
+            }
+
+            await getBackend().addCosmosAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 12)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            cosmosNewAddress = "";
+            cosmosNewLabel = "";
+            addSourceMode = "idle";
+            await loadCosmosAccounts();
+            toast.success("Cosmos account added");
+        } catch (err) {
+            toast.error(`Failed to add Cosmos account: ${err}`);
+        } finally {
+            cosmosAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveCosmosAccount(id: string) {
+        try {
+            await getBackend().removeCosmosAccount(id);
+            await loadCosmosAccounts();
+            toast.success("Cosmos account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncCosmosAccount(account: CosmosAccount) {
+        taskQueue.enqueue({
+            key: `cosmos-sync:${account.id}`,
+            label: `Sync ${account.label} (Cosmos)`,
+            async run(ctx) {
+                const r = await getBackend().syncCosmos(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadCosmosAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllCosmos() {
+        for (const account of cosmosAccounts) {
+            syncCosmosAccount(account);
+        }
+    }
+
+    // -- Polkadot functions --
+
+    function startAddPolkadot(prefillAddress?: string) {
+        addSourceMode = "polkadot";
+        if (prefillAddress) polkadotNewAddress = prefillAddress;
+    }
+
+    async function loadPolkadotAccounts() {
+        try {
+            polkadotAccounts = await getBackend().listPolkadotAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Polkadot accounts: ${err}`);
+        }
+    }
+
+    async function handleAddPolkadotAccount() {
+        const input = polkadotNewAddress.trim();
+        const baseLabel = polkadotNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        polkadotAddingAccount = true;
+        try {
+            // Multi-index path: seed phrase with derived addresses
+            if (polkadotDerivedAddresses.length > 0) {
+                if (polkadotSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = polkadotDerivedAddresses
+                    .filter(a => polkadotSelectedIndexes.has(a.index))
+                    .filter(a => !existingPolkadotAddresses.has(a.address));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                polkadotNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = polkadotItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addPolkadotAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                polkadotNewLabel = "";
+                polkadotPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadPolkadotAccounts();
+                toast.success(`${selected.length} Polkadot address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input;
+            if (!/^1[1-9A-HJ-NP-Za-km-z]{45,47}$/.test(address)) {
+                toast.error("Invalid Polkadot address (expected 1... format, 46-48 chars)");
+                return;
+            }
+
+            const existing = polkadotAccounts.find(a => a.address === address);
+            if (existing) {
+                toast.info("This address is already tracked on Polkadot");
+                return;
+            }
+
+            await getBackend().addPolkadotAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            polkadotNewAddress = "";
+            polkadotNewLabel = "";
+            addSourceMode = "idle";
+            await loadPolkadotAccounts();
+            toast.success("Polkadot account added");
+        } catch (err) {
+            toast.error(`Failed to add Polkadot account: ${err}`);
+        } finally {
+            polkadotAddingAccount = false;
+        }
+    }
+
+    async function handleRemovePolkadotAccount(id: string) {
+        try {
+            await getBackend().removePolkadotAccount(id);
+            await loadPolkadotAccounts();
+            toast.success("Polkadot account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncPolkadotAccount(account: PolkadotAccount) {
+        taskQueue.enqueue({
+            key: `polkadot-sync:${account.id}`,
+            label: `Sync ${account.label} (Polkadot)`,
+            async run(ctx) {
+                const r = await getBackend().syncPolkadot(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadPolkadotAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllPolkadot() {
+        for (const account of polkadotAccounts) {
+            syncPolkadotAccount(account);
+        }
+    }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy || tonBusy || tezosBusy || cosmosBusy || polkadotBusy);
 
     async function loadCexAccounts() {
         try {
@@ -1881,6 +2231,8 @@
         loadAptosAccounts();
         loadTonAccounts();
         loadTezosAccounts();
+        loadCosmosAccounts();
+        loadPolkadotAccounts();
     });
 
     // -- Etherscan handlers --
@@ -2391,6 +2743,8 @@
                     onSelectAptos={startAddAptos}
                     onSelectTon={startAddTon}
                     onSelectTezos={startAddTezos}
+                    onSelectCosmos={startAddCosmos}
+                    onSelectPolkadot={startAddPolkadot}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -3330,6 +3684,194 @@
                 </div>
             {/if}
 
+            {#if addSourceMode === "cosmos"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Cosmos Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Cosmos address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-cosmos-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-cosmos-address"
+                                placeholder="cosmos1..."
+                                autocomplete="off"
+                                bind:value={cosmosNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-cosmos-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-cosmos-label" placeholder="My Cosmos Wallet" bind:value={cosmosNewLabel} />
+                        </div>
+                        <Button onclick={handleAddCosmosAccount} disabled={cosmosAddingAccount || (!cosmosNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if cosmosDetection.input_type !== "unknown" && cosmosNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if cosmosDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{cosmosDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{cosmosDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if cosmosDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={cosmosPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if cosmosDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each cosmosDerivedAddresses as derived}
+                                {@const exists = existingCosmosAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={cosmosSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(cosmosSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            cosmosSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={cosmosItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(cosmosItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); cosmosItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: cosmosSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { cosmosDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "polkadot"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Polkadot Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Polkadot address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-polkadot-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-polkadot-address"
+                                placeholder="1..."
+                                autocomplete="off"
+                                bind:value={polkadotNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-polkadot-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-polkadot-label" placeholder="My Polkadot Wallet" bind:value={polkadotNewLabel} />
+                        </div>
+                        <Button onclick={handleAddPolkadotAccount} disabled={polkadotAddingAccount || (!polkadotNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if polkadotDetection.input_type !== "unknown" && polkadotNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if polkadotDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{polkadotDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{polkadotDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if polkadotDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={polkadotPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if polkadotDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each polkadotDerivedAddresses as derived}
+                                {@const exists = existingPolkadotAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={polkadotSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(polkadotSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            polkadotSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={polkadotItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(polkadotItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); polkadotItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: polkadotSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { polkadotDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
             <!-- Blockchain Accounts sub-section (merged BTC + EVM + SOL) -->
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
@@ -3776,6 +4318,126 @@
                                                     size="sm"
                                                     onclick={() => handleRemoveTezosAccount(tezosAccount.id)}
                                                     disabled={tezosBusy || editingRowId === tezosAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "cosmos"}
+                                    {@const cosmosAccount = row.data}
+                                    {@const isCosmosSyncing = taskQueue.isActive(`cosmos-sync:${cosmosAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {cosmosAccount.address.slice(0, 12)}...{cosmosAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{cosmosAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(cosmosAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === cosmosAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("cosmos"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {cosmosAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Cosmos</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Cosmos</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {cosmosAccount.last_sync
+                                                ? new Date(cosmosAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncCosmosAccount(cosmosAccount)}
+                                                    disabled={cosmosBusy || editingRowId === cosmosAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isCosmosSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === cosmosAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === cosmosAccount.id ? (editingRowId = null) : startEditLabel(cosmosAccount.id, cosmosAccount.label)} disabled={cosmosBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveCosmosAccount(cosmosAccount.id)}
+                                                    disabled={cosmosBusy || editingRowId === cosmosAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "polkadot"}
+                                    {@const polkadotAccount = row.data}
+                                    {@const isPolkadotSyncing = taskQueue.isActive(`polkadot-sync:${polkadotAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {polkadotAccount.address.slice(0, 8)}...{polkadotAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{polkadotAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(polkadotAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === polkadotAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("polkadot"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {polkadotAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Polkadot</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Polkadot</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {polkadotAccount.last_sync
+                                                ? new Date(polkadotAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncPolkadotAccount(polkadotAccount)}
+                                                    disabled={polkadotBusy || editingRowId === polkadotAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isPolkadotSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === polkadotAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === polkadotAccount.id ? (editingRowId = null) : startEditLabel(polkadotAccount.id, polkadotAccount.label)} disabled={polkadotBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemovePolkadotAccount(polkadotAccount.id)}
+                                                    disabled={polkadotBusy || editingRowId === polkadotAccount.id}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>

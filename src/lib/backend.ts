@@ -26,6 +26,8 @@ import type { SuiAccount, SuiSyncResult } from "./sui/types.js";
 import type { AptosAccount, AptosSyncResult } from "./aptos/types.js";
 import type { TonAccount, TonSyncResult } from "./ton/types.js";
 import type { TezosAccount, TezosSyncResult } from "./tezos/types.js";
+import type { CosmosAccount, CosmosSyncResult } from "./cosmos/types.js";
+import type { PolkadotAccount, PolkadotSyncResult } from "./polkadot/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -218,6 +220,22 @@ export interface Backend {
   updateTezosAccountLabel(id: string, label: string): Promise<void>;
   updateTezosSyncCursor(id: string, lastId: number): Promise<void>;
   syncTezos(account: TezosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TezosSyncResult>;
+
+  // Cosmos
+  listCosmosAccounts(): Promise<CosmosAccount[]>;
+  addCosmosAccount(account: Omit<CosmosAccount, "last_sync" | "last_offset">): Promise<void>;
+  removeCosmosAccount(id: string): Promise<void>;
+  updateCosmosAccountLabel(id: string, label: string): Promise<void>;
+  updateCosmosSyncOffset(id: string, offset: number): Promise<void>;
+  syncCosmos(account: CosmosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<CosmosSyncResult>;
+
+  // Polkadot
+  listPolkadotAccounts(): Promise<PolkadotAccount[]>;
+  addPolkadotAccount(account: Omit<PolkadotAccount, "last_sync" | "last_page">): Promise<void>;
+  removePolkadotAccount(id: string): Promise<void>;
+  updatePolkadotAccountLabel(id: string, label: string): Promise<void>;
+  updatePolkadotSyncPage(id: string, page: number): Promise<void>;
+  syncPolkadot(account: PolkadotAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<PolkadotSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -726,6 +744,28 @@ class TauriBackend implements Backend {
   async syncTezos(account: TezosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TezosSyncResult> {
     const { syncTezosAccount } = await import("./tezos/sync.js");
     return syncTezosAccount(this, account, onProgress, signal);
+  }
+
+  // Cosmos
+  async listCosmosAccounts(): Promise<CosmosAccount[]> { return this.invoke("list_cosmos_accounts"); }
+  async addCosmosAccount(account: Omit<CosmosAccount, "last_sync" | "last_offset">): Promise<void> { return this.invoke("add_cosmos_account", { account }); }
+  async removeCosmosAccount(id: string): Promise<void> { return this.invoke("remove_cosmos_account", { id }); }
+  async updateCosmosAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_cosmos_account_label", { id, label }); }
+  async updateCosmosSyncOffset(id: string, offset: number): Promise<void> { return this.invoke("update_cosmos_sync_offset", { id, offset }); }
+  async syncCosmos(account: CosmosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<CosmosSyncResult> {
+    const { syncCosmosAccount } = await import("./cosmos/sync.js");
+    return syncCosmosAccount(this, account, onProgress, signal);
+  }
+
+  // Polkadot
+  async listPolkadotAccounts(): Promise<PolkadotAccount[]> { return this.invoke("list_polkadot_accounts"); }
+  async addPolkadotAccount(account: Omit<PolkadotAccount, "last_sync" | "last_page">): Promise<void> { return this.invoke("add_polkadot_account", { account }); }
+  async removePolkadotAccount(id: string): Promise<void> { return this.invoke("remove_polkadot_account", { id }); }
+  async updatePolkadotAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_polkadot_account_label", { id, label }); }
+  async updatePolkadotSyncPage(id: string, page: number): Promise<void> { return this.invoke("update_polkadot_sync_page", { id, page }); }
+  async syncPolkadot(account: PolkadotAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<PolkadotSyncResult> {
+    const { syncPolkadotAccount } = await import("./polkadot/sync.js");
+    return syncPolkadotAccount(this, account, onProgress, signal);
   }
 
   // Exchange accounts (CEX)

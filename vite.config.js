@@ -113,6 +113,16 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/tezos/, ''),
       },
+      '/api/cosmos': {
+        target: 'https://lcd-cosmoshub.keplr.app',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cosmos/, ''),
+      },
+      '/api/polkadot': {
+        target: 'https://polkadot.api.subscan.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/polkadot/, ''),
+      },
     },
   },
 }));

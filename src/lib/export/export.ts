@@ -52,7 +52,7 @@ export async function exportData(
 	const exchangeRates = await backend.listExchangeRates();
 
 	onProgress?.("Gathering sources...");
-	const [ethAccounts, btcAccounts, solAccounts, hlAccounts, suiAccounts, aptosAccounts, tonAccounts, tezosAccounts, cexAccounts] = await Promise.all([
+	const [ethAccounts, btcAccounts, solAccounts, hlAccounts, suiAccounts, aptosAccounts, tonAccounts, tezosAccounts, cosmosAccounts, polkadotAccounts, cexAccounts] = await Promise.all([
 		backend.listEtherscanAccounts(),
 		backend.listBitcoinAccounts(),
 		backend.listSolanaAccounts(),
@@ -61,6 +61,8 @@ export async function exportData(
 		backend.listAptosAccounts(),
 		backend.listTonAccounts(),
 		backend.listTezosAccounts(),
+		backend.listCosmosAccounts(),
+		backend.listPolkadotAccounts(),
 		backend.listExchangeAccounts(),
 	]);
 
@@ -73,6 +75,8 @@ export async function exportData(
 		aptos: aptosAccounts,
 		ton: tonAccounts,
 		tezos: tezosAccounts,
+		cosmos: cosmosAccounts,
+		polkadot: polkadotAccounts,
 		cex: cexAccounts.map(a => ({
 			...a,
 			api_key: options.includeApiKeys ? a.api_key : "***",

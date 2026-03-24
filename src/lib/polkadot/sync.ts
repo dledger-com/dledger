@@ -1,0 +1,259 @@
+// Polkadot sync — fetch transfers and rewards via Subscan and create journal entries.
+
+import { v7 as uuidv7 } from "uuid";
+import Decimal from "decimal.js-light";
+import type { Backend } from "../backend.js";
+import type { Account, JournalEntry, LineItem } from "../types/index.js";
+import { renderDescription, onchainTransferDescription, rewardDescription } from "../types/description-data.js";
+import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
+import { invalidate } from "../data/invalidation.js";
+import { fetchTransfers, fetchRewards } from "./api.js";
+import type { PolkadotAccount, PolkadotSyncResult, SubscanTransfer, SubscanReward } from "./types.js";
+
+const CHAIN = "Polkadot";
+const DOT_DECIMALS = 10; // 1 DOT = 10^10 Plancks
+const STAKING_INCOME_ACCOUNT = "Income:Crypto:Staking:Polkadot";
+const STAKING_EXPENSE_ACCOUNT = "Expenses:Crypto:Staking:Polkadot";
+
+function plancksToDot(plancks: string): string {
+	return new Decimal(plancks).div(new Decimal(10).pow(DOT_DECIMALS)).toFixed();
+}
+
+function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+}
+
+export async function syncPolkadotAccount(
+	backend: Backend,
+	account: PolkadotAccount,
+	onProgress?: (msg: string) => void,
+	signal?: AbortSignal,
+): Promise<PolkadotSyncResult> {
+	const result: PolkadotSyncResult = {
+		transactions_imported: 0,
+		transactions_skipped: 0,
+		accounts_created: 0,
+		warnings: [],
+	};
+
+	// 1. Fetch transfers and rewards
+	onProgress?.("Fetching transfers...");
+	const transfers = await fetchTransfers(account.address, account.last_page ?? undefined, signal);
+
+	onProgress?.("Fetching rewards...");
+	const rewards = await fetchRewards(account.address, undefined, signal);
+
+	if (transfers.length === 0 && rewards.length === 0) {
+		onProgress?.("No new activities found.");
+		return result;
+	}
+
+	onProgress?.(`Found ${transfers.length} transfers and ${rewards.length} rewards.`);
+
+	// 2. Build caches
+	const currencySet = new Set((await backend.listCurrencies()).map(c => c.code));
+	const accountMap = new Map<string, Account>();
+	for (const acc of await backend.listAccounts()) accountMap.set(acc.full_name, acc);
+	const existingSources = new Set<string>();
+	for (const [e] of await backend.queryJournalEntries({})) {
+		if (e.source.startsWith("polkadot:")) existingSources.add(e.source);
+	}
+
+	async function ensureCurrency(code: string): Promise<void> {
+		if (currencySet.has(code)) return;
+		await backend.createCurrency({ code, asset_type: "", param: "", name: code, decimal_places: 10, is_base: false });
+		currencySet.add(code);
+	}
+
+	function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {
+		const first = fullName.split(":")[0];
+		switch (first) {
+			case "Assets": return "asset";
+			case "Liabilities": return "liability";
+			case "Equity": return "equity";
+			case "Income": return "revenue";
+			case "Expenses": return "expense";
+			default: return "expense";
+		}
+	}
+
+	async function ensureAccount(fullName: string, date: string): Promise<string> {
+		const existing = accountMap.get(fullName);
+		if (existing) return existing.id;
+		const parts = fullName.split(":");
+		let parentId: string | null = null;
+		for (let depth = 1; depth < parts.length; depth++) {
+			const ancestorName = parts.slice(0, depth).join(":");
+			const ancestor = accountMap.get(ancestorName);
+			if (ancestor) { parentId = ancestor.id; } else {
+				const id = uuidv7();
+				const acc: Account = { id, parent_id: parentId, account_type: inferAccountType(fullName), name: parts[depth - 1], full_name: ancestorName, allowed_currencies: [], is_postable: true, is_archived: false, created_at: date };
+				await backend.createAccount(acc);
+				accountMap.set(ancestorName, acc);
+				result.accounts_created++;
+				parentId = id;
+			}
+		}
+		const id = uuidv7();
+		const acc: Account = { id, parent_id: parentId, account_type: inferAccountType(fullName), name: parts[parts.length - 1], full_name: fullName, allowed_currencies: [], is_postable: true, is_archived: false, created_at: date };
+		await backend.createAccount(acc);
+		accountMap.set(fullName, acc);
+		result.accounts_created++;
+		return id;
+	}
+
+	await ensureCurrency("DOT");
+
+	// 3. Process transfers
+	let maxPage = account.last_page ?? 0;
+
+	for (const tx of transfers) {
+		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+		if (!tx.success) {
+			result.transactions_skipped++;
+			continue;
+		}
+
+		const source = `polkadot:xfer:${tx.extrinsic_index}`;
+		if (existingSources.has(source)) {
+			result.transactions_skipped++;
+			continue;
+		}
+
+		// Store raw
+		try { await backend.storeRawTransaction(source, JSON.stringify(tx)); } catch { /* may exist */ }
+
+		const date = new Date(tx.block_timestamp * 1000).toISOString().slice(0, 10);
+		const amount = plancksToDot(tx.amount);
+		const fee = plancksToDot(tx.fee);
+
+		const isSender = tx.from.toLowerCase() === account.address.toLowerCase();
+		const isReceiver = tx.to.toLowerCase() === account.address.toLowerCase();
+		const direction: "sent" | "received" | "self" = isSender && isReceiver ? "self" : isSender ? "sent" : "received";
+		const counterparty = isSender ? tx.to : tx.from;
+
+		const lineItemData: Array<{ account: string; currency: string; amount: string }> = [];
+
+		if (direction === "sent") {
+			lineItemData.push(
+				{ account: walletAssets(CHAIN, account.label), currency: "DOT", amount: new Decimal(amount).neg().toFixed() },
+				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "DOT", amount: amount },
+			);
+		} else if (direction === "received") {
+			lineItemData.push(
+				{ account: walletAssets(CHAIN, account.label), currency: "DOT", amount: amount },
+				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "DOT", amount: new Decimal(amount).neg().toFixed() },
+			);
+		} else {
+			// self-transfer — only fees matter
+			lineItemData.push(
+				{ account: walletAssets(CHAIN, account.label), currency: "DOT", amount: "0" },
+				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "DOT", amount: "0" },
+			);
+		}
+
+		// Fee (charged to sender)
+		if (isSender && new Decimal(fee).gt(0)) {
+			lineItemData.push(
+				{ account: chainFees(CHAIN), currency: "DOT", amount: fee },
+				{ account: walletAssets(CHAIN, account.label), currency: "DOT", amount: new Decimal(fee).neg().toFixed() },
+			);
+		}
+
+		const descData = onchainTransferDescription(CHAIN, "DOT", direction, { txHash: tx.hash });
+		const description = renderDescription(descData);
+
+		const entryId = uuidv7();
+		const entry: JournalEntry = {
+			id: entryId, date, description,
+			description_data: JSON.stringify(descData),
+			status: "confirmed", source, voided_by: null, created_at: date,
+		};
+
+		const lineItems: LineItem[] = [];
+		for (const item of lineItemData) {
+			const accountId = await ensureAccount(item.account, date);
+			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
+		}
+
+		try {
+			await backend.postJournalEntry(entry, lineItems);
+			existingSources.add(source);
+			result.transactions_imported++;
+		} catch (e) {
+			result.warnings.push(`post ${source}: ${e instanceof Error ? e.message : String(e)}`);
+		}
+
+		// Track max page from extrinsic_index
+		const pageNum = parseInt(tx.extrinsic_index.split("-")[0], 10);
+		if (!isNaN(pageNum) && pageNum > maxPage) maxPage = pageNum;
+	}
+
+	// 4. Process rewards
+	for (const reward of rewards) {
+		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+		const source = `polkadot:reward:${reward.event_index}`;
+		if (existingSources.has(source)) {
+			result.transactions_skipped++;
+			continue;
+		}
+
+		// Store raw
+		try { await backend.storeRawTransaction(source, JSON.stringify(reward)); } catch { /* may exist */ }
+
+		const date = new Date(reward.block_timestamp * 1000).toISOString().slice(0, 10);
+		const amount = plancksToDot(reward.amount);
+
+		const isReward = reward.event_id === "Rewarded";
+		const lineItemData: Array<{ account: string; currency: string; amount: string }> = [];
+
+		if (isReward) {
+			// Staking reward: income
+			lineItemData.push(
+				{ account: walletAssets(CHAIN, account.label), currency: "DOT", amount: amount },
+				{ account: STAKING_INCOME_ACCOUNT, currency: "DOT", amount: new Decimal(amount).neg().toFixed() },
+			);
+		} else {
+			// Slashed: expense/loss
+			lineItemData.push(
+				{ account: walletAssets(CHAIN, account.label), currency: "DOT", amount: new Decimal(amount).neg().toFixed() },
+				{ account: STAKING_EXPENSE_ACCOUNT, currency: "DOT", amount: amount },
+			);
+		}
+
+		const descData = rewardDescription(CHAIN, "staking", "DOT");
+		const description = renderDescription(descData);
+
+		const entryId = uuidv7();
+		const entry: JournalEntry = {
+			id: entryId, date, description,
+			description_data: JSON.stringify(descData),
+			status: "confirmed", source, voided_by: null, created_at: date,
+		};
+
+		const lineItems: LineItem[] = [];
+		for (const item of lineItemData) {
+			const accountId = await ensureAccount(item.account, date);
+			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
+		}
+
+		try {
+			await backend.postJournalEntry(entry, lineItems);
+			existingSources.add(source);
+			result.transactions_imported++;
+		} catch (e) {
+			result.warnings.push(`post ${source}: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+
+	// 5. Update page cursor
+	if (maxPage > (account.last_page ?? 0)) {
+		await backend.updatePolkadotSyncPage(account.id, maxPage);
+	}
+
+	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);
+	invalidate("journal", "accounts", "reports");
+	return result;
+}

@@ -559,7 +559,21 @@ export class SqlJsBackend implements Backend {
       created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tezos_account_address ON tezos_account(address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (27)");
+    // Cosmos (v28)
+    db.exec(`CREATE TABLE IF NOT EXISTS cosmos_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_offset INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cosmos_account_address ON cosmos_account(address)");
+    // Polkadot (v28)
+    db.exec(`CREATE TABLE IF NOT EXISTS polkadot_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_page INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_polkadot_account_address ON polkadot_account(address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (28)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1079,6 +1093,28 @@ PRAGMA foreign_keys = ON;
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tezos_account_address ON tezos_account(address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (27)");
+        }
+        if (currentVersion < 28) {
+          db.exec(`CREATE TABLE IF NOT EXISTS cosmos_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_offset INTEGER,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cosmos_account_address ON cosmos_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS polkadot_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_page INTEGER,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_polkadot_account_address ON polkadot_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (28)");
         }
       }
     }
@@ -4467,6 +4503,114 @@ PRAGMA foreign_keys = ON;
     }
   }
 
+  // ---- Cosmos accounts ----
+
+  async listCosmosAccounts(): Promise<import("./cosmos/types.js").CosmosAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_offset, last_sync, created_at FROM cosmos_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_offset: (row.last_offset as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addCosmosAccount(account: Omit<import("./cosmos/types.js").CosmosAccount, "last_sync" | "last_offset">): Promise<void> {
+    this.run(
+      `INSERT INTO cosmos_account (id, address, label, last_offset, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateCosmosAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE cosmos_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeCosmosAccount(id: string): Promise<void> {
+    this.run("DELETE FROM cosmos_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateCosmosSyncOffset(id: string, offset: number): Promise<void> {
+    this.run("UPDATE cosmos_account SET last_offset = ?, last_sync = ? WHERE id = ?", [offset, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncCosmos(
+    account: import("./cosmos/types.js").CosmosAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./cosmos/types.js").CosmosSyncResult> {
+    const { syncCosmosAccount } = await import("./cosmos/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncCosmosAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Polkadot accounts ----
+
+  async listPolkadotAccounts(): Promise<import("./polkadot/types.js").PolkadotAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_page, last_sync, created_at FROM polkadot_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_page: (row.last_page as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addPolkadotAccount(account: Omit<import("./polkadot/types.js").PolkadotAccount, "last_sync" | "last_page">): Promise<void> {
+    this.run(
+      `INSERT INTO polkadot_account (id, address, label, last_page, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updatePolkadotAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE polkadot_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removePolkadotAccount(id: string): Promise<void> {
+    this.run("DELETE FROM polkadot_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updatePolkadotSyncPage(id: string, page: number): Promise<void> {
+    this.run("UPDATE polkadot_account SET last_page = ?, last_sync = ? WHERE id = ?", [page, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncPolkadot(
+    account: import("./polkadot/types.js").PolkadotAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./polkadot/types.js").PolkadotSyncResult> {
+    const { syncPolkadotAccount } = await import("./polkadot/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncPolkadotAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   // ---- Exchange accounts (CEX) ----
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
@@ -4911,6 +5055,8 @@ PRAGMA foreign_keys = ON;
     try { this.db.exec("UPDATE aptos_account SET last_version = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE ton_account SET last_lt = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE tezos_account SET last_id = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE cosmos_account SET last_offset = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE polkadot_account SET last_page = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }
