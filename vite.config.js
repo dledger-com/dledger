@@ -123,6 +123,71 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/polkadot/, ''),
       },
+      '/api/doge': {
+        target: 'https://api.blockcypher.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/doge/, ''),
+      },
+      '/api/ltc': {
+        target: 'https://litecoinspace.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ltc/, ''),
+      },
+      '/api/bch': {
+        target: 'https://api.blockchair.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bch/, ''),
+      },
+      '/api/xrp': {
+        target: 'https://xrplcluster.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/xrp/, ''),
+      },
+      '/api/tron': {
+        target: 'https://api.trongrid.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/tron/, ''),
+      },
+      '/api/stellar': {
+        target: 'https://horizon.stellar.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/stellar/, ''),
+      },
+      '/api/bittensor': {
+        target: 'https://bittensor.api.subscan.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bittensor/, ''),
+      },
+      '/api/hedera': {
+        target: 'https://mainnet-public.mirrornode.hedera.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/hedera/, ''),
+      },
+      '/api/near': {
+        target: 'https://api.nearblocks.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/near/, ''),
+      },
+      '/api/algorand': {
+        target: 'https://mainnet-idx.algonode.cloud',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/algorand/, ''),
+      },
+      '/api/kaspa': {
+        target: 'https://api.kaspa.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/kaspa/, ''),
+      },
+      '/api/zcash': {
+        target: 'https://api.blockchair.com/zcash',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/zcash/, ''),
+      },
+      '/api/stacks': {
+        target: 'https://api.hiro.so',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/stacks/, ''),
+      },
     },
   },
 }));

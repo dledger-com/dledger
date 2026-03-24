@@ -18,6 +18,19 @@
     onSelectTezos,
     onSelectCosmos,
     onSelectPolkadot,
+    onSelectDoge,
+    onSelectLtc,
+    onSelectBch,
+    onSelectXrp,
+    onSelectTron,
+    onSelectStellar,
+    onSelectBittensor,
+    onSelectHedera,
+    onSelectNear,
+    onSelectAlgorand,
+    onSelectKaspa,
+    onSelectZcash,
+    onSelectStacks,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -31,6 +44,19 @@
     onSelectTezos?: (prefillAddress?: string) => void;
     onSelectCosmos?: (prefillAddress?: string) => void;
     onSelectPolkadot?: (prefillAddress?: string) => void;
+    onSelectDoge?: (prefillAddress?: string) => void;
+    onSelectLtc?: (prefillAddress?: string) => void;
+    onSelectBch?: (prefillAddress?: string) => void;
+    onSelectXrp?: (prefillAddress?: string) => void;
+    onSelectTron?: (prefillAddress?: string) => void;
+    onSelectStellar?: (prefillAddress?: string) => void;
+    onSelectBittensor?: (prefillAddress?: string) => void;
+    onSelectHedera?: (prefillAddress?: string) => void;
+    onSelectNear?: (prefillAddress?: string) => void;
+    onSelectAlgorand?: (prefillAddress?: string) => void;
+    onSelectKaspa?: (prefillAddress?: string) => void;
+    onSelectZcash?: (prefillAddress?: string) => void;
+    onSelectStacks?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -90,6 +116,56 @@
   const detectedPolkadotAddress = $derived.by(() => {
     const s = search.trim();
     return /^1[1-9A-HJ-NP-Za-km-z]{45,47}$/.test(s) ? s : null;
+  });
+
+  const detectedDogeAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^D[5-9A-HJ-NP-U][1-9A-HJ-NP-Za-km-z]{32}$/.test(s) ? s : null;
+  });
+
+  const detectedXrpAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(s) ? s : null;
+  });
+
+  const detectedTronAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(s) ? s : null;
+  });
+
+  const detectedStellarAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^G[A-Z2-7]{55}$/.test(s) ? s : null;
+  });
+
+  const detectedHederaAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^0\.0\.\d+$/.test(s) ? s : null;
+  });
+
+  const detectedAlgorandAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^[A-Z2-7]{58}$/.test(s) ? s : null;
+  });
+
+  const detectedKaspaAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^kaspa:[a-z0-9]{61,63}$/.test(s) ? s : null;
+  });
+
+  const detectedZcashAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^t[13][a-km-zA-HJ-NP-Z1-9]{33}$/.test(s) ? s : null;
+  });
+
+  const detectedStacksAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^SP[0-9A-Z]{28,38}$/.test(s) ? s : null;
+  });
+
+  const detectedBchAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^(bitcoincash:)?[qp][a-z0-9]{41}$/.test(s) ? s : null;
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -163,6 +239,84 @@
     open = false;
     search = "";
     onSelectPolkadot?.(prefillAddress);
+  }
+
+  function selectDoge(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectDoge?.(prefillAddress);
+  }
+
+  function selectLtc(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectLtc?.(prefillAddress);
+  }
+
+  function selectBch(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectBch?.(prefillAddress);
+  }
+
+  function selectXrp(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectXrp?.(prefillAddress);
+  }
+
+  function selectTron(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectTron?.(prefillAddress);
+  }
+
+  function selectStellar(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectStellar?.(prefillAddress);
+  }
+
+  function selectBittensor(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectBittensor?.(prefillAddress);
+  }
+
+  function selectHedera(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectHedera?.(prefillAddress);
+  }
+
+  function selectNear(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectNear?.(prefillAddress);
+  }
+
+  function selectAlgorand(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectAlgorand?.(prefillAddress);
+  }
+
+  function selectKaspa(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectKaspa?.(prefillAddress);
+  }
+
+  function selectZcash(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectZcash?.(prefillAddress);
+  }
+
+  function selectStacks(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectStacks?.(prefillAddress);
   }
 </script>
 
@@ -276,93 +430,188 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#if detectedDogeAddress}
+          <Command.Group heading="Detected Dogecoin Address">
+            <Command.Item value="detected-doge-{detectedDogeAddress}" keywords={["dogecoin", "doge"]} onSelect={() => selectDoge(detectedDogeAddress)} class="font-mono text-xs">
+              Add {detectedDogeAddress.slice(0, 8)}...{detectedDogeAddress.slice(-4)} as Dogecoin address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedXrpAddress}
+          <Command.Group heading="Detected XRP Address">
+            <Command.Item value="detected-xrp-{detectedXrpAddress}" keywords={["xrp", "ripple"]} onSelect={() => selectXrp(detectedXrpAddress)} class="font-mono text-xs">
+              Add {detectedXrpAddress.slice(0, 8)}...{detectedXrpAddress.slice(-4)} as XRP address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedTronAddress}
+          <Command.Group heading="Detected TRON Address">
+            <Command.Item value="detected-tron-{detectedTronAddress}" keywords={["tron", "trx"]} onSelect={() => selectTron(detectedTronAddress)} class="font-mono text-xs">
+              Add {detectedTronAddress.slice(0, 8)}...{detectedTronAddress.slice(-4)} as TRON address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedStellarAddress}
+          <Command.Group heading="Detected Stellar Address">
+            <Command.Item value="detected-stellar-{detectedStellarAddress}" keywords={["stellar", "xlm"]} onSelect={() => selectStellar(detectedStellarAddress)} class="font-mono text-xs">
+              Add {detectedStellarAddress.slice(0, 8)}...{detectedStellarAddress.slice(-4)} as Stellar address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedHederaAddress}
+          <Command.Group heading="Detected Hedera Address">
+            <Command.Item value="detected-hedera-{detectedHederaAddress}" keywords={["hedera", "hbar"]} onSelect={() => selectHedera(detectedHederaAddress)} class="font-mono text-xs">
+              Add {detectedHederaAddress} as Hedera account
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedAlgorandAddress}
+          <Command.Group heading="Detected Algorand Address">
+            <Command.Item value="detected-algorand-{detectedAlgorandAddress}" keywords={["algorand", "algo"]} onSelect={() => selectAlgorand(detectedAlgorandAddress)} class="font-mono text-xs">
+              Add {detectedAlgorandAddress.slice(0, 8)}...{detectedAlgorandAddress.slice(-4)} as Algorand address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedKaspaAddress}
+          <Command.Group heading="Detected Kaspa Address">
+            <Command.Item value="detected-kaspa-{detectedKaspaAddress}" keywords={["kaspa", "kas"]} onSelect={() => selectKaspa(detectedKaspaAddress)} class="font-mono text-xs">
+              Add {detectedKaspaAddress.slice(0, 12)}...{detectedKaspaAddress.slice(-4)} as Kaspa address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedZcashAddress}
+          <Command.Group heading="Detected Zcash Address">
+            <Command.Item value="detected-zcash-{detectedZcashAddress}" keywords={["zcash", "zec"]} onSelect={() => selectZcash(detectedZcashAddress)} class="font-mono text-xs">
+              Add {detectedZcashAddress.slice(0, 8)}...{detectedZcashAddress.slice(-4)} as Zcash address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedStacksAddress}
+          <Command.Group heading="Detected Stacks Address">
+            <Command.Item value="detected-stacks-{detectedStacksAddress}" keywords={["stacks", "stx"]} onSelect={() => selectStacks(detectedStacksAddress)} class="font-mono text-xs">
+              Add {detectedStacksAddress.slice(0, 8)}...{detectedStacksAddress.slice(-4)} as Stacks address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedBchAddress}
+          <Command.Group heading="Detected Bitcoin Cash Address">
+            <Command.Item value="detected-bch-{detectedBchAddress}" keywords={["bitcoin cash", "bch"]} onSelect={() => selectBch(detectedBchAddress)} class="font-mono text-xs">
+              Add {detectedBchAddress.slice(0, 12)}...{detectedBchAddress.slice(-4)} as Bitcoin Cash address
+            </Command.Item>
+          </Command.Group>
+        {/if}
         <Command.Group heading="Blockchain">
+          {#if onSelectAlgorand}
+            <Command.Item value="Algorand" keywords={["algorand", "algo"]} onSelect={() => selectAlgorand()}>
+              Algorand
+            </Command.Item>
+          {/if}
           {#if onSelectAptos}
-            <Command.Item
-              value="Aptos"
-              keywords={["aptos", "apt", "move"]}
-              onSelect={() => selectAptos()}
-            >
+            <Command.Item value="Aptos" keywords={["aptos", "apt", "move"]} onSelect={() => selectAptos()}>
               Aptos
             </Command.Item>
           {/if}
           {#if onSelectBitcoin}
-            <Command.Item
-              value="Bitcoin"
-              keywords={["bitcoin", "btc", "xpub", "ypub", "zpub"]}
-              onSelect={() => selectBitcoin()}
-            >
+            <Command.Item value="Bitcoin" keywords={["bitcoin", "btc", "xpub", "ypub", "zpub"]} onSelect={() => selectBitcoin()}>
               Bitcoin
             </Command.Item>
           {/if}
+          {#if onSelectBch}
+            <Command.Item value="Bitcoin Cash" keywords={["bitcoin cash", "bch"]} onSelect={() => selectBch()}>
+              Bitcoin Cash
+            </Command.Item>
+          {/if}
+          {#if onSelectBittensor}
+            <Command.Item value="Bittensor" keywords={["bittensor", "tao", "substrate"]} onSelect={() => selectBittensor()}>
+              Bittensor
+            </Command.Item>
+          {/if}
           {#if onSelectCosmos}
-            <Command.Item
-              value="Cosmos"
-              keywords={["cosmos", "atom", "ibc"]}
-              onSelect={() => selectCosmos()}
-            >
+            <Command.Item value="Cosmos" keywords={["cosmos", "atom", "ibc"]} onSelect={() => selectCosmos()}>
               Cosmos
             </Command.Item>
           {/if}
-          <Command.Item
-            value="EVM"
-            keywords={chainKeywords}
-            onSelect={() => selectBlockchain()}
-          >
+          {#if onSelectDoge}
+            <Command.Item value="Dogecoin" keywords={["dogecoin", "doge"]} onSelect={() => selectDoge()}>
+              Dogecoin
+            </Command.Item>
+          {/if}
+          <Command.Item value="EVM" keywords={chainKeywords} onSelect={() => selectBlockchain()}>
             EVM (Ethereum, Arbitrum, Base...)
           </Command.Item>
+          {#if onSelectHedera}
+            <Command.Item value="Hedera" keywords={["hedera", "hbar"]} onSelect={() => selectHedera()}>
+              Hedera
+            </Command.Item>
+          {/if}
           {#if onSelectHyperliquid}
-            <Command.Item
-              value="Hyperliquid"
-              keywords={["hyperliquid", "hl", "perp", "futures", "dex"]}
-              onSelect={() => selectHyperliquid()}
-            >
+            <Command.Item value="Hyperliquid" keywords={["hyperliquid", "hl", "perp", "futures", "dex"]} onSelect={() => selectHyperliquid()}>
               Hyperliquid
             </Command.Item>
           {/if}
+          {#if onSelectKaspa}
+            <Command.Item value="Kaspa" keywords={["kaspa", "kas"]} onSelect={() => selectKaspa()}>
+              Kaspa
+            </Command.Item>
+          {/if}
+          {#if onSelectLtc}
+            <Command.Item value="Litecoin" keywords={["litecoin", "ltc"]} onSelect={() => selectLtc()}>
+              Litecoin
+            </Command.Item>
+          {/if}
+          {#if onSelectNear}
+            <Command.Item value="NEAR" keywords={["near", "near protocol"]} onSelect={() => selectNear()}>
+              NEAR
+            </Command.Item>
+          {/if}
           {#if onSelectPolkadot}
-            <Command.Item
-              value="Polkadot"
-              keywords={["polkadot", "dot", "substrate"]}
-              onSelect={() => selectPolkadot()}
-            >
+            <Command.Item value="Polkadot" keywords={["polkadot", "dot", "substrate"]} onSelect={() => selectPolkadot()}>
               Polkadot
             </Command.Item>
           {/if}
           {#if onSelectSolana}
-            <Command.Item
-              value="Solana"
-              keywords={["solana", "sol", "phantom", "solflare"]}
-              onSelect={() => selectSolana()}
-            >
+            <Command.Item value="Solana" keywords={["solana", "sol", "phantom", "solflare"]} onSelect={() => selectSolana()}>
               Solana
             </Command.Item>
           {/if}
+          {#if onSelectStacks}
+            <Command.Item value="Stacks" keywords={["stacks", "stx", "bitcoin"]} onSelect={() => selectStacks()}>
+              Stacks
+            </Command.Item>
+          {/if}
+          {#if onSelectStellar}
+            <Command.Item value="Stellar" keywords={["stellar", "xlm"]} onSelect={() => selectStellar()}>
+              Stellar
+            </Command.Item>
+          {/if}
           {#if onSelectSui}
-            <Command.Item
-              value="Sui"
-              keywords={["sui", "move"]}
-              onSelect={() => selectSui()}
-            >
+            <Command.Item value="Sui" keywords={["sui", "move"]} onSelect={() => selectSui()}>
               Sui
             </Command.Item>
           {/if}
           {#if onSelectTezos}
-            <Command.Item
-              value="Tezos"
-              keywords={["tezos", "xtz", "tz1"]}
-              onSelect={() => selectTezos()}
-            >
+            <Command.Item value="Tezos" keywords={["tezos", "xtz", "tz1"]} onSelect={() => selectTezos()}>
               Tezos
             </Command.Item>
           {/if}
           {#if onSelectTon}
-            <Command.Item
-              value="TON"
-              keywords={["ton", "toncoin", "telegram"]}
-              onSelect={() => selectTon()}
-            >
+            <Command.Item value="TON" keywords={["ton", "toncoin", "telegram"]} onSelect={() => selectTon()}>
               TON
+            </Command.Item>
+          {/if}
+          {#if onSelectTron}
+            <Command.Item value="TRON" keywords={["tron", "trx"]} onSelect={() => selectTron()}>
+              TRON
+            </Command.Item>
+          {/if}
+          {#if onSelectXrp}
+            <Command.Item value="XRP" keywords={["xrp", "ripple", "xrpl"]} onSelect={() => selectXrp()}>
+              XRP
+            </Command.Item>
+          {/if}
+          {#if onSelectZcash}
+            <Command.Item value="Zcash" keywords={["zcash", "zec"]} onSelect={() => selectZcash()}>
+              Zcash
             </Command.Item>
           {/if}
         </Command.Group>

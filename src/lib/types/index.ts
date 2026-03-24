@@ -56,6 +56,8 @@ export interface ChainInfo {
 export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 1,      name: "Ethereum",        native_currency: "ETH",    decimals: 18 },
   { chain_id: 10,     name: "Optimism",        native_currency: "ETH",    decimals: 18 },
+  { chain_id: 14,     name: "Flare",           native_currency: "FLR",    decimals: 18 },
+  { chain_id: 25,     name: "Cronos",          native_currency: "CRO",    decimals: 18 },
   { chain_id: 42161,  name: "Arbitrum",        native_currency: "ETH",    decimals: 18 },
   { chain_id: 8453,   name: "Base",            native_currency: "ETH",    decimals: 18 },
   { chain_id: 59144,  name: "Linea",           native_currency: "ETH",    decimals: 18 },
@@ -66,6 +68,7 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 43114,  name: "Avalanche",       native_currency: "AVAX",   decimals: 18 },
   { chain_id: 100,    name: "Gnosis",          native_currency: "xDAI",   decimals: 18 },
   { chain_id: 50,     name: "XDC",             native_currency: "XDC",    decimals: 18 },
+  { chain_id: 61,     name: "Ethereum Classic", native_currency: "ETC",   decimals: 18 },
   { chain_id: 130,    name: "Unichain",        native_currency: "ETH",    decimals: 18 },
   { chain_id: 143,    name: "Monad",           native_currency: "MON",    decimals: 18 },
   { chain_id: 146,    name: "Sonic",           native_currency: "S",      decimals: 18 },
@@ -87,6 +90,8 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 33139,  name: "ApeChain",        native_currency: "APE",    decimals: 18 },
   { chain_id: 42220,  name: "Celo",            native_currency: "CELO",   decimals: 18 },
   { chain_id: 80094,  name: "Berachain",       native_currency: "BERA",   decimals: 18 },
+  { chain_id: 88888,  name: "Chiliz",          native_currency: "CHZ",    decimals: 18 },
+  { chain_id: 100009, name: "VeChain",         native_currency: "VET",    decimals: 18 },
   { chain_id: 167000, name: "Taiko",           native_currency: "ETH",    decimals: 18 },
   { chain_id: 747474, name: "Katana",          native_currency: "ETH",    decimals: 18 },
 ];

@@ -55,6 +55,40 @@
     import type { TezosAccount } from "$lib/tezos/types.js";
     import type { CosmosAccount } from "$lib/cosmos/types.js";
     import type { PolkadotAccount } from "$lib/polkadot/types.js";
+    import type { BtcForkAccount, BtcForkChainConfig } from "$lib/btc-fork/types.js";
+    import { BTC_FORK_CHAINS } from "$lib/btc-fork/types.js";
+    import { detectBtcForkInputType, deriveBtcForkAddresses } from "$lib/btc-fork/derive-js.js";
+    import type { BtcForkInputDetection, DerivedBtcForkAddress } from "$lib/btc-fork/types.js";
+    import type { XrpAccount } from "$lib/xrp/types.js";
+    import { detectXrpInputType, deriveXrpAddresses } from "$lib/xrp/derive-js.js";
+    import type { DerivedXrpAddress } from "$lib/xrp/derive-js.js";
+    import type { TronAccount } from "$lib/tron/types.js";
+    import { detectTronInputType, deriveTronAddresses } from "$lib/tron/derive-js.js";
+    import type { DerivedTronAddress } from "$lib/tron/derive-js.js";
+    import type { StellarAccount } from "$lib/stellar/types.js";
+    import { detectStellarInputType, deriveStellarAddresses } from "$lib/stellar/derive-js.js";
+    import type { DerivedStellarAddress } from "$lib/stellar/derive-js.js";
+    import type { BittensorAccount } from "$lib/bittensor/types.js";
+    import { detectBittensorInputType, deriveBittensorAddresses } from "$lib/bittensor/derive-js.js";
+    import type { DerivedBittensorAddress } from "$lib/bittensor/derive-js.js";
+    import type { HederaAccount } from "$lib/hedera/types.js";
+    import { detectHederaInputType, deriveHederaAddresses } from "$lib/hedera/derive-js.js";
+    import type { DerivedHederaAddress } from "$lib/hedera/derive-js.js";
+    import type { NearAccount } from "$lib/near/types.js";
+    import { detectNearInputType, deriveNearAddresses } from "$lib/near/derive-js.js";
+    import type { DerivedNearAddress } from "$lib/near/derive-js.js";
+    import type { AlgorandAccount } from "$lib/algorand/types.js";
+    import { detectAlgorandInputType, deriveAlgorandAddresses } from "$lib/algorand/derive-js.js";
+    import type { DerivedAlgorandAddress } from "$lib/algorand/derive-js.js";
+    import type { KaspaAccount } from "$lib/kaspa/types.js";
+    import { detectKaspaInputType, deriveKaspaAddresses } from "$lib/kaspa/derive-js.js";
+    import type { DerivedKaspaAddress } from "$lib/kaspa/derive-js.js";
+    import type { ZcashAccount } from "$lib/zcash/types.js";
+    import { detectZcashInputType, deriveZcashAddresses } from "$lib/zcash/derive-js.js";
+    import type { DerivedZcashAddress } from "$lib/zcash/derive-js.js";
+    import type { StacksAccount } from "$lib/stacks/types.js";
+    import { detectStacksInputType, deriveStacksAddresses } from "$lib/stacks/derive-js.js";
+    import type { DerivedStacksAddress } from "$lib/stacks/derive-js.js";
     import type { DerivedSolAddress } from "$lib/solana/derive-js.js";
     import { detectSuiInputType, deriveSuiAddresses } from "$lib/sui/derive-js.js";
     import type { DerivedSuiAddress } from "$lib/sui/derive-js.js";
@@ -198,7 +232,7 @@
         editingRowLabel = currentLabel;
     }
 
-    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "ton" | "tezos" | "cosmos" | "polkadot" | "cex") {
+    async function saveEditLabel(kind: "btc" | "sol" | "hl" | "sui" | "aptos" | "ton" | "tezos" | "cosmos" | "polkadot" | "doge" | "ltc" | "bch" | "xrp" | "tron" | "stellar" | "bittensor" | "hedera" | "near" | "algorand" | "kaspa" | "zcash" | "stacks" | "cex") {
         if (!editingRowId) return;
         const label = editingRowLabel.trim();
         if (!label) { editingRowId = null; return; }
@@ -230,6 +264,45 @@
             } else if (kind === "polkadot") {
                 await getBackend().updatePolkadotAccountLabel(editingRowId, label);
                 await loadPolkadotAccounts();
+            } else if (kind === "doge") {
+                await getBackend().updateDogeAccountLabel(editingRowId, label);
+                await loadDogeAccounts();
+            } else if (kind === "ltc") {
+                await getBackend().updateLtcAccountLabel(editingRowId, label);
+                await loadLtcAccounts();
+            } else if (kind === "bch") {
+                await getBackend().updateBchAccountLabel(editingRowId, label);
+                await loadBchAccounts();
+            } else if (kind === "xrp") {
+                await getBackend().updateXrpAccountLabel(editingRowId, label);
+                await loadXrpAccounts();
+            } else if (kind === "tron") {
+                await getBackend().updateTronAccountLabel(editingRowId, label);
+                await loadTronAccounts();
+            } else if (kind === "stellar") {
+                await getBackend().updateStellarAccountLabel(editingRowId, label);
+                await loadStellarAccounts();
+            } else if (kind === "bittensor") {
+                await getBackend().updateBittensorAccountLabel(editingRowId, label);
+                await loadBittensorAccounts();
+            } else if (kind === "hedera") {
+                await getBackend().updateHederaAccountLabel(editingRowId, label);
+                await loadHederaAccounts();
+            } else if (kind === "near") {
+                await getBackend().updateNearAccountLabel(editingRowId, label);
+                await loadNearAccounts();
+            } else if (kind === "algorand") {
+                await getBackend().updateAlgorandAccountLabel(editingRowId, label);
+                await loadAlgorandAccounts();
+            } else if (kind === "kaspa") {
+                await getBackend().updateKaspaAccountLabel(editingRowId, label);
+                await loadKaspaAccounts();
+            } else if (kind === "zcash") {
+                await getBackend().updateZcashAccountLabel(editingRowId, label);
+                await loadZcashAccounts();
+            } else if (kind === "stacks") {
+                await getBackend().updateStacksAccountLabel(editingRowId, label);
+                await loadStacksAccounts();
             } else if (kind === "cex") {
                 await getBackend().updateExchangeAccount(editingRowId, { label });
                 await loadCexAccounts();
@@ -284,7 +357,20 @@
         | { kind: "ton"; data: TonAccount }
         | { kind: "tezos"; data: TezosAccount }
         | { kind: "cosmos"; data: CosmosAccount }
-        | { kind: "polkadot"; data: PolkadotAccount };
+        | { kind: "polkadot"; data: PolkadotAccount }
+        | { kind: "doge"; data: BtcForkAccount }
+        | { kind: "ltc"; data: BtcForkAccount }
+        | { kind: "bch"; data: BtcForkAccount }
+        | { kind: "xrp"; data: XrpAccount }
+        | { kind: "tron"; data: TronAccount }
+        | { kind: "stellar"; data: StellarAccount }
+        | { kind: "bittensor"; data: BittensorAccount }
+        | { kind: "hedera"; data: HederaAccount }
+        | { kind: "near"; data: NearAccount }
+        | { kind: "algorand"; data: AlgorandAccount }
+        | { kind: "kaspa"; data: KaspaAccount }
+        | { kind: "zcash"; data: ZcashAccount }
+        | { kind: "stacks"; data: StacksAccount };
 
     const blockchainRows = $derived.by((): BlockchainRow[] => {
         const rows: BlockchainRow[] = [];
@@ -298,6 +384,19 @@
         for (const account of tezosAccounts) rows.push({ kind: "tezos", data: account });
         for (const account of cosmosAccounts) rows.push({ kind: "cosmos", data: account });
         for (const account of polkadotAccounts) rows.push({ kind: "polkadot", data: account });
+        for (const account of dogeAccounts) rows.push({ kind: "doge", data: account });
+        for (const account of ltcAccounts) rows.push({ kind: "ltc", data: account });
+        for (const account of bchAccounts) rows.push({ kind: "bch", data: account });
+        for (const account of xrpAccounts) rows.push({ kind: "xrp", data: account });
+        for (const account of tronAccounts) rows.push({ kind: "tron", data: account });
+        for (const account of stellarAccounts) rows.push({ kind: "stellar", data: account });
+        for (const account of bittensorAccounts) rows.push({ kind: "bittensor", data: account });
+        for (const account of hederaAccounts) rows.push({ kind: "hedera", data: account });
+        for (const account of nearAccounts) rows.push({ kind: "near", data: account });
+        for (const account of algorandAccounts) rows.push({ kind: "algorand", data: account });
+        for (const account of kaspaAccounts) rows.push({ kind: "kaspa", data: account });
+        for (const account of zcashAccounts) rows.push({ kind: "zcash", data: account });
+        for (const account of stacksAccounts) rows.push({ kind: "stacks", data: account });
         return rows;
     });
 
@@ -339,16 +438,30 @@
     // Sort state for Blockchain Accounts table
     type BlockchainSortKey = "address" | "label" | "type" | "networks" | "lastSync";
     const sortBlockchain = createSortState<BlockchainSortKey>();
+    function getBlockchainRowAddress(r: BlockchainRow): string {
+        if (r.kind === "btc") return r.data.address_or_xpub;
+        if (r.kind === "evm") return r.data.address;
+        return r.data.address;
+    }
+    const CHAIN_TYPE_LABELS: Record<string, string> = {
+        btc: "BTC", sol: "Solana", hl: "Hyperliquid", sui: "Sui", aptos: "Aptos",
+        ton: "TON", tezos: "Tezos", cosmos: "Cosmos", polkadot: "Polkadot",
+        doge: "Dogecoin", ltc: "Litecoin", bch: "Bitcoin Cash", xrp: "XRP",
+        tron: "TRON", stellar: "Stellar", bittensor: "Bittensor", hedera: "Hedera",
+        near: "NEAR", algorand: "Algorand", kaspa: "Kaspa", zcash: "Zcash", stacks: "Stacks",
+        evm: "EVM",
+    };
     const blockchainAccessors: Record<BlockchainSortKey, SortAccessor<BlockchainRow>> = {
-        address: (r) => r.kind === "btc" ? r.data.address_or_xpub : r.kind === "sol" ? r.data.address : r.kind === "hl" ? r.data.address : r.kind === "sui" ? r.data.address : r.kind === "aptos" ? r.data.address : r.kind === "ton" ? r.data.address : r.kind === "tezos" ? r.data.address : r.kind === "cosmos" ? r.data.address : r.kind === "polkadot" ? r.data.address : r.data.address,
+        address: (r) => getBlockchainRowAddress(r),
         label: (r) => r.data.label,
         type: (r) => r.kind === "btc"
             ? (r.data.account_type === "address" ? "BTC Address" : "HD Wallet")
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : r.kind === "cosmos" ? "Cosmos" : r.kind === "polkadot" ? "Polkadot" : "EVM",
+            : CHAIN_TYPE_LABELS[r.kind] ?? "EVM",
         networks: (r) => r.kind === "btc"
             ? "Bitcoin"
-            : r.kind === "sol" ? "Solana" : r.kind === "hl" ? "Hyperliquid" : r.kind === "sui" ? "Sui" : r.kind === "aptos" ? "Aptos" : r.kind === "ton" ? "TON" : r.kind === "tezos" ? "Tezos" : r.kind === "cosmos" ? "Cosmos" : r.kind === "polkadot" ? "Polkadot" : r.data.chainIds.map((id) => getChainName(id)).join(", "),
-        lastSync: (r) => r.kind === "btc" ? (r.data.last_sync || "") : r.kind === "sol" ? (r.data.last_sync || "") : r.kind === "hl" ? (r.data.last_sync || "") : r.kind === "sui" ? (r.data.last_sync || "") : r.kind === "aptos" ? (r.data.last_sync || "") : r.kind === "ton" ? (r.data.last_sync || "") : r.kind === "tezos" ? (r.data.last_sync || "") : r.kind === "cosmos" ? (r.data.last_sync || "") : r.kind === "polkadot" ? (r.data.last_sync || "") : "",
+            : r.kind === "evm" ? r.data.chainIds.map((id) => getChainName(id)).join(", ")
+            : CHAIN_TYPE_LABELS[r.kind] ?? r.kind,
+        lastSync: (r) => r.kind === "evm" ? "" : (r.data.last_sync || ""),
     };
 
     function isAccountClosed(account: ExchangeAccount): boolean {
@@ -356,7 +469,7 @@
         return account.closed_at < new Date().toISOString().slice(0, 10);
     }
 
-    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos" | "ton" | "tezos" | "cosmos" | "polkadot";
+    type AddSourceMode = "idle" | "cex" | "blockchain" | "bitcoin" | "solana" | "hyperliquid" | "sui" | "aptos" | "ton" | "tezos" | "cosmos" | "polkadot" | "doge" | "ltc" | "bch" | "xrp" | "tron" | "stellar" | "bittensor" | "hedera" | "near" | "algorand" | "kaspa" | "zcash" | "stacks";
     let addSourceMode = $state<AddSourceMode>("idle");
     let addSourceExchangeId = $state<ExchangeId>("kraken");
     let cexNewLabel = $state("");
@@ -460,6 +573,92 @@
         polkadotSelectedIndexes = new Set([0]);
         polkadotItemLabels = new Map();
         polkadotDerivedAddresses = [];
+        dogeNewAddress = "";
+        dogeNewLabel = "";
+        dogePrivateKeyAck = false;
+        dogeDeriveCount = 5;
+        dogeSelectedIndexes = new Set([0]);
+        dogeItemLabels = new Map();
+        dogeDerivedAddresses = [];
+        ltcNewAddress = "";
+        ltcNewLabel = "";
+        ltcPrivateKeyAck = false;
+        ltcDeriveCount = 5;
+        ltcSelectedIndexes = new Set([0]);
+        ltcItemLabels = new Map();
+        ltcDerivedAddresses = [];
+        bchNewAddress = "";
+        bchNewLabel = "";
+        xrpNewAddress = "";
+        xrpNewLabel = "";
+        xrpPrivateKeyAck = false;
+        xrpDeriveCount = 5;
+        xrpSelectedIndexes = new Set([0]);
+        xrpItemLabels = new Map();
+        xrpDerivedAddresses = [];
+        tronNewAddress = "";
+        tronNewLabel = "";
+        tronPrivateKeyAck = false;
+        tronDeriveCount = 5;
+        tronSelectedIndexes = new Set([0]);
+        tronItemLabels = new Map();
+        tronDerivedAddresses = [];
+        stellarNewAddress = "";
+        stellarNewLabel = "";
+        stellarPrivateKeyAck = false;
+        stellarDeriveCount = 5;
+        stellarSelectedIndexes = new Set([0]);
+        stellarItemLabels = new Map();
+        stellarDerivedAddresses = [];
+        bittensorNewAddress = "";
+        bittensorNewLabel = "";
+        bittensorPrivateKeyAck = false;
+        bittensorDeriveCount = 5;
+        bittensorSelectedIndexes = new Set([0]);
+        bittensorItemLabels = new Map();
+        bittensorDerivedAddresses = [];
+        hederaNewAddress = "";
+        hederaNewLabel = "";
+        hederaPrivateKeyAck = false;
+        hederaDeriveCount = 5;
+        hederaSelectedIndexes = new Set([0]);
+        hederaItemLabels = new Map();
+        hederaDerivedAddresses = [];
+        nearNewAddress = "";
+        nearNewLabel = "";
+        nearPrivateKeyAck = false;
+        nearDeriveCount = 5;
+        nearSelectedIndexes = new Set([0]);
+        nearItemLabels = new Map();
+        nearDerivedAddresses = [];
+        algorandNewAddress = "";
+        algorandNewLabel = "";
+        algorandPrivateKeyAck = false;
+        algorandDeriveCount = 5;
+        algorandSelectedIndexes = new Set([0]);
+        algorandItemLabels = new Map();
+        algorandDerivedAddresses = [];
+        kaspaNewAddress = "";
+        kaspaNewLabel = "";
+        kaspaPrivateKeyAck = false;
+        kaspaDeriveCount = 5;
+        kaspaSelectedIndexes = new Set([0]);
+        kaspaItemLabels = new Map();
+        kaspaDerivedAddresses = [];
+        zcashNewAddress = "";
+        zcashNewLabel = "";
+        zcashPrivateKeyAck = false;
+        zcashDeriveCount = 5;
+        zcashSelectedIndexes = new Set([0]);
+        zcashItemLabels = new Map();
+        zcashDerivedAddresses = [];
+        stacksNewAddress = "";
+        stacksNewLabel = "";
+        stacksPrivateKeyAck = false;
+        stacksDeriveCount = 5;
+        stacksSelectedIndexes = new Set([0]);
+        stacksItemLabels = new Map();
+        stacksDerivedAddresses = [];
     }
 
     // -- Bitcoin state --
@@ -559,6 +758,157 @@
     let polkadotSelectedIndexes = $state<Set<number>>(new Set([0]));
     let polkadotItemLabels = $state<Map<number, string>>(new Map());
     let polkadotDerivedAddresses = $state<DerivedPolkadotAddress[]>([]);
+
+    // Dogecoin state (BTC fork)
+    let dogeAccounts = $state<BtcForkAccount[]>([]);
+    let dogeNewAddress = $state("");
+    let dogeNewLabel = $state("");
+    let dogeAddingAccount = $state(false);
+    const dogeBusy = $derived(taskQueue.isActive("doge-sync"));
+    let dogePrivateKeyAck = $state(false);
+    let dogeDeriveCount = $state(5);
+    let dogeSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let dogeItemLabels = $state<Map<number, string>>(new Map());
+    let dogeDerivedAddresses = $state<DerivedBtcForkAddress[]>([]);
+
+    // Litecoin state (BTC fork)
+    let ltcAccounts = $state<BtcForkAccount[]>([]);
+    let ltcNewAddress = $state("");
+    let ltcNewLabel = $state("");
+    let ltcAddingAccount = $state(false);
+    const ltcBusy = $derived(taskQueue.isActive("ltc-sync"));
+    let ltcPrivateKeyAck = $state(false);
+    let ltcDeriveCount = $state(5);
+    let ltcSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let ltcItemLabels = $state<Map<number, string>>(new Map());
+    let ltcDerivedAddresses = $state<DerivedBtcForkAddress[]>([]);
+
+    // Bitcoin Cash state (BTC fork)
+    let bchAccounts = $state<BtcForkAccount[]>([]);
+    let bchNewAddress = $state("");
+    let bchNewLabel = $state("");
+    let bchAddingAccount = $state(false);
+    const bchBusy = $derived(taskQueue.isActive("bch-sync"));
+
+    // XRP state
+    let xrpAccounts = $state<XrpAccount[]>([]);
+    let xrpNewAddress = $state("");
+    let xrpNewLabel = $state("");
+    let xrpAddingAccount = $state(false);
+    const xrpBusy = $derived(taskQueue.isActive("xrp-sync"));
+    let xrpPrivateKeyAck = $state(false);
+    let xrpDeriveCount = $state(5);
+    let xrpSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let xrpItemLabels = $state<Map<number, string>>(new Map());
+    let xrpDerivedAddresses = $state<DerivedXrpAddress[]>([]);
+
+    // TRON state
+    let tronAccounts = $state<TronAccount[]>([]);
+    let tronNewAddress = $state("");
+    let tronNewLabel = $state("");
+    let tronAddingAccount = $state(false);
+    const tronBusy = $derived(taskQueue.isActive("tron-sync"));
+    let tronPrivateKeyAck = $state(false);
+    let tronDeriveCount = $state(5);
+    let tronSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let tronItemLabels = $state<Map<number, string>>(new Map());
+    let tronDerivedAddresses = $state<DerivedTronAddress[]>([]);
+
+    // Stellar state
+    let stellarAccounts = $state<StellarAccount[]>([]);
+    let stellarNewAddress = $state("");
+    let stellarNewLabel = $state("");
+    let stellarAddingAccount = $state(false);
+    const stellarBusy = $derived(taskQueue.isActive("stellar-sync"));
+    let stellarPrivateKeyAck = $state(false);
+    let stellarDeriveCount = $state(5);
+    let stellarSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let stellarItemLabels = $state<Map<number, string>>(new Map());
+    let stellarDerivedAddresses = $state<DerivedStellarAddress[]>([]);
+
+    // Bittensor state
+    let bittensorAccounts = $state<BittensorAccount[]>([]);
+    let bittensorNewAddress = $state("");
+    let bittensorNewLabel = $state("");
+    let bittensorAddingAccount = $state(false);
+    const bittensorBusy = $derived(taskQueue.isActive("bittensor-sync"));
+    let bittensorPrivateKeyAck = $state(false);
+    let bittensorDeriveCount = $state(5);
+    let bittensorSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let bittensorItemLabels = $state<Map<number, string>>(new Map());
+    let bittensorDerivedAddresses = $state<DerivedBittensorAddress[]>([]);
+
+    // Hedera state
+    let hederaAccounts = $state<HederaAccount[]>([]);
+    let hederaNewAddress = $state("");
+    let hederaNewLabel = $state("");
+    let hederaAddingAccount = $state(false);
+    const hederaBusy = $derived(taskQueue.isActive("hedera-sync"));
+    let hederaPrivateKeyAck = $state(false);
+    let hederaDeriveCount = $state(5);
+    let hederaSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let hederaItemLabels = $state<Map<number, string>>(new Map());
+    let hederaDerivedAddresses = $state<DerivedHederaAddress[]>([]);
+
+    // NEAR state
+    let nearAccounts = $state<NearAccount[]>([]);
+    let nearNewAddress = $state("");
+    let nearNewLabel = $state("");
+    let nearAddingAccount = $state(false);
+    const nearBusy = $derived(taskQueue.isActive("near-sync"));
+    let nearPrivateKeyAck = $state(false);
+    let nearDeriveCount = $state(5);
+    let nearSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let nearItemLabels = $state<Map<number, string>>(new Map());
+    let nearDerivedAddresses = $state<DerivedNearAddress[]>([]);
+
+    // Algorand state
+    let algorandAccounts = $state<AlgorandAccount[]>([]);
+    let algorandNewAddress = $state("");
+    let algorandNewLabel = $state("");
+    let algorandAddingAccount = $state(false);
+    const algorandBusy = $derived(taskQueue.isActive("algorand-sync"));
+    let algorandPrivateKeyAck = $state(false);
+    let algorandDeriveCount = $state(5);
+    let algorandSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let algorandItemLabels = $state<Map<number, string>>(new Map());
+    let algorandDerivedAddresses = $state<DerivedAlgorandAddress[]>([]);
+
+    // Kaspa state
+    let kaspaAccounts = $state<KaspaAccount[]>([]);
+    let kaspaNewAddress = $state("");
+    let kaspaNewLabel = $state("");
+    let kaspaAddingAccount = $state(false);
+    const kaspaBusy = $derived(taskQueue.isActive("kaspa-sync"));
+    let kaspaPrivateKeyAck = $state(false);
+    let kaspaDeriveCount = $state(5);
+    let kaspaSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let kaspaItemLabels = $state<Map<number, string>>(new Map());
+    let kaspaDerivedAddresses = $state<DerivedKaspaAddress[]>([]);
+
+    // Zcash state
+    let zcashAccounts = $state<ZcashAccount[]>([]);
+    let zcashNewAddress = $state("");
+    let zcashNewLabel = $state("");
+    let zcashAddingAccount = $state(false);
+    const zcashBusy = $derived(taskQueue.isActive("zcash-sync"));
+    let zcashPrivateKeyAck = $state(false);
+    let zcashDeriveCount = $state(5);
+    let zcashSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let zcashItemLabels = $state<Map<number, string>>(new Map());
+    let zcashDerivedAddresses = $state<DerivedZcashAddress[]>([]);
+
+    // Stacks state
+    let stacksAccounts = $state<StacksAccount[]>([]);
+    let stacksNewAddress = $state("");
+    let stacksNewLabel = $state("");
+    let stacksAddingAccount = $state(false);
+    const stacksBusy = $derived(taskQueue.isActive("stacks-sync"));
+    let stacksPrivateKeyAck = $state(false);
+    let stacksDeriveCount = $state(5);
+    let stacksSelectedIndexes = $state<Set<number>>(new Set([0]));
+    let stacksItemLabels = $state<Map<number, string>>(new Map());
+    let stacksDerivedAddresses = $state<DerivedStacksAddress[]>([]);
 
     // Solana state
     let solAccounts = $state<SolanaAccount[]>([]);
@@ -790,6 +1140,214 @@
             const firstUnknown = results.find(a => !existingPolkadotAddresses.has(a.address));
             polkadotSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
         } catch { polkadotDerivedAddresses = []; }
+    });
+
+    // Dogecoin detection and derivation
+    const dogeDetection = $derived.by(() => detectBtcForkInputType(BTC_FORK_CHAINS.doge, dogeNewAddress.trim()));
+    const existingDogeAddresses = $derived(new Set(dogeAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = dogeDetection;
+        if (det.input_type !== "seed" || !dogePrivateKeyAck || !dogeNewAddress.trim()) {
+            dogeDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveBtcForkAddresses(BTC_FORK_CHAINS.doge, dogeNewAddress.trim(), dogeDeriveCount);
+            dogeDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingDogeAddresses.has(a.address));
+            dogeSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { dogeDerivedAddresses = []; }
+    });
+
+    // Litecoin detection and derivation
+    const ltcDetection = $derived.by(() => detectBtcForkInputType(BTC_FORK_CHAINS.ltc, ltcNewAddress.trim()));
+    const existingLtcAddresses = $derived(new Set(ltcAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = ltcDetection;
+        if (det.input_type !== "seed" || !ltcPrivateKeyAck || !ltcNewAddress.trim()) {
+            ltcDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveBtcForkAddresses(BTC_FORK_CHAINS.ltc, ltcNewAddress.trim(), ltcDeriveCount);
+            ltcDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingLtcAddresses.has(a.address));
+            ltcSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { ltcDerivedAddresses = []; }
+    });
+
+    // Bitcoin Cash detection (no derivation — CashAddr not supported)
+    const bchDetection = $derived.by(() => detectBtcForkInputType(BTC_FORK_CHAINS.bch, bchNewAddress.trim()));
+    const existingBchAddresses = $derived(new Set(bchAccounts.map(a => a.address)));
+
+    // XRP detection and derivation
+    const xrpDetection = $derived.by(() => detectXrpInputType(xrpNewAddress.trim()));
+    const existingXrpAddresses = $derived(new Set(xrpAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = xrpDetection;
+        if (det.input_type !== "seed" || !xrpPrivateKeyAck || !xrpNewAddress.trim()) {
+            xrpDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveXrpAddresses(xrpNewAddress.trim(), xrpDeriveCount);
+            xrpDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingXrpAddresses.has(a.address));
+            xrpSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { xrpDerivedAddresses = []; }
+    });
+
+    // TRON detection and derivation
+    const tronDetection = $derived.by(() => detectTronInputType(tronNewAddress.trim()));
+    const existingTronAddresses = $derived(new Set(tronAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = tronDetection;
+        if (det.input_type !== "seed" || !tronPrivateKeyAck || !tronNewAddress.trim()) {
+            tronDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveTronAddresses(tronNewAddress.trim(), tronDeriveCount);
+            tronDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingTronAddresses.has(a.address));
+            tronSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { tronDerivedAddresses = []; }
+    });
+
+    // Stellar detection and derivation
+    const stellarDetection = $derived.by(() => detectStellarInputType(stellarNewAddress.trim()));
+    const existingStellarAddresses = $derived(new Set(stellarAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = stellarDetection;
+        if (det.input_type !== "seed" || !stellarPrivateKeyAck || !stellarNewAddress.trim()) {
+            stellarDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveStellarAddresses(stellarNewAddress.trim(), stellarDeriveCount);
+            stellarDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingStellarAddresses.has(a.address));
+            stellarSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { stellarDerivedAddresses = []; }
+    });
+
+    // Bittensor detection and derivation
+    const bittensorDetection = $derived.by(() => detectBittensorInputType(bittensorNewAddress.trim()));
+    const existingBittensorAddresses = $derived(new Set(bittensorAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = bittensorDetection;
+        if (det.input_type !== "seed" || !bittensorPrivateKeyAck || !bittensorNewAddress.trim()) {
+            bittensorDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveBittensorAddresses(bittensorNewAddress.trim(), bittensorDeriveCount);
+            bittensorDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingBittensorAddresses.has(a.address));
+            bittensorSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { bittensorDerivedAddresses = []; }
+    });
+
+    // Hedera detection and derivation
+    const hederaDetection = $derived.by(() => detectHederaInputType(hederaNewAddress.trim()));
+    const existingHederaAddresses = $derived(new Set(hederaAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = hederaDetection;
+        if (det.input_type !== "seed" || !hederaPrivateKeyAck || !hederaNewAddress.trim()) {
+            hederaDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveHederaAddresses(hederaNewAddress.trim(), hederaDeriveCount);
+            hederaDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingHederaAddresses.has(a.address));
+            hederaSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { hederaDerivedAddresses = []; }
+    });
+
+    // NEAR detection and derivation
+    const nearDetection = $derived.by(() => detectNearInputType(nearNewAddress.trim()));
+    const existingNearAddresses = $derived(new Set(nearAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = nearDetection;
+        if (det.input_type !== "seed" || !nearPrivateKeyAck || !nearNewAddress.trim()) {
+            nearDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveNearAddresses(nearNewAddress.trim(), nearDeriveCount);
+            nearDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingNearAddresses.has(a.address));
+            nearSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { nearDerivedAddresses = []; }
+    });
+
+    // Algorand detection and derivation
+    const algorandDetection = $derived.by(() => detectAlgorandInputType(algorandNewAddress.trim()));
+    const existingAlgorandAddresses = $derived(new Set(algorandAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = algorandDetection;
+        if (det.input_type !== "seed" || !algorandPrivateKeyAck || !algorandNewAddress.trim()) {
+            algorandDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveAlgorandAddresses(algorandNewAddress.trim(), algorandDeriveCount);
+            algorandDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingAlgorandAddresses.has(a.address));
+            algorandSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { algorandDerivedAddresses = []; }
+    });
+
+    // Kaspa detection and derivation
+    const kaspaDetection = $derived.by(() => detectKaspaInputType(kaspaNewAddress.trim()));
+    const existingKaspaAddresses = $derived(new Set(kaspaAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = kaspaDetection;
+        if (det.input_type !== "seed" || !kaspaPrivateKeyAck || !kaspaNewAddress.trim()) {
+            kaspaDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveKaspaAddresses(kaspaNewAddress.trim(), kaspaDeriveCount);
+            kaspaDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingKaspaAddresses.has(a.address));
+            kaspaSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { kaspaDerivedAddresses = []; }
+    });
+
+    // Zcash detection and derivation
+    const zcashDetection = $derived.by(() => detectZcashInputType(zcashNewAddress.trim()));
+    const existingZcashAddresses = $derived(new Set(zcashAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = zcashDetection;
+        if (det.input_type !== "seed" || !zcashPrivateKeyAck || !zcashNewAddress.trim()) {
+            zcashDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveZcashAddresses(zcashNewAddress.trim(), zcashDeriveCount);
+            zcashDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingZcashAddresses.has(a.address));
+            zcashSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { zcashDerivedAddresses = []; }
+    });
+
+    // Stacks detection and derivation
+    const stacksDetection = $derived.by(() => detectStacksInputType(stacksNewAddress.trim()));
+    const existingStacksAddresses = $derived(new Set(stacksAccounts.map(a => a.address)));
+    $effect(() => {
+        const det = stacksDetection;
+        if (det.input_type !== "seed" || !stacksPrivateKeyAck || !stacksNewAddress.trim()) {
+            stacksDerivedAddresses = [];
+            return;
+        }
+        try {
+            const results = deriveStacksAddresses(stacksNewAddress.trim(), stacksDeriveCount);
+            stacksDerivedAddresses = results;
+            const firstUnknown = results.find(a => !existingStacksAddresses.has(a.address));
+            stacksSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
+        } catch { stacksDerivedAddresses = []; }
     });
 
     // Async derivation of multi-index xpubs from seed phrase
@@ -2066,7 +2624,794 @@
         }
     }
 
-    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy || tonBusy || tezosBusy || cosmosBusy || polkadotBusy);
+    // -- Dogecoin functions --
+
+    function startAddDoge(prefillAddress?: string) {
+        addSourceMode = "doge";
+        if (prefillAddress) dogeNewAddress = prefillAddress;
+    }
+
+    async function loadDogeAccounts() {
+        try {
+            dogeAccounts = await getBackend().listDogeAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Dogecoin accounts: ${err}`);
+        }
+    }
+
+    async function handleAddDogeAccount() {
+        const input = dogeNewAddress.trim();
+        const baseLabel = dogeNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        dogeAddingAccount = true;
+        try {
+            // Multi-index path: seed phrase with derived addresses
+            if (dogeDerivedAddresses.length > 0) {
+                if (dogeSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = dogeDerivedAddresses
+                    .filter(a => dogeSelectedIndexes.has(a.index))
+                    .filter(a => !existingDogeAddresses.has(a.address));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                dogeNewAddress = ""; // Clear private material immediately
+                for (const { index, address } of selected) {
+                    const label = dogeItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addDogeAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                dogeNewLabel = "";
+                dogePrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadDogeAccounts();
+                toast.success(`${selected.length} Dogecoin address(es) added`);
+                return;
+            }
+
+            // Single address path
+            const address = input;
+            if (!(BTC_FORK_CHAINS.doge.addressRegex.test(address))) {
+                toast.error("Invalid Dogecoin address");
+                return;
+            }
+
+            const existing = dogeAccounts.find(a => a.address === address);
+            if (existing) {
+                toast.info("This address is already tracked on Dogecoin");
+                return;
+            }
+
+            await getBackend().addDogeAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            dogeNewAddress = "";
+            dogeNewLabel = "";
+            addSourceMode = "idle";
+            await loadDogeAccounts();
+            toast.success("Dogecoin account added");
+        } catch (err) {
+            toast.error(`Failed to add Dogecoin account: ${err}`);
+        } finally {
+            dogeAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveDogeAccount(id: string) {
+        try {
+            await getBackend().removeDogeAccount(id);
+            await loadDogeAccounts();
+            toast.success("Dogecoin account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncDogeAccount(account: BtcForkAccount) {
+        taskQueue.enqueue({
+            key: `doge-sync:${account.id}`,
+            label: `Sync ${account.label} (Dogecoin)`,
+            async run(ctx) {
+                const r = await getBackend().syncDoge(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadDogeAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(
+                        taskQueue,
+                        getBackend(),
+                        settings.buildRateConfig(),
+                        getHiddenCurrencySet(),
+                    );
+                }
+                return {
+                    summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`,
+                    data: r,
+                };
+            },
+        });
+    }
+
+    function syncAllDoge() {
+        for (const account of dogeAccounts) {
+            syncDogeAccount(account);
+        }
+    }
+
+    // -- Litecoin functions --
+
+    function startAddLtc(prefillAddress?: string) {
+        addSourceMode = "ltc";
+        if (prefillAddress) ltcNewAddress = prefillAddress;
+    }
+
+    async function loadLtcAccounts() {
+        try {
+            ltcAccounts = await getBackend().listLtcAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Litecoin accounts: ${err}`);
+        }
+    }
+
+    async function handleAddLtcAccount() {
+        const input = ltcNewAddress.trim();
+        const baseLabel = ltcNewLabel.trim();
+        if (!input) {
+            toast.error("Input is required");
+            return;
+        }
+
+        ltcAddingAccount = true;
+        try {
+            if (ltcDerivedAddresses.length > 0) {
+                if (ltcSelectedIndexes.size === 0) {
+                    toast.error("Select at least one address");
+                    return;
+                }
+                const selected = ltcDerivedAddresses
+                    .filter(a => ltcSelectedIndexes.has(a.index))
+                    .filter(a => !existingLtcAddresses.has(a.address));
+                if (selected.length === 0) {
+                    toast.error("All selected addresses are already added");
+                    return;
+                }
+                ltcNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = ltcItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addLtcAccount({
+                        id: uuidv7(),
+                        address,
+                        label,
+                        created_at: new Date().toISOString(),
+                    });
+                }
+                ltcNewLabel = "";
+                ltcPrivateKeyAck = false;
+                addSourceMode = "idle";
+                await loadLtcAccounts();
+                toast.success(`${selected.length} Litecoin address(es) added`);
+                return;
+            }
+
+            const address = input;
+            if (!(BTC_FORK_CHAINS.ltc.addressRegex.test(address))) {
+                toast.error("Invalid Litecoin address");
+                return;
+            }
+
+            const existing = ltcAccounts.find(a => a.address === address);
+            if (existing) {
+                toast.info("This address is already tracked on Litecoin");
+                return;
+            }
+
+            await getBackend().addLtcAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            ltcNewAddress = "";
+            ltcNewLabel = "";
+            addSourceMode = "idle";
+            await loadLtcAccounts();
+            toast.success("Litecoin account added");
+        } catch (err) {
+            toast.error(`Failed to add Litecoin account: ${err}`);
+        } finally {
+            ltcAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveLtcAccount(id: string) {
+        try {
+            await getBackend().removeLtcAccount(id);
+            await loadLtcAccounts();
+            toast.success("Litecoin account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncLtcAccount(account: BtcForkAccount) {
+        taskQueue.enqueue({
+            key: `ltc-sync:${account.id}`,
+            label: `Sync ${account.label} (Litecoin)`,
+            async run(ctx) {
+                const r = await getBackend().syncLtc(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadLtcAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet());
+                }
+                return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+            },
+        });
+    }
+
+    function syncAllLtc() {
+        for (const account of ltcAccounts) { syncLtcAccount(account); }
+    }
+
+    // -- Bitcoin Cash functions --
+
+    function startAddBch(prefillAddress?: string) {
+        addSourceMode = "bch";
+        if (prefillAddress) bchNewAddress = prefillAddress;
+    }
+
+    async function loadBchAccounts() {
+        try {
+            bchAccounts = await getBackend().listBchAccounts();
+        } catch (err) {
+            toast.error(`Failed to load Bitcoin Cash accounts: ${err}`);
+        }
+    }
+
+    async function handleAddBchAccount() {
+        const input = bchNewAddress.trim();
+        const baseLabel = bchNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+
+        bchAddingAccount = true;
+        try {
+            const address = input;
+            if (!(BTC_FORK_CHAINS.bch.addressRegex.test(address))) {
+                toast.error("Invalid Bitcoin Cash address");
+                return;
+            }
+            const existing = bchAccounts.find(a => a.address === address);
+            if (existing) { toast.info("This address is already tracked on Bitcoin Cash"); return; }
+
+            await getBackend().addBchAccount({
+                id: uuidv7(),
+                address,
+                label: baseLabel || `${address.slice(0, 12)}...${address.slice(-4)}`,
+                created_at: new Date().toISOString(),
+            });
+            bchNewAddress = "";
+            bchNewLabel = "";
+            addSourceMode = "idle";
+            await loadBchAccounts();
+            toast.success("Bitcoin Cash account added");
+        } catch (err) {
+            toast.error(`Failed to add Bitcoin Cash account: ${err}`);
+        } finally {
+            bchAddingAccount = false;
+        }
+    }
+
+    async function handleRemoveBchAccount(id: string) {
+        try {
+            await getBackend().removeBchAccount(id);
+            await loadBchAccounts();
+            toast.success("Bitcoin Cash account removed");
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
+    function syncBchAccount(account: BtcForkAccount) {
+        taskQueue.enqueue({
+            key: `bch-sync:${account.id}`,
+            label: `Sync ${account.label} (Bitcoin Cash)`,
+            async run(ctx) {
+                const r = await getBackend().syncBch(
+                    account,
+                    (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadBchAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet());
+                }
+                return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+            },
+        });
+    }
+
+    function syncAllBch() {
+        for (const account of bchAccounts) { syncBchAccount(account); }
+    }
+
+    // -- XRP functions --
+
+    function startAddXrp(prefillAddress?: string) {
+        addSourceMode = "xrp";
+        if (prefillAddress) xrpNewAddress = prefillAddress;
+    }
+
+    async function loadXrpAccounts() {
+        try { xrpAccounts = await getBackend().listXrpAccounts(); }
+        catch (err) { toast.error(`Failed to load XRP accounts: ${err}`); }
+    }
+
+    async function handleAddXrpAccount() {
+        const input = xrpNewAddress.trim();
+        const baseLabel = xrpNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+
+        xrpAddingAccount = true;
+        try {
+            if (xrpDerivedAddresses.length > 0) {
+                if (xrpSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = xrpDerivedAddresses.filter(a => xrpSelectedIndexes.has(a.index)).filter(a => !existingXrpAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                xrpNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = xrpItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addXrpAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                xrpNewLabel = ""; xrpPrivateKeyAck = false; addSourceMode = "idle";
+                await loadXrpAccounts();
+                toast.success(`${selected.length} XRP address(es) added`);
+                return;
+            }
+
+            const address = input;
+            if (!(/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(address))) { toast.error("Invalid XRP address"); return; }
+            const existing = xrpAccounts.find(a => a.address === address);
+            if (existing) { toast.info("This address is already tracked on XRP"); return; }
+
+            await getBackend().addXrpAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            xrpNewAddress = ""; xrpNewLabel = ""; addSourceMode = "idle";
+            await loadXrpAccounts();
+            toast.success("XRP account added");
+        } catch (err) { toast.error(`Failed to add XRP account: ${err}`); }
+        finally { xrpAddingAccount = false; }
+    }
+
+    async function handleRemoveXrpAccount(id: string) {
+        try { await getBackend().removeXrpAccount(id); await loadXrpAccounts(); toast.success("XRP account removed"); }
+        catch (err) { toast.error(`Failed to remove: ${err}`); }
+    }
+
+    function syncXrpAccount(account: XrpAccount) {
+        taskQueue.enqueue({
+            key: `xrp-sync:${account.id}`,
+            label: `Sync ${account.label} (XRP)`,
+            async run(ctx) {
+                const r = await getBackend().syncXrp(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+                await loadXrpAccounts();
+                if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+                if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+                return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+            },
+        });
+    }
+
+    function syncAllXrp() { for (const account of xrpAccounts) { syncXrpAccount(account); } }
+
+    // -- TRON functions --
+
+    function startAddTron(prefillAddress?: string) { addSourceMode = "tron"; if (prefillAddress) tronNewAddress = prefillAddress; }
+    async function loadTronAccounts() { try { tronAccounts = await getBackend().listTronAccounts(); } catch (err) { toast.error(`Failed to load TRON accounts: ${err}`); } }
+
+    async function handleAddTronAccount() {
+        const input = tronNewAddress.trim(); const baseLabel = tronNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        tronAddingAccount = true;
+        try {
+            if (tronDerivedAddresses.length > 0) {
+                if (tronSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = tronDerivedAddresses.filter(a => tronSelectedIndexes.has(a.index)).filter(a => !existingTronAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                tronNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = tronItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addTronAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                tronNewLabel = ""; tronPrivateKeyAck = false; addSourceMode = "idle";
+                await loadTronAccounts(); toast.success(`${selected.length} TRON address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address))) { toast.error("Invalid TRON address"); return; }
+            if (tronAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on TRON"); return; }
+            await getBackend().addTronAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            tronNewAddress = ""; tronNewLabel = ""; addSourceMode = "idle"; await loadTronAccounts(); toast.success("TRON account added");
+        } catch (err) { toast.error(`Failed to add TRON account: ${err}`); } finally { tronAddingAccount = false; }
+    }
+
+    async function handleRemoveTronAccount(id: string) { try { await getBackend().removeTronAccount(id); await loadTronAccounts(); toast.success("TRON account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncTronAccount(account: TronAccount) {
+        taskQueue.enqueue({ key: `tron-sync:${account.id}`, label: `Sync ${account.label} (TRON)`, async run(ctx) {
+            const r = await getBackend().syncTron(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadTronAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllTron() { for (const account of tronAccounts) { syncTronAccount(account); } }
+
+    // -- Stellar functions --
+
+    function startAddStellar(prefillAddress?: string) { addSourceMode = "stellar"; if (prefillAddress) stellarNewAddress = prefillAddress; }
+    async function loadStellarAccounts() { try { stellarAccounts = await getBackend().listStellarAccounts(); } catch (err) { toast.error(`Failed to load Stellar accounts: ${err}`); } }
+
+    async function handleAddStellarAccount() {
+        const input = stellarNewAddress.trim(); const baseLabel = stellarNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        stellarAddingAccount = true;
+        try {
+            if (stellarDerivedAddresses.length > 0) {
+                if (stellarSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = stellarDerivedAddresses.filter(a => stellarSelectedIndexes.has(a.index)).filter(a => !existingStellarAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                stellarNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = stellarItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addStellarAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                stellarNewLabel = ""; stellarPrivateKeyAck = false; addSourceMode = "idle";
+                await loadStellarAccounts(); toast.success(`${selected.length} Stellar address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^G[A-Z2-7]{55}$/.test(address))) { toast.error("Invalid Stellar address"); return; }
+            if (stellarAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Stellar"); return; }
+            await getBackend().addStellarAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            stellarNewAddress = ""; stellarNewLabel = ""; addSourceMode = "idle"; await loadStellarAccounts(); toast.success("Stellar account added");
+        } catch (err) { toast.error(`Failed to add Stellar account: ${err}`); } finally { stellarAddingAccount = false; }
+    }
+
+    async function handleRemoveStellarAccount(id: string) { try { await getBackend().removeStellarAccount(id); await loadStellarAccounts(); toast.success("Stellar account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncStellarAccount(account: StellarAccount) {
+        taskQueue.enqueue({ key: `stellar-sync:${account.id}`, label: `Sync ${account.label} (Stellar)`, async run(ctx) {
+            const r = await getBackend().syncStellar(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadStellarAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllStellar() { for (const account of stellarAccounts) { syncStellarAccount(account); } }
+
+    // -- Bittensor functions --
+
+    function startAddBittensor(prefillAddress?: string) { addSourceMode = "bittensor"; if (prefillAddress) bittensorNewAddress = prefillAddress; }
+    async function loadBittensorAccounts() { try { bittensorAccounts = await getBackend().listBittensorAccounts(); } catch (err) { toast.error(`Failed to load Bittensor accounts: ${err}`); } }
+
+    async function handleAddBittensorAccount() {
+        const input = bittensorNewAddress.trim(); const baseLabel = bittensorNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        bittensorAddingAccount = true;
+        try {
+            if (bittensorDerivedAddresses.length > 0) {
+                if (bittensorSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = bittensorDerivedAddresses.filter(a => bittensorSelectedIndexes.has(a.index)).filter(a => !existingBittensorAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                bittensorNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = bittensorItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addBittensorAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                bittensorNewLabel = ""; bittensorPrivateKeyAck = false; addSourceMode = "idle";
+                await loadBittensorAccounts(); toast.success(`${selected.length} Bittensor address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^5[A-HJ-NP-Za-km-z1-9]{47}$/.test(address))) { toast.error("Invalid Bittensor address"); return; }
+            if (bittensorAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Bittensor"); return; }
+            await getBackend().addBittensorAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            bittensorNewAddress = ""; bittensorNewLabel = ""; addSourceMode = "idle"; await loadBittensorAccounts(); toast.success("Bittensor account added");
+        } catch (err) { toast.error(`Failed to add Bittensor account: ${err}`); } finally { bittensorAddingAccount = false; }
+    }
+
+    async function handleRemoveBittensorAccount(id: string) { try { await getBackend().removeBittensorAccount(id); await loadBittensorAccounts(); toast.success("Bittensor account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncBittensorAccount(account: BittensorAccount) {
+        taskQueue.enqueue({ key: `bittensor-sync:${account.id}`, label: `Sync ${account.label} (Bittensor)`, async run(ctx) {
+            const r = await getBackend().syncBittensor(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadBittensorAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllBittensor() { for (const account of bittensorAccounts) { syncBittensorAccount(account); } }
+
+    // -- Hedera functions --
+
+    function startAddHedera(prefillAddress?: string) { addSourceMode = "hedera"; if (prefillAddress) hederaNewAddress = prefillAddress; }
+    async function loadHederaAccounts() { try { hederaAccounts = await getBackend().listHederaAccounts(); } catch (err) { toast.error(`Failed to load Hedera accounts: ${err}`); } }
+
+    async function handleAddHederaAccount() {
+        const input = hederaNewAddress.trim(); const baseLabel = hederaNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        hederaAddingAccount = true;
+        try {
+            if (hederaDerivedAddresses.length > 0) {
+                if (hederaSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = hederaDerivedAddresses.filter(a => hederaSelectedIndexes.has(a.index)).filter(a => !existingHederaAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                hederaNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = hederaItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address}`);
+                    await getBackend().addHederaAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                hederaNewLabel = ""; hederaPrivateKeyAck = false; addSourceMode = "idle";
+                await loadHederaAccounts(); toast.success(`${selected.length} Hedera account(s) added`); return;
+            }
+            const address = input;
+            if (!(/^0\.0\.\d+$/.test(address))) { toast.error("Invalid Hedera address (expected 0.0.X format)"); return; }
+            if (hederaAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Hedera"); return; }
+            await getBackend().addHederaAccount({ id: uuidv7(), address, label: baseLabel || address, created_at: new Date().toISOString() });
+            hederaNewAddress = ""; hederaNewLabel = ""; addSourceMode = "idle"; await loadHederaAccounts(); toast.success("Hedera account added");
+        } catch (err) { toast.error(`Failed to add Hedera account: ${err}`); } finally { hederaAddingAccount = false; }
+    }
+
+    async function handleRemoveHederaAccount(id: string) { try { await getBackend().removeHederaAccount(id); await loadHederaAccounts(); toast.success("Hedera account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncHederaAccount(account: HederaAccount) {
+        taskQueue.enqueue({ key: `hedera-sync:${account.id}`, label: `Sync ${account.label} (Hedera)`, async run(ctx) {
+            const r = await getBackend().syncHedera(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadHederaAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllHedera() { for (const account of hederaAccounts) { syncHederaAccount(account); } }
+
+    // -- NEAR functions --
+
+    function startAddNear(prefillAddress?: string) { addSourceMode = "near"; if (prefillAddress) nearNewAddress = prefillAddress; }
+    async function loadNearAccounts() { try { nearAccounts = await getBackend().listNearAccounts(); } catch (err) { toast.error(`Failed to load NEAR accounts: ${err}`); } }
+
+    async function handleAddNearAccount() {
+        const input = nearNewAddress.trim(); const baseLabel = nearNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        nearAddingAccount = true;
+        try {
+            if (nearDerivedAddresses.length > 0) {
+                if (nearSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = nearDerivedAddresses.filter(a => nearSelectedIndexes.has(a.index)).filter(a => !existingNearAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                nearNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = nearItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addNearAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                nearNewLabel = ""; nearPrivateKeyAck = false; addSourceMode = "idle";
+                await loadNearAccounts(); toast.success(`${selected.length} NEAR address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^([a-z0-9._-]+\.near|[0-9a-f]{64})$/.test(address))) { toast.error("Invalid NEAR address"); return; }
+            if (nearAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on NEAR"); return; }
+            await getBackend().addNearAccount({ id: uuidv7(), address, label: baseLabel || (address.includes(".near") ? address : `${address.slice(0, 8)}...${address.slice(-4)}`), created_at: new Date().toISOString() });
+            nearNewAddress = ""; nearNewLabel = ""; addSourceMode = "idle"; await loadNearAccounts(); toast.success("NEAR account added");
+        } catch (err) { toast.error(`Failed to add NEAR account: ${err}`); } finally { nearAddingAccount = false; }
+    }
+
+    async function handleRemoveNearAccount(id: string) { try { await getBackend().removeNearAccount(id); await loadNearAccounts(); toast.success("NEAR account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncNearAccount(account: NearAccount) {
+        taskQueue.enqueue({ key: `near-sync:${account.id}`, label: `Sync ${account.label} (NEAR)`, async run(ctx) {
+            const r = await getBackend().syncNear(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadNearAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllNear() { for (const account of nearAccounts) { syncNearAccount(account); } }
+
+    // -- Algorand functions --
+
+    function startAddAlgorand(prefillAddress?: string) { addSourceMode = "algorand"; if (prefillAddress) algorandNewAddress = prefillAddress; }
+    async function loadAlgorandAccounts() { try { algorandAccounts = await getBackend().listAlgorandAccounts(); } catch (err) { toast.error(`Failed to load Algorand accounts: ${err}`); } }
+
+    async function handleAddAlgorandAccount() {
+        const input = algorandNewAddress.trim(); const baseLabel = algorandNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        algorandAddingAccount = true;
+        try {
+            if (algorandDerivedAddresses.length > 0) {
+                if (algorandSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = algorandDerivedAddresses.filter(a => algorandSelectedIndexes.has(a.index)).filter(a => !existingAlgorandAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                algorandNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = algorandItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addAlgorandAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                algorandNewLabel = ""; algorandPrivateKeyAck = false; addSourceMode = "idle";
+                await loadAlgorandAccounts(); toast.success(`${selected.length} Algorand address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^[A-Z2-7]{58}$/.test(address))) { toast.error("Invalid Algorand address"); return; }
+            if (algorandAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Algorand"); return; }
+            await getBackend().addAlgorandAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            algorandNewAddress = ""; algorandNewLabel = ""; addSourceMode = "idle"; await loadAlgorandAccounts(); toast.success("Algorand account added");
+        } catch (err) { toast.error(`Failed to add Algorand account: ${err}`); } finally { algorandAddingAccount = false; }
+    }
+
+    async function handleRemoveAlgorandAccount(id: string) { try { await getBackend().removeAlgorandAccount(id); await loadAlgorandAccounts(); toast.success("Algorand account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncAlgorandAccount(account: AlgorandAccount) {
+        taskQueue.enqueue({ key: `algorand-sync:${account.id}`, label: `Sync ${account.label} (Algorand)`, async run(ctx) {
+            const r = await getBackend().syncAlgorand(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadAlgorandAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllAlgorand() { for (const account of algorandAccounts) { syncAlgorandAccount(account); } }
+
+    // -- Kaspa functions --
+
+    function startAddKaspa(prefillAddress?: string) { addSourceMode = "kaspa"; if (prefillAddress) kaspaNewAddress = prefillAddress; }
+    async function loadKaspaAccounts() { try { kaspaAccounts = await getBackend().listKaspaAccounts(); } catch (err) { toast.error(`Failed to load Kaspa accounts: ${err}`); } }
+
+    async function handleAddKaspaAccount() {
+        const input = kaspaNewAddress.trim(); const baseLabel = kaspaNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        kaspaAddingAccount = true;
+        try {
+            if (kaspaDerivedAddresses.length > 0) {
+                if (kaspaSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = kaspaDerivedAddresses.filter(a => kaspaSelectedIndexes.has(a.index)).filter(a => !existingKaspaAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                kaspaNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = kaspaItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 12)}...${address.slice(-4)}`);
+                    await getBackend().addKaspaAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                kaspaNewLabel = ""; kaspaPrivateKeyAck = false; addSourceMode = "idle";
+                await loadKaspaAccounts(); toast.success(`${selected.length} Kaspa address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^kaspa:[a-z0-9]{61,63}$/.test(address))) { toast.error("Invalid Kaspa address"); return; }
+            if (kaspaAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Kaspa"); return; }
+            await getBackend().addKaspaAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 12)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            kaspaNewAddress = ""; kaspaNewLabel = ""; addSourceMode = "idle"; await loadKaspaAccounts(); toast.success("Kaspa account added");
+        } catch (err) { toast.error(`Failed to add Kaspa account: ${err}`); } finally { kaspaAddingAccount = false; }
+    }
+
+    async function handleRemoveKaspaAccount(id: string) { try { await getBackend().removeKaspaAccount(id); await loadKaspaAccounts(); toast.success("Kaspa account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncKaspaAccount(account: KaspaAccount) {
+        taskQueue.enqueue({ key: `kaspa-sync:${account.id}`, label: `Sync ${account.label} (Kaspa)`, async run(ctx) {
+            const r = await getBackend().syncKaspa(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadKaspaAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllKaspa() { for (const account of kaspaAccounts) { syncKaspaAccount(account); } }
+
+    // -- Zcash functions --
+
+    function startAddZcash(prefillAddress?: string) { addSourceMode = "zcash"; if (prefillAddress) zcashNewAddress = prefillAddress; }
+    async function loadZcashAccounts() { try { zcashAccounts = await getBackend().listZcashAccounts(); } catch (err) { toast.error(`Failed to load Zcash accounts: ${err}`); } }
+
+    async function handleAddZcashAccount() {
+        const input = zcashNewAddress.trim(); const baseLabel = zcashNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        zcashAddingAccount = true;
+        try {
+            if (zcashDerivedAddresses.length > 0) {
+                if (zcashSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = zcashDerivedAddresses.filter(a => zcashSelectedIndexes.has(a.index)).filter(a => !existingZcashAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                zcashNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = zcashItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addZcashAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                zcashNewLabel = ""; zcashPrivateKeyAck = false; addSourceMode = "idle";
+                await loadZcashAccounts(); toast.success(`${selected.length} Zcash address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^t[13][a-km-zA-HJ-NP-Z1-9]{33}$/.test(address))) { toast.error("Invalid Zcash address"); return; }
+            if (zcashAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Zcash"); return; }
+            await getBackend().addZcashAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            zcashNewAddress = ""; zcashNewLabel = ""; addSourceMode = "idle"; await loadZcashAccounts(); toast.success("Zcash account added");
+        } catch (err) { toast.error(`Failed to add Zcash account: ${err}`); } finally { zcashAddingAccount = false; }
+    }
+
+    async function handleRemoveZcashAccount(id: string) { try { await getBackend().removeZcashAccount(id); await loadZcashAccounts(); toast.success("Zcash account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncZcashAccount(account: ZcashAccount) {
+        taskQueue.enqueue({ key: `zcash-sync:${account.id}`, label: `Sync ${account.label} (Zcash)`, async run(ctx) {
+            const r = await getBackend().syncZcash(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadZcashAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllZcash() { for (const account of zcashAccounts) { syncZcashAccount(account); } }
+
+    // -- Stacks functions --
+
+    function startAddStacks(prefillAddress?: string) { addSourceMode = "stacks"; if (prefillAddress) stacksNewAddress = prefillAddress; }
+    async function loadStacksAccounts() { try { stacksAccounts = await getBackend().listStacksAccounts(); } catch (err) { toast.error(`Failed to load Stacks accounts: ${err}`); } }
+
+    async function handleAddStacksAccount() {
+        const input = stacksNewAddress.trim(); const baseLabel = stacksNewLabel.trim();
+        if (!input) { toast.error("Input is required"); return; }
+        stacksAddingAccount = true;
+        try {
+            if (stacksDerivedAddresses.length > 0) {
+                if (stacksSelectedIndexes.size === 0) { toast.error("Select at least one address"); return; }
+                const selected = stacksDerivedAddresses.filter(a => stacksSelectedIndexes.has(a.index)).filter(a => !existingStacksAddresses.has(a.address));
+                if (selected.length === 0) { toast.error("All selected addresses are already added"); return; }
+                stacksNewAddress = "";
+                for (const { index, address } of selected) {
+                    const label = stacksItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : `${address.slice(0, 8)}...${address.slice(-4)}`);
+                    await getBackend().addStacksAccount({ id: uuidv7(), address, label, created_at: new Date().toISOString() });
+                }
+                stacksNewLabel = ""; stacksPrivateKeyAck = false; addSourceMode = "idle";
+                await loadStacksAccounts(); toast.success(`${selected.length} Stacks address(es) added`); return;
+            }
+            const address = input;
+            if (!(/^SP[0-9A-Z]{28,38}$/.test(address))) { toast.error("Invalid Stacks address"); return; }
+            if (stacksAccounts.find(a => a.address === address)) { toast.info("This address is already tracked on Stacks"); return; }
+            await getBackend().addStacksAccount({ id: uuidv7(), address, label: baseLabel || `${address.slice(0, 8)}...${address.slice(-4)}`, created_at: new Date().toISOString() });
+            stacksNewAddress = ""; stacksNewLabel = ""; addSourceMode = "idle"; await loadStacksAccounts(); toast.success("Stacks account added");
+        } catch (err) { toast.error(`Failed to add Stacks account: ${err}`); } finally { stacksAddingAccount = false; }
+    }
+
+    async function handleRemoveStacksAccount(id: string) { try { await getBackend().removeStacksAccount(id); await loadStacksAccounts(); toast.success("Stacks account removed"); } catch (err) { toast.error(`Failed to remove: ${err}`); } }
+
+    function syncStacksAccount(account: StacksAccount) {
+        taskQueue.enqueue({ key: `stacks-sync:${account.id}`, label: `Sync ${account.label} (Stacks)`, async run(ctx) {
+            const r = await getBackend().syncStacks(account, (msg) => ctx.reportProgress({ current: 0, total: 0, message: msg }), ctx.signal);
+            await loadStacksAccounts(); if (r.transactions_imported > 0) invalidate("journal", "accounts", "reports");
+            if (r.transactions_imported > 0) { enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet()); }
+            return { summary: `${r.transactions_imported} imported, ${r.transactions_skipped} skipped`, data: r };
+        }});
+    }
+
+    function syncAllStacks() { for (const account of stacksAccounts) { syncStacksAccount(account); } }
+
+    const anyBusy = $derived(cexBusy || ethBusy || btcBusy || solBusy || hlBusy || suiBusy || aptosBusy || tonBusy || tezosBusy || cosmosBusy || polkadotBusy || dogeBusy || ltcBusy || bchBusy || xrpBusy || tronBusy || stellarBusy || bittensorBusy || hederaBusy || nearBusy || algorandBusy || kaspaBusy || zcashBusy || stacksBusy);
 
     async function loadCexAccounts() {
         try {
@@ -2233,6 +3578,19 @@
         loadTezosAccounts();
         loadCosmosAccounts();
         loadPolkadotAccounts();
+        loadDogeAccounts();
+        loadLtcAccounts();
+        loadBchAccounts();
+        loadXrpAccounts();
+        loadTronAccounts();
+        loadStellarAccounts();
+        loadBittensorAccounts();
+        loadHederaAccounts();
+        loadNearAccounts();
+        loadAlgorandAccounts();
+        loadKaspaAccounts();
+        loadZcashAccounts();
+        loadStacksAccounts();
     });
 
     // -- Etherscan handlers --
@@ -2745,6 +4103,19 @@
                     onSelectTezos={startAddTezos}
                     onSelectCosmos={startAddCosmos}
                     onSelectPolkadot={startAddPolkadot}
+                    onSelectDoge={startAddDoge}
+                    onSelectLtc={startAddLtc}
+                    onSelectBch={startAddBch}
+                    onSelectXrp={startAddXrp}
+                    onSelectTron={startAddTron}
+                    onSelectStellar={startAddStellar}
+                    onSelectBittensor={startAddBittensor}
+                    onSelectHedera={startAddHedera}
+                    onSelectNear={startAddNear}
+                    onSelectAlgorand={startAddAlgorand}
+                    onSelectKaspa={startAddKaspa}
+                    onSelectZcash={startAddZcash}
+                    onSelectStacks={startAddStacks}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}
@@ -3872,6 +5243,1168 @@
                 </div>
             {/if}
 
+
+            {#if addSourceMode === "doge"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Dogecoin Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Dogecoin address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-doge-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-doge-address"
+                                placeholder="D..."
+                                autocomplete="off"
+                                bind:value={dogeNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-doge-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-doge-label" placeholder="My Dogecoin Wallet" bind:value={dogeNewLabel} />
+                        </div>
+                        <Button onclick={handleAddDogeAccount} disabled={dogeAddingAccount || (!dogeNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if dogeDetection.input_type !== "unknown" && dogeNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if dogeDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{dogeDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{dogeDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if dogeDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={dogePrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if dogeDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each dogeDerivedAddresses as derived}
+                                {@const exists = existingDogeAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={dogeSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(dogeSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            dogeSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={dogeItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(dogeItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); dogeItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: dogeSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { dogeDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "ltc"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Litecoin Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Litecoin address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-ltc-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-ltc-address"
+                                placeholder="L... / M... / ltc1..."
+                                autocomplete="off"
+                                bind:value={ltcNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-ltc-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-ltc-label" placeholder="My Litecoin Wallet" bind:value={ltcNewLabel} />
+                        </div>
+                        <Button onclick={handleAddLtcAccount} disabled={ltcAddingAccount || (!ltcNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if ltcDetection.input_type !== "unknown" && ltcNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if ltcDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{ltcDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{ltcDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if ltcDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={ltcPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if ltcDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each ltcDerivedAddresses as derived}
+                                {@const exists = existingLtcAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={ltcSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(ltcSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            ltcSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={ltcItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(ltcItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); ltcItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: ltcSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { ltcDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "bch"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Bitcoin Cash Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Bitcoin Cash address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-bch-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-bch-address"
+                                placeholder="bitcoincash:q..."
+                                autocomplete="off"
+                                bind:value={bchNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-bch-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-bch-label" placeholder="My BCH Wallet" bind:value={bchNewLabel} />
+                        </div>
+                        <Button onclick={handleAddBchAccount} disabled={bchAddingAccount || (!bchNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+                </div>
+            {/if}
+
+            {#if addSourceMode === "xrp"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add XRP Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a XRP address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-xrp-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-xrp-address"
+                                placeholder="r..."
+                                autocomplete="off"
+                                bind:value={xrpNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-xrp-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-xrp-label" placeholder="My XRP Wallet" bind:value={xrpNewLabel} />
+                        </div>
+                        <Button onclick={handleAddXrpAccount} disabled={xrpAddingAccount || (!xrpNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if xrpDetection.input_type !== "unknown" && xrpNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if xrpDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{xrpDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{xrpDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if xrpDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={xrpPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if xrpDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each xrpDerivedAddresses as derived}
+                                {@const exists = existingXrpAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={xrpSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(xrpSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            xrpSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={xrpItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(xrpItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); xrpItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: xrpSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { xrpDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "tron"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add TRON Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a TRON address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-tron-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-tron-address"
+                                placeholder="T..."
+                                autocomplete="off"
+                                bind:value={tronNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-tron-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-tron-label" placeholder="My TRON Wallet" bind:value={tronNewLabel} />
+                        </div>
+                        <Button onclick={handleAddTronAccount} disabled={tronAddingAccount || (!tronNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if tronDetection.input_type !== "unknown" && tronNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if tronDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{tronDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{tronDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if tronDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={tronPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if tronDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each tronDerivedAddresses as derived}
+                                {@const exists = existingTronAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={tronSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(tronSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            tronSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={tronItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(tronItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); tronItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: tronSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { tronDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "stellar"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Stellar Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Stellar address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-stellar-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-stellar-address"
+                                placeholder="G..."
+                                autocomplete="off"
+                                bind:value={stellarNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-stellar-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-stellar-label" placeholder="My Stellar Wallet" bind:value={stellarNewLabel} />
+                        </div>
+                        <Button onclick={handleAddStellarAccount} disabled={stellarAddingAccount || (!stellarNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if stellarDetection.input_type !== "unknown" && stellarNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if stellarDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{stellarDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{stellarDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if stellarDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={stellarPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if stellarDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each stellarDerivedAddresses as derived}
+                                {@const exists = existingStellarAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={stellarSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(stellarSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            stellarSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={stellarItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(stellarItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); stellarItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: stellarSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { stellarDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "bittensor"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Bittensor Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Bittensor address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-bittensor-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-bittensor-address"
+                                placeholder="5..."
+                                autocomplete="off"
+                                bind:value={bittensorNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-bittensor-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-bittensor-label" placeholder="My Bittensor Wallet" bind:value={bittensorNewLabel} />
+                        </div>
+                        <Button onclick={handleAddBittensorAccount} disabled={bittensorAddingAccount || (!bittensorNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if bittensorDetection.input_type !== "unknown" && bittensorNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if bittensorDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{bittensorDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{bittensorDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if bittensorDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={bittensorPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if bittensorDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each bittensorDerivedAddresses as derived}
+                                {@const exists = existingBittensorAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={bittensorSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(bittensorSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            bittensorSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={bittensorItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(bittensorItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); bittensorItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: bittensorSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { bittensorDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "hedera"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Hedera Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Hedera address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-hedera-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-hedera-address"
+                                placeholder="0.0.X"
+                                autocomplete="off"
+                                bind:value={hederaNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-hedera-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-hedera-label" placeholder="My Hedera Account" bind:value={hederaNewLabel} />
+                        </div>
+                        <Button onclick={handleAddHederaAccount} disabled={hederaAddingAccount || (!hederaNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if hederaDetection.input_type !== "unknown" && hederaNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if hederaDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{hederaDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{hederaDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if hederaDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={hederaPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if hederaDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each hederaDerivedAddresses as derived}
+                                {@const exists = existingHederaAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={hederaSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(hederaSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            hederaSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={hederaItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(hederaItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); hederaItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: hederaSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { hederaDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "near"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add NEAR Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a NEAR address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-near-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-near-address"
+                                placeholder="alice.near / 64-char hex"
+                                autocomplete="off"
+                                bind:value={nearNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-near-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-near-label" placeholder="My NEAR Wallet" bind:value={nearNewLabel} />
+                        </div>
+                        <Button onclick={handleAddNearAccount} disabled={nearAddingAccount || (!nearNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if nearDetection.input_type !== "unknown" && nearNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if nearDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{nearDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{nearDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if nearDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={nearPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if nearDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each nearDerivedAddresses as derived}
+                                {@const exists = existingNearAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={nearSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(nearSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            nearSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={nearItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(nearItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); nearItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: nearSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { nearDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "algorand"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Algorand Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Algorand address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-algorand-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-algorand-address"
+                                placeholder="A-Z2-7 (58 chars)"
+                                autocomplete="off"
+                                bind:value={algorandNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-algorand-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-algorand-label" placeholder="My Algorand Wallet" bind:value={algorandNewLabel} />
+                        </div>
+                        <Button onclick={handleAddAlgorandAccount} disabled={algorandAddingAccount || (!algorandNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if algorandDetection.input_type !== "unknown" && algorandNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if algorandDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{algorandDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{algorandDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if algorandDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={algorandPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if algorandDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each algorandDerivedAddresses as derived}
+                                {@const exists = existingAlgorandAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={algorandSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(algorandSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            algorandSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={algorandItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(algorandItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); algorandItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: algorandSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { algorandDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "kaspa"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Kaspa Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Kaspa address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-kaspa-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-kaspa-address"
+                                placeholder="kaspa:..."
+                                autocomplete="off"
+                                bind:value={kaspaNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-kaspa-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-kaspa-label" placeholder="My Kaspa Wallet" bind:value={kaspaNewLabel} />
+                        </div>
+                        <Button onclick={handleAddKaspaAccount} disabled={kaspaAddingAccount || (!kaspaNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if kaspaDetection.input_type !== "unknown" && kaspaNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if kaspaDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{kaspaDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{kaspaDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if kaspaDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={kaspaPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if kaspaDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each kaspaDerivedAddresses as derived}
+                                {@const exists = existingKaspaAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={kaspaSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(kaspaSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            kaspaSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={kaspaItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(kaspaItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); kaspaItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: kaspaSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { kaspaDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "zcash"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Zcash Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Zcash address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-zcash-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-zcash-address"
+                                placeholder="t1... / t3..."
+                                autocomplete="off"
+                                bind:value={zcashNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-zcash-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-zcash-label" placeholder="My Zcash Wallet" bind:value={zcashNewLabel} />
+                        </div>
+                        <Button onclick={handleAddZcashAccount} disabled={zcashAddingAccount || (!zcashNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if zcashDetection.input_type !== "unknown" && zcashNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if zcashDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{zcashDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{zcashDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if zcashDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={zcashPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if zcashDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each zcashDerivedAddresses as derived}
+                                {@const exists = existingZcashAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={zcashSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(zcashSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            zcashSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={zcashItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(zcashItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); zcashItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: zcashSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { zcashDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            {#if addSourceMode === "stacks"}
+                <div class="space-y-3 rounded-lg border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Add Stacks Account</span>
+                        <Button variant="ghost" size="sm" onclick={cancelAdd}>
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Track a Stacks address. All on-chain data is public — no API key needed.
+                    </p>
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1 space-y-1">
+                            <label for="new-stacks-address" class="text-xs font-medium">Address</label>
+                            <Input
+                                id="new-stacks-address"
+                                placeholder="SP..."
+                                autocomplete="off"
+                                bind:value={stacksNewAddress}
+                            />
+                        </div>
+                        <div class="w-40 space-y-1">
+                            <label for="new-stacks-label" class="text-xs font-medium">Label (optional)</label>
+                            <Input id="new-stacks-label" placeholder="My Stacks Wallet" bind:value={stacksNewLabel} />
+                        </div>
+                        <Button onclick={handleAddStacksAccount} disabled={stacksAddingAccount || (!stacksNewAddress.trim())}>
+                            <Plus class="mr-1 h-4 w-4" />
+                            Add
+                        </Button>
+                    </div>
+
+                    {#if stacksDetection.input_type !== "unknown" && stacksNewAddress.trim()}
+                        <div class="flex items-center gap-2">
+                            {#if stacksDetection.is_private}
+                                <Badge variant="outline" class="border-amber-500 text-amber-700">{stacksDetection.description}</Badge>
+                            {:else}
+                                <Badge variant="outline" class="border-green-500 text-green-700">{stacksDetection.description}</Badge>
+                            {/if}
+                        </div>
+                    {/if}
+
+                    {#if stacksDetection.is_private}
+                        <div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                            <p class="font-medium text-amber-800 dark:text-amber-200">{m.sources_private_key_detected()}</p>
+                            <p class="mt-1 text-amber-700 dark:text-amber-300">{m.sources_sol_private_key_warning()}</p>
+                            <label class="mt-2 flex items-center gap-2">
+                                <input type="checkbox" bind:checked={stacksPrivateKeyAck} />
+                                <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
+                            </label>
+                        </div>
+                    {/if}
+
+                    {#if stacksDerivedAddresses.length > 0}
+                        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+                            {#each stacksDerivedAddresses as derived}
+                                {@const exists = existingStacksAddresses.has(derived.address)}
+                                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                                    <input
+                                        type="checkbox"
+                                        checked={stacksSelectedIndexes.has(derived.index)}
+                                        disabled={exists}
+                                        onchange={() => {
+                                            const next = new Set(stacksSelectedIndexes);
+                                            if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index);
+                                            stacksSelectedIndexes = next;
+                                        }}
+                                    />
+                                    <span class="font-mono">{derived.index}</span>
+                                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                        class="h-6 w-24 text-xs"
+                                        placeholder={m.label_label()}
+                                        value={stacksItemLabels.get(derived.index) ?? ""}
+                                        oninput={(e) => { const next = new Map(stacksItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); stacksItemLabels = next; }}
+                                    />
+                                    {#if exists}
+                                        <Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>
+                                    {/if}
+                                </label>
+                            {/each}
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">{m.sources_addresses_selected({ count: stacksSelectedIndexes.size })}</span>
+                                <Button variant="outline" size="sm" onclick={() => { stacksDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
             <!-- Blockchain Accounts sub-section (merged BTC + EVM + SOL) -->
             {#if blockchainRows.length > 0}
                 <div class="space-y-2">
@@ -4444,6 +6977,787 @@
                                             </div>
                                         </Table.Cell>
                                     </Table.Row>
+                                {:else if row.kind === "doge"}
+                                    {@const dogeAccount = row.data}
+                                    {@const isDogeSyncing = taskQueue.isActive(`doge-sync:${dogeAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {dogeAccount.address.slice(0, 8)}...{dogeAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{dogeAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(dogeAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === dogeAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("doge"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {dogeAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Dogecoin</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Dogecoin</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {dogeAccount.last_sync
+                                                ? new Date(dogeAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncDogeAccount(dogeAccount)}
+                                                    disabled={dogeBusy || editingRowId === dogeAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isDogeSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === dogeAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === dogeAccount.id ? (editingRowId = null) : startEditLabel(dogeAccount.id, dogeAccount.label)} disabled={dogeBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveDogeAccount(dogeAccount.id)}
+                                                    disabled={dogeBusy || editingRowId === dogeAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "ltc"}
+                                    {@const ltcAccount = row.data}
+                                    {@const isLtcSyncing = taskQueue.isActive(`ltc-sync:${ltcAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {ltcAccount.address.slice(0, 8)}...{ltcAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{ltcAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(ltcAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === ltcAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("ltc"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {ltcAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Litecoin</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Litecoin</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {ltcAccount.last_sync
+                                                ? new Date(ltcAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncLtcAccount(ltcAccount)}
+                                                    disabled={ltcBusy || editingRowId === ltcAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isLtcSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === ltcAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === ltcAccount.id ? (editingRowId = null) : startEditLabel(ltcAccount.id, ltcAccount.label)} disabled={ltcBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveLtcAccount(ltcAccount.id)}
+                                                    disabled={ltcBusy || editingRowId === ltcAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "bch"}
+                                    {@const bchAccount = row.data}
+                                    {@const isBchSyncing = taskQueue.isActive(`bch-sync:${bchAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {bchAccount.address.slice(0, 12)}...{bchAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{bchAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(bchAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === bchAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("bch"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {bchAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Bitcoin Cash</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Bitcoin Cash</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {bchAccount.last_sync
+                                                ? new Date(bchAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncBchAccount(bchAccount)}
+                                                    disabled={bchBusy || editingRowId === bchAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isBchSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === bchAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === bchAccount.id ? (editingRowId = null) : startEditLabel(bchAccount.id, bchAccount.label)} disabled={bchBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveBchAccount(bchAccount.id)}
+                                                    disabled={bchBusy || editingRowId === bchAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "xrp"}
+                                    {@const xrpAccount = row.data}
+                                    {@const isXrpSyncing = taskQueue.isActive(`xrp-sync:${xrpAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {xrpAccount.address.slice(0, 8)}...{xrpAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{xrpAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(xrpAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === xrpAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("xrp"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {xrpAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">XRP</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">XRP</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {xrpAccount.last_sync
+                                                ? new Date(xrpAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncXrpAccount(xrpAccount)}
+                                                    disabled={xrpBusy || editingRowId === xrpAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isXrpSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === xrpAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === xrpAccount.id ? (editingRowId = null) : startEditLabel(xrpAccount.id, xrpAccount.label)} disabled={xrpBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveXrpAccount(xrpAccount.id)}
+                                                    disabled={xrpBusy || editingRowId === xrpAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "tron"}
+                                    {@const tronAccount = row.data}
+                                    {@const isTronSyncing = taskQueue.isActive(`tron-sync:${tronAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {tronAccount.address.slice(0, 8)}...{tronAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{tronAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(tronAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === tronAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("tron"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {tronAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">TRON</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">TRON</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {tronAccount.last_sync
+                                                ? new Date(tronAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncTronAccount(tronAccount)}
+                                                    disabled={tronBusy || editingRowId === tronAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isTronSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === tronAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === tronAccount.id ? (editingRowId = null) : startEditLabel(tronAccount.id, tronAccount.label)} disabled={tronBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveTronAccount(tronAccount.id)}
+                                                    disabled={tronBusy || editingRowId === tronAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "stellar"}
+                                    {@const stellarAccount = row.data}
+                                    {@const isStellarSyncing = taskQueue.isActive(`stellar-sync:${stellarAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {stellarAccount.address.slice(0, 8)}...{stellarAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{stellarAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(stellarAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === stellarAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("stellar"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {stellarAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Stellar</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Stellar</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {stellarAccount.last_sync
+                                                ? new Date(stellarAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncStellarAccount(stellarAccount)}
+                                                    disabled={stellarBusy || editingRowId === stellarAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isStellarSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === stellarAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === stellarAccount.id ? (editingRowId = null) : startEditLabel(stellarAccount.id, stellarAccount.label)} disabled={stellarBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveStellarAccount(stellarAccount.id)}
+                                                    disabled={stellarBusy || editingRowId === stellarAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "bittensor"}
+                                    {@const bittensorAccount = row.data}
+                                    {@const isBittensorSyncing = taskQueue.isActive(`bittensor-sync:${bittensorAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {bittensorAccount.address.slice(0, 8)}...{bittensorAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{bittensorAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(bittensorAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === bittensorAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("bittensor"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {bittensorAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Bittensor</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Bittensor</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {bittensorAccount.last_sync
+                                                ? new Date(bittensorAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncBittensorAccount(bittensorAccount)}
+                                                    disabled={bittensorBusy || editingRowId === bittensorAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isBittensorSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === bittensorAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === bittensorAccount.id ? (editingRowId = null) : startEditLabel(bittensorAccount.id, bittensorAccount.label)} disabled={bittensorBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveBittensorAccount(bittensorAccount.id)}
+                                                    disabled={bittensorBusy || editingRowId === bittensorAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "hedera"}
+                                    {@const hederaAccount = row.data}
+                                    {@const isHederaSyncing = taskQueue.isActive(`hedera-sync:${hederaAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {hederaAccount.address}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{hederaAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(hederaAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === hederaAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("hedera"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {hederaAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Hedera</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Hedera</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {hederaAccount.last_sync
+                                                ? new Date(hederaAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncHederaAccount(hederaAccount)}
+                                                    disabled={hederaBusy || editingRowId === hederaAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isHederaSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === hederaAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === hederaAccount.id ? (editingRowId = null) : startEditLabel(hederaAccount.id, hederaAccount.label)} disabled={hederaBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveHederaAccount(hederaAccount.id)}
+                                                    disabled={hederaBusy || editingRowId === hederaAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "near"}
+                                    {@const nearAccount = row.data}
+                                    {@const isNearSyncing = taskQueue.isActive(`near-sync:${nearAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {nearAccount.address.slice(0, 8)}...{nearAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{nearAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(nearAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === nearAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("near"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {nearAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">NEAR</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">NEAR</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {nearAccount.last_sync
+                                                ? new Date(nearAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncNearAccount(nearAccount)}
+                                                    disabled={nearBusy || editingRowId === nearAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isNearSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === nearAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === nearAccount.id ? (editingRowId = null) : startEditLabel(nearAccount.id, nearAccount.label)} disabled={nearBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveNearAccount(nearAccount.id)}
+                                                    disabled={nearBusy || editingRowId === nearAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "algorand"}
+                                    {@const algorandAccount = row.data}
+                                    {@const isAlgorandSyncing = taskQueue.isActive(`algorand-sync:${algorandAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {algorandAccount.address.slice(0, 8)}...{algorandAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{algorandAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(algorandAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === algorandAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("algorand"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {algorandAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Algorand</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Algorand</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {algorandAccount.last_sync
+                                                ? new Date(algorandAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncAlgorandAccount(algorandAccount)}
+                                                    disabled={algorandBusy || editingRowId === algorandAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isAlgorandSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === algorandAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === algorandAccount.id ? (editingRowId = null) : startEditLabel(algorandAccount.id, algorandAccount.label)} disabled={algorandBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveAlgorandAccount(algorandAccount.id)}
+                                                    disabled={algorandBusy || editingRowId === algorandAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "kaspa"}
+                                    {@const kaspaAccount = row.data}
+                                    {@const isKaspaSyncing = taskQueue.isActive(`kaspa-sync:${kaspaAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {kaspaAccount.address.slice(0, 12)}...{kaspaAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{kaspaAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(kaspaAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === kaspaAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("kaspa"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {kaspaAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Kaspa</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Kaspa</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {kaspaAccount.last_sync
+                                                ? new Date(kaspaAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncKaspaAccount(kaspaAccount)}
+                                                    disabled={kaspaBusy || editingRowId === kaspaAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isKaspaSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === kaspaAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === kaspaAccount.id ? (editingRowId = null) : startEditLabel(kaspaAccount.id, kaspaAccount.label)} disabled={kaspaBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveKaspaAccount(kaspaAccount.id)}
+                                                    disabled={kaspaBusy || editingRowId === kaspaAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "zcash"}
+                                    {@const zcashAccount = row.data}
+                                    {@const isZcashSyncing = taskQueue.isActive(`zcash-sync:${zcashAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {zcashAccount.address.slice(0, 8)}...{zcashAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{zcashAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(zcashAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === zcashAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("zcash"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {zcashAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Zcash</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Zcash</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {zcashAccount.last_sync
+                                                ? new Date(zcashAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncZcashAccount(zcashAccount)}
+                                                    disabled={zcashBusy || editingRowId === zcashAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isZcashSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === zcashAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === zcashAccount.id ? (editingRowId = null) : startEditLabel(zcashAccount.id, zcashAccount.label)} disabled={zcashBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveZcashAccount(zcashAccount.id)}
+                                                    disabled={zcashBusy || editingRowId === zcashAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                {:else if row.kind === "stacks"}
+                                    {@const stacksAccount = row.data}
+                                    {@const isStacksSyncing = taskQueue.isActive(`stacks-sync:${stacksAccount.id}`)}
+                                    <Table.Row>
+                                        <Table.Cell class="font-mono text-sm">
+                                            <div class="flex items-center gap-1">
+                                                <Tooltip.Root>
+                                                    <Tooltip.Trigger class="truncate">
+                                                        {stacksAccount.address.slice(0, 8)}...{stacksAccount.address.slice(-4)}
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{stacksAccount.address}</p></Tooltip.Content>
+                                                </Tooltip.Root>
+                                                <button onclick={() => copyToClipboard(stacksAccount.address)} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
+                                                    <Copy class="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            {#if editingRowId === stacksAccount.id}
+                                                <Input class="h-7 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("stacks"); if (e.key === "Escape") editingRowId = null; }} />
+                                            {:else}
+                                                {stacksAccount.label}
+                                            {/if}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Stacks</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Badge variant="secondary">Stacks</Badge>
+                                        </Table.Cell>
+                                        <Table.Cell class="text-sm text-muted-foreground">
+                                            {stacksAccount.last_sync
+                                                ? new Date(stacksAccount.last_sync).toLocaleDateString()
+                                                : m.sources_never()}
+                                        </Table.Cell>
+                                        <Table.Cell class="text-right">
+                                            <div class="flex justify-end gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => syncStacksAccount(stacksAccount)}
+                                                    disabled={stacksBusy || editingRowId === stacksAccount.id}
+                                                >
+                                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                                    {isStacksSyncing ? m.state_syncing() : m.sources_sync()}
+                                                </Button>
+                                                <Button variant={editingRowId === stacksAccount.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === stacksAccount.id ? (editingRowId = null) : startEditLabel(stacksAccount.id, stacksAccount.label)} disabled={stacksBusy}>
+                                                    <Pencil class="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onclick={() => handleRemoveStacksAccount(stacksAccount.id)}
+                                                    disabled={stacksBusy || editingRowId === stacksAccount.id}
+                                                >
+                                                    <Trash2 class="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+
                                 {:else}
                                     {@const group = row.data}
                                     {#if editingAddress === group.address}

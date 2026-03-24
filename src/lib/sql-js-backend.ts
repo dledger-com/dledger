@@ -573,7 +573,89 @@ export class SqlJsBackend implements Backend {
       created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_polkadot_account_address ON polkadot_account(address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (28)");
+    // BTC Forks (v29)
+    db.exec(`CREATE TABLE IF NOT EXISTS doge_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_doge_account_address ON doge_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS ltc_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_ltc_account_address ON ltc_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS bch_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bch_account_address ON bch_account(address)");
+    // Tier 2 (v29)
+    db.exec(`CREATE TABLE IF NOT EXISTS xrp_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_marker TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_xrp_account_address ON xrp_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS tron_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_fingerprint TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tron_account_address ON tron_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS stellar_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_stellar_account_address ON stellar_account(address)");
+    // Tier 3 (v29)
+    db.exec(`CREATE TABLE IF NOT EXISTS bittensor_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_page INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bittensor_account_address ON bittensor_account(address)");
+    // Tier 4 (v29)
+    db.exec(`CREATE TABLE IF NOT EXISTS hedera_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_timestamp TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_hedera_account_address ON hedera_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS near_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_near_account_address ON near_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS algorand_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, next_token TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_algorand_account_address ON algorand_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS kaspa_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_kaspa_account_address ON kaspa_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS zcash_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_zcash_account_address ON zcash_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS stacks_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_offset INTEGER, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_stacks_account_address ON stacks_account(address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (29)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1115,6 +1197,79 @@ PRAGMA foreign_keys = ON;
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_polkadot_account_address ON polkadot_account(address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (28)");
+        }
+        if (currentVersion < 29) {
+          // BTC Forks
+          db.exec(`CREATE TABLE IF NOT EXISTS doge_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_doge_account_address ON doge_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS ltc_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_ltc_account_address ON ltc_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS bch_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bch_account_address ON bch_account(address)");
+          // Tier 2
+          db.exec(`CREATE TABLE IF NOT EXISTS xrp_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_marker TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_xrp_account_address ON xrp_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS tron_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_fingerprint TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tron_account_address ON tron_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS stellar_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_stellar_account_address ON stellar_account(address)");
+          // Tier 3
+          db.exec(`CREATE TABLE IF NOT EXISTS bittensor_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_page INTEGER, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bittensor_account_address ON bittensor_account(address)");
+          // Tier 4
+          db.exec(`CREATE TABLE IF NOT EXISTS hedera_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_timestamp TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_hedera_account_address ON hedera_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS near_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_near_account_address ON near_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS algorand_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, next_token TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_algorand_account_address ON algorand_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS kaspa_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_kaspa_account_address ON kaspa_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS zcash_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_cursor TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_zcash_account_address ON zcash_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS stacks_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_offset INTEGER, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_stacks_account_address ON stacks_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (29)");
         }
       }
     }
@@ -4611,6 +4766,708 @@ PRAGMA foreign_keys = ON;
     }
   }
 
+  // ---- Dogecoin accounts ----
+
+  async listDogeAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM doge_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "doge" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addDogeAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO doge_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateDogeAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE doge_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeDogeAccount(id: string): Promise<void> {
+    this.run("DELETE FROM doge_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateDogeSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE doge_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncDoge(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "doge" }, BTC_FORK_CHAINS.doge, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Litecoin accounts ----
+
+  async listLtcAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM ltc_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "ltc" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addLtcAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO ltc_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateLtcAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE ltc_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeLtcAccount(id: string): Promise<void> {
+    this.run("DELETE FROM ltc_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateLtcSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE ltc_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncLtc(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "ltc" }, BTC_FORK_CHAINS.ltc, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Bitcoin Cash accounts ----
+
+  async listBchAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM bch_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "bch" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addBchAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO bch_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateBchAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE bch_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeBchAccount(id: string): Promise<void> {
+    this.run("DELETE FROM bch_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateBchSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE bch_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncBch(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "bch" }, BTC_FORK_CHAINS.bch, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- XRP accounts ----
+
+  async listXrpAccounts(): Promise<import("./xrp/types.js").XrpAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_marker, last_sync, created_at FROM xrp_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_marker: (row.last_marker as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addXrpAccount(account: Omit<import("./xrp/types.js").XrpAccount, "last_sync" | "last_marker">): Promise<void> {
+    this.run(
+      `INSERT INTO xrp_account (id, address, label, last_marker, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateXrpAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE xrp_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeXrpAccount(id: string): Promise<void> {
+    this.run("DELETE FROM xrp_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateXrpSyncMarker(id: string, marker: string): Promise<void> {
+    this.run("UPDATE xrp_account SET last_marker = ?, last_sync = ? WHERE id = ?", [marker, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncXrp(
+    account: import("./xrp/types.js").XrpAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./xrp/types.js").XrpSyncResult> {
+    const { syncXrpAccount } = await import("./xrp/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncXrpAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- TRON accounts ----
+
+  async listTronAccounts(): Promise<import("./tron/types.js").TronAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_fingerprint, last_sync, created_at FROM tron_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_fingerprint: (row.last_fingerprint as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addTronAccount(account: Omit<import("./tron/types.js").TronAccount, "last_sync" | "last_fingerprint">): Promise<void> {
+    this.run(
+      `INSERT INTO tron_account (id, address, label, last_fingerprint, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateTronAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE tron_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeTronAccount(id: string): Promise<void> {
+    this.run("DELETE FROM tron_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateTronSyncFingerprint(id: string, fingerprint: string): Promise<void> {
+    this.run("UPDATE tron_account SET last_fingerprint = ?, last_sync = ? WHERE id = ?", [fingerprint, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncTron(
+    account: import("./tron/types.js").TronAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./tron/types.js").TronSyncResult> {
+    const { syncTronAccount } = await import("./tron/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncTronAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Stellar accounts ----
+
+  async listStellarAccounts(): Promise<import("./stellar/types.js").StellarAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_cursor, last_sync, created_at FROM stellar_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_cursor: (row.last_cursor as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addStellarAccount(account: Omit<import("./stellar/types.js").StellarAccount, "last_sync" | "last_cursor">): Promise<void> {
+    this.run(
+      `INSERT INTO stellar_account (id, address, label, last_cursor, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateStellarAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE stellar_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeStellarAccount(id: string): Promise<void> {
+    this.run("DELETE FROM stellar_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateStellarSyncCursor(id: string, cursor: string): Promise<void> {
+    this.run("UPDATE stellar_account SET last_cursor = ?, last_sync = ? WHERE id = ?", [cursor, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncStellar(
+    account: import("./stellar/types.js").StellarAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./stellar/types.js").StellarSyncResult> {
+    const { syncStellarAccount } = await import("./stellar/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncStellarAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Bittensor accounts ----
+
+  async listBittensorAccounts(): Promise<import("./bittensor/types.js").BittensorAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_page, last_sync, created_at FROM bittensor_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_page: (row.last_page as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addBittensorAccount(account: Omit<import("./bittensor/types.js").BittensorAccount, "last_sync" | "last_page">): Promise<void> {
+    this.run(
+      `INSERT INTO bittensor_account (id, address, label, last_page, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateBittensorAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE bittensor_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeBittensorAccount(id: string): Promise<void> {
+    this.run("DELETE FROM bittensor_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateBittensorSyncPage(id: string, page: number): Promise<void> {
+    this.run("UPDATE bittensor_account SET last_page = ?, last_sync = ? WHERE id = ?", [page, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncBittensor(
+    account: import("./bittensor/types.js").BittensorAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./bittensor/types.js").BittensorSyncResult> {
+    const { syncBittensorAccount } = await import("./bittensor/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBittensorAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Hedera accounts ----
+
+  async listHederaAccounts(): Promise<import("./hedera/types.js").HederaAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_timestamp, last_sync, created_at FROM hedera_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_timestamp: (row.last_timestamp as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addHederaAccount(account: Omit<import("./hedera/types.js").HederaAccount, "last_sync" | "last_timestamp">): Promise<void> {
+    this.run(
+      `INSERT INTO hedera_account (id, address, label, last_timestamp, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateHederaAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE hedera_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeHederaAccount(id: string): Promise<void> {
+    this.run("DELETE FROM hedera_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateHederaSyncCursor(id: string, timestamp: string): Promise<void> {
+    this.run("UPDATE hedera_account SET last_timestamp = ?, last_sync = ? WHERE id = ?", [timestamp, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncHedera(
+    account: import("./hedera/types.js").HederaAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./hedera/types.js").HederaSyncResult> {
+    const { syncHederaAccount } = await import("./hedera/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncHederaAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- NEAR accounts ----
+
+  async listNearAccounts(): Promise<import("./near/types.js").NearAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_cursor, last_sync, created_at FROM near_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_cursor: (row.last_cursor as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addNearAccount(account: Omit<import("./near/types.js").NearAccount, "last_sync" | "last_cursor">): Promise<void> {
+    this.run(
+      `INSERT INTO near_account (id, address, label, last_cursor, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateNearAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE near_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeNearAccount(id: string): Promise<void> {
+    this.run("DELETE FROM near_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateNearSyncCursor(id: string, cursor: string): Promise<void> {
+    this.run("UPDATE near_account SET last_cursor = ?, last_sync = ? WHERE id = ?", [cursor, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncNear(
+    account: import("./near/types.js").NearAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./near/types.js").NearSyncResult> {
+    const { syncNearAccount } = await import("./near/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncNearAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Algorand accounts ----
+
+  async listAlgorandAccounts(): Promise<import("./algorand/types.js").AlgorandAccount[]> {
+    return this.query(
+      "SELECT id, address, label, next_token, last_sync, created_at FROM algorand_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        next_token: (row.next_token as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addAlgorandAccount(account: Omit<import("./algorand/types.js").AlgorandAccount, "last_sync" | "next_token">): Promise<void> {
+    this.run(
+      `INSERT INTO algorand_account (id, address, label, next_token, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateAlgorandAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE algorand_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeAlgorandAccount(id: string): Promise<void> {
+    this.run("DELETE FROM algorand_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateAlgorandSyncCursor(id: string, token: string): Promise<void> {
+    this.run("UPDATE algorand_account SET next_token = ?, last_sync = ? WHERE id = ?", [token, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncAlgorand(
+    account: import("./algorand/types.js").AlgorandAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./algorand/types.js").AlgorandSyncResult> {
+    const { syncAlgorandAccount } = await import("./algorand/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncAlgorandAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Kaspa accounts ----
+
+  async listKaspaAccounts(): Promise<import("./kaspa/types.js").KaspaAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_cursor, last_sync, created_at FROM kaspa_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_cursor: (row.last_cursor as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addKaspaAccount(account: Omit<import("./kaspa/types.js").KaspaAccount, "last_sync" | "last_cursor">): Promise<void> {
+    this.run(
+      `INSERT INTO kaspa_account (id, address, label, last_cursor, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateKaspaAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE kaspa_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeKaspaAccount(id: string): Promise<void> {
+    this.run("DELETE FROM kaspa_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateKaspaSyncCursor(id: string, cursor: string): Promise<void> {
+    this.run("UPDATE kaspa_account SET last_cursor = ?, last_sync = ? WHERE id = ?", [cursor, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncKaspa(
+    account: import("./kaspa/types.js").KaspaAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./kaspa/types.js").KaspaSyncResult> {
+    const { syncKaspaAccount } = await import("./kaspa/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncKaspaAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Zcash accounts ----
+
+  async listZcashAccounts(): Promise<import("./zcash/types.js").ZcashAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_cursor, last_sync, created_at FROM zcash_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_cursor: (row.last_cursor as string) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addZcashAccount(account: Omit<import("./zcash/types.js").ZcashAccount, "last_sync" | "last_cursor">): Promise<void> {
+    this.run(
+      `INSERT INTO zcash_account (id, address, label, last_cursor, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateZcashAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE zcash_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeZcashAccount(id: string): Promise<void> {
+    this.run("DELETE FROM zcash_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateZcashSyncCursor(id: string, cursor: string): Promise<void> {
+    this.run("UPDATE zcash_account SET last_cursor = ?, last_sync = ? WHERE id = ?", [cursor, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncZcash(
+    account: import("./zcash/types.js").ZcashAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./zcash/types.js").ZcashSyncResult> {
+    const { syncZcashAccount } = await import("./zcash/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncZcashAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Stacks accounts ----
+
+  async listStacksAccounts(): Promise<import("./stacks/types.js").StacksAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_offset, last_sync, created_at FROM stacks_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_offset: (row.last_offset as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addStacksAccount(account: Omit<import("./stacks/types.js").StacksAccount, "last_sync" | "last_offset">): Promise<void> {
+    this.run(
+      `INSERT INTO stacks_account (id, address, label, last_offset, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateStacksAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE stacks_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeStacksAccount(id: string): Promise<void> {
+    this.run("DELETE FROM stacks_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateStacksSyncOffset(id: string, offset: number): Promise<void> {
+    this.run("UPDATE stacks_account SET last_offset = ?, last_sync = ? WHERE id = ?", [offset, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncStacks(
+    account: import("./stacks/types.js").StacksAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./stacks/types.js").StacksSyncResult> {
+    const { syncStacksAccount } = await import("./stacks/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncStacksAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
   // ---- Exchange accounts (CEX) ----
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
@@ -5057,6 +5914,19 @@ PRAGMA foreign_keys = ON;
     try { this.db.exec("UPDATE tezos_account SET last_id = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE cosmos_account SET last_offset = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE polkadot_account SET last_page = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE doge_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE ltc_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE bch_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE xrp_account SET last_marker = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE tron_account SET last_fingerprint = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE stellar_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE bittensor_account SET last_page = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE hedera_account SET last_timestamp = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE near_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE algorand_account SET next_token = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE kaspa_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE zcash_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE stacks_account SET last_offset = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }

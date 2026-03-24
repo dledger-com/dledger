@@ -219,6 +219,21 @@ export async function importData(
 			for (const acc of sources.aptos ?? []) { try { await backend.addAptosAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.ton ?? []) { try { await backend.addTonAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.tezos ?? []) { try { await backend.addTezosAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.cosmos ?? []) { try { await backend.addCosmosAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.polkadot ?? []) { try { await backend.addPolkadotAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.doge ?? []) { try { await backend.addDogeAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.ltc ?? []) { try { await backend.addLtcAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.bch ?? []) { try { await backend.addBchAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.xrp ?? []) { try { await backend.addXrpAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.tron ?? []) { try { await backend.addTronAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.stellar ?? []) { try { await backend.addStellarAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.bittensor ?? []) { try { await backend.addBittensorAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.hedera ?? []) { try { await backend.addHederaAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.near ?? []) { try { await backend.addNearAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.algorand ?? []) { try { await backend.addAlgorandAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.kaspa ?? []) { try { await backend.addKaspaAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.zcash ?? []) { try { await backend.addZcashAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.stacks ?? []) { try { await backend.addStacksAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.cex ?? []) { try { await backend.addExchangeAccount(acc); } catch { /* skip */ } }
 		} catch (e) {
 			result.warnings.push(`sources: ${e instanceof Error ? e.message : String(e)}`);

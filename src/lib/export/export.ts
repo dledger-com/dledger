@@ -52,7 +52,7 @@ export async function exportData(
 	const exchangeRates = await backend.listExchangeRates();
 
 	onProgress?.("Gathering sources...");
-	const [ethAccounts, btcAccounts, solAccounts, hlAccounts, suiAccounts, aptosAccounts, tonAccounts, tezosAccounts, cosmosAccounts, polkadotAccounts, cexAccounts] = await Promise.all([
+	const [ethAccounts, btcAccounts, solAccounts, hlAccounts, suiAccounts, aptosAccounts, tonAccounts, tezosAccounts, cosmosAccounts, polkadotAccounts, dogeAccounts, ltcAccounts, bchAccounts, xrpAccounts, tronAccounts, stellarAccounts, bittensorAccounts, hederaAccounts, nearAccounts, algorandAccounts, kaspaAccounts, zcashAccounts, stacksAccounts, cexAccounts] = await Promise.all([
 		backend.listEtherscanAccounts(),
 		backend.listBitcoinAccounts(),
 		backend.listSolanaAccounts(),
@@ -63,6 +63,19 @@ export async function exportData(
 		backend.listTezosAccounts(),
 		backend.listCosmosAccounts(),
 		backend.listPolkadotAccounts(),
+		backend.listDogeAccounts(),
+		backend.listLtcAccounts(),
+		backend.listBchAccounts(),
+		backend.listXrpAccounts(),
+		backend.listTronAccounts(),
+		backend.listStellarAccounts(),
+		backend.listBittensorAccounts(),
+		backend.listHederaAccounts(),
+		backend.listNearAccounts(),
+		backend.listAlgorandAccounts(),
+		backend.listKaspaAccounts(),
+		backend.listZcashAccounts(),
+		backend.listStacksAccounts(),
 		backend.listExchangeAccounts(),
 	]);
 
@@ -77,6 +90,19 @@ export async function exportData(
 		tezos: tezosAccounts,
 		cosmos: cosmosAccounts,
 		polkadot: polkadotAccounts,
+		doge: dogeAccounts,
+		ltc: ltcAccounts,
+		bch: bchAccounts,
+		xrp: xrpAccounts,
+		tron: tronAccounts,
+		stellar: stellarAccounts,
+		bittensor: bittensorAccounts,
+		hedera: hederaAccounts,
+		near: nearAccounts,
+		algorand: algorandAccounts,
+		kaspa: kaspaAccounts,
+		zcash: zcashAccounts,
+		stacks: stacksAccounts,
 		cex: cexAccounts.map(a => ({
 			...a,
 			api_key: options.includeApiKeys ? a.api_key : "***",

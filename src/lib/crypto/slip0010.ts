@@ -41,3 +41,16 @@ export function slip0010DeriveKey(seed: Uint8Array, coinType: number, accountInd
 	({ key } = deriveChild(key, chainCode, 0));
 	return key;
 }
+
+/**
+ * Derive an Ed25519 private key using a 3-level SLIP-0010 hardened path.
+ * Path: m/44'/{coinType}'/accountIndex'
+ * Used by Stellar (coin 148) which uses only 3 hardened levels.
+ */
+export function slip0010DeriveKey3(seed: Uint8Array, coinType: number, accountIndex: number): Uint8Array {
+	let { key, chainCode } = masterKey(seed);
+	({ key, chainCode } = deriveChild(key, chainCode, 44));
+	({ key, chainCode } = deriveChild(key, chainCode, coinType));
+	({ key } = deriveChild(key, chainCode, accountIndex));
+	return key;
+}

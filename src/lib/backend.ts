@@ -28,6 +28,17 @@ import type { TonAccount, TonSyncResult } from "./ton/types.js";
 import type { TezosAccount, TezosSyncResult } from "./tezos/types.js";
 import type { CosmosAccount, CosmosSyncResult } from "./cosmos/types.js";
 import type { PolkadotAccount, PolkadotSyncResult } from "./polkadot/types.js";
+import type { BtcForkAccount, BtcForkSyncResult } from "./btc-fork/types.js";
+import type { XrpAccount, XrpSyncResult } from "./xrp/types.js";
+import type { TronAccount, TronSyncResult } from "./tron/types.js";
+import type { StellarAccount, StellarSyncResult } from "./stellar/types.js";
+import type { BittensorAccount, BittensorSyncResult } from "./bittensor/types.js";
+import type { HederaAccount, HederaSyncResult } from "./hedera/types.js";
+import type { NearAccount, NearSyncResult } from "./near/types.js";
+import type { AlgorandAccount, AlgorandSyncResult } from "./algorand/types.js";
+import type { KaspaAccount, KaspaSyncResult } from "./kaspa/types.js";
+import type { ZcashAccount, ZcashSyncResult } from "./zcash/types.js";
+import type { StacksAccount, StacksSyncResult } from "./stacks/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -236,6 +247,110 @@ export interface Backend {
   updatePolkadotAccountLabel(id: string, label: string): Promise<void>;
   updatePolkadotSyncPage(id: string, page: number): Promise<void>;
   syncPolkadot(account: PolkadotAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<PolkadotSyncResult>;
+
+  // Dogecoin
+  listDogeAccounts(): Promise<BtcForkAccount[]>;
+  addDogeAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeDogeAccount(id: string): Promise<void>;
+  updateDogeAccountLabel(id: string, label: string): Promise<void>;
+  updateDogeSyncTimestamp(id: string): Promise<void>;
+  syncDoge(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
+  // Litecoin
+  listLtcAccounts(): Promise<BtcForkAccount[]>;
+  addLtcAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeLtcAccount(id: string): Promise<void>;
+  updateLtcAccountLabel(id: string, label: string): Promise<void>;
+  updateLtcSyncTimestamp(id: string): Promise<void>;
+  syncLtc(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
+  // Bitcoin Cash
+  listBchAccounts(): Promise<BtcForkAccount[]>;
+  addBchAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeBchAccount(id: string): Promise<void>;
+  updateBchAccountLabel(id: string, label: string): Promise<void>;
+  updateBchSyncTimestamp(id: string): Promise<void>;
+  syncBch(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
+  // XRP
+  listXrpAccounts(): Promise<XrpAccount[]>;
+  addXrpAccount(account: Omit<XrpAccount, "last_sync" | "last_marker">): Promise<void>;
+  removeXrpAccount(id: string): Promise<void>;
+  updateXrpAccountLabel(id: string, label: string): Promise<void>;
+  updateXrpSyncMarker(id: string, marker: string): Promise<void>;
+  syncXrp(account: XrpAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<XrpSyncResult>;
+
+  // TRON
+  listTronAccounts(): Promise<TronAccount[]>;
+  addTronAccount(account: Omit<TronAccount, "last_sync" | "last_fingerprint">): Promise<void>;
+  removeTronAccount(id: string): Promise<void>;
+  updateTronAccountLabel(id: string, label: string): Promise<void>;
+  updateTronSyncFingerprint(id: string, fingerprint: string): Promise<void>;
+  syncTron(account: TronAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TronSyncResult>;
+
+  // Stellar
+  listStellarAccounts(): Promise<StellarAccount[]>;
+  addStellarAccount(account: Omit<StellarAccount, "last_sync" | "last_cursor">): Promise<void>;
+  removeStellarAccount(id: string): Promise<void>;
+  updateStellarAccountLabel(id: string, label: string): Promise<void>;
+  updateStellarSyncCursor(id: string, cursor: string): Promise<void>;
+  syncStellar(account: StellarAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StellarSyncResult>;
+
+  // Bittensor
+  listBittensorAccounts(): Promise<BittensorAccount[]>;
+  addBittensorAccount(account: Omit<BittensorAccount, "last_sync" | "last_page">): Promise<void>;
+  removeBittensorAccount(id: string): Promise<void>;
+  updateBittensorAccountLabel(id: string, label: string): Promise<void>;
+  updateBittensorSyncPage(id: string, page: number): Promise<void>;
+  syncBittensor(account: BittensorAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BittensorSyncResult>;
+
+  // Hedera
+  listHederaAccounts(): Promise<HederaAccount[]>;
+  addHederaAccount(account: Omit<HederaAccount, "last_sync" | "last_timestamp">): Promise<void>;
+  removeHederaAccount(id: string): Promise<void>;
+  updateHederaAccountLabel(id: string, label: string): Promise<void>;
+  updateHederaSyncCursor(id: string, timestamp: string): Promise<void>;
+  syncHedera(account: HederaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HederaSyncResult>;
+
+  // NEAR
+  listNearAccounts(): Promise<NearAccount[]>;
+  addNearAccount(account: Omit<NearAccount, "last_sync" | "last_cursor">): Promise<void>;
+  removeNearAccount(id: string): Promise<void>;
+  updateNearAccountLabel(id: string, label: string): Promise<void>;
+  updateNearSyncCursor(id: string, cursor: string): Promise<void>;
+  syncNear(account: NearAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<NearSyncResult>;
+
+  // Algorand
+  listAlgorandAccounts(): Promise<AlgorandAccount[]>;
+  addAlgorandAccount(account: Omit<AlgorandAccount, "last_sync" | "next_token">): Promise<void>;
+  removeAlgorandAccount(id: string): Promise<void>;
+  updateAlgorandAccountLabel(id: string, label: string): Promise<void>;
+  updateAlgorandSyncCursor(id: string, token: string): Promise<void>;
+  syncAlgorand(account: AlgorandAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AlgorandSyncResult>;
+
+  // Kaspa
+  listKaspaAccounts(): Promise<KaspaAccount[]>;
+  addKaspaAccount(account: Omit<KaspaAccount, "last_sync" | "last_cursor">): Promise<void>;
+  removeKaspaAccount(id: string): Promise<void>;
+  updateKaspaAccountLabel(id: string, label: string): Promise<void>;
+  updateKaspaSyncCursor(id: string, cursor: string): Promise<void>;
+  syncKaspa(account: KaspaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<KaspaSyncResult>;
+
+  // Zcash
+  listZcashAccounts(): Promise<ZcashAccount[]>;
+  addZcashAccount(account: Omit<ZcashAccount, "last_sync" | "last_cursor">): Promise<void>;
+  removeZcashAccount(id: string): Promise<void>;
+  updateZcashAccountLabel(id: string, label: string): Promise<void>;
+  updateZcashSyncCursor(id: string, cursor: string): Promise<void>;
+  syncZcash(account: ZcashAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<ZcashSyncResult>;
+
+  // Stacks
+  listStacksAccounts(): Promise<StacksAccount[]>;
+  addStacksAccount(account: Omit<StacksAccount, "last_sync" | "last_offset">): Promise<void>;
+  removeStacksAccount(id: string): Promise<void>;
+  updateStacksAccountLabel(id: string, label: string): Promise<void>;
+  updateStacksSyncOffset(id: string, offset: number): Promise<void>;
+  syncStacks(account: StacksAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StacksSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -766,6 +881,152 @@ class TauriBackend implements Backend {
   async syncPolkadot(account: PolkadotAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<PolkadotSyncResult> {
     const { syncPolkadotAccount } = await import("./polkadot/sync.js");
     return syncPolkadotAccount(this, account, onProgress, signal);
+  }
+
+  // Dogecoin
+  async listDogeAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_doge_accounts"); }
+  async addDogeAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_doge_account", { account }); }
+  async removeDogeAccount(id: string): Promise<void> { return this.invoke("remove_doge_account", { id }); }
+  async updateDogeAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_doge_account_label", { id, label }); }
+  async updateDogeSyncTimestamp(id: string): Promise<void> { return this.invoke("update_doge_sync_timestamp", { id }); }
+  async syncDoge(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "doge" }, BTC_FORK_CHAINS.doge, onProgress, signal);
+  }
+
+  // Litecoin
+  async listLtcAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_ltc_accounts"); }
+  async addLtcAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_ltc_account", { account }); }
+  async removeLtcAccount(id: string): Promise<void> { return this.invoke("remove_ltc_account", { id }); }
+  async updateLtcAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_ltc_account_label", { id, label }); }
+  async updateLtcSyncTimestamp(id: string): Promise<void> { return this.invoke("update_ltc_sync_timestamp", { id }); }
+  async syncLtc(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "ltc" }, BTC_FORK_CHAINS.ltc, onProgress, signal);
+  }
+
+  // Bitcoin Cash
+  async listBchAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_bch_accounts"); }
+  async addBchAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_bch_account", { account }); }
+  async removeBchAccount(id: string): Promise<void> { return this.invoke("remove_bch_account", { id }); }
+  async updateBchAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_bch_account_label", { id, label }); }
+  async updateBchSyncTimestamp(id: string): Promise<void> { return this.invoke("update_bch_sync_timestamp", { id }); }
+  async syncBch(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "bch" }, BTC_FORK_CHAINS.bch, onProgress, signal);
+  }
+
+  // XRP
+  async listXrpAccounts(): Promise<XrpAccount[]> { return this.invoke("list_xrp_accounts"); }
+  async addXrpAccount(account: Omit<XrpAccount, "last_sync" | "last_marker">): Promise<void> { return this.invoke("add_xrp_account", { account }); }
+  async removeXrpAccount(id: string): Promise<void> { return this.invoke("remove_xrp_account", { id }); }
+  async updateXrpAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_xrp_account_label", { id, label }); }
+  async updateXrpSyncMarker(id: string, marker: string): Promise<void> { return this.invoke("update_xrp_sync_marker", { id, marker }); }
+  async syncXrp(account: XrpAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<XrpSyncResult> {
+    const { syncXrpAccount } = await import("./xrp/sync.js");
+    return syncXrpAccount(this, account, onProgress, signal);
+  }
+
+  // TRON
+  async listTronAccounts(): Promise<TronAccount[]> { return this.invoke("list_tron_accounts"); }
+  async addTronAccount(account: Omit<TronAccount, "last_sync" | "last_fingerprint">): Promise<void> { return this.invoke("add_tron_account", { account }); }
+  async removeTronAccount(id: string): Promise<void> { return this.invoke("remove_tron_account", { id }); }
+  async updateTronAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_tron_account_label", { id, label }); }
+  async updateTronSyncFingerprint(id: string, fingerprint: string): Promise<void> { return this.invoke("update_tron_sync_fingerprint", { id, fingerprint }); }
+  async syncTron(account: TronAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TronSyncResult> {
+    const { syncTronAccount } = await import("./tron/sync.js");
+    return syncTronAccount(this, account, onProgress, signal);
+  }
+
+  // Stellar
+  async listStellarAccounts(): Promise<StellarAccount[]> { return this.invoke("list_stellar_accounts"); }
+  async addStellarAccount(account: Omit<StellarAccount, "last_sync" | "last_cursor">): Promise<void> { return this.invoke("add_stellar_account", { account }); }
+  async removeStellarAccount(id: string): Promise<void> { return this.invoke("remove_stellar_account", { id }); }
+  async updateStellarAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_stellar_account_label", { id, label }); }
+  async updateStellarSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_stellar_sync_cursor", { id, cursor }); }
+  async syncStellar(account: StellarAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StellarSyncResult> {
+    const { syncStellarAccount } = await import("./stellar/sync.js");
+    return syncStellarAccount(this, account, onProgress, signal);
+  }
+
+  // Bittensor
+  async listBittensorAccounts(): Promise<BittensorAccount[]> { return this.invoke("list_bittensor_accounts"); }
+  async addBittensorAccount(account: Omit<BittensorAccount, "last_sync" | "last_page">): Promise<void> { return this.invoke("add_bittensor_account", { account }); }
+  async removeBittensorAccount(id: string): Promise<void> { return this.invoke("remove_bittensor_account", { id }); }
+  async updateBittensorAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_bittensor_account_label", { id, label }); }
+  async updateBittensorSyncPage(id: string, page: number): Promise<void> { return this.invoke("update_bittensor_sync_page", { id, page }); }
+  async syncBittensor(account: BittensorAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BittensorSyncResult> {
+    const { syncBittensorAccount } = await import("./bittensor/sync.js");
+    return syncBittensorAccount(this, account, onProgress, signal);
+  }
+
+  // Hedera
+  async listHederaAccounts(): Promise<HederaAccount[]> { return this.invoke("list_hedera_accounts"); }
+  async addHederaAccount(account: Omit<HederaAccount, "last_sync" | "last_timestamp">): Promise<void> { return this.invoke("add_hedera_account", { account }); }
+  async removeHederaAccount(id: string): Promise<void> { return this.invoke("remove_hedera_account", { id }); }
+  async updateHederaAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_hedera_account_label", { id, label }); }
+  async updateHederaSyncCursor(id: string, timestamp: string): Promise<void> { return this.invoke("update_hedera_sync_cursor", { id, timestamp }); }
+  async syncHedera(account: HederaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HederaSyncResult> {
+    const { syncHederaAccount } = await import("./hedera/sync.js");
+    return syncHederaAccount(this, account, onProgress, signal);
+  }
+
+  // NEAR
+  async listNearAccounts(): Promise<NearAccount[]> { return this.invoke("list_near_accounts"); }
+  async addNearAccount(account: Omit<NearAccount, "last_sync" | "last_cursor">): Promise<void> { return this.invoke("add_near_account", { account }); }
+  async removeNearAccount(id: string): Promise<void> { return this.invoke("remove_near_account", { id }); }
+  async updateNearAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_near_account_label", { id, label }); }
+  async updateNearSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_near_sync_cursor", { id, cursor }); }
+  async syncNear(account: NearAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<NearSyncResult> {
+    const { syncNearAccount } = await import("./near/sync.js");
+    return syncNearAccount(this, account, onProgress, signal);
+  }
+
+  // Algorand
+  async listAlgorandAccounts(): Promise<AlgorandAccount[]> { return this.invoke("list_algorand_accounts"); }
+  async addAlgorandAccount(account: Omit<AlgorandAccount, "last_sync" | "next_token">): Promise<void> { return this.invoke("add_algorand_account", { account }); }
+  async removeAlgorandAccount(id: string): Promise<void> { return this.invoke("remove_algorand_account", { id }); }
+  async updateAlgorandAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_algorand_account_label", { id, label }); }
+  async updateAlgorandSyncCursor(id: string, token: string): Promise<void> { return this.invoke("update_algorand_sync_cursor", { id, token }); }
+  async syncAlgorand(account: AlgorandAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AlgorandSyncResult> {
+    const { syncAlgorandAccount } = await import("./algorand/sync.js");
+    return syncAlgorandAccount(this, account, onProgress, signal);
+  }
+
+  // Kaspa
+  async listKaspaAccounts(): Promise<KaspaAccount[]> { return this.invoke("list_kaspa_accounts"); }
+  async addKaspaAccount(account: Omit<KaspaAccount, "last_sync" | "last_cursor">): Promise<void> { return this.invoke("add_kaspa_account", { account }); }
+  async removeKaspaAccount(id: string): Promise<void> { return this.invoke("remove_kaspa_account", { id }); }
+  async updateKaspaAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_kaspa_account_label", { id, label }); }
+  async updateKaspaSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_kaspa_sync_cursor", { id, cursor }); }
+  async syncKaspa(account: KaspaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<KaspaSyncResult> {
+    const { syncKaspaAccount } = await import("./kaspa/sync.js");
+    return syncKaspaAccount(this, account, onProgress, signal);
+  }
+
+  // Zcash
+  async listZcashAccounts(): Promise<ZcashAccount[]> { return this.invoke("list_zcash_accounts"); }
+  async addZcashAccount(account: Omit<ZcashAccount, "last_sync" | "last_cursor">): Promise<void> { return this.invoke("add_zcash_account", { account }); }
+  async removeZcashAccount(id: string): Promise<void> { return this.invoke("remove_zcash_account", { id }); }
+  async updateZcashAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_zcash_account_label", { id, label }); }
+  async updateZcashSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_zcash_sync_cursor", { id, cursor }); }
+  async syncZcash(account: ZcashAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<ZcashSyncResult> {
+    const { syncZcashAccount } = await import("./zcash/sync.js");
+    return syncZcashAccount(this, account, onProgress, signal);
+  }
+
+  // Stacks
+  async listStacksAccounts(): Promise<StacksAccount[]> { return this.invoke("list_stacks_accounts"); }
+  async addStacksAccount(account: Omit<StacksAccount, "last_sync" | "last_offset">): Promise<void> { return this.invoke("add_stacks_account", { account }); }
+  async removeStacksAccount(id: string): Promise<void> { return this.invoke("remove_stacks_account", { id }); }
+  async updateStacksAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_stacks_account_label", { id, label }); }
+  async updateStacksSyncOffset(id: string, offset: number): Promise<void> { return this.invoke("update_stacks_sync_offset", { id, offset }); }
+  async syncStacks(account: StacksAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StacksSyncResult> {
+    const { syncStacksAccount } = await import("./stacks/sync.js");
+    return syncStacksAccount(this, account, onProgress, signal);
   }
 
   // Exchange accounts (CEX)
