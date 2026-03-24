@@ -20,6 +20,7 @@
   import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
+  import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
   import { rateHealth } from "$lib/data/rate-health.svelte.js";
   import CircleCheck from "lucide-svelte/icons/circle-check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
@@ -156,7 +157,13 @@
     loadCurrencies();
     loadRateSources();
   });
-  onDestroy(unsubCurrencies);
+  onDestroy(() => { unsubCurrencies(); clearTopBarActions(); });
+
+  $effect(() => {
+    setTopBarActions([
+      { type: "button", label: m.btn_add(), onclick: () => { addDialogOpen = true; }, fab: true, fabIcon: Plus },
+    ]);
+  });
 
   onMount(() => {
     loadCurrencies();
@@ -175,9 +182,6 @@
         />
         {m.label_show_hidden()}
       </label>
-      <Button size="sm" onclick={() => { addDialogOpen = true; }}>
-        <Plus class="h-4 w-4 mr-1" />{m.btn_add()}
-      </Button>
     </div>
   </div>
 
