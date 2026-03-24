@@ -59,6 +59,7 @@ export interface AppSettings {
   heliusApiKey?: string;    // Helius API key for Solana sync
   onboardingCompleted?: boolean;
   onboardingDismissedChecklist?: boolean;
+  dashboardRangePreset?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

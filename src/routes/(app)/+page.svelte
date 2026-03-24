@@ -118,7 +118,7 @@
 
   // Date range
   type RangePreset = "ytd" | "mtd" | "12m" | "all";
-  let rangePreset = $state<RangePreset>("ytd");
+  let rangePreset = $state<RangePreset>((settings.settings.dashboardRangePreset as RangePreset) ?? "ytd");
 
   function today(): string {
     return new Date().toISOString().slice(0, 10);
@@ -388,6 +388,7 @@
 
   async function selectRange(preset: RangePreset) {
     rangePreset = preset;
+    settings.update({ dashboardRangePreset: preset });
     // Reload income statement first, then pass it to charts
     await reportStore.loadIncomeStatement(rangeFromDate(), today());
     loadCharts(getOrCreateRateCache());
