@@ -15,7 +15,7 @@
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
-  import { mainCounterparty, entryAmountDisplay, amountColorClass } from "$lib/utils/journal-display.js";
+  import { mainCounterparty, mainCounterpartyShort, entryAmountDisplay, amountColorClass } from "$lib/utils/journal-display.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
@@ -602,19 +602,49 @@
   {:else}
     <Card.Root class="border-x-0 rounded-none shadow-none py-0">
       <Table.Root>
-        <Table.Header>
+        <Table.Header class="hidden sm:table-header-group">
           <Table.Row>
-            <Table.Head class="w-0 hidden sm:table-cell">{m.label_date()}</Table.Head>
+            <Table.Head class="w-0">{m.label_date()}</Table.Head>
             <Table.Head>{m.label_description()}</Table.Head>
-            <Table.Head class="hidden sm:table-cell">{m.label_account()}</Table.Head>
-            <Table.Head class="text-right hidden sm:table-cell">{m.label_amount()}</Table.Head>
+            <Table.Head>{m.label_account()}</Table.Head>
+            <Table.Head class="text-right">{m.label_amount()}</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {#each recentEntries as [entry, items]}
-            <Table.Row class="flex flex-wrap sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
-              <Table.Cell class="text-muted-foreground order-1 text-xs sm:text-sm w-auto shrink-0 py-2 pr-2 sm:p-2">{entry.date}</Table.Cell>
-              <Table.Cell class="order-3 w-full sm:w-auto sm:max-w-[300px] whitespace-normal sm:whitespace-nowrap pt-0 pb-2 sm:p-2">
+            <!-- Mobile: compact 2-line layout -->
+            <Table.Row class="sm:hidden {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
+              <Table.Cell colspan={4} class="py-2 px-3">
+                {@const acct = mainCounterpartyShort(items, accountIdToName)}
+                <a href="/journal/{entry.id}" class="block">
+                  <div class="flex items-baseline justify-between gap-2">
+                    <div class="flex items-baseline gap-1 min-w-0 text-xs text-muted-foreground">
+                      <span>{entry.date}</span>
+                      {#if acct}<span>·</span><span class="truncate">{acct}</span>{/if}
+                    </div>
+                    <div class="text-right text-xs font-mono whitespace-nowrap tabular-nums shrink-0">
+                      {#each entryAmountDisplay(items, accountIdToName) as part, i}
+                        {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
+                        <span class={amountColorClass(part.direction)}>{part.text}</span>
+                      {/each}
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-0.5">
+                    <span class="font-medium text-sm truncate">{entry.description}</span>
+                    {#if entryTags.get(entry.id)?.length}
+                      <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
+                    {/if}
+                    {#if entryLinks.get(entry.id)?.length}
+                      <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
+                    {/if}
+                  </div>
+                </a>
+              </Table.Cell>
+            </Table.Row>
+            <!-- Desktop: standard 4-column layout -->
+            <Table.Row class="hidden sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
+              <Table.Cell class="text-muted-foreground text-sm">{entry.date}</Table.Cell>
+              <Table.Cell class="max-w-[300px] whitespace-nowrap">
                 <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0">
                   <a href="/journal/{entry.id}" class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
@@ -625,10 +655,10 @@
                   {/if}
                 </div>
               </Table.Cell>
-              <Table.Cell class="text-muted-foreground text-sm hidden sm:table-cell">
+              <Table.Cell class="text-muted-foreground text-sm">
                 {mainCounterparty(items, accountIdToName)}
               </Table.Cell>
-              <Table.Cell class="text-right text-sm hidden sm:table-cell whitespace-nowrap tabular-nums order-2 ml-auto py-2 pl-2 sm:p-2">
+              <Table.Cell class="text-right text-sm whitespace-nowrap tabular-nums">
                 {#each entryAmountDisplay(items, accountIdToName) as part, i}
                   {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
                   <span class={amountColorClass(part.direction)}>{part.text}</span>
