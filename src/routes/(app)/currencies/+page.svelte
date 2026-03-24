@@ -28,6 +28,11 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
+  import * as Popover from "$lib/components/ui/popover/index.js";
+  import { Separator } from "$lib/components/ui/separator/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+  import Filter from "lucide-svelte/icons/filter";
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
@@ -47,6 +52,17 @@
   let currencies = $state<Currency[]>([]);
   let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
   let currencySearchTerm = $state("");
+  let selectedAssetTypes = $state(new Set<string>());
+
+  const ASSET_TYPES: { value: string; label: () => string }[] = [
+    { value: "", label: () => m.asset_type_unclassified() },
+    { value: "fiat", label: () => m.asset_type_fiat() },
+    { value: "crypto", label: () => m.asset_type_crypto() },
+    { value: "stock", label: () => m.asset_type_stock() },
+    { value: "commodity", label: () => m.asset_type_commodity() },
+    { value: "index", label: () => m.asset_type_index() },
+    { value: "bond", label: () => m.asset_type_bond() },
+  ];
 
   // Currency form
   let currCode = $state("");
@@ -255,6 +271,46 @@
 
   <div class="flex items-center gap-2">
     <ListFilter bind:value={currencySearchTerm} placeholder={m.placeholder_filter_currencies()} class="min-w-0 w-[200px] lg:w-[250px] shrink" />
+    <Popover.Root>
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <Button variant="outline" size="sm" class="h-8 border-dashed" {...props}>
+            <Filter class="size-4" />
+            <span class="hidden sm:inline">{m.label_filter()}</span>
+            {#if selectedAssetTypes.size > 0}
+              <Separator orientation="vertical" class="mx-1 h-4" />
+              <Badge variant="secondary" class="rounded-sm px-1 font-normal">
+                {selectedAssetTypes.size}
+              </Badge>
+            {/if}
+          </Button>
+        {/snippet}
+      </Popover.Trigger>
+      <Popover.Content class="w-[200px] p-2" align="start">
+        <div class="space-y-1">
+          {#each ASSET_TYPES as at}
+            <label class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer">
+              <Checkbox
+                checked={selectedAssetTypes.has(at.value)}
+                onCheckedChange={(v) => {
+                  const next = new Set(selectedAssetTypes);
+                  if (v) next.add(at.value); else next.delete(at.value);
+                  selectedAssetTypes = next;
+                }}
+              />
+              {at.label()}
+            </label>
+          {/each}
+        </div>
+        {#if selectedAssetTypes.size > 0}
+          <Separator class="my-1" />
+          <button
+            class="w-full rounded-sm px-2 py-1.5 text-sm text-center hover:bg-accent cursor-pointer"
+            onclick={() => { selectedAssetTypes = new Set(); }}
+          >{m.btn_clear()}</button>
+        {/if}
+      </Popover.Content>
+    </Popover.Root>
     <div class="ml-auto">
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
@@ -329,7 +385,7 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {@const filteredCurrencies = currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"]))}
+            {@const filteredCurrencies = currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"]) && (selectedAssetTypes.size === 0 || selectedAssetTypes.has(c.asset_type)))}
             {@const sortedCurrencies = sortCurr.key && sortCurr.direction ? sortItems(filteredCurrencies, currencyAccessors[sortCurr.key], sortCurr.direction) : filteredCurrencies}
             {#each sortedCurrencies as c}
               {@const rs = rateSources.get(c.code)}
