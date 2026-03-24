@@ -26,6 +26,9 @@
   import Loader from "lucide-svelte/icons/loader";
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
+  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+  import { groupDateIntervals, formatInterval } from "$lib/utils/date-intervals.js";
+  import ChevronDown from "lucide-svelte/icons/chevron-down";
   import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
@@ -190,30 +193,49 @@
               {m.btn_sync_rates()}
             </Button>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="space-y-2">
             {#each rateHealth.missingCurrencies as code}
-              <div class="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs dark:border-amber-700 dark:bg-amber-900">
-                <a href="/currencies/{code}" class="font-mono font-medium text-amber-800 hover:underline dark:text-amber-200">{code}</a>
-                <span class="text-amber-400 dark:text-amber-600">|</span>
-                <button
-                  onclick={async () => { await markCurrencyHidden(getBackend(), code); await loadCurrencies(); }}
-                  class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
-                >{m.btn_hide()}</button>
-                <span class="text-amber-400 dark:text-amber-600">|</span>
-                <a href="/currencies/{code}" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200">{m.btn_enter_rate()}</a>
-                <span class="text-amber-400 dark:text-amber-600">|</span>
-                <button
-                  onclick={() => handleDontConvert(code)}
-                  class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
-                >{m.btn_dont_convert()}</button>
-                {#if dpriceEnabled}
+              {@const dates = rateHealth.missingDatesByCode[code]}
+              {@const intervals = dates ? groupDateIntervals(dates) : []}
+              <Collapsible.Root>
+                <div class="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs dark:border-amber-700 dark:bg-amber-900">
+                  <Collapsible.Trigger class="inline-flex items-center gap-1 font-mono font-medium text-amber-800 hover:underline dark:text-amber-200 cursor-pointer">
+                    {code}
+                    {#if intervals.length > 0}
+                      <ChevronDown class="h-3 w-3" />
+                    {/if}
+                  </Collapsible.Trigger>
                   <span class="text-amber-400 dark:text-amber-600">|</span>
                   <button
-                    onclick={() => { dpriceDialogCode = code; dpriceDialogOpen = true; }}
+                    onclick={async () => { await markCurrencyHidden(getBackend(), code); await loadCurrencies(); }}
                     class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
-                  >{m.btn_link_dprice()}</button>
+                  >{m.btn_hide()}</button>
+                  <span class="text-amber-400 dark:text-amber-600">|</span>
+                  <a href="/currencies/{code}" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200">{m.btn_enter_rate()}</a>
+                  <span class="text-amber-400 dark:text-amber-600">|</span>
+                  <button
+                    onclick={() => handleDontConvert(code)}
+                    class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
+                  >{m.btn_dont_convert()}</button>
+                  {#if dpriceEnabled}
+                    <span class="text-amber-400 dark:text-amber-600">|</span>
+                    <button
+                      onclick={() => { dpriceDialogCode = code; dpriceDialogOpen = true; }}
+                      class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
+                    >{m.btn_link_dprice()}</button>
+                  {/if}
+                </div>
+                {#if intervals.length > 0}
+                  <Collapsible.Content>
+                    <div class="ml-2 mt-1 flex flex-wrap gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+                      {#each intervals as iv}
+                        <span class="rounded bg-amber-100 px-1.5 py-0.5 font-mono dark:bg-amber-900/50">{formatInterval(iv)}</span>
+                      {/each}
+                      <span class="text-amber-500 dark:text-amber-500">({dates.length} {dates.length === 1 ? "date" : "dates"})</span>
+                    </div>
+                  </Collapsible.Content>
                 {/if}
-              </div>
+              </Collapsible.Root>
             {/each}
           </div>
         </div>

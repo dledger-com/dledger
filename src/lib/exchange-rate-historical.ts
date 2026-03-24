@@ -1197,6 +1197,8 @@ export interface AutoBackfillResult extends HistoricalFetchResult {
   currenciesAnalyzed: number;
   totalDatesRequested: number;
   unsourceableCurrencies: string[];
+  /** Per-currency missing dates (both failed and unsourceable) */
+  missingDatesByCode: Record<string, string[]>;
 }
 
 /**
@@ -1210,7 +1212,7 @@ export async function autoBackfillRates(
   dpriceAssets?: Set<string>,
 ): Promise<AutoBackfillResult> {
   if (!backend.getCurrencyDateRequirements) {
-    return { fetched: 0, skipped: 0, errors: ["Backend does not support getCurrencyDateRequirements"], failedCurrencies: [], unsourceableCurrencies: [], currenciesAnalyzed: 0, totalDatesRequested: 0 };
+    return { fetched: 0, skipped: 0, errors: ["Backend does not support getCurrencyDateRequirements"], failedCurrencies: [], unsourceableCurrencies: [], missingDatesByCode: {}, currenciesAnalyzed: 0, totalDatesRequested: 0 };
   }
 
   const requirements = await backend.getCurrencyDateRequirements(config.baseCurrency);
@@ -1353,13 +1355,21 @@ export async function autoBackfillRates(
   const totalDatesRequested = currencyDates.length;
 
   if (currencyDates.length === 0) {
-    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [], missingDatesByCode: {}, currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
   }
 
   const unsourceable = new Set<string>();
   const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources, unsourceable);
+
+  // Collect per-currency missing dates for unsourceable currencies
+  const missingDatesByCode: Record<string, string[]> = {};
+  for (const code of unsourceable) {
+    const dates = [...new Set(currencyDates.filter((cd) => cd.currency === code).map((cd) => cd.date))].sort();
+    if (dates.length > 0) missingDatesByCode[code] = dates;
+  }
+
   if (missing.length === 0) {
-    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [...unsourceable], currenciesAnalyzed: filtered.length, totalDatesRequested };
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [...unsourceable], missingDatesByCode, currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
 
   // Ensure storedSources is populated for dprice ID-based lookups
@@ -1368,9 +1378,17 @@ export async function autoBackfillRates(
     : { ...config, storedSources: await backend.getCurrencyRateSources() };
 
   const result = await fetchHistoricalRates(backend, missing, effectiveConfig, dpriceAssets);
+
+  // Collect per-currency missing dates for failed currencies
+  for (const code of result.failedCurrencies) {
+    const req = missing.find((m) => m.currency === code);
+    if (req) missingDatesByCode[code] = req.dates;
+  }
+
   return {
     ...result,
     unsourceableCurrencies: [...unsourceable],
+    missingDatesByCode,
     currenciesAnalyzed: filtered.length,
     totalDatesRequested,
   };
