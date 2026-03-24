@@ -31,25 +31,30 @@ async function convertBalancesToNumber(
 }
 
 /**
- * Adaptive chart sampling:
- * - <=60 months: monthly end dates
- * - 61-120 months: quarterly end dates
- * - >120 months: yearly end dates
+ * Adaptive chart sampling — generates dates at increasing density for shorter spans:
+ * - ≤24 months: weekly (every 7 days) — ~4x smoother than monthly
+ * - 25-60 months: biweekly (every 14 days) — ~2x smoother than monthly
+ * - 61-120 months: monthly end dates
+ * - >120 months: quarterly end dates
+ *
+ * X-axis labels are controlled by the chart library (scaleTime) and remain
+ * at month/year scale regardless of data point density.
  */
 export function monthEndDates(from: Date, to: Date): string[] {
   const totalMonths =
     (to.getFullYear() - from.getFullYear()) * 12 +
     (to.getMonth() - from.getMonth());
 
-  // Determine sampling interval
-  let step: number;
-  if (totalMonths <= 60) {
-    step = 1; // monthly
-  } else if (totalMonths <= 120) {
-    step = 3; // quarterly
-  } else {
-    step = 12; // yearly
+  // For shorter spans, use day-based intervals for smoother chart lines
+  if (totalMonths <= 24) {
+    return dayIntervalDates(from, to, 7);
   }
+  if (totalMonths <= 60) {
+    return dayIntervalDates(from, to, 14);
+  }
+
+  // For longer spans, use month-end dates
+  const step = totalMonths <= 120 ? 1 : 3;
 
   const dates: string[] = [];
   let year = from.getFullYear();
@@ -73,6 +78,22 @@ export function monthEndDates(from: Date, to: Date): string[] {
     dates.push(toStr);
   }
 
+  return dates;
+}
+
+/** Generate dates at a fixed day interval between from and to (inclusive). */
+function dayIntervalDates(from: Date, to: Date, intervalDays: number): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(from);
+  while (cursor <= to) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + intervalDays);
+  }
+  // Always include the final date
+  const toStr = to.toISOString().slice(0, 10);
+  if (dates.length === 0 || dates[dates.length - 1] !== toStr) {
+    dates.push(toStr);
+  }
   return dates;
 }
 

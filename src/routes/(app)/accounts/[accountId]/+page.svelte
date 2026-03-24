@@ -20,6 +20,7 @@
   import { v7 as uuidv7 } from "uuid";
   import { toast } from "svelte-sonner";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
+  import { monthEndDates } from "$lib/utils/balance-history.js";
   import type { Account, CurrencyBalance, JournalEntry, LineItem, BalanceAssertion } from "$lib/types/index.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
@@ -117,32 +118,28 @@
         snapshots.push({ date: entry.date, balances: new Map(runningMap) });
       }
 
-      // Find date range
+      // Find date range and generate sample dates
       const first = new Date(snapshots[0].date);
       const last = new Date();
+      const sampleDates = monthEndDates(first, last);
 
-      // Generate monthly end-of-month points
       const points: { date: Date; value: number }[] = [];
-      const cursor = new Date(first.getFullYear(), first.getMonth(), 1);
       const rateCache = new ExchangeRateCache(getBackend());
       const baseCurrency = settings.currency;
 
-      while (cursor <= last) {
-        const endOfMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-        const dateStr = endOfMonth.toISOString().slice(0, 10);
-
+      for (const dateStr of sampleDates) {
         // Find the last snapshot on or before this date
-        let balAtMonth: Map<string, number> | null = null;
+        let balAtDate: Map<string, number> | null = null;
         for (let i = snapshots.length - 1; i >= 0; i--) {
           if (snapshots[i].date <= dateStr) {
-            balAtMonth = snapshots[i].balances;
+            balAtDate = snapshots[i].balances;
             break;
           }
         }
 
         let total = 0;
-        if (balAtMonth) {
-          for (const [currency, amount] of balAtMonth) {
+        if (balAtDate) {
+          for (const [currency, amount] of balAtDate) {
             if (currency === baseCurrency) {
               total += amount;
             } else {
@@ -153,7 +150,6 @@
           }
         }
         points.push({ date: new Date(dateStr + "T00:00:00"), value: Math.round(total * 100) / 100 });
-        cursor.setMonth(cursor.getMonth() + 1);
       }
       balanceChartData = points;
     } catch (e) {

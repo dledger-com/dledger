@@ -3,38 +3,45 @@ import { seedBasicLedger, type SeededLedger } from "../../test/helpers.js";
 import { computeNetWorthSeries, computeExpenseBreakdown, monthEndDates } from "./balance-history.js";
 
 describe("monthEndDates", () => {
-  it("generates monthly end dates for short range", () => {
+  it("generates weekly dates for short range (<=24 months)", () => {
     const dates = monthEndDates(new Date("2024-01-01"), new Date("2024-06-30"));
-    // Should include end of Jan through Jun (6 months)
-    expect(dates.length).toBeGreaterThanOrEqual(6);
-    // First date should be end of January (exact string depends on TZ)
-    expect(dates[0]).toMatch(/^2024-01-3[01]$/);
-    // Last date should be exactly the "to" date formatted
+    // 6 months → weekly sampling (~26 points)
+    expect(dates.length).toBeGreaterThanOrEqual(20);
+    // First date should be the start date
+    expect(dates[0]).toBe("2024-01-01");
+    // Last date should be exactly the "to" date
     const toStr = new Date("2024-06-30").toISOString().slice(0, 10);
-    expect(dates).toContain(toStr);
+    expect(dates[dates.length - 1]).toBe(toStr);
   });
 
-  it("generates quarterly dates for medium range", () => {
+  it("generates biweekly dates for medium-short range (25-60 months)", () => {
+    const dates = monthEndDates(new Date("2021-01-01"), new Date("2024-06-30"));
+    // 42 months → biweekly (~90 points)
+    expect(dates.length).toBeGreaterThan(60);
+    expect(dates.length).toBeLessThan(120);
+    expect(dates[0]).toBe("2021-01-01");
+  });
+
+  it("generates monthly dates for medium range (61-120 months)", () => {
     const from = new Date("2019-01-01");
     const to = new Date("2024-12-31");
     const dates = monthEndDates(from, to);
-    // 72 months > 60, so should be quarterly
-    // Should be fewer than monthly (72 monthly -> ~24 quarterly)
-    expect(dates.length).toBeLessThan(72);
-    expect(dates.length).toBeGreaterThan(10);
+    // 72 months → monthly end dates
+    expect(dates.length).toBeGreaterThanOrEqual(72);
+    expect(dates.length).toBeLessThan(80);
     // All dates should be valid YYYY-MM-DD strings
     for (const d of dates) {
       expect(d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 
-  it("generates yearly dates for long range", () => {
+  it("generates quarterly dates for long range (>120 months)", () => {
     const from = new Date("2010-01-01");
     const to = new Date("2024-12-31");
     const dates = monthEndDates(from, to);
-    // 180 months > 120, so yearly
-    expect(dates.length).toBeLessThan(30);
-    expect(dates.length).toBeGreaterThan(5);
+    // 180 months → quarterly
+    expect(dates.length).toBeLessThan(70);
+    expect(dates.length).toBeGreaterThan(10);
   });
 
   it("always includes the final date", () => {
