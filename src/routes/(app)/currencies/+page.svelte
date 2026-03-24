@@ -172,19 +172,6 @@
 </script>
 
 <div class="space-y-6">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <ListFilter bind:value={currencySearchTerm} placeholder={m.placeholder_filter_currencies()} class="order-last sm:order-none" />
-    <div class="flex flex-wrap items-center gap-3 shrink-0">
-      <label class="flex items-center gap-2 text-sm">
-        <Switch
-          checked={settings.showHidden}
-          onCheckedChange={(v) => settings.update({ showHidden: v })}
-        />
-        {m.label_show_hidden()}
-      </label>
-    </div>
-  </div>
-
   <!-- Rate health banner -->
   {#if rateHealth.status === "syncing" || syncing}
     <div class="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
@@ -263,6 +250,19 @@
       </Button>
     </div>
   {/if}
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <ListFilter bind:value={currencySearchTerm} placeholder={m.placeholder_filter_currencies()} class="order-last sm:order-none" />
+    <div class="flex flex-wrap items-center gap-3 shrink-0">
+      <label class="flex items-center gap-2 text-sm">
+        <Switch
+          checked={settings.showHidden}
+          onCheckedChange={(v) => settings.update({ showHidden: v })}
+        />
+        {m.label_show_hidden()}
+      </label>
+    </div>
+  </div>
 
   <Dialog.Root bind:open={addDialogOpen}>
     <Dialog.Content class="max-w-sm">
