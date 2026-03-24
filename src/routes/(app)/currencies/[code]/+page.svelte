@@ -123,9 +123,10 @@
         chartLoading = false;
         return;
       }
+      const backend = getBackend();
       const [directRates, inverseRates] = await Promise.all([
-        getBackend().listExchangeRates(currCode, quote),
-        getBackend().listExchangeRates(quote, currCode),
+        backend.listExchangeRates(currCode, quote),
+        backend.listExchangeRates(quote, currCode),
       ]);
 
       // Merge: direct rates take priority, inverse rates fill gaps
@@ -137,6 +138,56 @@
         if (!dateMap.has(r.date)) {
           const v = parseFloat(r.rate);
           if (v !== 0) dateMap.set(r.date, 1 / v);
+        }
+      }
+
+      // Transitive: compute cross-rates via common intermediates (e.g., DEPIN→USD→BTC)
+      // Load all rates for the currency to discover intermediates
+      const [allCodeFrom, allCodeTo] = await Promise.all([
+        backend.listExchangeRates(currCode),
+        backend.listExchangeRates(undefined, currCode),
+      ]);
+
+      // Build code→intermediate rate maps: intermediate → Map<date, rate>
+      const codeToIntermediate = new Map<string, Map<string, number>>();
+      for (const r of allCodeFrom) {
+        if (r.to_currency === quote) continue;
+        let m = codeToIntermediate.get(r.to_currency);
+        if (!m) { m = new Map(); codeToIntermediate.set(r.to_currency, m); }
+        if (!m.has(r.date)) m.set(r.date, parseFloat(r.rate));
+      }
+      for (const r of allCodeTo) {
+        if (r.from_currency === quote) continue;
+        let m = codeToIntermediate.get(r.from_currency);
+        if (!m) { m = new Map(); codeToIntermediate.set(r.from_currency, m); }
+        if (!m.has(r.date)) {
+          const v = parseFloat(r.rate);
+          if (v !== 0) m.set(r.date, 1 / v);
+        }
+      }
+
+      // For each intermediate, load its rates to the quote currency and compute cross-rates
+      for (const [intermediate, codeDates] of codeToIntermediate) {
+        const [intDirect, intInverse] = await Promise.all([
+          backend.listExchangeRates(intermediate, quote),
+          backend.listExchangeRates(quote, intermediate),
+        ]);
+        const intToQuote = new Map<string, number>();
+        for (const r of intDirect) intToQuote.set(r.date, parseFloat(r.rate));
+        for (const r of intInverse) {
+          if (!intToQuote.has(r.date)) {
+            const v = parseFloat(r.rate);
+            if (v !== 0) intToQuote.set(r.date, 1 / v);
+          }
+        }
+
+        // Cross-rate: code→quote = code→intermediate × intermediate→quote
+        for (const [date, codeRate] of codeDates) {
+          if (dateMap.has(date)) continue;
+          const intRate = intToQuote.get(date);
+          if (intRate && intRate !== 0) {
+            dateMap.set(date, codeRate * intRate);
+          }
         }
       }
 
