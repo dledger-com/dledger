@@ -19,9 +19,9 @@
     { title: () => m.nav_dashboard(), href: "/", icon: LayoutDashboard },
     { title: () => m.nav_accounts(), href: "/accounts", icon: BookOpen },
     { title: () => m.nav_journal(), href: "/journal", icon: FileText },
-    { title: () => m.nav_reports(), href: "/reports", icon: BarChart3 },
-    { title: () => m.nav_budgets(), href: "/budgets", icon: PiggyBank },
     { title: () => m.nav_currencies(), href: "/currencies", icon: Coins },
+    { title: () => m.nav_budgets(), href: "/budgets", icon: PiggyBank },
+    { title: () => m.nav_reports(), href: "/reports", icon: BarChart3 },
     { title: () => m.nav_sources(), href: "/sources", icon: ArrowUpDown },
   ];
 
