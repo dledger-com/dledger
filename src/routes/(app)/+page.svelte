@@ -15,6 +15,7 @@
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
+  import { mainCounterparty, entryAmountDisplay, amountColorClass } from "$lib/utils/journal-display.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
@@ -36,6 +37,8 @@
   const settings = new SettingsStore();
 
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
+
+  const accountIdToName = $derived(new Map(accountStore.accounts.map(a => [a.id, a.full_name])));
 
   // Dynamically loaded chart libraries (deferred past first paint)
   let AreaChart = $state<typeof import("layerchart").AreaChart | null>(null);
@@ -99,21 +102,6 @@
         entryLinks = new Map(ids.map((id, i) => [id, links[i]]));
       }
     } catch { /* ignore */ }
-  }
-
-  function debitsByCurrency(items: { amount: string; currency: string }[]): { currency: string; amount: string }[] {
-    const map = new Map<string, number>();
-    for (const item of items) {
-      const n = parseFloat(item.amount);
-      if (n > 0) map.set(item.currency, (map.get(item.currency) ?? 0) + n);
-    }
-    return [...map].map(([currency, amount]) => ({ currency, amount: String(amount) }));
-  }
-
-  function formatDebitTotal(items: { amount: string; currency: string }[]): string {
-    const byCode = debitsByCurrency(items);
-    if (byCode.length === 0) return formatCurrency(0, settings.currency);
-    return byCode.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
 
   // Charts
@@ -618,6 +606,7 @@
           <Table.Row>
             <Table.Head class="w-0 hidden sm:table-cell">{m.label_date()}</Table.Head>
             <Table.Head>{m.label_description()}</Table.Head>
+            <Table.Head class="hidden sm:table-cell">{m.label_account()}</Table.Head>
             <Table.Head class="text-right hidden sm:table-cell">{m.label_amount()}</Table.Head>
           </Table.Row>
         </Table.Header>
@@ -636,8 +625,14 @@
                   {/if}
                 </div>
               </Table.Cell>
-              <Table.Cell class="text-right font-mono order-2 ml-auto py-2 pl-2 sm:p-2">
-                {formatDebitTotal(items)}
+              <Table.Cell class="text-muted-foreground text-sm hidden sm:table-cell">
+                {mainCounterparty(items, accountIdToName)}
+              </Table.Cell>
+              <Table.Cell class="text-right text-sm hidden sm:table-cell whitespace-nowrap tabular-nums order-2 ml-auto py-2 pl-2 sm:p-2">
+                {#each entryAmountDisplay(items, accountIdToName) as part, i}
+                  {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
+                  <span class={amountColorClass(part.direction)}>{part.text}</span>
+                {/each}
               </Table.Cell>
             </Table.Row>
           {/each}
