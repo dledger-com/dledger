@@ -24,9 +24,11 @@
   import CircleCheck from "lucide-svelte/icons/circle-check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import Loader from "lucide-svelte/icons/loader";
+  import * as Dialog from "$lib/components/ui/dialog/index.js";
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+  import Plus from "lucide-svelte/icons/plus";
   import { groupDateIntervals, formatInterval } from "$lib/utils/date-intervals.js";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import * as m from "$paraglide/messages.js";
@@ -37,6 +39,7 @@
 
   let dpriceDialogOpen = $state(false);
   let dpriceDialogCode = $state("");
+  let addDialogOpen = $state(false);
 
   let currencies = $state<Currency[]>([]);
   let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
@@ -96,6 +99,7 @@
       currName = "";
       currDecimals = "2";
       currIsBase = false;
+      addDialogOpen = false;
       await loadCurrencies();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -171,6 +175,9 @@
         />
         {m.label_show_hidden()}
       </label>
+      <Button size="sm" onclick={() => { addDialogOpen = true; }}>
+        <Plus class="h-4 w-4 mr-1" />{m.btn_add()}
+      </Button>
     </div>
   </div>
 
@@ -253,25 +260,38 @@
     </div>
   {/if}
 
-  <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="flex items-end gap-3">
-    <div class="space-y-1">
-      <label for="curr-code" class="text-xs text-muted-foreground">{m.label_code()}</label>
-      <Input id="curr-code" bind:value={currCode} placeholder="EUR" class="w-24" />
-    </div>
-    <div class="space-y-1">
-      <label for="curr-name" class="text-xs text-muted-foreground">{m.label_name()}</label>
-      <Input id="curr-name" bind:value={currName} placeholder="Euro" class="w-40" />
-    </div>
-    <div class="space-y-1">
-      <label for="curr-decimals" class="text-xs text-muted-foreground">{m.label_decimals()}</label>
-      <Input id="curr-decimals" type="number" bind:value={currDecimals} class="w-20" />
-    </div>
-    <div class="space-y-1 flex items-center gap-2 pb-1">
-      <Switch id="curr-base" bind:checked={currIsBase} />
-      <label for="curr-base" class="text-xs text-muted-foreground">{m.label_base()}</label>
-    </div>
-    <Button type="submit" size="sm">{m.btn_add()}</Button>
-  </form>
+  <Dialog.Root bind:open={addDialogOpen}>
+    <Dialog.Content class="max-w-sm">
+      <Dialog.Header>
+        <Dialog.Title>{m.btn_add()}</Dialog.Title>
+      </Dialog.Header>
+      <form onsubmit={(e) => { e.preventDefault(); addCurrency(); }} class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label for="curr-code" class="text-xs text-muted-foreground">{m.label_code()}</label>
+            <Input id="curr-code" bind:value={currCode} placeholder="EUR" />
+          </div>
+          <div class="space-y-1">
+            <label for="curr-name" class="text-xs text-muted-foreground">{m.label_name()}</label>
+            <Input id="curr-name" bind:value={currName} placeholder="Euro" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label for="curr-decimals" class="text-xs text-muted-foreground">{m.label_decimals()}</label>
+            <Input id="curr-decimals" type="number" bind:value={currDecimals} />
+          </div>
+          <div class="flex items-center gap-2 pt-5">
+            <Switch id="curr-base" bind:checked={currIsBase} />
+            <label for="curr-base" class="text-xs text-muted-foreground">{m.label_base()}</label>
+          </div>
+        </div>
+        <Dialog.Footer>
+          <Button type="submit" size="sm">{m.btn_add()}</Button>
+        </Dialog.Footer>
+      </form>
+    </Dialog.Content>
+  </Dialog.Root>
 
   {#if currencies.length === 0}
     <Card.Root class="border-x-0 rounded-none shadow-none">
