@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource, CurrencyDateRequirement } from "./backend.js";
-import type { SourceName } from "./exchange-rate-sync.js";
+import { type SourceName, resolveDpriceAsset } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 import { setRateHealthSyncing, updateRateHealth } from "./data/rate-health.svelte.js";
@@ -1295,6 +1295,42 @@ export async function autoBackfillRates(
       if (src.rate_source === "none" && src.set_by === "auto" && dpriceAssets.has(src.currency)) {
         await backend.setCurrencyRateSource(src.currency, null, "auto");
       }
+    }
+  }
+
+  // Try to resolve dprice assets for currencies that getRates() missed
+  // (ambiguous symbols, no recent price, etc.) — closes gap with syncExchangeRates()
+  if (isDpriceActive(config.dpriceMode) && currencyDates.length > 0) {
+    try {
+      const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+      const allCurrencies = await backend.listCurrencies();
+      const currencyTypeMap = new Map(allCurrencies.map((c) => [c.code, c.asset_type]));
+      const tokenAddresses = await backend.getCurrencyTokenAddresses();
+      const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+
+      // Currencies that need rates but weren't returned by getRates()
+      const neededCodes = new Set(currencyDates.map((cd) => cd.currency));
+      const unresolvedCodes = [...neededCodes].filter(
+        (c) => c !== config.baseCurrency && !dpriceAssets?.has(c),
+      );
+
+      for (const code of unresolvedCodes) {
+        try {
+          const assetType = currencyTypeMap.get(code) ?? "";
+          const tokenInfo = tokenAddrMap.get(code);
+          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo);
+          if (resolved !== "none" && resolved !== "ambiguous") {
+            if (!dpriceAssets) dpriceAssets = new Set();
+            dpriceAssets.add(code);
+            // Store the resolved ID so fetchDpriceHistorical uses ID-based lookup
+            await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
+          }
+        } catch {
+          // Individual resolution failure — skip
+        }
+      }
+    } catch {
+      // dprice client creation failed — skip resolution
     }
   }
 

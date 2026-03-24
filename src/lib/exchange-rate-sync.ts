@@ -115,7 +115,7 @@ function autoDetectSource(
  * Resolve a currency against dprice's asset database using all available metadata.
  * Returns the dprice asset ID on unambiguous match, or "none"/"ambiguous" otherwise.
  */
-async function resolveDpriceAsset(
+export async function resolveDpriceAsset(
   client: DpriceClient,
   code: string,
   assetType: string,

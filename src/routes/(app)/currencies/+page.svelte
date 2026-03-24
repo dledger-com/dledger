@@ -17,6 +17,7 @@
   import type { Currency } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
   import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
+  import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
   import { rateHealth } from "$lib/data/rate-health.svelte.js";
@@ -134,6 +135,10 @@
     toast.success(m.toast_rate_source_updated({ code, source: "none" }));
   }
 
+  function syncRates() {
+    enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet());
+  }
+
   const unsubCurrencies = onInvalidate("currencies", () => {
     loadCurrencies();
     loadRateSources();
@@ -171,9 +176,14 @@
       <div class="flex items-start gap-2">
         <CircleAlert class="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <div class="space-y-2 w-full">
-          <p class="text-sm font-medium text-amber-800 dark:text-amber-200">
-            {m.banner_missing_rates({ count: String(rateHealth.missingCurrencies.length) })}
-          </p>
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-medium text-amber-800 dark:text-amber-200">
+              {m.banner_missing_rates({ count: String(rateHealth.missingCurrencies.length) })}
+            </p>
+            <Button size="sm" variant="outline" onclick={syncRates} disabled={syncing}>
+              {m.btn_sync_rates()}
+            </Button>
+          </div>
           <div class="flex flex-wrap gap-2">
             {#each rateHealth.missingCurrencies as code}
               <div class="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs dark:border-amber-700 dark:bg-amber-900">
@@ -197,9 +207,14 @@
       </div>
     </div>
   {:else if rateHealth.status === "ok"}
-    <div class="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
-      <CircleCheck class="h-4 w-4" />
-      <span>{m.banner_rates_ok()}</span>
+    <div class="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+      <div class="flex items-center gap-2">
+        <CircleCheck class="h-4 w-4" />
+        <span>{m.banner_rates_ok()}</span>
+      </div>
+      <Button size="sm" variant="ghost" onclick={syncRates} disabled={syncing}>
+        {m.btn_sync_rates()}
+      </Button>
     </div>
   {/if}
 

@@ -694,6 +694,7 @@
 
   "btn_test": "Test",
   "btn_sync_latest": "Sync Latest",
+  "btn_sync_rates": "Sync rates",
   "btn_full_sync": "Full Sync",
   "btn_export_db": "Export DB",
   "btn_import_db": "Import DB",
