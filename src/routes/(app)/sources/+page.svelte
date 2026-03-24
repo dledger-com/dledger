@@ -4947,6 +4947,9 @@
                                         onchange={() => { const next = new Set(tonSelectedIndexes); if (next.has(derived.index)) next.delete(derived.index); else next.add(derived.index); tonSelectedIndexes = next; }} />
                                     <span class="font-mono">{derived.index}</span>
                                     <span class="font-mono truncate flex-1">{derived.address}</span>
+                                    <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
+                                        <Copy class="h-3 w-3" />
+                                    </Button>
                                     <Input class="h-6 w-24 text-xs" placeholder={m.label_label()} value={tonItemLabels.get(derived.index) ?? ""}
                                         oninput={(e) => { const next = new Map(tonItemLabels); next.set(derived.index, (e.target as HTMLInputElement).value); tonItemLabels = next; }} />
                                     {#if exists}<Badge variant="outline" class="text-xs">{m.sources_added()}</Badge>{/if}
