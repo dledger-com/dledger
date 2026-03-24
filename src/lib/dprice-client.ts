@@ -242,12 +242,16 @@ class HttpDpriceClient implements DpriceClient {
     fromDate: string,
     toDate: string,
   ): Promise<DpriceBatchResult> {
-    const symbols = bases.map((b) => b.symbol ?? b.id ?? "").filter(Boolean);
-    const params = new URLSearchParams({
-      symbols: symbols.join(","),
-      date: fromDate,
-      end_date: toDate,
-    });
+    // Separate ID-based and symbol-based filters for the REST API
+    const symbolEntries: string[] = [];
+    const idEntries: string[] = [];
+    for (const b of bases) {
+      if (b.id) idEntries.push(b.id);
+      else if (b.symbol) symbolEntries.push(b.symbol);
+    }
+    const params = new URLSearchParams({ date: fromDate, end_date: toDate });
+    if (symbolEntries.length > 0) params.set("symbols", symbolEntries.join(","));
+    if (idEntries.length > 0) params.set("ids", idEntries.join(","));
     // If all filters share the same type/param, add them to the query
     const types = new Set(bases.map((b) => b.type).filter(Boolean));
     if (types.size === 1) params.set("type", [...types][0]!);
