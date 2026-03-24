@@ -26,6 +26,8 @@
   import CircleAlert from "lucide-svelte/icons/circle-alert";
   import Loader from "lucide-svelte/icons/loader";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import SlidersHorizontal from "lucide-svelte/icons/sliders-horizontal";
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
@@ -251,16 +253,25 @@
     </div>
   {/if}
 
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <ListFilter bind:value={currencySearchTerm} placeholder={m.placeholder_filter_currencies()} class="order-last sm:order-none" />
-    <div class="flex flex-wrap items-center gap-3 shrink-0">
-      <label class="flex items-center gap-2 text-sm">
-        <Switch
-          checked={settings.showHidden}
-          onCheckedChange={(v) => settings.update({ showHidden: v })}
-        />
-        {m.label_show_hidden()}
-      </label>
+  <div class="flex items-center gap-2">
+    <ListFilter bind:value={currencySearchTerm} placeholder={m.placeholder_filter_currencies()} class="min-w-0 w-[200px] lg:w-[250px] shrink" />
+    <div class="ml-auto">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button variant="outline" size="sm" class="h-8" {...props}>
+              <SlidersHorizontal class="size-4" />
+              <span class="hidden sm:inline">{m.label_view()}</span>
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="w-[170px]">
+          <DropdownMenu.CheckboxItem
+            checked={settings.showHidden}
+            onCheckedChange={(v) => settings.update({ showHidden: !!v })}
+          >{m.label_show_hidden()}</DropdownMenu.CheckboxItem>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     </div>
   </div>
 
