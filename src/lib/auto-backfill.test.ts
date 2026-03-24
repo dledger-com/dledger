@@ -267,6 +267,53 @@ describe("getExchangeRatesBatchExact", () => {
   });
 });
 
+describe("findMissingRates unsourceable tracking with exactDateMatch", () => {
+  let backend: SqlJsBackend;
+
+  beforeEach(async () => {
+    backend = await createTestBackend();
+    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
+  });
+
+  it("reports unsourceable currencies alongside sourceable ones", async () => {
+    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN", decimal_places: 8, is_base: false });
+
+    const unsourceable = new Set<string>();
+    const requests = await findMissingRates(
+      backend, "USD",
+      [
+        { currency: "EUR", date: "2024-06-15" },
+        { currency: "DEPIN", date: "2024-06-15" },
+      ],
+      undefined, { exactDateMatch: true }, undefined, unsourceable,
+    );
+
+    // EUR is sourceable (frankfurter), DEPIN is not
+    expect(requests).toHaveLength(1);
+    expect(requests[0].currency).toBe("EUR");
+    expect(unsourceable.has("DEPIN")).toBe(true);
+    expect(unsourceable.has("EUR")).toBe(false);
+  });
+
+  it("dprice-known currencies are not unsourceable", async () => {
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN", decimal_places: 8, is_base: false });
+
+    const dpriceAssets = new Set(["DEPIN"]);
+    const unsourceable = new Set<string>();
+    const requests = await findMissingRates(
+      backend, "USD",
+      [{ currency: "DEPIN", date: "2024-06-15" }],
+      dpriceAssets, { exactDateMatch: true }, undefined, unsourceable,
+    );
+
+    // DEPIN is in dpriceAssets, so it gets classified as dprice
+    expect(requests).toHaveLength(1);
+    expect(requests[0].source).toBe("dprice");
+    expect(unsourceable.size).toBe(0);
+  });
+});
+
 describe("findMissingRates with exactDateMatch", () => {
   let backend: SqlJsBackend;
 

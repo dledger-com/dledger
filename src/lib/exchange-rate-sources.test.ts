@@ -183,4 +183,51 @@ describe("findMissingRates source classification", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].source).toBe("cryptocompare");
   });
+
+  it("collects unsourceable currencies when out-parameter is provided", async () => {
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN Token", decimal_places: 8, is_base: false });
+
+    const unsourceable = new Set<string>();
+    const requests = await findMissingRates(
+      backend, "USD",
+      [{ currency: "DEPIN", date: "2024-06-01" }],
+      undefined, undefined, undefined,
+      unsourceable,
+    );
+
+    expect(requests).toHaveLength(0);
+    expect(unsourceable.has("DEPIN")).toBe(true);
+  });
+
+  it("does not collect user-set none currencies as unsourceable", async () => {
+    await backend.createCurrency({ code: "SKIP", asset_type: "", param: "", name: "Skip Token", decimal_places: 8, is_base: false });
+    await backend.setCurrencyRateSource("SKIP", "none", "user");
+
+    const unsourceable = new Set<string>();
+    const requests = await findMissingRates(
+      backend, "USD",
+      [{ currency: "SKIP", date: "2024-06-01" }],
+      undefined, undefined, undefined,
+      unsourceable,
+    );
+
+    expect(requests).toHaveLength(0);
+    expect(unsourceable.has("SKIP")).toBe(false);
+  });
+
+  it("collects auto-set none currencies as unsourceable", async () => {
+    await backend.createCurrency({ code: "STALE", asset_type: "", param: "", name: "Stale Token", decimal_places: 8, is_base: false });
+    await backend.setCurrencyRateSource("STALE", "none", "auto");
+
+    const unsourceable = new Set<string>();
+    const requests = await findMissingRates(
+      backend, "USD",
+      [{ currency: "STALE", date: "2024-06-01" }],
+      undefined, undefined, undefined,
+      unsourceable,
+    );
+
+    expect(requests).toHaveLength(0);
+    expect(unsourceable.has("STALE")).toBe(true);
+  });
 });

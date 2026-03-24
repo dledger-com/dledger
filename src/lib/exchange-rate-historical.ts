@@ -155,6 +155,7 @@ export async function findMissingRates(
   dpriceAssets?: Set<string>,
   options?: { exactDateMatch?: boolean },
   disabledSources?: Set<string>,
+  unsourceableCurrencies?: Set<string>,
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -198,7 +199,13 @@ export async function findMissingRates(
       if (existenceMap.get(key)) continue;
 
       const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
-      if (!source) continue;
+      if (!source) {
+        const stored = rateSourceMap.get(currency);
+        if (!(stored?.set_by === "user" && stored?.rate_source === "none")) {
+          unsourceableCurrencies?.add(currency);
+        }
+        continue;
+      }
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -212,7 +219,13 @@ export async function findMissingRates(
       if (existenceMap.get(key)) continue;
 
       const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
-      if (!source) continue;  // rate_source = "none" → skip
+      if (!source) {
+        const stored = rateSourceMap.get(currency);
+        if (!(stored?.set_by === "user" && stored?.rate_source === "none")) {
+          unsourceableCurrencies?.add(currency);
+        }
+        continue;
+      }
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -225,7 +238,13 @@ export async function findMissingRates(
       if (rate !== null) continue;
 
       const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
-      if (!source) continue;  // rate_source = "none" → skip
+      if (!source) {
+        const stored = rateSourceMap.get(currency);
+        if (!(stored?.set_by === "user" && stored?.rate_source === "none")) {
+          unsourceableCurrencies?.add(currency);
+        }
+        continue;
+      }
       const groupKey = `${currency}:${source}`;
       if (!missing.has(groupKey)) {
         missing.set(groupKey, { currency, dates: [], source });
@@ -1177,6 +1196,7 @@ export async function ensurePeriodicRates(
 export interface AutoBackfillResult extends HistoricalFetchResult {
   currenciesAnalyzed: number;
   totalDatesRequested: number;
+  unsourceableCurrencies: string[];
 }
 
 /**
@@ -1190,7 +1210,7 @@ export async function autoBackfillRates(
   dpriceAssets?: Set<string>,
 ): Promise<AutoBackfillResult> {
   if (!backend.getCurrencyDateRequirements) {
-    return { fetched: 0, skipped: 0, errors: ["Backend does not support getCurrencyDateRequirements"], failedCurrencies: [], currenciesAnalyzed: 0, totalDatesRequested: 0 };
+    return { fetched: 0, skipped: 0, errors: ["Backend does not support getCurrencyDateRequirements"], failedCurrencies: [], unsourceableCurrencies: [], currenciesAnalyzed: 0, totalDatesRequested: 0 };
   }
 
   const requirements = await backend.getCurrencyDateRequirements(config.baseCurrency);
@@ -1267,15 +1287,27 @@ export async function autoBackfillRates(
     }
   }
 
+  // Re-evaluate auto-"none" currencies: if dprice now knows them, clear the stale marking
+  // so classifySource() can re-route them to dprice instead of silently skipping.
+  if (dpriceAssets && dpriceAssets.size > 0) {
+    const storedSources = await backend.getCurrencyRateSources();
+    for (const src of storedSources) {
+      if (src.rate_source === "none" && src.set_by === "auto" && dpriceAssets.has(src.currency)) {
+        await backend.setCurrencyRateSource(src.currency, null, "auto");
+      }
+    }
+  }
+
   const totalDatesRequested = currencyDates.length;
 
   if (currencyDates.length === 0) {
-    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
   }
 
-  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources);
+  const unsourceable = new Set<string>();
+  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources, unsourceable);
   if (missing.length === 0) {
-    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], currenciesAnalyzed: filtered.length, totalDatesRequested };
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [...unsourceable], currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
 
   // Ensure storedSources is populated for dprice ID-based lookups
@@ -1286,6 +1318,7 @@ export async function autoBackfillRates(
   const result = await fetchHistoricalRates(backend, missing, effectiveConfig, dpriceAssets);
   return {
     ...result,
+    unsourceableCurrencies: [...unsourceable],
     currenciesAnalyzed: filtered.length,
     totalDatesRequested,
   };
@@ -1351,8 +1384,9 @@ export function enqueueRateBackfill(
           }
         }
 
-        // Update rate health store — only report non-hidden failed currencies
-        const failedNonHidden = result.failedCurrencies.filter(
+        // Update rate health store — report both failed and unsourceable (non-hidden) currencies
+        const allMissing = [...new Set([...result.failedCurrencies, ...result.unsourceableCurrencies])];
+        const failedNonHidden = allMissing.filter(
           (c) => !hiddenCurrencies.has(c),
         );
         updateRateHealth(result, failedNonHidden);
