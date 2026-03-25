@@ -1443,6 +1443,8 @@
                     onSelectKaspa={() => startAddChain("kaspa")}
                     onSelectZcash={() => startAddChain("zcash")}
                     onSelectStacks={() => startAddChain("stacks")}
+                    onSelectCardano={() => startAddChain("cardano")}
+                    onSelectMonero={() => startAddChain("xmr")}
                     disabled={anyBusy}
                 />
             {:else if addSourceMode === "cex"}

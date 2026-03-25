@@ -31,6 +31,8 @@
     onSelectKaspa,
     onSelectZcash,
     onSelectStacks,
+    onSelectCardano,
+    onSelectMonero,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -57,6 +59,8 @@
     onSelectKaspa?: (prefillAddress?: string) => void;
     onSelectZcash?: (prefillAddress?: string) => void;
     onSelectStacks?: (prefillAddress?: string) => void;
+    onSelectCardano?: (prefillAddress?: string) => void;
+    onSelectMonero?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -166,6 +170,16 @@
   const detectedBchAddress = $derived.by(() => {
     const s = search.trim();
     return /^(bitcoincash:)?[qp][a-z0-9]{41}$/.test(s) ? s : null;
+  });
+
+  const detectedCardanoAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^addr1[0-9a-z]{53,}$/.test(s) ? s : null;
+  });
+
+  const detectedMoneroAddress = $derived.by(() => {
+    const s = search.trim();
+    return /^4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}$/.test(s) ? s : null;
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -317,6 +331,18 @@
     open = false;
     search = "";
     onSelectStacks?.(prefillAddress);
+  }
+
+  function selectCardano(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectCardano?.(prefillAddress);
+  }
+
+  function selectMonero(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectMonero?.(prefillAddress);
   }
 </script>
 
@@ -500,6 +526,20 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#if detectedCardanoAddress}
+          <Command.Group heading="Detected Cardano Address">
+            <Command.Item value="detected-cardano-{detectedCardanoAddress}" keywords={["cardano", "ada"]} onSelect={() => selectCardano(detectedCardanoAddress)} class="font-mono text-xs">
+              Add {detectedCardanoAddress.slice(0, 10)}...{detectedCardanoAddress.slice(-4)} as Cardano address
+            </Command.Item>
+          </Command.Group>
+        {/if}
+        {#if detectedMoneroAddress}
+          <Command.Group heading="Detected Monero Address">
+            <Command.Item value="detected-monero-{detectedMoneroAddress}" keywords={["monero", "xmr"]} onSelect={() => selectMonero(detectedMoneroAddress)} class="font-mono text-xs">
+              Add {detectedMoneroAddress.slice(0, 8)}...{detectedMoneroAddress.slice(-4)} as Monero address
+            </Command.Item>
+          </Command.Group>
+        {/if}
         <Command.Group heading="Blockchain">
           {#if onSelectAlgorand}
             <Command.Item value="Algorand" keywords={["algorand", "algo"]} onSelect={() => selectAlgorand()}>
@@ -524,6 +564,11 @@
           {#if onSelectBittensor}
             <Command.Item value="Bittensor" keywords={["bittensor", "tao", "substrate"]} onSelect={() => selectBittensor()}>
               Bittensor
+            </Command.Item>
+          {/if}
+          {#if onSelectCardano}
+            <Command.Item value="Cardano" keywords={["cardano", "ada"]} onSelect={() => selectCardano()}>
+              Cardano
             </Command.Item>
           {/if}
           {#if onSelectCosmos}
@@ -557,6 +602,11 @@
           {#if onSelectLtc}
             <Command.Item value="Litecoin" keywords={["litecoin", "ltc"]} onSelect={() => selectLtc()}>
               Litecoin
+            </Command.Item>
+          {/if}
+          {#if onSelectMonero}
+            <Command.Item value="Monero" keywords={["monero", "xmr", "privacy"]} onSelect={() => selectMonero()}>
+              Monero
             </Command.Item>
           {/if}
           {#if onSelectNear}
