@@ -25,7 +25,9 @@
     import X from "lucide-svelte/icons/x";
     import Pencil from "lucide-svelte/icons/pencil";
     import Copy from "lucide-svelte/icons/copy";
+    import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
     import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+    import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
     import * as Collapsible from "$lib/components/ui/collapsible/index.js";
     import {
         enqueueRateBackfill,
@@ -1861,7 +1863,7 @@
                         </span>
                     </div>
                     <Table.Root>
-                        <Table.Header>
+                        <Table.Header class="hidden sm:table-header-group">
                             <Table.Row>
                                 <SortableHeader active={sortBlockchain.key === "address"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("address")}>{m.sources_address_key()}</SortableHeader>
                                 <SortableHeader active={sortBlockchain.key === "label"} direction={sortBlockchain.direction} onclick={() => sortBlockchain.toggle("label")}>{m.label_label()}</SortableHeader>
@@ -1877,7 +1879,44 @@
                                 {#if row.kind === "btc"}
                                     {@const account = row.data}
                                     {@const isSyncing = taskQueue.isActive(`btc-sync:${account.id}`)}
-                                    <Table.Row>
+                                    <!-- BTC Mobile row -->
+                                    <Table.Row class="sm:hidden">
+                                        <Table.Cell colspan={99} class="py-2 px-3">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                                        <span class="font-mono text-sm truncate">{account.address_or_xpub.length > 16 ? `${account.address_or_xpub.slice(0, 10)}...${account.address_or_xpub.slice(-6)}` : account.address_or_xpub}</span>
+                                                        <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground"><Copy class="h-3 w-3" /></button>
+                                                        <Badge variant="secondary" class="text-[10px]">{m.sources_bitcoin()}</Badge>
+                                                    </div>
+                                                    <div class="flex items-baseline gap-x-1.5 mt-0.5 text-xs text-muted-foreground">
+                                                        {#if editingRowId === account.id}
+                                                            <Input class="h-6 text-xs" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("btc"); if (e.key === "Escape") editingRowId = null; }} />
+                                                        {:else}
+                                                            <span>{account.label}</span>
+                                                        {/if}
+                                                        <span class="ml-auto shrink-0">{account.last_sync ? new Date(account.last_sync).toLocaleDateString() : m.sources_never()}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="shrink-0">
+                                                    <DropdownMenu.Root>
+                                                        <DropdownMenu.Trigger>
+                                                            {#snippet child({ props })}
+                                                                <Button variant="ghost" size="icon-sm" {...props}><EllipsisVertical class="h-4 w-4" /></Button>
+                                                            {/snippet}
+                                                        </DropdownMenu.Trigger>
+                                                        <DropdownMenu.Content align="end">
+                                                            <DropdownMenu.Item disabled={btcBusy} onclick={() => syncBtcAccount(account)}><RefreshCw class="mr-2 h-4 w-4" />{m.sources_sync()}</DropdownMenu.Item>
+                                                            <DropdownMenu.Item onclick={() => startEditLabel(account.id, account.label)}><Pencil class="mr-2 h-4 w-4" />{m.btn_rename()}</DropdownMenu.Item>
+                                                            <DropdownMenu.Item disabled={btcBusy} onclick={() => handleRemoveBtcAccount(account.id)}><Trash2 class="mr-2 h-4 w-4" />{m.btn_delete()}</DropdownMenu.Item>
+                                                        </DropdownMenu.Content>
+                                                    </DropdownMenu.Root>
+                                                </div>
+                                            </div>
+                                        </Table.Cell>
+                                    </Table.Row>
+                                    <!-- BTC Desktop row -->
+                                    <Table.Row class="hidden sm:table-row">
                                         <Table.Cell class="font-mono text-sm">
                                             <div class="flex items-center gap-1">
                                                 <Tooltip.Root>
@@ -2059,7 +2098,47 @@
                                     {:else}
                                         <!-- EVM Display mode -->
                                         {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
-                                        <Table.Row>
+                                        <!-- EVM Mobile row -->
+                                        <Table.Row class="sm:hidden">
+                                            <Table.Cell colspan={99} class="py-2 px-3">
+                                                <div class="flex items-start justify-between gap-2">
+                                                    <div class="min-w-0 flex-1">
+                                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                                            <span class="font-mono text-sm truncate">{formatAddress(group.address)}</span>
+                                                            <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground"><Copy class="h-3 w-3" /></button>
+                                                            <Badge variant="secondary" class="text-[10px]">{m.sources_evm()}</Badge>
+                                                        </div>
+                                                        <div class="flex items-baseline gap-x-1.5 mt-0.5 text-xs text-muted-foreground">
+                                                            <span>{group.label}</span>
+                                                            {#if isSyncingGroup}
+                                                                <RefreshCw class="inline h-3 w-3 animate-spin" />
+                                                            {/if}
+                                                        </div>
+                                                        <div class="flex flex-wrap gap-0.5 mt-1">
+                                                            {#each group.chainIds as chainId}
+                                                                <Badge variant="secondary" class="text-[10px]">{getChainName(chainId)}</Badge>
+                                                            {/each}
+                                                        </div>
+                                                    </div>
+                                                    <div class="shrink-0">
+                                                        <DropdownMenu.Root>
+                                                            <DropdownMenu.Trigger>
+                                                                {#snippet child({ props })}
+                                                                    <Button variant="ghost" size="icon-sm" {...props}><EllipsisVertical class="h-4 w-4" /></Button>
+                                                                {/snippet}
+                                                            </DropdownMenu.Trigger>
+                                                            <DropdownMenu.Content align="end">
+                                                                <DropdownMenu.Item disabled={ethBusy || reprocessing || applyingReprocess} onclick={() => handleSyncGroup(group)}><RefreshCw class="mr-2 h-4 w-4" />{m.sources_sync()}</DropdownMenu.Item>
+                                                                <DropdownMenu.Item disabled={ethBusy || reprocessing || applyingReprocess} onclick={() => startEditAddress(group)}><Pencil class="mr-2 h-4 w-4" />{m.btn_rename()}</DropdownMenu.Item>
+                                                                <DropdownMenu.Item disabled={ethBusy || reprocessing || applyingReprocess} onclick={() => handleRemoveGroup(group)}><Trash2 class="mr-2 h-4 w-4" />{m.btn_delete()}</DropdownMenu.Item>
+                                                            </DropdownMenu.Content>
+                                                        </DropdownMenu.Root>
+                                                    </div>
+                                                </div>
+                                            </Table.Cell>
+                                        </Table.Row>
+                                        <!-- EVM Desktop row -->
+                                        <Table.Row class="hidden sm:table-row">
                                             <Table.Cell class="font-mono text-sm">
                                                 <div class="flex items-center gap-1">
                                                     <Tooltip.Root>
@@ -2127,7 +2206,7 @@
                 <div class="space-y-2">
                     <h4 class="text-xs font-medium uppercase tracking-wider text-muted-foreground">{m.sources_exchanges()}</h4>
                     <Table.Root>
-                        <Table.Header>
+                        <Table.Header class="hidden sm:table-header-group">
                             <Table.Row>
                                 <SortableHeader active={sortCex.key === "exchange"} direction={sortCex.direction} onclick={() => sortCex.toggle("exchange")}>{m.label_exchange()}</SortableHeader>
                                 <SortableHeader active={sortCex.key === "label"} direction={sortCex.direction} onclick={() => sortCex.toggle("label")}>{m.label_label()}</SortableHeader>
@@ -2139,9 +2218,66 @@
                         <Table.Body>
                             {@const sortedCexAccounts = sortCex.key && sortCex.direction ? sortItems(cexAccounts, cexAccessors[sortCex.key], sortCex.direction) : cexAccounts}
                             {#each sortedCexAccounts as account}
-                                <Table.Row>
+                                {@const isCexSyncing = taskQueue.queue.some((t) => t.key === `cex-sync:${account.id}` && t.status === "running")}
+                                <!-- Mobile row -->
+                                <Table.Row class="sm:hidden">
+                                    <Table.Cell colspan={99} class="py-2 px-3">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex items-center gap-2">
+                                                    <Badge variant="secondary" class="shrink-0 text-[10px]">{EXCHANGE_NAMES[account.exchange] ?? account.exchange}</Badge>
+                                                    {#if editingRowId === account.id}
+                                                        <Input class="h-7 text-xs flex-1" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("cex"); if (e.key === "Escape") editingRowId = null; }} />
+                                                    {:else}
+                                                        <span class="font-medium truncate">{account.label}</span>
+                                                    {/if}
+                                                </div>
+                                                <div class="flex items-baseline gap-x-1.5 mt-0.5 text-xs text-muted-foreground">
+                                                    {#if account.last_sync}
+                                                        {new Date(account.last_sync).toLocaleDateString()}
+                                                    {:else}
+                                                        {m.sources_never()}
+                                                    {/if}
+                                                    {#if isCexSyncing}
+                                                        <RefreshCw class="inline h-3 w-3 animate-spin" />
+                                                    {/if}
+                                                </div>
+                                            </div>
+                                            <div class="shrink-0">
+                                                <DropdownMenu.Root>
+                                                    <DropdownMenu.Trigger>
+                                                        {#snippet child({ props })}
+                                                            <Button variant="ghost" size="icon-sm" {...props}>
+                                                                <EllipsisVertical class="h-4 w-4" />
+                                                            </Button>
+                                                        {/snippet}
+                                                    </DropdownMenu.Trigger>
+                                                    <DropdownMenu.Content align="end">
+                                                        <DropdownMenu.Item
+                                                            disabled={cexBusy || isAccountClosed(account)}
+                                                            onclick={() => syncCex(account)}
+                                                        >
+                                                            <RefreshCw class="mr-2 h-4 w-4" />
+                                                            {m.sources_sync()}
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Item onclick={() => startEditLabel(account.id, account.label)}>
+                                                            <Pencil class="mr-2 h-4 w-4" />
+                                                            {m.btn_rename()}
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Item onclick={() => removeCexAccount(account.id)}>
+                                                            <Trash2 class="mr-2 h-4 w-4" />
+                                                            {m.btn_delete()}
+                                                        </DropdownMenu.Item>
+                                                    </DropdownMenu.Content>
+                                                </DropdownMenu.Root>
+                                            </div>
+                                        </div>
+                                    </Table.Cell>
+                                </Table.Row>
+                                <!-- Desktop row -->
+                                <Table.Row class="hidden sm:table-row">
                                     <Table.Cell>
-                                        <Badge variant="secondary">{account.exchange}</Badge>
+                                        <Badge variant="secondary">{EXCHANGE_NAMES[account.exchange] ?? account.exchange}</Badge>
                                     </Table.Cell>
                                     <Table.Cell class="font-medium">
                                         {#if editingRowId === account.id}
@@ -2188,7 +2324,6 @@
                                         {/if}
                                     </Table.Cell>
                                     <Table.Cell class="text-right">
-                                        {@const isCexSyncing = taskQueue.queue.some((t) => t.key === `cex-sync:${account.id}` && t.status === "running")}
                                         <div class="flex items-center justify-end gap-1">
                                             <Button
                                                 variant="outline"
@@ -2227,7 +2362,7 @@
 
         <!-- Footer with unified actions -->
         {#if cexAccounts.length > 0 || blockchainRows.length > 0}
-            <Card.Footer class="flex justify-end gap-2">
+            <Card.Footer class="flex flex-wrap justify-end gap-2">
                 {#if ethAccounts.length > 0 && cexAccounts.length > 0}
                     <Button
                         variant="outline"
