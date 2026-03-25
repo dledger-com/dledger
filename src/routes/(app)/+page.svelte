@@ -26,6 +26,7 @@
   import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
   import OnboardingChecklist from "$lib/components/OnboardingChecklist.svelte";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
+  import SourceIcon from "$lib/components/SourceIcon.svelte";
   import * as m from "$paraglide/messages.js";
   import {
     getCachedRecentEntries, setCachedRecentEntries,
@@ -620,7 +621,8 @@
                 {@const acct = mainCounterpartyShort(items, accountIdToName)}
                 <a href="/journal/{entry.id}" class="block">
                   <div class="flex items-baseline justify-between gap-2">
-                    <div class="flex items-baseline gap-1 min-w-0 text-xs text-muted-foreground">
+                    <div class="flex items-center gap-1 min-w-0 text-xs text-muted-foreground">
+                      <SourceIcon source={entry.source} size={14} />
                       <span>{entry.date}</span>
                       {#if acct}<span>·</span><span class="truncate">{acct}</span>{/if}
                     </div>
@@ -645,7 +647,7 @@
             </Table.Row>
             <!-- Desktop: standard 4-column layout -->
             <Table.Row class="hidden sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
-              <Table.Cell class="text-muted-foreground text-sm">{entry.date}</Table.Cell>
+              <Table.Cell class="text-muted-foreground text-sm"><span class="inline-flex items-center gap-1.5"><SourceIcon source={entry.source} size={14} />{entry.date}</span></Table.Cell>
               <Table.Cell class="max-w-[300px] whitespace-nowrap">
                 <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0">
                   <a href="/journal/{entry.id}" class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</a>

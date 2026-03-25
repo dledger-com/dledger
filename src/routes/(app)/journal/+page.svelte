@@ -72,6 +72,7 @@
     import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
     import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
     import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
+    import SourceIcon from "$lib/components/SourceIcon.svelte";
 
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -2342,7 +2343,8 @@
                                                 <div
                                                     class="flex justify-between items-baseline gap-2"
                                                 >
-                                                    <span class="flex items-baseline gap-1 min-w-0">
+                                                    <span class="flex items-center gap-1 min-w-0">
+                                                        <SourceIcon source={entry.source} size={14} />
                                                         {#if columnVisibility.date !== false}
                                                             <span
                                                                 class="text-muted-foreground text-xs shrink-0"
@@ -2466,7 +2468,7 @@
                                                 {:else if cell.column.id === "date"}
                                                     <Table.Cell
                                                         class="text-muted-foreground text-sm p-2"
-                                                        >{entry.date}</Table.Cell
+                                                        ><span class="inline-flex items-center gap-1.5"><SourceIcon source={entry.source} size={14} />{entry.date}</span></Table.Cell
                                                     >
                                                 {:else if cell.column.id === "description"}
                                                     <Table.Cell class="p-2">

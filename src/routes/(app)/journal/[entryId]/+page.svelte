@@ -27,6 +27,8 @@
   import Copy from "lucide-svelte/icons/copy";
   import Check from "lucide-svelte/icons/check";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
+  import SourceIcon from "$lib/components/SourceIcon.svelte";
+  import { getSourceLabel } from "$lib/data/source-icons.js";
 
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
@@ -241,7 +243,10 @@
           </div>
           <div>
             <dt class="text-muted-foreground">Source</dt>
-            <dd class="font-medium">{entry.source}</dd>
+            <dd class="font-medium flex items-center gap-1.5">
+              <SourceIcon source={entry.source} size={16} />
+              {getSourceLabel(entry.source)}
+            </dd>
           </div>
           <div>
             <dt class="text-muted-foreground">Created</dt>

@@ -29,6 +29,8 @@
   import Check from "lucide-svelte/icons/check";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import * as m from "$paraglide/messages.js";
+  import SourceIcon from "$lib/components/SourceIcon.svelte";
+  import { getSourceLabel } from "$lib/data/source-icons.js";
 
   interface Props {
     open: boolean;
@@ -271,11 +273,12 @@
               <div class="min-w-0">
                 <dt class="text-muted-foreground">{m.label_source()}</dt>
                 <dd>
-                  {#if isLongValue(entry.source)}
-                    <div class="flex items-center gap-1 min-w-0">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <SourceIcon source={entry.source} size={16} />
+                    {#if isLongValue(entry.source)}
                       <Tooltip.Root>
                         <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
-                          {entry.source}
+                          {getSourceLabel(entry.source)}
                         </Tooltip.Trigger>
                         <Tooltip.Content side="top" class="max-w-xs break-all">
                           {entry.source}
@@ -293,10 +296,10 @@
                           <Copy class="h-3 w-3" />
                         {/if}
                       </button>
-                    </div>
-                  {:else}
-                    <span class="font-medium">{entry.source}</span>
-                  {/if}
+                    {:else}
+                      <span class="font-medium">{getSourceLabel(entry.source)}</span>
+                    {/if}
+                  </div>
                 </dd>
               </div>
               <div class="min-w-0">
