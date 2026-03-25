@@ -91,11 +91,15 @@
   const hiddenCurrencies = $derived(currencies.filter((c) => c.is_hidden));
 
   // Sort state
-  type CurrencySortKey = "code" | "name" | "decimals" | "base" | "rateSource";
+  type CurrencySortKey = "code" | "name" | "type" | "lastPrice" | "holdings" | "value" | "decimals" | "base" | "rateSource";
   const sortCurr = createSortState<CurrencySortKey>();
   const currencyAccessors: Record<CurrencySortKey, SortAccessor<Currency>> = {
     code: (c) => c.code,
     name: (c) => c.name,
+    type: (c) => effectiveAssetType(c),
+    lastPrice: (c) => lastPrices.get(c.code) ?? 0,
+    holdings: (c) => holdings.get(c.code) ?? 0,
+    value: (c) => (holdings.get(c.code) ?? 0) * (c.is_base ? 1 : (lastPrices.get(c.code) ?? 0)),
     decimals: (c) => c.decimal_places,
     base: (c) => c.is_base ? 1 : 0,
     rateSource: (c) => rateSources.get(c.code)?.rate_source ?? "auto",
@@ -410,6 +414,18 @@
             checked={colVis.value !== false}
             onCheckedChange={(v) => { colVis = { ...colVis, value: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
           >{m.label_value()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.decimals !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, decimals: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_decimals()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.base !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, base: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_base()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.rateSource === true}
+            onCheckedChange={(v) => { colVis = { ...colVis, rateSource: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_rate_source()}</DropdownMenu.CheckboxItem>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </div>
@@ -462,12 +478,13 @@
             <Table.Row>
               <SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")}>{m.label_code()}</SortableHeader>
               <SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>{m.label_name()}</SortableHeader>
-              {#if colVis.type !== false}<Table.Head class="hidden sm:table-cell">{m.label_type()}</Table.Head>{/if}
-              {#if colVis.lastPrice !== false}<Table.Head class="text-right hidden md:table-cell">{m.label_last_price()}</Table.Head>{/if}
-              {#if colVis.holdings === true}<Table.Head class="text-right hidden md:table-cell">{m.label_holdings()}</Table.Head>{/if}
-              {#if colVis.value !== false}<Table.Head class="text-right hidden md:table-cell">{m.label_value()}</Table.Head>{/if}
-              <SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden lg:table-cell">{m.label_decimals()}</SortableHeader>
-              <SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden xl:table-cell">{m.label_rate_source()}</SortableHeader>
+              {#if colVis.type !== false}<SortableHeader active={sortCurr.key === "type"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("type")} class="hidden sm:table-cell">{m.label_type()}</SortableHeader>{/if}
+              {#if colVis.lastPrice !== false}<SortableHeader active={sortCurr.key === "lastPrice"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("lastPrice")} class="text-right hidden md:table-cell">{m.label_last_price()}</SortableHeader>{/if}
+              {#if colVis.holdings === true}<SortableHeader active={sortCurr.key === "holdings"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("holdings")} class="text-right hidden md:table-cell">{m.label_holdings()}</SortableHeader>{/if}
+              {#if colVis.value !== false}<SortableHeader active={sortCurr.key === "value"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("value")} class="text-right hidden md:table-cell">{m.label_value()}</SortableHeader>{/if}
+              {#if colVis.decimals !== false}<SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden lg:table-cell">{m.label_decimals()}</SortableHeader>{/if}
+              {#if colVis.base !== false}<SortableHeader active={sortCurr.key === "base"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("base")} class="hidden lg:table-cell">{m.label_base()}</SortableHeader>{/if}
+              {#if colVis.rateSource === true}<SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden xl:table-cell">{m.label_rate_source()}</SortableHeader>{/if}
               <Table.Head class="text-right">{m.label_actions()}</Table.Head>
             </Table.Row>
           </Table.Header>
@@ -535,37 +552,43 @@
                     {/if}
                   </Table.Cell>
                 {/if}
-                <Table.Cell class="text-right hidden lg:table-cell">{c.decimal_places}</Table.Cell>
-                <Table.Cell class="hidden sm:table-cell">
-                  {#if c.is_base}
-                    <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{m.label_base()}</span>
-                  {/if}
-                </Table.Cell>
-                <Table.Cell class="hidden xl:table-cell" onclick={(e: MouseEvent) => e.stopPropagation()}>
-                  {#if !c.is_base}
-                    <div class="flex items-center gap-2">
-                      <Select.Root type="single" value={rs?.rate_source ?? "auto"} onValueChange={(val) => handleSourceChange(c.code, val)} disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}>
-                        <Select.Trigger class="h-7" size="sm">
-                          {rs?.rate_source ?? m.label_auto_detect()}
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Item value="auto">auto-detect</Select.Item>
-                          <Select.Item value="frankfurter">frankfurter</Select.Item>
-                          <Select.Item value="defillama">defillama</Select.Item>
-                          <Select.Item value="coingecko">coingecko</Select.Item>
-                          <Select.Item value="cryptocompare">cryptocompare</Select.Item>
-                          <Select.Item value="binance">binance</Select.Item>
-                          <Select.Item value="finnhub">finnhub</Select.Item>
-                          <Select.Item value="dprice">dprice</Select.Item>
-                          <Select.Item value="none">none</Select.Item>
-                        </Select.Content>
-                      </Select.Root>
-                      {#if rs?.set_by}
-                        <span class="text-xs text-muted-foreground">{rs.set_by}</span>
-                      {/if}
-                    </div>
-                  {/if}
-                </Table.Cell>
+                {#if colVis.decimals !== false}
+                  <Table.Cell class="text-right hidden lg:table-cell">{c.decimal_places}</Table.Cell>
+                {/if}
+                {#if colVis.base !== false}
+                  <Table.Cell class="hidden lg:table-cell">
+                    {#if c.is_base}
+                      <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{m.label_base()}</span>
+                    {/if}
+                  </Table.Cell>
+                {/if}
+                {#if colVis.rateSource === true}
+                  <Table.Cell class="hidden xl:table-cell" onclick={(e: MouseEvent) => e.stopPropagation()}>
+                    {#if !c.is_base}
+                      <div class="flex items-center gap-2">
+                        <Select.Root type="single" value={rs?.rate_source ?? "auto"} onValueChange={(val) => handleSourceChange(c.code, val)} disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}>
+                          <Select.Trigger class="h-7" size="sm">
+                            {rs?.rate_source ?? m.label_auto_detect()}
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="auto">auto-detect</Select.Item>
+                            <Select.Item value="frankfurter">frankfurter</Select.Item>
+                            <Select.Item value="defillama">defillama</Select.Item>
+                            <Select.Item value="coingecko">coingecko</Select.Item>
+                            <Select.Item value="cryptocompare">cryptocompare</Select.Item>
+                            <Select.Item value="binance">binance</Select.Item>
+                            <Select.Item value="finnhub">finnhub</Select.Item>
+                            <Select.Item value="dprice">dprice</Select.Item>
+                            <Select.Item value="none">none</Select.Item>
+                          </Select.Content>
+                        </Select.Root>
+                        {#if rs?.set_by}
+                          <span class="text-xs text-muted-foreground">{rs.set_by}</span>
+                        {/if}
+                      </div>
+                    {/if}
+                  </Table.Cell>
+                {/if}
                 <Table.Cell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
