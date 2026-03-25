@@ -530,7 +530,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={(v) => { if (!v) cancelAdd(); }}>
-    <Dialog.Content class="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+    <Dialog.Content class="sm:max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <Dialog.Header>
             <Dialog.Title>{getDialogTitle()}</Dialog.Title>
         </Dialog.Header>
@@ -625,7 +625,7 @@
             </div>
         {:else if addSourceMode === "blockchain"}
             <div class="space-y-3">
-                <div class="flex items-end gap-2">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
                     <div class="flex-1 space-y-1">
                         <label for="new-eth-address" class="text-xs font-medium">{m.sources_address()}</label>
                         <Input
@@ -644,6 +644,7 @@
                         />
                     </div>
                     <Button
+                        class="w-full sm:w-auto"
                         onclick={handleAddEthAccount}
                         disabled={addingAccount ||
                             !newAddress.trim() ||
@@ -692,10 +693,10 @@
                 {#if evmShowAddressPicker}
                     <div class="space-y-2">
                         <span class="text-xs font-medium">{m.sources_derived_addresses()}</span>
-                        <div class="max-h-48 overflow-y-auto rounded-md border">
+                        <div class="max-h-48 overflow-y-auto overflow-x-hidden rounded-md border">
                             {#each evmDerivedAddresses as { index, address }}
                                 {@const exists = existingEvmAddresses.has(address.toLowerCase())}
-                                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer"
+                                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer min-w-0"
                                        class:opacity-50={exists} class:cursor-not-allowed={exists}>
                                     <input
                                         type="checkbox"
@@ -708,8 +709,8 @@
                                         }}
                                     />
                                     <Tooltip.Root>
-                                        <Tooltip.Trigger class="font-mono text-xs truncate">{address}</Tooltip.Trigger>
-                                        <Tooltip.Content><p class="font-mono text-xs">{address}</p></Tooltip.Content>
+                                        <Tooltip.Trigger class="font-mono text-xs truncate">{address.slice(0, 10)}...{address.slice(-6)}</Tooltip.Trigger>
+                                        <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{address}</p></Tooltip.Content>
                                     </Tooltip.Root>
                                     <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(address); }} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                         <Copy class="h-3 w-3" />
@@ -750,7 +751,7 @@
                         <Popover.Trigger>
                             <Button
                                 variant="outline"
-                                class="w-[300px] justify-between"
+                                class="w-full sm:w-[300px] justify-between"
                             >
                                 {#if selectedChainIds.size === 0}
                                     {m.sources_select_chains()}
@@ -807,7 +808,7 @@
             </div>
         {:else if addSourceMode === "bitcoin"}
             <div class="space-y-3">
-                <div class="flex items-end gap-2">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
                     <div class="flex-1 space-y-1">
                         <label for="new-btc-input" class="text-xs font-medium">{m.sources_address_or_xpub()}</label>
                         <Input
@@ -817,7 +818,7 @@
                             bind:value={btcNewAddressOrXpub}
                         />
                     </div>
-                    <div class="w-40 space-y-1">
+                    <div class="sm:w-40 space-y-1">
                         <label for="new-btc-label" class="text-xs font-medium">{m.sources_label_optional()}</label>
                         <Input
                             id="new-btc-label"
@@ -826,6 +827,7 @@
                         />
                     </div>
                     <Button
+                        class="w-full sm:w-auto"
                         onclick={handleAddBtcAccount}
                         disabled={btcAddingAccount || !btcNewAddressOrXpub.trim() || (btcDetection.isPrivate && !btcPrivateKeyAck) || (btcDerivedXpubs.length > 0 && btcSelectedIndexes.size === 0) || btcSingleExists}
                     >
@@ -884,10 +886,10 @@
                                 {m.sources_deriving()}
                             </div>
                         {/if}
-                        <div class="max-h-48 overflow-y-auto rounded-md border">
+                        <div class="max-h-48 overflow-y-auto overflow-x-hidden rounded-md border">
                             {#each btcDerivedXpubs as { index, xpub, keyType }}
                                 {@const exists = existingBtcXpubs.has(xpub)}
-                                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer"
+                                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer min-w-0"
                                        class:opacity-50={exists} class:cursor-not-allowed={exists}>
                                     <input
                                         type="checkbox"
@@ -945,6 +947,7 @@
                 <BlockchainAddForm
                     config={activeChainConfig}
                     existingAddresses={existingAddrs}
+                    embedded
                     onClose={() => { addSourceMode = "idle"; }}
                     onAccountAdded={async () => { onAccountAdded(); open = false; }}
                 />

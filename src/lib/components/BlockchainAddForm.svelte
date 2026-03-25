@@ -3,6 +3,7 @@
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
+    import * as Tooltip from "$lib/components/ui/tooltip/index.js";
     import { getBackend } from "$lib/backend.js";
     import { toast } from "svelte-sonner";
     import { v7 as uuidv7 } from "uuid";
@@ -15,12 +16,14 @@
         config,
         existingAddresses = new Set<string>(),
         prefillAddress = "",
+        embedded = false,
         onClose,
         onAccountAdded,
     }: {
         config: BlockchainConfig;
         existingAddresses?: Set<string>;
         prefillAddress?: string;
+        embedded?: boolean;
         onClose: () => void;
         onAccountAdded: () => Promise<void>;
     } = $props();
@@ -126,17 +129,19 @@
     }
 </script>
 
-<div class="space-y-3 rounded-lg border p-4">
-    <div class="flex items-center justify-between">
-        <span class="text-sm font-medium">Add {config.name} Account</span>
-        <Button variant="ghost" size="sm" onclick={onClose}>
-            <X class="h-4 w-4" />
-        </Button>
-    </div>
+<div class={embedded ? "space-y-3" : "space-y-3 rounded-lg border p-4"}>
+    {#if !embedded}
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">Add {config.name} Account</span>
+            <Button variant="ghost" size="sm" onclick={onClose}>
+                <X class="h-4 w-4" />
+            </Button>
+        </div>
+    {/if}
     <p class="text-xs text-muted-foreground">
         Track a {config.name} address. All on-chain data is public.
     </p>
-    <div class="flex items-end gap-2">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div class="flex-1 space-y-1">
             <label for="new-chain-address" class="text-xs font-medium">Address</label>
             <Input
@@ -146,11 +151,11 @@
                 bind:value={address}
             />
         </div>
-        <div class="w-40 space-y-1">
+        <div class="sm:w-40 space-y-1">
             <label for="new-chain-label" class="text-xs font-medium">Label (optional)</label>
             <Input id="new-chain-label" placeholder={`My ${config.name}`} bind:value={label} />
         </div>
-        <Button onclick={handleAdd} disabled={adding || (!address.trim())}>
+        <Button class="w-full sm:w-auto" onclick={handleAdd} disabled={adding || (!address.trim())}>
             <Plus class="mr-1 h-4 w-4" />
             Add
         </Button>
@@ -178,10 +183,10 @@
     {/if}
 
     {#if derivedAddresses.length > 0}
-        <div class="max-h-64 space-y-1 overflow-y-auto rounded border p-2">
+        <div class="max-h-64 space-y-1 overflow-y-auto overflow-x-hidden rounded border p-2">
             {#each derivedAddresses as derived}
                 {@const exists = existingAddresses.has(normalizeAddr(derived.address))}
-                <label class="flex items-center gap-2 text-xs {exists ? 'opacity-50' : ''}">
+                <label class="flex items-center gap-2 text-xs min-w-0 {exists ? 'opacity-50' : ''}">
                     <input
                         type="checkbox"
                         checked={selectedIndexes.has(derived.index)}
@@ -193,7 +198,10 @@
                         }}
                     />
                     <span class="font-mono">{derived.index}</span>
-                    <span class="font-mono truncate flex-1">{derived.address}</span>
+                    <Tooltip.Root>
+                        <Tooltip.Trigger class="font-mono text-left truncate flex-1">{shortAddr(derived.address)}</Tooltip.Trigger>
+                        <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{derived.address}</p></Tooltip.Content>
+                    </Tooltip.Root>
                     <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
                         <Copy class="h-3 w-3" />
                     </Button>
