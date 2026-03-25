@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
   import type { ExchangeId } from "$lib/cex/types.js";
+  import { getAllCexAdapters } from "$lib/cex/index.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 
   let {
@@ -67,16 +68,9 @@
   let open = $state(false);
   let search = $state("");
 
-  const EXCHANGES: { id: ExchangeId; name: string }[] = [
-    { id: "binance", name: "Binance" },
-    { id: "bitstamp", name: "Bitstamp" },
-    { id: "bybit", name: "Bybit" },
-    { id: "coinbase", name: "Coinbase" },
-    { id: "cryptocom", name: "Crypto.com" },
-    { id: "kraken", name: "Kraken" },
-    { id: "okx", name: "OKX" },
-    { id: "volet", name: "Volet" },
-  ];
+  const EXCHANGES: { id: ExchangeId; name: string }[] = getAllCexAdapters()
+    .map((a) => ({ id: a.exchangeId, name: a.exchangeName }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const chainKeywords = SUPPORTED_CHAINS.map((c) => c.name.toLowerCase());
 

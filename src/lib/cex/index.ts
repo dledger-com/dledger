@@ -5,6 +5,10 @@ export function getCexAdapter(id: ExchangeId): CexAdapter {
   return getPluginManager().cexAdapters.get(id);
 }
 
+export function getAllCexAdapters(): CexAdapter[] {
+  return getPluginManager().cexAdapters.getAll();
+}
+
 export { syncCexAccount, normalizeTxid } from "./pipeline.js";
 export { KrakenAdapter } from "./kraken.js";
 export { BinanceAdapter } from "./binance.js";

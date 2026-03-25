@@ -52,6 +52,7 @@
     import type { ExchangeAccount } from "$lib/cex/types.js";
     import {
         getCexAdapter,
+        getAllCexAdapters,
         syncCexAccount,
         retroactiveConsolidate,
     } from "$lib/cex/index.js";
@@ -336,24 +337,9 @@
     const cexBusy = $derived(taskQueue.isActive("cex-sync"));
     const cexConsolidating = $derived(taskQueue.isActive("cex-consolidate"));
 
-    const EXCHANGE_NAMES: Record<ExchangeId, string> = {
-        kraken: "Kraken", binance: "Binance", coinbase: "Coinbase",
-        bybit: "Bybit", okx: "OKX", bitstamp: "Bitstamp", cryptocom: "Crypto.com",
-        volet: "Volet",
-        // Binance clones
-        "binance-tr": "Binance TR", "binance-us": "Binance.US",
-        "binance-th": "Binance TH", tokocrypto: "Tokocrypto",
-        // Wave 1
-        bitget: "Bitget", gateio: "Gate.io", kucoin: "KuCoin",
-        mexc: "MEXC", htx: "HTX",
-        // Wave 2
-        bingx: "BingX", bitmart: "BitMart", upbit: "Upbit",
-        bithumb: "Bithumb",
-        // Wave 3
-        lbank: "LBank", xtcom: "XT.COM", gemini: "Gemini",
-        coinex: "CoinEx", poloniex: "Poloniex", bitvavo: "Bitvavo",
-        phemex: "Phemex", whitebit: "WhiteBIT",
-    };
+    const EXCHANGE_NAMES = Object.fromEntries(
+        getAllCexAdapters().map((a) => [a.exchangeId, a.exchangeName]),
+    ) as Record<ExchangeId, string>;
 
     function startAddCex(exchangeId: ExchangeId) {
         addSourceMode = "cex";
