@@ -399,6 +399,14 @@
           <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">{m.label_columns()}</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.CheckboxItem
+            checked={colVis.name !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, name: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_name()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.symbol !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, symbol: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_symbol()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
             checked={colVis.type !== false}
             onCheckedChange={(v) => { colVis = { ...colVis, type: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
           >{m.label_type()}</DropdownMenu.CheckboxItem>
@@ -476,8 +484,8 @@
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")}>{m.label_code()}</SortableHeader>
-              <SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>{m.label_name()}</SortableHeader>
+              {#if colVis.name !== false}<SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>{m.label_name()}</SortableHeader>{/if}
+              {#if colVis.symbol !== false}<SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")} class="font-mono">{m.label_symbol()}</SortableHeader>{/if}
               {#if colVis.type !== false}<SortableHeader active={sortCurr.key === "type"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("type")} class="hidden sm:table-cell">{m.label_type()}</SortableHeader>{/if}
               {#if colVis.lastPrice !== false}<SortableHeader active={sortCurr.key === "lastPrice"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("lastPrice")} class="text-right hidden md:table-cell">{m.label_last_price()}</SortableHeader>{/if}
               {#if colVis.holdings === true}<SortableHeader active={sortCurr.key === "holdings"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("holdings")} class="text-right hidden md:table-cell">{m.label_holdings()}</SortableHeader>{/if}
@@ -494,24 +502,26 @@
             {#each sortedCurrencies as c}
               {@const rs = rateSources.get(c.code)}
               <Table.Row class="cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
-                <Table.Cell class="font-mono">
-                  {c.code}
-                  {#if c.is_hidden}
-                    <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
-                  {/if}
-                </Table.Cell>
-                <Table.Cell onclick={(e: MouseEvent) => { if (renamingCode === c.code) e.stopPropagation(); }}>
-                  {#if renamingCode === c.code}
-                    <Input
-                      bind:value={renameValue}
-                      class="h-7 text-sm"
-                      onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { renamingCode = ""; } }}
-                      onblur={() => commitRename()}
-                    />
-                  {:else}
-                    {c.name}
-                  {/if}
-                </Table.Cell>
+                {#if colVis.name !== false}
+                  <Table.Cell onclick={(e: MouseEvent) => { if (renamingCode === c.code) e.stopPropagation(); }}>
+                    {#if renamingCode === c.code}
+                      <Input
+                        bind:value={renameValue}
+                        class="h-7 text-sm"
+                        onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { renamingCode = ""; } }}
+                        onblur={() => commitRename()}
+                      />
+                    {:else}
+                      {c.name}
+                      {#if c.is_hidden}
+                        <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
+                      {/if}
+                    {/if}
+                  </Table.Cell>
+                {/if}
+                {#if colVis.symbol !== false}
+                  <Table.Cell class="font-mono">{c.code}</Table.Cell>
+                {/if}
                 {#if colVis.type !== false}
                   <Table.Cell class="hidden sm:table-cell">
                     {@const assetType = effectiveAssetType(c)}
