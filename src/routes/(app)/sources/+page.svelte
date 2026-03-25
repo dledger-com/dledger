@@ -926,38 +926,38 @@
     <!-- Import Files -->
     <Card.Root>
         <Card.Header>
-            <Card.Title>{m.sources_import_files()}</Card.Title>
-            <Card.Description>
-                {m.sources_import_files_desc()}
-                <span class="mt-2 flex flex-col gap-1.5">
-                    <span class="flex flex-wrap items-center gap-1">
-                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">CSV</span>
-                        {#each csvPresetNames as name}
-                            <Badge variant="outline">{name}</Badge>
-                        {/each}
-                    </span>
-                    <span class="flex flex-wrap items-center gap-1">
-                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">OFX / QFX / QBO</span>
-                    </span>
-                    <span class="flex flex-wrap items-center gap-1">
-                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">PDF</span>
-                        {#each pdfParserNames as name}
-                            <Badge variant="outline">{name}</Badge>
-                        {/each}
-                    </span>
-                    <span class="flex flex-wrap items-center gap-1">
-                        <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">{m.sources_plain_text()}</span>
-                        {#each ["Beancount", "hledger", "ledger"] as name}
-                            <Badge variant="outline">{name}</Badge>
-                        {/each}
-                    </span>
-                </span>
-            </Card.Description>
-        </Card.Header>
-        <Card.Content>
-            <div class="flex items-center gap-3">
-                <Button onclick={handleImportClick}>
-                    <Upload class="mr-2 h-4 w-4" /> {m.sources_import_files()}
+            <div class="flex items-center justify-between">
+                <div>
+                    <Card.Title>{m.sources_import_files()}</Card.Title>
+                    <Card.Description>
+                        {m.sources_import_files_desc()}
+                        <span class="mt-2 flex flex-col gap-1.5">
+                            <span class="flex flex-wrap items-center gap-1">
+                                <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">CSV</span>
+                                {#each csvPresetNames as name}
+                                    <Badge variant="outline">{name}</Badge>
+                                {/each}
+                            </span>
+                            <span class="flex flex-wrap items-center gap-1">
+                                <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">OFX / QFX / QBO</span>
+                            </span>
+                            <span class="flex flex-wrap items-center gap-1">
+                                <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">PDF</span>
+                                {#each pdfParserNames as name}
+                                    <Badge variant="outline">{name}</Badge>
+                                {/each}
+                            </span>
+                            <span class="flex flex-wrap items-center gap-1">
+                                <span class="text-xs font-medium text-muted-foreground/70 mr-0.5">{m.sources_plain_text()}</span>
+                                {#each ["Beancount", "hledger", "ledger"] as name}
+                                    <Badge variant="outline">{name}</Badge>
+                                {/each}
+                            </span>
+                        </span>
+                    </Card.Description>
+                </div>
+                <Button size="sm" class="shrink-0" onclick={handleImportClick}>
+                    <Upload class="mr-1 h-4 w-4" /> {m.btn_import()}
                 </Button>
                 <input
                     bind:this={fileInputEl}
@@ -968,7 +968,7 @@
                     onchange={handleFileInputChange}
                 />
             </div>
-        </Card.Content>
+        </Card.Header>
     </Card.Root>
 
     <!-- Online Sources -->
