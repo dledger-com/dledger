@@ -33,6 +33,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import Filter from "lucide-svelte/icons/filter";
+  import { inferAssetType } from "$lib/currency-type.js";
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
@@ -63,6 +64,17 @@
     { value: "index", label: () => m.asset_type_index() },
     { value: "bond", label: () => m.asset_type_bond() },
   ];
+
+  /** Infer asset type dynamically: stored value → static heuristic → dprice source ID */
+  function effectiveAssetType(c: Currency): string {
+    if (c.asset_type) return c.asset_type;
+    const inferred = inferAssetType(c.code);
+    if (inferred) return inferred;
+    const rs = rateSources.get(c.code);
+    if (rs?.rate_source_id?.startsWith("crypto:")) return "crypto";
+    if (rs?.rate_source_id?.startsWith("fiat:")) return "fiat";
+    return "";
+  }
 
   // Currency form
   let currCode = $state("");
@@ -385,7 +397,7 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {@const filteredCurrencies = currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"]) && (selectedAssetTypes.size === 0 || selectedAssetTypes.has(c.asset_type)))}
+            {@const filteredCurrencies = currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"]) && (selectedAssetTypes.size === 0 || selectedAssetTypes.has(effectiveAssetType(c))))}
             {@const sortedCurrencies = sortCurr.key && sortCurr.direction ? sortItems(filteredCurrencies, currencyAccessors[sortCurr.key], sortCurr.direction) : filteredCurrencies}
             {#each sortedCurrencies as c}
               {@const rs = rateSources.get(c.code)}

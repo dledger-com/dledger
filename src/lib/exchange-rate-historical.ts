@@ -2,7 +2,6 @@ import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource, CurrencyDateRequirement } from "./backend.js";
 import { type SourceName, resolveDpriceAsset } from "./exchange-rate-sync.js";
-import { inferAssetType } from "./currency-type.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 import { setRateHealthSyncing, updateRateHealth } from "./data/rate-health.svelte.js";
@@ -1297,25 +1296,6 @@ export async function autoBackfillRates(
     for (const src of storedSources) {
       if (src.rate_source === "none" && src.set_by === "auto" && dpriceAssets.has(src.currency)) {
         await backend.setCurrencyRateSource(src.currency, null, "auto");
-      }
-    }
-  }
-
-  // Auto-classify unclassified currencies using heuristics.
-  // Only classify currencies where no row with the target (code, assetType, "") exists
-  // to avoid UNIQUE constraint violations on the composite PK.
-  {
-    const allCurrenciesForClassify = await backend.listCurrencies();
-    const existingKeys = new Set(allCurrenciesForClassify.map((c) => `${c.code}:${c.asset_type}`));
-    for (const c of allCurrenciesForClassify) {
-      if (c.asset_type !== "") continue;
-      const inferred = inferAssetType(c.code);
-      if (inferred && !existingKeys.has(`${c.code}:${inferred}`)) {
-        try {
-          await backend.setCurrencyAssetType(c.code, inferred);
-        } catch {
-          // Skip if classification fails
-        }
       }
     }
   }
