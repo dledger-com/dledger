@@ -37,6 +37,7 @@
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+  import { goto } from "$app/navigation";
   import Plus from "lucide-svelte/icons/plus";
   import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
   import { groupDateIntervals, formatInterval } from "$lib/utils/date-intervals.js";
@@ -50,11 +51,16 @@
   let dpriceDialogOpen = $state(false);
   let dpriceDialogCode = $state("");
   let addDialogOpen = $state(false);
+  let renamingCode = $state("");
+  let renameValue = $state("");
 
   let currencies = $state<Currency[]>([]);
   let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
   let currencySearchTerm = $state("");
   let selectedAssetTypes = $state(new Set<string>());
+  let holdings = $state(new Map<string, number>());
+  let lastPrices = $state(new Map<string, number>());
+  let colVis = $state<Record<string, boolean>>(settings.settings.currencyColumnVisibility ?? {});
 
   const ASSET_TYPES: { value: string; label: () => string }[] = [
     { value: "", label: () => m.asset_type_unclassified() },
@@ -109,6 +115,35 @@
       rateSources = new Map(rows.map((r) => [r.currency, r]));
     } catch {
       rateSources = new Map();
+    }
+  }
+
+  async function loadMarketData() {
+    const backend = getBackend();
+    const baseCurrency = settings.currency;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      // Holdings: sum across all asset + liability accounts
+      const sheet = await backend.balanceSheet(today);
+      const h = new Map<string, number>();
+      for (const b of sheet.assets.totals) {
+        h.set(b.currency, (h.get(b.currency) ?? 0) + parseFloat(b.amount));
+      }
+      for (const b of sheet.liabilities.totals) {
+        h.set(b.currency, (h.get(b.currency) ?? 0) + parseFloat(b.amount));
+      }
+      holdings = h;
+
+      // Last prices: for each non-base currency, get latest rate
+      const prices = new Map<string, number>();
+      for (const code of h.keys()) {
+        if (code === baseCurrency) continue;
+        const rate = await backend.getExchangeRate(code, baseCurrency, today);
+        if (rate) prices.set(code, parseFloat(rate));
+      }
+      lastPrices = prices;
+    } catch (e) {
+      console.error("loadMarketData failed:", e);
     }
   }
 
@@ -180,6 +215,22 @@
     toast.success(m.toast_rate_source_updated({ code, source: "none" }));
   }
 
+  function startRename(code: string, currentName: string) {
+    renamingCode = code;
+    renameValue = currentName;
+  }
+
+  async function commitRename() {
+    if (!renamingCode || !renameValue.trim()) { renamingCode = ""; return; }
+    try {
+      await getBackend().setCurrencyName(renamingCode, renameValue.trim());
+      await loadCurrencies();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+    renamingCode = "";
+  }
+
   function syncRates() {
     enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet());
   }
@@ -199,6 +250,7 @@
   onMount(() => {
     loadCurrencies();
     loadRateSources();
+    loadMarketData();
   });
 </script>
 
@@ -339,6 +391,25 @@
             checked={settings.showHidden}
             onCheckedChange={(v) => settings.update({ showHidden: !!v })}
           >{m.label_show_hidden()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">{m.label_columns()}</DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem
+            checked={colVis.type !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, type: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_type()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.lastPrice !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, lastPrice: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_last_price()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.holdings === true}
+            onCheckedChange={(v) => { colVis = { ...colVis, holdings: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_holdings()}</DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={colVis.value !== false}
+            onCheckedChange={(v) => { colVis = { ...colVis, value: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
+          >{m.label_value()}</DropdownMenu.CheckboxItem>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </div>
@@ -391,9 +462,12 @@
             <Table.Row>
               <SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")}>{m.label_code()}</SortableHeader>
               <SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>{m.label_name()}</SortableHeader>
-              <SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden md:table-cell">{m.label_decimals()}</SortableHeader>
-              <SortableHeader active={sortCurr.key === "base"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("base")} class="hidden sm:table-cell">{m.label_base()}</SortableHeader>
-              <SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden lg:table-cell">{m.label_rate_source()}</SortableHeader>
+              {#if colVis.type !== false}<Table.Head class="hidden sm:table-cell">{m.label_type()}</Table.Head>{/if}
+              {#if colVis.lastPrice !== false}<Table.Head class="text-right hidden md:table-cell">{m.label_last_price()}</Table.Head>{/if}
+              {#if colVis.holdings === true}<Table.Head class="text-right hidden md:table-cell">{m.label_holdings()}</Table.Head>{/if}
+              {#if colVis.value !== false}<Table.Head class="text-right hidden md:table-cell">{m.label_value()}</Table.Head>{/if}
+              <SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden lg:table-cell">{m.label_decimals()}</SortableHeader>
+              <SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden xl:table-cell">{m.label_rate_source()}</SortableHeader>
               <Table.Head class="text-right">{m.label_actions()}</Table.Head>
             </Table.Row>
           </Table.Header>
@@ -402,23 +476,72 @@
             {@const sortedCurrencies = sortCurr.key && sortCurr.direction ? sortItems(filteredCurrencies, currencyAccessors[sortCurr.key], sortCurr.direction) : filteredCurrencies}
             {#each sortedCurrencies as c}
               {@const rs = rateSources.get(c.code)}
-              <Table.Row>
+              <Table.Row class="cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
                 <Table.Cell class="font-mono">
-                  <a href="/currencies/{c.code}" class="hover:underline text-primary">
-                    {c.code}
-                  </a>
+                  {c.code}
                   {#if c.is_hidden}
                     <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
                   {/if}
                 </Table.Cell>
-                <Table.Cell>{c.name}</Table.Cell>
-                <Table.Cell class="text-right hidden md:table-cell">{c.decimal_places}</Table.Cell>
+                <Table.Cell onclick={(e: MouseEvent) => { if (renamingCode === c.code) e.stopPropagation(); }}>
+                  {#if renamingCode === c.code}
+                    <Input
+                      bind:value={renameValue}
+                      class="h-7 text-sm"
+                      onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { renamingCode = ""; } }}
+                      onblur={() => commitRename()}
+                    />
+                  {:else}
+                    {c.name}
+                  {/if}
+                </Table.Cell>
+                {#if colVis.type !== false}
+                  <Table.Cell class="hidden sm:table-cell">
+                    {@const assetType = effectiveAssetType(c)}
+                    {#if assetType}
+                      <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{assetType}</span>
+                    {/if}
+                  </Table.Cell>
+                {/if}
+                {#if colVis.lastPrice !== false}
+                  <Table.Cell class="text-right hidden md:table-cell font-mono text-xs">
+                    {#if c.is_base}
+                      —
+                    {:else if lastPrices.has(c.code)}
+                      {lastPrices.get(c.code)!.toLocaleString(undefined, { maximumSignificantDigits: 6 })}
+                    {:else}
+                      <span class="text-muted-foreground">—</span>
+                    {/if}
+                  </Table.Cell>
+                {/if}
+                {#if colVis.holdings === true}
+                  <Table.Cell class="text-right hidden md:table-cell font-mono text-xs">
+                    {#if holdings.has(c.code)}
+                      {holdings.get(c.code)!.toLocaleString(undefined, { maximumFractionDigits: c.decimal_places })}
+                    {:else}
+                      <span class="text-muted-foreground">—</span>
+                    {/if}
+                  </Table.Cell>
+                {/if}
+                {#if colVis.value !== false}
+                  <Table.Cell class="text-right hidden md:table-cell font-mono text-xs">
+                    {@const h = holdings.get(c.code) ?? 0}
+                    {@const p = c.is_base ? 1 : (lastPrices.get(c.code) ?? 0)}
+                    {@const val = h * p}
+                    {#if val !== 0}
+                      {val.toLocaleString(undefined, { maximumFractionDigits: 2 })} {settings.currency}
+                    {:else}
+                      <span class="text-muted-foreground">—</span>
+                    {/if}
+                  </Table.Cell>
+                {/if}
+                <Table.Cell class="text-right hidden lg:table-cell">{c.decimal_places}</Table.Cell>
                 <Table.Cell class="hidden sm:table-cell">
                   {#if c.is_base}
                     <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{m.label_base()}</span>
                   {/if}
                 </Table.Cell>
-                <Table.Cell class="hidden lg:table-cell">
+                <Table.Cell class="hidden xl:table-cell" onclick={(e: MouseEvent) => e.stopPropagation()}>
                   {#if !c.is_base}
                     <div class="flex items-center gap-2">
                       <Select.Root type="single" value={rs?.rate_source ?? "auto"} onValueChange={(val) => handleSourceChange(c.code, val)} disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}>
@@ -443,7 +566,7 @@
                     </div>
                   {/if}
                 </Table.Cell>
-                <Table.Cell class="text-right">
+                <Table.Cell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
                       {#snippet child({ props })}
@@ -454,7 +577,7 @@
                       {/snippet}
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content align="end">
-                      <DropdownMenu.Item onclick={() => { window.location.href = `/currencies/${c.code}`; }}>{m.btn_view_details()}</DropdownMenu.Item>
+                      <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
                       {#if !c.is_base}
                         {#if c.is_hidden}
                           <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
@@ -499,12 +622,10 @@
             </Table.Header>
             <Table.Body>
               {#each hiddenCurrencies as c}
-                <Table.Row>
-                  <Table.Cell class="font-mono">
-                    <a href="/currencies/{c.code}" class="hover:underline text-primary">{c.code}</a>
-                  </Table.Cell>
+                <Table.Row class="cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
+                  <Table.Cell class="font-mono">{c.code}</Table.Cell>
                   <Table.Cell>{c.name}</Table.Cell>
-                  <Table.Cell class="text-right">
+                  <Table.Cell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
                     <DropdownMenu.Root>
                       <DropdownMenu.Trigger>
                         {#snippet child({ props })}
@@ -515,7 +636,6 @@
                         {/snippet}
                       </DropdownMenu.Trigger>
                       <DropdownMenu.Content align="end">
-                        <DropdownMenu.Item onclick={() => { window.location.href = `/currencies/${c.code}`; }}>{m.btn_view_details()}</DropdownMenu.Item>
                         <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>

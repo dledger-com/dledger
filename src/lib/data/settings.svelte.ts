@@ -52,6 +52,7 @@ export interface AppSettings {
   journalAmountBars?: boolean;
   journalShowChart?: boolean;
   journalColumnVisibility?: Record<string, boolean>;
+  currencyColumnVisibility?: Record<string, boolean>;
   journalChartGranularity?: ChartGranularity | null;
   journalLineItemView?: "table" | "flow";
   locale?: string;

@@ -417,7 +417,8 @@ export interface Backend {
   getCurrencyTokenAddresses(): Promise<Array<{ currency: string; chain: string; contract_address: string }>>;
   getCurrencyTokenAddress(currency: string): Promise<{ chain: string; contract_address: string } | null>;
 
-  // Currency hidden management
+  // Currency management
+  setCurrencyName(code: string, name: string): Promise<void>;
   setCurrencyHidden(code: string, isHidden: boolean): Promise<void>;
   listHiddenCurrencies(): Promise<string[]>;
 
@@ -1117,7 +1118,10 @@ class TauriBackend implements Backend {
     return this.invoke("get_currency_token_address", { currency });
   }
 
-  // Currency hidden management
+  // Currency management
+  async setCurrencyName(code: string, name: string): Promise<void> {
+    return this.invoke("set_currency_name", { code, name });
+  }
   async setCurrencyHidden(code: string, isHidden: boolean): Promise<void> {
     return this.invoke("set_currency_hidden", { code, isHidden });
   }

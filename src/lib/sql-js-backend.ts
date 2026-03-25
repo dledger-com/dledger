@@ -1768,6 +1768,11 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
+  async setCurrencyName(code: string, name: string): Promise<void> {
+    this.run("UPDATE currency SET name = ? WHERE code = ?", [name, code]);
+    this.scheduleSave();
+  }
+
   async setCurrencyHidden(code: string, isHidden: boolean): Promise<void> {
     this.run("UPDATE currency SET is_hidden = ? WHERE code = ?", [isHidden ? 1 : 0, code]);
     this.scheduleSave();
