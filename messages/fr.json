@@ -840,6 +840,7 @@
   "sources_import_files_desc": "Importer des transactions depuis des fichiers. Déposez un fichier ou cliquez pour choisir.",
   "sources_online": "Sources en ligne",
   "sources_online_desc": "Synchroniser les données depuis les exchanges et les blockchains.",
+  "sources_add_online_source": "Ajouter une source en ligne",
   "sources_add_exchange_account": "Ajouter un compte d'exchange",
   "sources_add_evm_address": "Ajouter une adresse EVM",
   "sources_add_bitcoin": "Ajouter une adresse Bitcoin / portefeuille HD",
