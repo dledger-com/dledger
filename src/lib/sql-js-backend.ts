@@ -1271,6 +1271,21 @@ PRAGMA foreign_keys = ON;
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (29)");
         }
+        if (currentVersion < 30) {
+          db.exec(`CREATE TABLE IF NOT EXISTS cardano_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            label TEXT NOT NULL, last_page INTEGER, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cardano_account_address ON cardano_account(address)");
+          db.exec(`CREATE TABLE IF NOT EXISTS monero_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            view_key TEXT NOT NULL, label TEXT NOT NULL,
+            last_sync_height INTEGER, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_monero_account_address ON monero_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (30)");
+        }
       }
     }
     // Idempotent cleanup: ensure is_reconciled exists on line_item
@@ -5460,6 +5475,116 @@ PRAGMA foreign_keys = ON;
     this.beginTransaction();
     try {
       const result = await syncStacksAccount(this, account, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Cardano ----
+
+  async listCardanoAccounts(): Promise<import("./cardano/types.js").CardanoAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_page, last_sync, created_at FROM cardano_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, label: row.label as string,
+        last_page: (row.last_page as number) ?? null, last_sync: (row.last_sync as string) ?? null,
+        created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addCardanoAccount(account: Omit<import("./cardano/types.js").CardanoAccount, "last_sync" | "last_page">): Promise<void> {
+    this.run(
+      `INSERT INTO cardano_account (id, address, label, last_page, last_sync, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateCardanoAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE cardano_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeCardanoAccount(id: string): Promise<void> {
+    this.run("DELETE FROM cardano_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateCardanoSyncPage(id: string, page: number): Promise<void> {
+    this.run("UPDATE cardano_account SET last_page = ?, last_sync = ? WHERE id = ?", [page, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncCardano(
+    account: import("./cardano/types.js").CardanoAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./cardano/types.js").CardanoSyncResult> {
+    const { syncCardanoAccount } = await import("./cardano/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    this.beginTransaction();
+    try {
+      const result = await syncCardanoAccount(this, account, loadSettings(), onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Monero ----
+
+  async listMoneroAccounts(): Promise<import("./monero/types.js").MoneroAccount[]> {
+    return this.query(
+      "SELECT id, address, view_key, label, last_sync_height, last_sync, created_at FROM monero_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string, view_key: row.view_key as string,
+        label: row.label as string, last_sync_height: (row.last_sync_height as number) ?? null,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addMoneroAccount(account: Omit<import("./monero/types.js").MoneroAccount, "last_sync" | "last_sync_height">): Promise<void> {
+    this.run(
+      `INSERT INTO monero_account (id, address, view_key, label, last_sync_height, last_sync, created_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.view_key, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateMoneroAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE monero_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeMoneroAccount(id: string): Promise<void> {
+    this.run("DELETE FROM monero_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateMoneroSyncHeight(id: string, height: number): Promise<void> {
+    this.run("UPDATE monero_account SET last_sync_height = ?, last_sync = ? WHERE id = ?", [height, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncMonero(
+    account: import("./monero/types.js").MoneroAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./monero/types.js").MoneroSyncResult> {
+    const { syncMoneroAccount } = await import("./monero/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    this.beginTransaction();
+    try {
+      const result = await syncMoneroAccount(this, account, loadSettings(), onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {

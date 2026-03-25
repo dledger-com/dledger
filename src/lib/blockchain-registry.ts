@@ -64,6 +64,8 @@ import { detectAlgorandInputType, deriveAlgorandAddresses } from "./algorand/der
 import { detectKaspaInputType, deriveKaspaAddresses } from "./kaspa/derive-js.js";
 import { detectZcashInputType, deriveZcashAddresses } from "./zcash/derive-js.js";
 import { detectStacksInputType, deriveStacksAddresses } from "./stacks/derive-js.js";
+import { detectCardanoInputType, deriveCardanoAddresses } from "./cardano/derive-js.js";
+import { detectMoneroInputType, deriveMoneroAddresses } from "./monero/derive-js.js";
 
 export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 	// Algorand
@@ -102,6 +104,15 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listBittensorAccounts", backendAdd: "addBittensorAccount", backendRemove: "removeBittensorAccount",
 		backendUpdateLabel: "updateBittensorAccountLabel", backendSync: "syncBittensor", syncTaskPrefix: "bittensor-sync",
 		detectInput: detectBittensorInputType, deriveAddresses: deriveBittensorAddresses,
+	},
+	// Cardano
+	{
+		id: "cardano", name: "Cardano", symbol: "ADA",
+		addressRegex: /^addr1[0-9a-z]{53,}$/,
+		addressPlaceholder: "addr1...", addressSlicePrefix: 10, addressSliceSuffix: 4, caseSensitive: false,
+		backendList: "listCardanoAccounts", backendAdd: "addCardanoAccount", backendRemove: "removeCardanoAccount",
+		backendUpdateLabel: "updateCardanoAccountLabel", backendSync: "syncCardano", syncTaskPrefix: "cardano-sync",
+		detectInput: detectCardanoInputType, deriveAddresses: deriveCardanoAddresses,
 	},
 	// Cosmos
 	{
@@ -162,6 +173,15 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateLtcAccountLabel", backendSync: "syncLtc", syncTaskPrefix: "ltc-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.ltc, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.ltc, m, c, p, s),
+	},
+	// Monero
+	{
+		id: "xmr", name: "Monero", symbol: "XMR",
+		addressRegex: /^4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}$/,
+		addressPlaceholder: "4...", addressSlicePrefix: 8, addressSliceSuffix: 4, caseSensitive: true,
+		backendList: "listMoneroAccounts", backendAdd: "addMoneroAccount", backendRemove: "removeMoneroAccount",
+		backendUpdateLabel: "updateMoneroAccountLabel", backendSync: "syncMonero", syncTaskPrefix: "xmr-sync",
+		detectInput: detectMoneroInputType, deriveAddresses: (m, c, p, s) => deriveMoneroAddresses(m, c, p, s),
 	},
 	// NEAR
 	{

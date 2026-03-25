@@ -39,6 +39,8 @@ import type { AlgorandAccount, AlgorandSyncResult } from "./algorand/types.js";
 import type { KaspaAccount, KaspaSyncResult } from "./kaspa/types.js";
 import type { ZcashAccount, ZcashSyncResult } from "./zcash/types.js";
 import type { StacksAccount, StacksSyncResult } from "./stacks/types.js";
+import type { CardanoAccount, CardanoSyncResult } from "./cardano/types.js";
+import type { MoneroAccount, MoneroSyncResult } from "./monero/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -351,6 +353,22 @@ export interface Backend {
   updateStacksAccountLabel(id: string, label: string): Promise<void>;
   updateStacksSyncOffset(id: string, offset: number): Promise<void>;
   syncStacks(account: StacksAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StacksSyncResult>;
+
+  // Cardano
+  listCardanoAccounts(): Promise<CardanoAccount[]>;
+  addCardanoAccount(account: Omit<CardanoAccount, "last_sync" | "last_page">): Promise<void>;
+  removeCardanoAccount(id: string): Promise<void>;
+  updateCardanoAccountLabel(id: string, label: string): Promise<void>;
+  updateCardanoSyncPage(id: string, page: number): Promise<void>;
+  syncCardano(account: CardanoAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<CardanoSyncResult>;
+
+  // Monero
+  listMoneroAccounts(): Promise<MoneroAccount[]>;
+  addMoneroAccount(account: Omit<MoneroAccount, "last_sync" | "last_sync_height">): Promise<void>;
+  removeMoneroAccount(id: string): Promise<void>;
+  updateMoneroAccountLabel(id: string, label: string): Promise<void>;
+  updateMoneroSyncHeight(id: string, height: number): Promise<void>;
+  syncMonero(account: MoneroAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<MoneroSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -1027,6 +1045,30 @@ class TauriBackend implements Backend {
   async syncStacks(account: StacksAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StacksSyncResult> {
     const { syncStacksAccount } = await import("./stacks/sync.js");
     return syncStacksAccount(this, account, onProgress, signal);
+  }
+
+  // Cardano
+  async listCardanoAccounts(): Promise<CardanoAccount[]> { return this.invoke("list_cardano_accounts"); }
+  async addCardanoAccount(account: Omit<CardanoAccount, "last_sync" | "last_page">): Promise<void> { return this.invoke("add_cardano_account", { account }); }
+  async removeCardanoAccount(id: string): Promise<void> { return this.invoke("remove_cardano_account", { id }); }
+  async updateCardanoAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_cardano_account_label", { id, label }); }
+  async updateCardanoSyncPage(id: string, page: number): Promise<void> { return this.invoke("update_cardano_sync_page", { id, page }); }
+  async syncCardano(account: CardanoAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<CardanoSyncResult> {
+    const { syncCardanoAccount } = await import("./cardano/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    return syncCardanoAccount(this, account, loadSettings(), onProgress, signal);
+  }
+
+  // Monero
+  async listMoneroAccounts(): Promise<MoneroAccount[]> { return this.invoke("list_monero_accounts"); }
+  async addMoneroAccount(account: Omit<MoneroAccount, "last_sync" | "last_sync_height">): Promise<void> { return this.invoke("add_monero_account", { account }); }
+  async removeMoneroAccount(id: string): Promise<void> { return this.invoke("remove_monero_account", { id }); }
+  async updateMoneroAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_monero_account_label", { id, label }); }
+  async updateMoneroSyncHeight(id: string, height: number): Promise<void> { return this.invoke("update_monero_sync_height", { id, height }); }
+  async syncMonero(account: MoneroAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<MoneroSyncResult> {
+    const { syncMoneroAccount } = await import("./monero/sync.js");
+    const { loadSettings } = await import("./data/settings.svelte.js");
+    return syncMoneroAccount(this, account, loadSettings(), onProgress, signal);
   }
 
   // Exchange accounts (CEX)

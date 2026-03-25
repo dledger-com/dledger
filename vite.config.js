@@ -188,6 +188,11 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/stacks/, ''),
       },
+      '/api/cardano': {
+        target: 'https://cardano-mainnet.blockfrost.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cardano/, ''),
+      },
     },
   },
 }));
