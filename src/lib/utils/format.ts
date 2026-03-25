@@ -78,6 +78,28 @@ function formatWithExpandedPrecision(num: number, currency: string): string {
   return `${fallback} ${currency}`;
 }
 
+/**
+ * Format a number using locale conventions, WITHOUT currency symbol or code.
+ * Used for icon-based rendering where the icon replaces the currency symbol.
+ */
+export function formatAmountOnly(amount: string | number): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  const formatter = new Intl.NumberFormat(_locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formatted = formatter.format(num);
+  // If non-zero rounds to zero, expand precision
+  if (num !== 0 && formatted === formatter.format(0)) {
+    for (let digits = 3; digits <= 8; digits++) {
+      const f = new Intl.NumberFormat(_locale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+      const r = f.format(num);
+      if (r !== f.format(0)) return r;
+    }
+  }
+  return formatted;
+}
+
 export function formatCurrencyFull(amount: string | number, currency = "USD"): string {
   const str = typeof amount === "number" ? String(amount) : amount;
   const num = parseFloat(str);

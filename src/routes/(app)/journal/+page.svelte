@@ -73,6 +73,7 @@
     import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
     import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
     import SourceIcon from "$lib/components/SourceIcon.svelte";
+    import CoinIcon from "$lib/components/CoinIcon.svelte";
 
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -275,6 +276,8 @@
     });
 
     let showChart = $state(settings.settings.journalShowChart !== false);
+    let journalShowSourceIcons = $state(settings.settings.journalShowSourceIcons ?? true);
+    let journalShowCurrencyIcons = $state(settings.settings.journalShowCurrencyIcons ?? true);
     let exporting = $state(false);
     let detectingDuplicates = $state(false);
     let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
@@ -2133,6 +2136,17 @@
                         checked={settings.settings.journalAmountBars !== false}
                         onCheckedChange={(v) => settings.update({ journalAmountBars: !!v })}
                     >{m.journal_amount_bars()}</DropdownMenu.CheckboxItem>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item disabled class="text-xs font-medium opacity-70">Icons</DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.CheckboxItem
+                        checked={journalShowSourceIcons}
+                        onCheckedChange={(v) => { journalShowSourceIcons = !!v; settings.update({ journalShowSourceIcons: !!v }); }}
+                    >Source icons</DropdownMenu.CheckboxItem>
+                    <DropdownMenu.CheckboxItem
+                        checked={journalShowCurrencyIcons}
+                        onCheckedChange={(v) => { journalShowCurrencyIcons = !!v; settings.update({ journalShowCurrencyIcons: !!v }); }}
+                    >Currency icons</DropdownMenu.CheckboxItem>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
@@ -2344,7 +2358,6 @@
                                                     class="flex justify-between items-baseline gap-2"
                                                 >
                                                     <span class="flex items-center gap-1 min-w-0">
-                                                        <SourceIcon source={entry.source} size={14} />
                                                         {#if columnVisibility.date !== false}
                                                             <span
                                                                 class="text-muted-foreground text-xs shrink-0"
@@ -2367,12 +2380,13 @@
                                                                         class="text-muted-foreground"
                                                                         >+</span
                                                                     >{" "}{/if}
-                                                                <span
-                                                                    class={amountColorClass(
-                                                                        part.direction,
-                                                                    )}
-                                                                    >{part.text}</span
-                                                                >
+                                                                {#if journalShowCurrencyIcons && part.segments.length > 0}
+                                                                    <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}"
+                                                                        >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={14} />{seg.currency}{/each}</span
+                                                                    >
+                                                                {:else}
+                                                                    <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                                                {/if}
                                                             {/each}
                                                         </span>
                                                     {/if}
@@ -2380,6 +2394,7 @@
                                                 <div
                                                     class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5"
                                                 >
+                                                    {#if journalShowSourceIcons}<SourceIcon source={entry.source} size={14} />{/if}
                                                     {#if columnVisibility.description !== false}
                                                         <span
                                                             class="font-medium overflow-clip text-ellipsis whitespace-nowrap"
@@ -2468,13 +2483,14 @@
                                                 {:else if cell.column.id === "date"}
                                                     <Table.Cell
                                                         class="text-muted-foreground text-sm p-2"
-                                                        ><span class="inline-flex items-center gap-1.5"><SourceIcon source={entry.source} size={14} />{entry.date}</span></Table.Cell
+                                                        >{entry.date}</Table.Cell
                                                     >
                                                 {:else if cell.column.id === "description"}
                                                     <Table.Cell class="p-2">
                                                         <div
-                                                            class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0"
+                                                            class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
                                                         >
+                                                            {#if journalShowSourceIcons}<SourceIcon source={entry.source} size={14} />{/if}
                                                             <span
                                                                 class="font-medium overflow-clip text-ellipsis whitespace-nowrap max-w-md"
                                                                 title={entry.description}
@@ -2532,12 +2548,13 @@
                                                                     class="text-muted-foreground"
                                                                     >+</span
                                                                 >{" "}{/if}
-                                                            <span
-                                                                class={amountColorClass(
-                                                                    part.direction,
-                                                                )}
-                                                                >{part.text}</span
-                                                            >
+                                                            {#if journalShowCurrencyIcons && part.segments.length > 0}
+                                                                <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}"
+                                                                    >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={14} />{seg.currency}{/each}</span
+                                                                >
+                                                            {:else}
+                                                                <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                                            {/if}
                                                         {/each}
                                                     </Table.Cell>
                                                 {/if}
@@ -2797,11 +2814,13 @@
                                                     class="text-muted-foreground"
                                                     >+</span
                                                 >{" "}{/if}
-                                            <span
-                                                class={amountColorClass(
-                                                    part.direction,
-                                                )}>{part.text}</span
-                                            >
+                                            {#if journalShowCurrencyIcons && part.segments.length > 0}
+                                                <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}"
+                                                    >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={14} />{seg.currency}{/each}</span
+                                                >
+                                            {:else}
+                                                <span class={amountColorClass(part.direction)}>{part.text}</span>
+                                            {/if}
                                         {/each}
                                     </span>
                                     <Badge variant="outline" class="text-xs"

@@ -622,18 +622,22 @@
                 <a href="/journal/{entry.id}" class="block">
                   <div class="flex items-baseline justify-between gap-2">
                     <div class="flex items-center gap-1 min-w-0 text-xs text-muted-foreground">
-                      <SourceIcon source={entry.source} size={14} />
                       <span>{entry.date}</span>
                       {#if acct}<span>·</span><span class="truncate">{acct}</span>{/if}
                     </div>
                     <div class="text-right text-xs font-mono whitespace-nowrap tabular-nums shrink-0">
                       {#each entryAmountDisplay(items, accountIdToName) as part, i}
                         {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
-                        <span class={amountColorClass(part.direction)}>{part.text}</span>
+                        {#if part.segments.length > 0}
+                          <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}">{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={12} />{seg.currency}{/each}</span>
+                        {:else}
+                          <span class={amountColorClass(part.direction)}>{part.text}</span>
+                        {/if}
                       {/each}
                     </div>
                   </div>
-                  <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-0.5">
+                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                    <SourceIcon source={entry.source} size={14} />
                     <span class="font-medium text-sm truncate">{entry.description}</span>
                     {#if entryTags.get(entry.id)?.length}
                       <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
@@ -647,9 +651,10 @@
             </Table.Row>
             <!-- Desktop: standard 4-column layout -->
             <Table.Row class="hidden sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
-              <Table.Cell class="text-muted-foreground text-sm"><span class="inline-flex items-center gap-1.5"><SourceIcon source={entry.source} size={14} />{entry.date}</span></Table.Cell>
+              <Table.Cell class="text-muted-foreground text-sm">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px] whitespace-nowrap">
-                <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0">
+                <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                  <SourceIcon source={entry.source} size={14} />
                   <a href="/journal/{entry.id}" class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
                     <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
@@ -665,7 +670,11 @@
               <Table.Cell class="text-right text-sm whitespace-nowrap tabular-nums">
                 {#each entryAmountDisplay(items, accountIdToName) as part, i}
                   {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
-                  <span class={amountColorClass(part.direction)}>{part.text}</span>
+                  {#if part.segments.length > 0}
+                    <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}">{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={12} />{seg.currency}{/each}</span>
+                  {:else}
+                    <span class={amountColorClass(part.direction)}>{part.text}</span>
+                  {/if}
                 {/each}
               </Table.Cell>
             </Table.Row>

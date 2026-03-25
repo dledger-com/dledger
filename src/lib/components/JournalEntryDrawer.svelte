@@ -30,6 +30,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import * as m from "$paraglide/messages.js";
   import SourceIcon from "$lib/components/SourceIcon.svelte";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import { getSourceLabel } from "$lib/data/source-icons.js";
 
   interface Props {
@@ -458,10 +459,10 @@
                         <span class="block break-words" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {amount > 0 ? formatCurrencyFull(item.amount, item.currency) : ""}
+                        {#if amount > 0}<span class="inline-flex items-center gap-1"><CoinIcon code={item.currency} size={14} />{formatCurrencyFull(item.amount, item.currency)}</span>{/if}
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {amount < 0 ? formatCurrencyFull(item.amount.replace(/^-/, ""), item.currency) : ""}
+                        {#if amount < 0}<span class="inline-flex items-center gap-1"><CoinIcon code={item.currency} size={14} />{formatCurrencyFull(item.amount.replace(/^-/, ""), item.currency)}</span>{/if}
                       </td>
                     </tr>
                   {/each}

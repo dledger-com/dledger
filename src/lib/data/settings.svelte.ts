@@ -51,6 +51,8 @@ export interface AppSettings {
   theGraphEnabled?: boolean;
   journalAmountBars?: boolean;
   journalShowChart?: boolean;
+  journalShowSourceIcons?: boolean;
+  journalShowCurrencyIcons?: boolean;
   journalColumnVisibility?: Record<string, boolean>;
   currencyColumnVisibility?: Record<string, boolean>;
   journalChartGranularity?: ChartGranularity | null;
