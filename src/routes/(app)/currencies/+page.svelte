@@ -483,7 +483,7 @@
       <Card.Content class="p-0">
         <Table.Root>
           <Table.Header>
-            <Table.Row>
+            <Table.Row class="hidden sm:table-row">
               {#if colVis.name !== false}<SortableHeader active={sortCurr.key === "name"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("name")}>{m.label_name()}</SortableHeader>{/if}
               {#if colVis.symbol !== false}<SortableHeader active={sortCurr.key === "code"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("code")} class="font-mono">{m.label_symbol()}</SortableHeader>{/if}
               {#if colVis.type !== false}<SortableHeader active={sortCurr.key === "type"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("type")} class="hidden sm:table-cell">{m.label_type()}</SortableHeader>{/if}
@@ -501,7 +501,79 @@
             {@const sortedCurrencies = sortCurr.key && sortCurr.direction ? sortItems(filteredCurrencies, currencyAccessors[sortCurr.key], sortCurr.direction) : filteredCurrencies}
             {#each sortedCurrencies as c}
               {@const rs = rateSources.get(c.code)}
-              <Table.Row class="cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
+              {@const assetType = effectiveAssetType(c)}
+              {@const h = holdings.get(c.code) ?? 0}
+              {@const p = c.is_base ? 1 : (lastPrices.get(c.code) ?? 0)}
+              {@const val = h * p}
+              <!-- Mobile row -->
+              <Table.Row class="sm:hidden cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
+                <Table.Cell colspan={99} class="py-2 px-3">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                      <!-- Line 1: Name + Value -->
+                      <div class="flex items-baseline justify-between gap-2">
+                        <span class="font-medium truncate">
+                          {c.name}
+                          {#if c.is_hidden}
+                            <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
+                          {/if}
+                        </span>
+                        {#if colVis.value !== false && val !== 0}
+                          <span class="font-mono text-sm text-right shrink-0 tabular-nums">
+                            {val.toLocaleString(undefined, { maximumFractionDigits: 2 })} {settings.currency}
+                          </span>
+                        {/if}
+                      </div>
+                      <!-- Line 2: Symbol, Type, Last Price, Holdings -->
+                      <div class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+                        {#if colVis.symbol !== false}
+                          <span class="font-mono">{c.code}</span>
+                        {/if}
+                        {#if colVis.type !== false && assetType}
+                          <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">{assetType}</span>
+                        {/if}
+                        {#if colVis.lastPrice !== false && !c.is_base && lastPrices.has(c.code)}
+                          <span class="font-mono">{lastPrices.get(c.code)!.toLocaleString(undefined, { maximumSignificantDigits: 6 })} {settings.currency}</span>
+                        {/if}
+                        {#if colVis.holdings === true && holdings.has(c.code)}
+                          <span class="font-mono">{holdings.get(c.code)!.toLocaleString(undefined, { maximumFractionDigits: c.decimal_places })} {c.code}</span>
+                        {/if}
+                        {#if c.is_base}
+                          <span class="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">{m.label_base()}</span>
+                        {/if}
+                      </div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="shrink-0" onclick={(e: MouseEvent) => e.stopPropagation()}>
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger>
+                          {#snippet child({ props })}
+                            <Button variant="ghost" size="icon-sm" {...props}>
+                              <EllipsisVertical class="h-4 w-4" />
+                              <span class="sr-only">{m.label_actions()}</span>
+                            </Button>
+                          {/snippet}
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
+                          {#if !c.is_base}
+                            {#if c.is_hidden}
+                              <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
+                            {:else}
+                              <DropdownMenu.Item onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</DropdownMenu.Item>
+                            {/if}
+                          {/if}
+                          {#if dpriceEnabled}
+                            <DropdownMenu.Item onclick={() => { dpriceDialogCode = c.code; dpriceDialogOpen = true; }}>{m.btn_link_dprice()}</DropdownMenu.Item>
+                          {/if}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    </div>
+                  </div>
+                </Table.Cell>
+              </Table.Row>
+              <!-- Desktop row -->
+              <Table.Row class="hidden sm:table-row cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
                 {#if colVis.name !== false}
                   <Table.Cell onclick={(e: MouseEvent) => { if (renamingCode === c.code) e.stopPropagation(); }}>
                     {#if renamingCode === c.code}
@@ -524,7 +596,6 @@
                 {/if}
                 {#if colVis.type !== false}
                   <Table.Cell class="hidden sm:table-cell">
-                    {@const assetType = effectiveAssetType(c)}
                     {#if assetType}
                       <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{assetType}</span>
                     {/if}
@@ -552,9 +623,6 @@
                 {/if}
                 {#if colVis.value !== false}
                   <Table.Cell class="text-right hidden md:table-cell font-mono text-xs">
-                    {@const h = holdings.get(c.code) ?? 0}
-                    {@const p = c.is_base ? 1 : (lastPrices.get(c.code) ?? 0)}
-                    {@const val = h * p}
                     {#if val !== 0}
                       {val.toLocaleString(undefined, { maximumFractionDigits: 2 })} {settings.currency}
                     {:else}
