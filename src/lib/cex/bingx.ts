@@ -1,45 +1,36 @@
-import type { CexAdapter, CexLedgerRecord, ExchangeId } from "./types.js";
+import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
 import { hmacSha256Hex } from "./crypto-utils.js";
 
-/** Configuration for Binance and Binance-compatible regional exchanges. */
-export interface BinanceConfig {
-  exchangeId: ExchangeId;
-  exchangeName: string;
-  baseUrl: string;
-  proxyPrefix: string;
-  /** Whether the /sapi/v1/capital/* endpoints are available (default true). */
-  hasCapitalEndpoints?: boolean;
+const BINGX_API = "https://open-api.bingx.com";
+
+async function bingxFetch(
+  url: string,
+  init?: RequestInit,
+  signal?: AbortSignal,
+): Promise<{ status: number; body: string }> {
+  return cexFetch(url, BINGX_API, "/api/bingx", init, signal);
 }
-
-const DEFAULT_CONFIG: BinanceConfig = {
-  exchangeId: "binance",
-  exchangeName: "Binance",
-  baseUrl: "https://api.binance.com",
-  proxyPrefix: "/api/binance",
-  hasCapitalEndpoints: true,
-};
-
-// Binance asset code → standard code mapping.
-// Binance mostly uses standard ticker symbols already.
-const BINANCE_ASSET_MAP: Record<string, string> = {
-  IOTA: "MIOTA",
-  YOOSHI: "YOOSHI",
-};
-
-const QUOTE_CURRENCIES = ["USDT", "BTC", "ETH", "BNB", "FDUSD", "EUR"];
 
 /**
- * Sign a Binance API request.
- * Signature = hex(HMAC-SHA256(secret, queryString))
+ * Sign a BingX API request.
+ * Signature = hex(HMAC-SHA256(secret, sorted-query-params-string))
  */
-async function binanceSign(queryString: string, secret: string): Promise<string> {
-  return hmacSha256Hex(secret, queryString);
+async function bingxSign(params: URLSearchParams, secret: string): Promise<string> {
+  // Sort params alphabetically by key
+  const sorted = new URLSearchParams([...params.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+  return hmacSha256Hex(secret, sorted.toString());
 }
 
-interface BinanceTrade {
-  id: number;
+interface BingxResponse<T> {
+  code: number;
+  msg?: string;
+  data: T;
+}
+
+interface BingxTrade {
+  orderId: string;
   symbol: string;
   price: string;
   qty: string;
@@ -50,66 +41,47 @@ interface BinanceTrade {
   isBuyer: boolean;
 }
 
-interface BinanceDeposit {
+interface BingxTradesData {
+  orders: BingxTrade[];
+}
+
+interface BingxDeposit {
   id: string;
-  amount: string;
   coin: string;
+  amount: string;
   network: string;
   txId: string;
   status: number;
   insertTime: number;
 }
 
-interface BinanceWithdrawal {
+interface BingxWithdrawal {
   id: string;
-  amount: string;
   coin: string;
+  amount: string;
   network: string;
   txId: string;
   transactionFee: string;
-  applyTime: string;
+  applyTime: number;
   status: number;
 }
 
-interface BinanceAssetConfig {
-  coin: string;
-  free: string;
-  locked: string;
-  freeze: string;
-  withdrawing: string;
-}
+const QUOTE_CURRENCIES = ["USDT", "USDC", "BTC", "ETH", "BNB", "EUR"];
 
-/**
- * Extract base and quote assets from a trading symbol given a list of known quote currencies.
- * Returns null if no known quote is found.
- */
 function parseSymbol(symbol: string): { base: string; quote: string } | null {
-  for (const q of QUOTE_CURRENCIES) {
-    if (symbol.endsWith(q)) {
-      const base = symbol.slice(0, -q.length);
-      if (base.length > 0) return { base, quote: q };
-    }
+  // BingX uses dash-separated symbols like "BTC-USDT"
+  const parts = symbol.split("-");
+  if (parts.length === 2 && parts[0].length > 0 && parts[1].length > 0) {
+    return { base: parts[0], quote: parts[1] };
   }
   return null;
 }
 
-export class BinanceAdapter implements CexAdapter {
-  readonly exchangeId: ExchangeId;
-  readonly exchangeName: string;
-  private readonly baseUrl: string;
-  private readonly proxyPrefix: string;
-  private readonly hasCapitalEndpoints: boolean;
-
-  constructor(config: BinanceConfig = DEFAULT_CONFIG) {
-    this.exchangeId = config.exchangeId;
-    this.exchangeName = config.exchangeName;
-    this.baseUrl = config.baseUrl;
-    this.proxyPrefix = config.proxyPrefix;
-    this.hasCapitalEndpoints = config.hasCapitalEndpoints ?? true;
-  }
+export class BingxAdapter implements CexAdapter {
+  readonly exchangeId = "bingx" as const;
+  readonly exchangeName = "BingX";
 
   normalizeAsset(raw: string): string {
-    if (BINANCE_ASSET_MAP[raw]) return BINANCE_ASSET_MAP[raw];
     return raw;
   }
 
@@ -136,14 +108,6 @@ export class BinanceAdapter implements CexAdapter {
     return records;
   }
 
-  private async fetch(
-    url: string,
-    init?: RequestInit,
-    signal?: AbortSignal,
-  ): Promise<{ status: number; body: string }> {
-    return cexFetch(url, this.baseUrl, this.proxyPrefix, init, signal);
-  }
-
   private async signedGet(
     path: string,
     params: URLSearchParams,
@@ -152,71 +116,25 @@ export class BinanceAdapter implements CexAdapter {
     signal?: AbortSignal,
   ): Promise<{ status: number; body: string }> {
     params.set("timestamp", String(Date.now()));
-    const queryString = params.toString();
-    const signature = await binanceSign(queryString, apiSecret);
-    const url = `${this.baseUrl}${path}?${queryString}&signature=${signature}`;
+    const signature = await bingxSign(params, apiSecret);
+    params.set("signature", signature);
+    const url = `${BINGX_API}${path}?${params.toString()}`;
 
-    return this.fetch(
+    return bingxFetch(
       url,
       {
         method: "GET",
-        headers: { "X-MBX-APIKEY": apiKey },
+        headers: { "X-BX-APIKEY": apiKey },
       },
       signal,
     );
   }
 
   /**
-   * Fetch user assets to discover which trading pairs to query.
+   * Fetch trades for common quote currencies.
+   * BingX requires a symbol param, so we iterate over common pairs.
+   * Paginate by orderId.
    */
-  private async fetchUserAssets(
-    apiKey: string,
-    apiSecret: string,
-    signal?: AbortSignal,
-  ): Promise<string[]> {
-    if (!this.hasCapitalEndpoints) {
-      return []; // Clone doesn't support /sapi — return empty, trades will be skipped
-    }
-
-    try {
-      const params = new URLSearchParams();
-      const result = await this.signedGet("/sapi/v1/capital/config/getall", params, apiKey, apiSecret, signal);
-      const json = JSON.parse(result.body) as BinanceAssetConfig[];
-
-      // Return coins that have any balance (free, locked, freeze, withdrawing)
-      const coins: string[] = [];
-      for (const entry of json) {
-        const hasBalance =
-          parseFloat(entry.free) > 0 ||
-          parseFloat(entry.locked) > 0 ||
-          parseFloat(entry.freeze) > 0 ||
-          parseFloat(entry.withdrawing) > 0;
-        if (hasBalance) {
-          coins.push(entry.coin);
-        }
-      }
-      return coins;
-    } catch {
-      // Endpoint not available on this clone — gracefully return empty
-      return [];
-    }
-  }
-
-  /**
-   * Derive candidate trading pair symbols from user assets.
-   */
-  private deriveCandidatePairs(coins: string[]): string[] {
-    const pairs: string[] = [];
-    for (const coin of coins) {
-      for (const quote of QUOTE_CURRENCIES) {
-        if (coin !== quote) {
-          pairs.push(coin + quote);
-        }
-      }
-    }
-    return pairs;
-  }
-
   private async fetchTrades(
     apiKey: string,
     apiSecret: string,
@@ -225,20 +143,17 @@ export class BinanceAdapter implements CexAdapter {
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
 
-    // Discover user assets and derive candidate pairs
-    const coins = await this.fetchUserAssets(apiKey, apiSecret, signal);
-    if (coins.length === 0) return records;
-    await abortableDelay(100, signal);
+    // We need to query per-symbol; fetch common pairs
+    // BingX uses "BTC-USDT" format
+    const symbols = await this.fetchTradedSymbols(apiKey, apiSecret, signal);
 
-    const candidatePairs = this.deriveCandidatePairs(coins);
-
-    for (const symbol of candidatePairs) {
+    for (const symbol of symbols) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
       const parsed = parseSymbol(symbol);
       if (!parsed) continue;
 
-      let fromId: number | undefined;
+      let lastOrderId: string | undefined;
       let hasMore = true;
 
       while (hasMore) {
@@ -246,25 +161,31 @@ export class BinanceAdapter implements CexAdapter {
 
         const params = new URLSearchParams({
           symbol,
-          limit: "1000",
+          limit: "500",
         });
-        if (fromId !== undefined) {
-          params.set("fromId", String(fromId));
-        } else if (since) {
-          // For the first page, use startTime to filter by since
+        if (lastOrderId) {
+          params.set("orderId", lastOrderId);
+        }
+        if (since) {
           params.set("startTime", String(since * 1000));
         }
 
-        const result = await this.signedGet("/api/v3/myTrades", params, apiKey, apiSecret, signal);
-        const trades = JSON.parse(result.body) as BinanceTrade[];
+        const result = await this.signedGet("/openApi/spot/v1/trade/query", params, apiKey, apiSecret, signal);
+        const json = JSON.parse(result.body) as BingxResponse<BingxTradesData>;
 
+        if (json.code !== 0) {
+          // Symbol may not exist — skip silently
+          break;
+        }
+
+        const trades = json.data?.orders;
         if (!Array.isArray(trades) || trades.length === 0) {
           hasMore = false;
           break;
         }
 
         for (const trade of trades) {
-          const refid = `${trade.symbol}:${trade.id}`;
+          const refid = `${trade.symbol}:${trade.orderId}`;
           const { base, quote } = parsed;
 
           const tradeMeta: Record<string, string> = {
@@ -301,7 +222,7 @@ export class BinanceAdapter implements CexAdapter {
             metadata: tradeMeta,
           });
 
-          // If commission asset is neither base nor quote, add a 3rd record
+          // Commission in a third asset
           if (trade.commissionAsset !== base && trade.commissionAsset !== quote) {
             records.push({
               refid,
@@ -316,24 +237,49 @@ export class BinanceAdapter implements CexAdapter {
           }
         }
 
-        // Pagination: if we got a full page, continue from the last id + 1
-        if (trades.length < 1000) {
+        if (trades.length < 500) {
           hasMore = false;
         } else {
-          fromId = trades[trades.length - 1].id + 1;
+          lastOrderId = trades[trades.length - 1].orderId;
         }
 
-        await abortableDelay(100, signal);
+        await abortableDelay(150, signal);
       }
 
-      await abortableDelay(100, signal);
+      await abortableDelay(150, signal);
     }
 
     return records;
   }
 
   /**
-   * Fetch deposits using 90-day rolling windows from `since` to now.
+   * Derive candidate symbols from common quote currencies.
+   * Returns dash-separated symbols like "BTC-USDT".
+   */
+  private async fetchTradedSymbols(
+    _apiKey: string,
+    _apiSecret: string,
+    _signal?: AbortSignal,
+  ): Promise<string[]> {
+    // BingX doesn't provide a user-assets endpoint easily,
+    // so we use common base/quote combinations
+    const bases = [
+      "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK",
+      "MATIC", "UNI", "ATOM", "LTC", "NEAR", "APT", "ARB", "OP", "SUI",
+    ];
+    const symbols: string[] = [];
+    for (const base of bases) {
+      for (const quote of QUOTE_CURRENCIES) {
+        if (base !== quote) {
+          symbols.push(`${base}-${quote}`);
+        }
+      }
+    }
+    return symbols;
+  }
+
+  /**
+   * Fetch deposit history using time-windowed pagination.
    */
   private async fetchDeposits(
     apiKey: string,
@@ -341,8 +287,6 @@ export class BinanceAdapter implements CexAdapter {
     since?: number,
     signal?: AbortSignal,
   ): Promise<CexLedgerRecord[]> {
-    if (!this.hasCapitalEndpoints) return [];
-
     const records: CexLedgerRecord[] = [];
     const now = Date.now();
     const MS_90_DAYS = 90 * 24 * 60 * 60 * 1000;
@@ -364,9 +308,20 @@ export class BinanceAdapter implements CexAdapter {
           offset: String(offset),
         });
 
-        const result = await this.signedGet("/sapi/v1/capital/deposit/hisrec", params, apiKey, apiSecret, signal);
-        const deposits = JSON.parse(result.body) as BinanceDeposit[];
+        const result = await this.signedGet(
+          "/openApi/wallets/v1/capital/deposit/hisrec",
+          params,
+          apiKey,
+          apiSecret,
+          signal,
+        );
 
+        const json = JSON.parse(result.body) as BingxResponse<BingxDeposit[]>;
+        if (json.code !== 0) {
+          throw new Error(`BingX API error: ${json.msg ?? json.code}`);
+        }
+
+        const deposits = json.data;
         if (!Array.isArray(deposits) || deposits.length === 0) break;
 
         for (const dep of deposits) {
@@ -388,18 +343,18 @@ export class BinanceAdapter implements CexAdapter {
         if (deposits.length < 1000) break;
         offset += deposits.length;
 
-        await abortableDelay(100, signal);
+        await abortableDelay(150, signal);
       }
 
       windowStart = windowEnd;
-      await abortableDelay(100, signal);
+      await abortableDelay(150, signal);
     }
 
     return records;
   }
 
   /**
-   * Fetch withdrawals using 90-day rolling windows from `since` to now.
+   * Fetch withdrawal history using time-windowed pagination.
    */
   private async fetchWithdrawals(
     apiKey: string,
@@ -407,8 +362,6 @@ export class BinanceAdapter implements CexAdapter {
     since?: number,
     signal?: AbortSignal,
   ): Promise<CexLedgerRecord[]> {
-    if (!this.hasCapitalEndpoints) return [];
-
     const records: CexLedgerRecord[] = [];
     const now = Date.now();
     const MS_90_DAYS = 90 * 24 * 60 * 60 * 1000;
@@ -430,9 +383,20 @@ export class BinanceAdapter implements CexAdapter {
           offset: String(offset),
         });
 
-        const result = await this.signedGet("/sapi/v1/capital/withdraw/history", params, apiKey, apiSecret, signal);
-        const withdrawals = JSON.parse(result.body) as BinanceWithdrawal[];
+        const result = await this.signedGet(
+          "/openApi/wallets/v1/capital/withdraw/history",
+          params,
+          apiKey,
+          apiSecret,
+          signal,
+        );
 
+        const json = JSON.parse(result.body) as BingxResponse<BingxWithdrawal[]>;
+        if (json.code !== 0) {
+          throw new Error(`BingX API error: ${json.msg ?? json.code}`);
+        }
+
+        const withdrawals = json.data;
         if (!Array.isArray(withdrawals) || withdrawals.length === 0) break;
 
         for (const wd of withdrawals) {
@@ -442,7 +406,7 @@ export class BinanceAdapter implements CexAdapter {
             asset: this.normalizeAsset(wd.coin),
             amount: `-${wd.amount}`,
             fee: wd.transactionFee,
-            timestamp: Date.parse(wd.applyTime) / 1000,
+            timestamp: wd.applyTime / 1000,
             txid: wd.txId ? normalizeTxid(wd.txId) : null,
             metadata: {
               "withdrawal:network": wd.network,
@@ -455,11 +419,11 @@ export class BinanceAdapter implements CexAdapter {
         if (withdrawals.length < 1000) break;
         offset += withdrawals.length;
 
-        await abortableDelay(100, signal);
+        await abortableDelay(150, signal);
       }
 
       windowStart = windowEnd;
-      await abortableDelay(100, signal);
+      await abortableDelay(150, signal);
     }
 
     return records;
@@ -467,4 +431,4 @@ export class BinanceAdapter implements CexAdapter {
 }
 
 // Re-export for tests
-export { binanceSign, BINANCE_ASSET_MAP };
+export { bingxSign };

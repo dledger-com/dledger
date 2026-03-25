@@ -83,3 +83,44 @@ export async function sha256Hex(data: string): Promise<string> {
   const buf = await sha256(data);
   return toHex(buf);
 }
+
+/**
+ * HMAC-SHA512 with string inputs, output as hex string.
+ * Used by: gate.io, bithumb, whitebit.
+ */
+export async function hmacSha512Hex(secret: string, data: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-512" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
+  return toHex(sig);
+}
+
+/**
+ * SHA-512 digest, output as hex string.
+ * Used by: gate.io (body hash).
+ */
+export async function sha512Hex(data: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-512", encoder.encode(data));
+  return toHex(buf);
+}
+
+/**
+ * HMAC-SHA384, output as hex string.
+ * Used by: gemini.
+ */
+export async function hmacSha384Hex(secret: string, data: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-384" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
+  return toHex(sig);
+}

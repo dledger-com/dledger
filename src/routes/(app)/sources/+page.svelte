@@ -340,6 +340,19 @@
         kraken: "Kraken", binance: "Binance", coinbase: "Coinbase",
         bybit: "Bybit", okx: "OKX", bitstamp: "Bitstamp", cryptocom: "Crypto.com",
         volet: "Volet",
+        // Binance clones
+        "binance-tr": "Binance TR", "binance-us": "Binance.US",
+        "binance-th": "Binance TH", tokocrypto: "Tokocrypto",
+        // Wave 1
+        bitget: "Bitget", gateio: "Gate.io", kucoin: "KuCoin",
+        mexc: "MEXC", htx: "HTX",
+        // Wave 2
+        bingx: "BingX", bitmart: "BitMart", upbit: "Upbit",
+        bithumb: "Bithumb",
+        // Wave 3
+        lbank: "LBank", xtcom: "XT.COM", gemini: "Gemini",
+        coinex: "CoinEx", poloniex: "Poloniex", bitvavo: "Bitvavo",
+        phemex: "Phemex", whitebit: "WhiteBIT",
     };
 
     function startAddCex(exchangeId: ExchangeId) {

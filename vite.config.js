@@ -193,6 +193,112 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/cardano/, ''),
       },
+      // ── CEX Adapters ──────────────────────────────────────────────────
+      '/api/binance-tr': {
+        target: 'https://api.binance.tr',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/binance-tr/, ''),
+      },
+      '/api/binance-us': {
+        target: 'https://api.binance.us',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/binance-us/, ''),
+      },
+      '/api/binance-th': {
+        target: 'https://api.binance.th',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/binance-th/, ''),
+      },
+      '/api/tokocrypto': {
+        target: 'https://api.tokocrypto.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/tokocrypto/, ''),
+      },
+      '/api/bitget': {
+        target: 'https://api.bitget.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bitget/, ''),
+      },
+      '/api/gateio': {
+        target: 'https://api.gateio.ws',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/gateio/, ''),
+      },
+      '/api/kucoin': {
+        target: 'https://api.kucoin.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/kucoin/, ''),
+      },
+      '/api/mexc': {
+        target: 'https://api.mexc.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/mexc/, ''),
+      },
+      '/api/htx': {
+        target: 'https://api.huobi.pro',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/htx/, ''),
+      },
+      '/api/bingx': {
+        target: 'https://open-api.bingx.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bingx/, ''),
+      },
+      '/api/bitmart': {
+        target: 'https://api-cloud.bitmart.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bitmart/, ''),
+      },
+      '/api/upbit': {
+        target: 'https://api.upbit.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/upbit/, ''),
+      },
+      '/api/bithumb': {
+        target: 'https://api.bithumb.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bithumb/, ''),
+      },
+      '/api/lbank': {
+        target: 'https://api.lbank.info',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/lbank/, ''),
+      },
+      '/api/xtcom': {
+        target: 'https://sapi.xt.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/xtcom/, ''),
+      },
+      '/api/gemini': {
+        target: 'https://api.gemini.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/gemini/, ''),
+      },
+      '/api/coinex': {
+        target: 'https://api.coinex.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/coinex/, ''),
+      },
+      '/api/poloniex': {
+        target: 'https://api.poloniex.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/poloniex/, ''),
+      },
+      '/api/bitvavo': {
+        target: 'https://api.bitvavo.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bitvavo/, ''),
+      },
+      '/api/phemex': {
+        target: 'https://api.phemex.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/phemex/, ''),
+      },
+      '/api/whitebit': {
+        target: 'https://whitebit.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/whitebit/, ''),
+      },
     },
   },
 }));

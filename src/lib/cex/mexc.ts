@@ -1,45 +1,36 @@
-import type { CexAdapter, CexLedgerRecord, ExchangeId } from "./types.js";
+import type { CexAdapter, CexLedgerRecord } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
 import { cexFetch, abortableDelay } from "./fetch.js";
 import { hmacSha256Hex } from "./crypto-utils.js";
 
-/** Configuration for Binance and Binance-compatible regional exchanges. */
-export interface BinanceConfig {
-  exchangeId: ExchangeId;
-  exchangeName: string;
-  baseUrl: string;
-  proxyPrefix: string;
-  /** Whether the /sapi/v1/capital/* endpoints are available (default true). */
-  hasCapitalEndpoints?: boolean;
+const MEXC_API = "https://api.mexc.com";
+const RATE_LIMIT_MS = 100;
+
+// 90 days in milliseconds (max window for deposit/withdrawal queries)
+const MS_90_DAYS = 90 * 24 * 60 * 60 * 1000;
+
+const QUOTE_CURRENCIES = ["USDT", "USDC", "BTC", "ETH", "EUR"];
+
+async function mexcFetch(
+  url: string,
+  init?: RequestInit,
+  signal?: AbortSignal,
+): Promise<{ status: number; body: string }> {
+  return cexFetch(url, MEXC_API, "/api/mexc", init, signal);
 }
 
-const DEFAULT_CONFIG: BinanceConfig = {
-  exchangeId: "binance",
-  exchangeName: "Binance",
-  baseUrl: "https://api.binance.com",
-  proxyPrefix: "/api/binance",
-  hasCapitalEndpoints: true,
-};
-
-// Binance asset code → standard code mapping.
-// Binance mostly uses standard ticker symbols already.
-const BINANCE_ASSET_MAP: Record<string, string> = {
-  IOTA: "MIOTA",
-  YOOSHI: "YOOSHI",
-};
-
-const QUOTE_CURRENCIES = ["USDT", "BTC", "ETH", "BNB", "FDUSD", "EUR"];
-
 /**
- * Sign a Binance API request.
+ * Sign a MEXC API request (Binance V3 compatible).
  * Signature = hex(HMAC-SHA256(secret, queryString))
  */
-async function binanceSign(queryString: string, secret: string): Promise<string> {
+async function mexcSign(queryString: string, secret: string): Promise<string> {
   return hmacSha256Hex(secret, queryString);
 }
 
-interface BinanceTrade {
-  id: number;
+// --- API response types ---
+
+interface MexcTrade {
+  id: string;
   symbol: string;
   price: string;
   qty: string;
@@ -48,19 +39,20 @@ interface BinanceTrade {
   commissionAsset: string;
   time: number;
   isBuyer: boolean;
+  orderId: string;
 }
 
-interface BinanceDeposit {
+interface MexcDeposit {
   id: string;
   amount: string;
   coin: string;
   network: string;
   txId: string;
-  status: number;
+  status: string;
   insertTime: number;
 }
 
-interface BinanceWithdrawal {
+interface MexcWithdrawal {
   id: string;
   amount: string;
   coin: string;
@@ -68,21 +60,13 @@ interface BinanceWithdrawal {
   txId: string;
   transactionFee: string;
   applyTime: string;
-  status: number;
+  status: string;
 }
 
-interface BinanceAssetConfig {
+interface MexcCoinConfig {
   coin: string;
-  free: string;
-  locked: string;
-  freeze: string;
-  withdrawing: string;
 }
 
-/**
- * Extract base and quote assets from a trading symbol given a list of known quote currencies.
- * Returns null if no known quote is found.
- */
 function parseSymbol(symbol: string): { base: string; quote: string } | null {
   for (const q of QUOTE_CURRENCIES) {
     if (symbol.endsWith(q)) {
@@ -93,23 +77,11 @@ function parseSymbol(symbol: string): { base: string; quote: string } | null {
   return null;
 }
 
-export class BinanceAdapter implements CexAdapter {
-  readonly exchangeId: ExchangeId;
-  readonly exchangeName: string;
-  private readonly baseUrl: string;
-  private readonly proxyPrefix: string;
-  private readonly hasCapitalEndpoints: boolean;
-
-  constructor(config: BinanceConfig = DEFAULT_CONFIG) {
-    this.exchangeId = config.exchangeId;
-    this.exchangeName = config.exchangeName;
-    this.baseUrl = config.baseUrl;
-    this.proxyPrefix = config.proxyPrefix;
-    this.hasCapitalEndpoints = config.hasCapitalEndpoints ?? true;
-  }
+export class MexcAdapter implements CexAdapter {
+  readonly exchangeId = "mexc" as const;
+  readonly exchangeName = "MEXC";
 
   normalizeAsset(raw: string): string {
-    if (BINANCE_ASSET_MAP[raw]) return BINANCE_ASSET_MAP[raw];
     return raw;
   }
 
@@ -121,27 +93,16 @@ export class BinanceAdapter implements CexAdapter {
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
 
-    // 1. Fetch trades
     const tradeRecords = await this.fetchTrades(apiKey, apiSecret, since, signal);
     records.push(...tradeRecords);
 
-    // 2. Fetch deposits
     const depositRecords = await this.fetchDeposits(apiKey, apiSecret, since, signal);
     records.push(...depositRecords);
 
-    // 3. Fetch withdrawals
     const withdrawalRecords = await this.fetchWithdrawals(apiKey, apiSecret, since, signal);
     records.push(...withdrawalRecords);
 
     return records;
-  }
-
-  private async fetch(
-    url: string,
-    init?: RequestInit,
-    signal?: AbortSignal,
-  ): Promise<{ status: number; body: string }> {
-    return cexFetch(url, this.baseUrl, this.proxyPrefix, init, signal);
   }
 
   private async signedGet(
@@ -153,58 +114,38 @@ export class BinanceAdapter implements CexAdapter {
   ): Promise<{ status: number; body: string }> {
     params.set("timestamp", String(Date.now()));
     const queryString = params.toString();
-    const signature = await binanceSign(queryString, apiSecret);
-    const url = `${this.baseUrl}${path}?${queryString}&signature=${signature}`;
+    const signature = await mexcSign(queryString, apiSecret);
+    const url = `${MEXC_API}${path}?${queryString}&signature=${signature}`;
 
-    return this.fetch(
+    return mexcFetch(
       url,
       {
         method: "GET",
-        headers: { "X-MBX-APIKEY": apiKey },
+        headers: { "X-MEXC-APIKEY": apiKey },
       },
       signal,
     );
   }
 
   /**
-   * Fetch user assets to discover which trading pairs to query.
+   * Discover user coins via /api/v3/capital/config/getall to build candidate trade pairs.
    */
-  private async fetchUserAssets(
+  private async fetchUserCoins(
     apiKey: string,
     apiSecret: string,
     signal?: AbortSignal,
   ): Promise<string[]> {
-    if (!this.hasCapitalEndpoints) {
-      return []; // Clone doesn't support /sapi — return empty, trades will be skipped
-    }
-
     try {
       const params = new URLSearchParams();
-      const result = await this.signedGet("/sapi/v1/capital/config/getall", params, apiKey, apiSecret, signal);
-      const json = JSON.parse(result.body) as BinanceAssetConfig[];
-
-      // Return coins that have any balance (free, locked, freeze, withdrawing)
-      const coins: string[] = [];
-      for (const entry of json) {
-        const hasBalance =
-          parseFloat(entry.free) > 0 ||
-          parseFloat(entry.locked) > 0 ||
-          parseFloat(entry.freeze) > 0 ||
-          parseFloat(entry.withdrawing) > 0;
-        if (hasBalance) {
-          coins.push(entry.coin);
-        }
-      }
-      return coins;
+      const result = await this.signedGet("/api/v3/capital/config/getall", params, apiKey, apiSecret, signal);
+      const json = JSON.parse(result.body) as MexcCoinConfig[];
+      if (!Array.isArray(json)) return [];
+      return json.map((c) => c.coin);
     } catch {
-      // Endpoint not available on this clone — gracefully return empty
       return [];
     }
   }
 
-  /**
-   * Derive candidate trading pair symbols from user assets.
-   */
   private deriveCandidatePairs(coins: string[]): string[] {
     const pairs: string[] = [];
     for (const coin of coins) {
@@ -225,10 +166,9 @@ export class BinanceAdapter implements CexAdapter {
   ): Promise<CexLedgerRecord[]> {
     const records: CexLedgerRecord[] = [];
 
-    // Discover user assets and derive candidate pairs
-    const coins = await this.fetchUserAssets(apiKey, apiSecret, signal);
+    const coins = await this.fetchUserCoins(apiKey, apiSecret, signal);
     if (coins.length === 0) return records;
-    await abortableDelay(100, signal);
+    await abortableDelay(RATE_LIMIT_MS, signal);
 
     const candidatePairs = this.deriveCandidatePairs(coins);
 
@@ -238,7 +178,7 @@ export class BinanceAdapter implements CexAdapter {
       const parsed = parseSymbol(symbol);
       if (!parsed) continue;
 
-      let fromId: number | undefined;
+      let fromId: string | undefined;
       let hasMore = true;
 
       while (hasMore) {
@@ -248,15 +188,14 @@ export class BinanceAdapter implements CexAdapter {
           symbol,
           limit: "1000",
         });
-        if (fromId !== undefined) {
-          params.set("fromId", String(fromId));
+        if (fromId) {
+          params.set("fromId", fromId);
         } else if (since) {
-          // For the first page, use startTime to filter by since
           params.set("startTime", String(since * 1000));
         }
 
         const result = await this.signedGet("/api/v3/myTrades", params, apiKey, apiSecret, signal);
-        const trades = JSON.parse(result.body) as BinanceTrade[];
+        const trades = JSON.parse(result.body) as MexcTrade[];
 
         if (!Array.isArray(trades) || trades.length === 0) {
           hasMore = false;
@@ -264,8 +203,8 @@ export class BinanceAdapter implements CexAdapter {
         }
 
         for (const trade of trades) {
-          const refid = `${trade.symbol}:${trade.id}`;
           const { base, quote } = parsed;
+          const refid = `${trade.symbol}:${trade.id}`;
 
           const tradeMeta: Record<string, string> = {
             "trade:symbol": trade.symbol,
@@ -275,6 +214,7 @@ export class BinanceAdapter implements CexAdapter {
             "trade:quote_amount": trade.quoteQty,
             "trade:commission": trade.commission,
             "trade:commission_asset": trade.commissionAsset,
+            "trade:order_id": trade.orderId,
           };
 
           // Base asset record
@@ -301,7 +241,7 @@ export class BinanceAdapter implements CexAdapter {
             metadata: tradeMeta,
           });
 
-          // If commission asset is neither base nor quote, add a 3rd record
+          // If commission asset is neither base nor quote
           if (trade.commissionAsset !== base && trade.commissionAsset !== quote) {
             records.push({
               refid,
@@ -316,17 +256,16 @@ export class BinanceAdapter implements CexAdapter {
           }
         }
 
-        // Pagination: if we got a full page, continue from the last id + 1
         if (trades.length < 1000) {
           hasMore = false;
         } else {
-          fromId = trades[trades.length - 1].id + 1;
+          fromId = trades[trades.length - 1].id;
         }
 
-        await abortableDelay(100, signal);
+        await abortableDelay(RATE_LIMIT_MS, signal);
       }
 
-      await abortableDelay(100, signal);
+      await abortableDelay(RATE_LIMIT_MS, signal);
     }
 
     return records;
@@ -341,34 +280,23 @@ export class BinanceAdapter implements CexAdapter {
     since?: number,
     signal?: AbortSignal,
   ): Promise<CexLedgerRecord[]> {
-    if (!this.hasCapitalEndpoints) return [];
-
     const records: CexLedgerRecord[] = [];
     const now = Date.now();
-    const MS_90_DAYS = 90 * 24 * 60 * 60 * 1000;
     let windowStart = since ? since * 1000 : now - MS_90_DAYS;
 
     while (windowStart < now) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
       const windowEnd = Math.min(windowStart + MS_90_DAYS, now);
-      let offset = 0;
+      const params = new URLSearchParams({
+        startTime: String(windowStart),
+        endTime: String(windowEnd),
+      });
 
-      for (;;) {
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const result = await this.signedGet("/api/v3/capital/deposit/hisrec", params, apiKey, apiSecret, signal);
+      const deposits = JSON.parse(result.body) as MexcDeposit[];
 
-        const params = new URLSearchParams({
-          startTime: String(windowStart),
-          endTime: String(windowEnd),
-          limit: "1000",
-          offset: String(offset),
-        });
-
-        const result = await this.signedGet("/sapi/v1/capital/deposit/hisrec", params, apiKey, apiSecret, signal);
-        const deposits = JSON.parse(result.body) as BinanceDeposit[];
-
-        if (!Array.isArray(deposits) || deposits.length === 0) break;
-
+      if (Array.isArray(deposits)) {
         for (const dep of deposits) {
           records.push({
             refid: `deposit:${dep.id}`,
@@ -380,19 +308,14 @@ export class BinanceAdapter implements CexAdapter {
             txid: dep.txId ? normalizeTxid(dep.txId) : null,
             metadata: {
               "deposit:network": dep.network,
-              "deposit:status": String(dep.status),
+              "deposit:status": dep.status,
             },
           });
         }
-
-        if (deposits.length < 1000) break;
-        offset += deposits.length;
-
-        await abortableDelay(100, signal);
       }
 
       windowStart = windowEnd;
-      await abortableDelay(100, signal);
+      await abortableDelay(RATE_LIMIT_MS, signal);
     }
 
     return records;
@@ -407,34 +330,23 @@ export class BinanceAdapter implements CexAdapter {
     since?: number,
     signal?: AbortSignal,
   ): Promise<CexLedgerRecord[]> {
-    if (!this.hasCapitalEndpoints) return [];
-
     const records: CexLedgerRecord[] = [];
     const now = Date.now();
-    const MS_90_DAYS = 90 * 24 * 60 * 60 * 1000;
     let windowStart = since ? since * 1000 : now - MS_90_DAYS;
 
     while (windowStart < now) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
       const windowEnd = Math.min(windowStart + MS_90_DAYS, now);
-      let offset = 0;
+      const params = new URLSearchParams({
+        startTime: String(windowStart),
+        endTime: String(windowEnd),
+      });
 
-      for (;;) {
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const result = await this.signedGet("/api/v3/capital/withdraw/history", params, apiKey, apiSecret, signal);
+      const withdrawals = JSON.parse(result.body) as MexcWithdrawal[];
 
-        const params = new URLSearchParams({
-          startTime: String(windowStart),
-          endTime: String(windowEnd),
-          limit: "1000",
-          offset: String(offset),
-        });
-
-        const result = await this.signedGet("/sapi/v1/capital/withdraw/history", params, apiKey, apiSecret, signal);
-        const withdrawals = JSON.parse(result.body) as BinanceWithdrawal[];
-
-        if (!Array.isArray(withdrawals) || withdrawals.length === 0) break;
-
+      if (Array.isArray(withdrawals)) {
         for (const wd of withdrawals) {
           records.push({
             refid: `withdraw:${wd.id}`,
@@ -447,19 +359,14 @@ export class BinanceAdapter implements CexAdapter {
             metadata: {
               "withdrawal:network": wd.network,
               "withdrawal:fee": wd.transactionFee,
-              "withdrawal:status": String(wd.status),
+              "withdrawal:status": wd.status,
             },
           });
         }
-
-        if (withdrawals.length < 1000) break;
-        offset += withdrawals.length;
-
-        await abortableDelay(100, signal);
       }
 
       windowStart = windowEnd;
-      await abortableDelay(100, signal);
+      await abortableDelay(RATE_LIMIT_MS, signal);
     }
 
     return records;
@@ -467,4 +374,4 @@ export class BinanceAdapter implements CexAdapter {
 }
 
 // Re-export for tests
-export { binanceSign, BINANCE_ASSET_MAP };
+export { mexcSign };

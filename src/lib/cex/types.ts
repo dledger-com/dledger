@@ -1,4 +1,13 @@
-export type ExchangeId = "kraken" | "binance" | "coinbase" | "bybit" | "okx" | "bitstamp" | "cryptocom" | "volet";
+export type ExchangeId =
+  | "kraken" | "binance" | "coinbase" | "bybit" | "okx" | "bitstamp" | "cryptocom" | "volet"
+  // Binance regional clones
+  | "binance-tr" | "binance-us" | "binance-th" | "tokocrypto"
+  // Wave 1
+  | "bitget" | "gateio" | "kucoin" | "mexc" | "htx"
+  // Wave 2
+  | "bingx" | "bitmart" | "upbit" | "bithumb"
+  // Wave 3
+  | "lbank" | "xtcom" | "gemini" | "coinex" | "poloniex" | "bitvavo" | "phemex" | "whitebit";
 
 export interface ExchangeAccount {
   id: string;

@@ -107,6 +107,163 @@ export const INSTITUTION_REGISTRY: Record<string, InstitutionInfo> = {
     note: "Formerly AdvCash (rebranded Mar 2024)",
   },
 
+  // ── Binance Regional Clones ─────────────────────────────────────────
+
+  "binance-tr": {
+    legalEntity: "BN Teknoloji A.Ş.",
+    address: "Esentepe Mah. Büyükdere Cad. No:193, Levent, Istanbul",
+    country: "Turkey",
+    url: "binance.tr",
+    foreign: true,
+    note: "Binance Turkey subsidiary",
+  },
+  "binance-us": {
+    legalEntity: "BAM Trading Services Inc.",
+    address: "One Letterman Drive, Suite C3-800, San Francisco, CA 94129",
+    country: "USA",
+    url: "binance.us",
+    foreign: true,
+    note: "US-regulated Binance subsidiary",
+  },
+  "binance-th": {
+    legalEntity: "Gulf Binance Co., Ltd.",
+    address: "87 M Thai Tower, All Seasons Place, Wireless Rd, Lumphini, Pathum Wan, Bangkok 10330",
+    country: "Thailand",
+    url: "binance.th",
+    foreign: true,
+    note: "Binance Thailand JV with Gulf Energy",
+  },
+  tokocrypto: {
+    legalEntity: "PT Tokocrypto",
+    address: "Jl. Prof. DR. Satrio Kav. 3-5, Jakarta Selatan 12940",
+    country: "Indonesia",
+    url: "tokocrypto.com",
+    foreign: true,
+    note: "Binance Indonesia subsidiary, Bappebti regulated",
+  },
+
+  // ── Wave 1: Top Priority CEX Adapters ─────────────────────────────
+
+  bitget: {
+    legalEntity: "Bitget Limited",
+    address: "Suite 202, 2nd Floor, The River Court, 6 Triq l-Imdina, Pieta PTA 9040",
+    country: "Malta",
+    url: "bitget.com",
+    foreign: true,
+    note: "MiCA license pending",
+  },
+  kucoin: {
+    legalEntity: "Mek Global Limited",
+    address: "P.O. Box 309, Ugland House, George Town, Grand Cayman",
+    country: "Cayman Islands",
+    url: "kucoin.com",
+    foreign: true,
+  },
+  mexc: {
+    legalEntity: "MEXC Global Ltd",
+    address: "Victoria, Mahé",
+    country: "Seychelles",
+    url: "mexc.com",
+    foreign: true,
+  },
+  htx: {
+    legalEntity: "HTX Global Limited",
+    address: "Victoria, Mahé",
+    country: "Seychelles",
+    url: "htx.com",
+    foreign: true,
+    note: "Formerly Huobi. Rebranded Sep 2023",
+  },
+
+  // ── Wave 2: Important CEX Adapters ────────────────────────────────
+
+  bingx: {
+    legalEntity: "BingX Holdings Limited",
+    address: "Victoria, Mahé",
+    country: "Seychelles",
+    url: "bingx.com",
+    foreign: true,
+  },
+  bitmart: {
+    legalEntity: "BitMart Exchange",
+    address: "Georgetown, Grand Cayman",
+    country: "Cayman Islands",
+    url: "bitmart.com",
+    foreign: true,
+  },
+  upbit: {
+    legalEntity: "Dunamu Inc.",
+    address: "15F, 2 Gangnam-daero 53-gil, Seocho-gu, Seoul 06621",
+    country: "South Korea",
+    url: "upbit.com",
+    foreign: true,
+    note: "Korean exchange, KISA/VASP registered",
+  },
+  bithumb: {
+    legalEntity: "Bithumb Korea Co., Ltd.",
+    address: "12F, 34 Yeouido-dong, Yeongdeungpo-gu, Seoul 07331",
+    country: "South Korea",
+    url: "bithumb.com",
+    foreign: true,
+    note: "Korean exchange, KISA/VASP registered",
+  },
+
+  // ── Wave 3: Second Tier CEX Adapters ──────────────────────────────
+
+  lbank: {
+    legalEntity: "LBank Exchange",
+    address: "Victoria, Mahé",
+    country: "Seychelles",
+    url: "lbank.com",
+    foreign: true,
+  },
+  xtcom: {
+    legalEntity: "XT.COM Exchange",
+    address: "Victoria, Mahé",
+    country: "Seychelles",
+    url: "xt.com",
+    foreign: true,
+  },
+  gemini: {
+    legalEntity: "Gemini Trust Company, LLC",
+    address: "315 Park Avenue South, 18th Floor, New York, NY 10010",
+    country: "USA",
+    url: "gemini.com",
+    foreign: true,
+    note: "NYDFS regulated trust company",
+  },
+  coinex: {
+    legalEntity: "CoinEx Technology Limited",
+    address: "Unit 1009, Level 10, Tower A, ibc, Apia",
+    country: "Samoa",
+    url: "coinex.com",
+    foreign: true,
+  },
+  bitvavo: {
+    legalEntity: "Bitvavo B.V.",
+    address: "Herengracht 450, 1017 CA Amsterdam",
+    country: "Netherlands",
+    url: "bitvavo.com",
+    foreign: true,
+    note: "DNB registered, MiCA via Netherlands",
+  },
+  phemex: {
+    legalEntity: "Phemex Limited",
+    address: "3 Fraser Street, Duo Tower, Singapore 189352",
+    country: "Singapore",
+    url: "phemex.com",
+    foreign: true,
+  },
+  whitebit: {
+    legalEntity: "WHITEBIRD SAS",
+    address: "15 Avenue de la Grande Armée, 75116 Paris",
+    country: "France",
+    url: "whitebit.com",
+    foreign: false,
+    foreignBefore: "2023-03-01",
+    note: "Ukrainian-founded, French entity PSAN E2023-019",
+  },
+
   // ── CSV-only Presets ─────────────────────────────────────────────────
 
   bisq: {
