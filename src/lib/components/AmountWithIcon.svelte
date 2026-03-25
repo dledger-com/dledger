@@ -10,7 +10,6 @@
     } = $props();
 </script>
 
-<span class="inline-flex items-center gap-0.5">
-    {#if showIcon}<CoinIcon code={currency} {size} />{/if}
-    {formatAmountOnly(amount)} {currency}
+<span class="inline-flex items-center gap-1">
+    {#if showIcon}<CoinIcon code={currency} {size} />{/if}{formatAmountOnly(amount)} {currency}
 </span>
