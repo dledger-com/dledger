@@ -417,7 +417,8 @@
   "empty_no_accounts_configured": "Aucun compte configuré. Commencez avec un plan comptable par défaut, ou ajoutez des comptes manuellement.",
   "empty_all_archived": "Tous les comptes sont archivés. Activez « Afficher les archivés » ci-dessus pour les voir et les restaurer.",
   "empty_no_accounts_match": "Aucun compte ne correspond à « {search} ».",
-  "empty_no_budgets": "Aucun budget configuré. Ajoutez-en un ci-dessus pour commencer le suivi des dépenses.",
+  "dialog_edit_budget": "Modifier le budget",
+  "empty_no_budgets": "Aucun budget configuré.",
   "empty_no_budgets_match": "Aucun budget ne correspond à « {search} ».",
 
   "dialog_merge_account_desc": "Déplacer toutes les transactions de « {source} » vers « {target} », puis supprimer « {source} ». Cette action est irréversible.",

@@ -417,7 +417,8 @@
   "empty_no_accounts_configured": "No accounts configured yet. Start with a default chart of accounts, or add accounts manually.",
   "empty_all_archived": "All accounts are archived. Toggle \"Show archived\" above to view and restore them.",
   "empty_no_accounts_match": "No accounts match \"{search}\".",
-  "empty_no_budgets": "No budgets configured yet. Add one above to start tracking spending.",
+  "dialog_edit_budget": "Edit Budget",
+  "empty_no_budgets": "No budgets configured yet.",
   "empty_no_budgets_match": "No budgets match \"{search}\".",
 
   "dialog_merge_account_desc": "Move all transactions from \"{source}\" into \"{target}\", then delete \"{source}\". This cannot be undone.",
