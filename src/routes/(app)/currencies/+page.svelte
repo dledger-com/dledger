@@ -38,6 +38,7 @@
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import Plus from "lucide-svelte/icons/plus";
+  import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
   import { groupDateIntervals, formatInterval } from "$lib/utils/date-intervals.js";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
   import * as m from "$paraglide/messages.js";
@@ -443,13 +444,29 @@
                   {/if}
                 </Table.Cell>
                 <Table.Cell class="text-right">
-                  {#if !c.is_base}
-                    {#if c.is_hidden}
-                      <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</Button>
-                    {:else}
-                      <Button variant="ghost" size="sm" onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</Button>
-                    {/if}
-                  {/if}
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      {#snippet child({ props })}
+                        <Button variant="ghost" size="icon-sm" {...props}>
+                          <EllipsisVertical class="h-4 w-4" />
+                          <span class="sr-only">{m.label_actions()}</span>
+                        </Button>
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      <DropdownMenu.Item onclick={() => { window.location.href = `/currencies/${c.code}`; }}>{m.btn_view_details()}</DropdownMenu.Item>
+                      {#if !c.is_base}
+                        {#if c.is_hidden}
+                          <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
+                        {:else}
+                          <DropdownMenu.Item onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</DropdownMenu.Item>
+                        {/if}
+                      {/if}
+                      {#if dpriceEnabled}
+                        <DropdownMenu.Item onclick={() => { dpriceDialogCode = c.code; dpriceDialogOpen = true; }}>{m.btn_link_dprice()}</DropdownMenu.Item>
+                      {/if}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 </Table.Cell>
               </Table.Row>
             {/each}
@@ -488,7 +505,20 @@
                   </Table.Cell>
                   <Table.Cell>{c.name}</Table.Cell>
                   <Table.Cell class="text-right">
-                    <Button variant="ghost" size="sm" onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</Button>
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger>
+                        {#snippet child({ props })}
+                          <Button variant="ghost" size="icon-sm" {...props}>
+                            <EllipsisVertical class="h-4 w-4" />
+                            <span class="sr-only">{m.label_actions()}</span>
+                          </Button>
+                        {/snippet}
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        <DropdownMenu.Item onclick={() => { window.location.href = `/currencies/${c.code}`; }}>{m.btn_view_details()}</DropdownMenu.Item>
+                        <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
                   </Table.Cell>
                 </Table.Row>
               {/each}
