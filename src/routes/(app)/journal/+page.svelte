@@ -73,7 +73,7 @@
     import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
     import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
     import SourceIcon from "$lib/components/SourceIcon.svelte";
-    import CoinIcon from "$lib/components/CoinIcon.svelte";
+    import AmountWithIcon from "$lib/components/AmountWithIcon.svelte";
 
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -2380,9 +2380,9 @@
                                                                         class="text-muted-foreground"
                                                                         >+</span
                                                                     >{" "}{/if}
-                                                                {#if journalShowCurrencyIcons && part.segments.length > 0}
+                                                                {#if part.segments.length > 0}
                                                                     <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}"
-                                                                        >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={14} />{seg.currency}{/each}</span
+                                                                        >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} showIcon={journalShowCurrencyIcons} />{/each}</span
                                                                     >
                                                                 {:else}
                                                                     <span class={amountColorClass(part.direction)}>{part.text}</span>
@@ -2548,9 +2548,9 @@
                                                                     class="text-muted-foreground"
                                                                     >+</span
                                                                 >{" "}{/if}
-                                                            {#if journalShowCurrencyIcons && part.segments.length > 0}
+                                                            {#if part.segments.length > 0}
                                                                 <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}"
-                                                                    >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={14} />{seg.currency}{/each}</span
+                                                                    >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} showIcon={journalShowCurrencyIcons} />{/each}</span
                                                                 >
                                                             {:else}
                                                                 <span class={amountColorClass(part.direction)}>{part.text}</span>
@@ -2814,9 +2814,9 @@
                                                     class="text-muted-foreground"
                                                     >+</span
                                                 >{" "}{/if}
-                                            {#if journalShowCurrencyIcons && part.segments.length > 0}
+                                            {#if part.segments.length > 0}
                                                 <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}"
-                                                    >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={14} />{seg.currency}{/each}</span
+                                                    >{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} showIcon={journalShowCurrencyIcons} />{/each}</span
                                                 >
                                             {:else}
                                                 <span class={amountColorClass(part.direction)}>{part.text}</span>

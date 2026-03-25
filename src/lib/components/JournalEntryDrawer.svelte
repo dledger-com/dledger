@@ -7,7 +7,6 @@
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { formatCurrencyFull } from "$lib/utils/format.js";
   import { entryInvolvesHidden } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
@@ -30,7 +29,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import * as m from "$paraglide/messages.js";
   import SourceIcon from "$lib/components/SourceIcon.svelte";
-  import CoinIcon from "$lib/components/CoinIcon.svelte";
+  import AmountWithIcon from "$lib/components/AmountWithIcon.svelte";
   import { getSourceLabel } from "$lib/data/source-icons.js";
 
   interface Props {
@@ -231,7 +230,10 @@
         </div>
       </div>
       {#if entry}
-        <p class="text-base font-semibold leading-snug">{entry.description}</p>
+        <p class="text-base font-semibold leading-snug flex items-center gap-1.5">
+          <SourceIcon source={entry.source} size={20} />
+          {entry.description}
+        </p>
       {/if}
     </Drawer.Header>
 
@@ -459,10 +461,10 @@
                         <span class="block break-words" title={accountName(item.account_id)}>{accountName(item.account_id)}</span>
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {#if amount > 0}<span class="inline-flex items-center gap-1"><CoinIcon code={item.currency} size={14} />{formatCurrencyFull(item.amount, item.currency)}</span>{/if}
+                        {#if amount > 0}<AmountWithIcon amount={item.amount} currency={item.currency} />{/if}
                       </td>
                       <td class="text-right font-mono px-3 py-2 whitespace-nowrap">
-                        {#if amount < 0}<span class="inline-flex items-center gap-1"><CoinIcon code={item.currency} size={14} />{formatCurrencyFull(item.amount.replace(/^-/, ""), item.currency)}</span>{/if}
+                        {#if amount < 0}<AmountWithIcon amount={item.amount.replace(/^-/, "")} currency={item.currency} />{/if}
                       </td>
                     </tr>
                   {/each}

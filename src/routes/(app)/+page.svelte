@@ -26,6 +26,7 @@
   import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
   import OnboardingChecklist from "$lib/components/OnboardingChecklist.svelte";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
+  import AmountWithIcon from "$lib/components/AmountWithIcon.svelte";
   import SourceIcon from "$lib/components/SourceIcon.svelte";
   import * as m from "$paraglide/messages.js";
   import {
@@ -629,7 +630,7 @@
                       {#each entryAmountDisplay(items, accountIdToName) as part, i}
                         {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
                         {#if part.segments.length > 0}
-                          <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}">{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={12} />{seg.currency}{/each}</span>
+                          <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}">{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} size={12} />{/each}</span>
                         {:else}
                           <span class={amountColorClass(part.direction)}>{part.text}</span>
                         {/if}
@@ -671,7 +672,7 @@
                 {#each entryAmountDisplay(items, accountIdToName) as part, i}
                   {#if i > 0}<span class="text-muted-foreground mx-0.5">+</span>{/if}
                   {#if part.segments.length > 0}
-                    <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}">{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}{seg.amount}&nbsp;<CoinIcon code={seg.currency} size={12} />{seg.currency}{/each}</span>
+                    <span class="inline-flex items-center gap-0.5 {amountColorClass(part.direction)}">{#each part.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">{part.isTrade ? "\u00a0→\u00a0" : ", "}</span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} size={12} />{/each}</span>
                   {:else}
                     <span class={amountColorClass(part.direction)}>{part.text}</span>
                   {/if}
