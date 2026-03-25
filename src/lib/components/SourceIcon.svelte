@@ -20,6 +20,7 @@
 
     const label = $derived.by(() => {
         if (parsed.institutionId) return parsed.institutionId;
+        if (parsed.chainName) return parsed.chainName;
         return parsed.type;
     });
 </script>

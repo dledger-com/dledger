@@ -50,7 +50,7 @@ export const NAMED_CHAIN_ICONS: Record<string, string> = {
   sui:       `${TW}/sui/info/logo.png`,
   hedera:    `${TW}/hedera/info/logo.png`,
   bittensor: `${TW}/bittensor/info/logo.png`,
-  hl:        "", // Hyperliquid — no Trust Wallet logo yet
+  hl:        "https://coin-images.coingecko.com/coins/images/50882/small/hyperliquid.jpg?1729431300",
   doge:      `${TW}/doge/info/logo.png`,
   ltc:       `${TW}/litecoin/info/logo.png`,
   bch:       `${TW}/bitcoincash/info/logo.png`,

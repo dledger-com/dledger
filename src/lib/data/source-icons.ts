@@ -45,6 +45,9 @@ export function parseSourceId(source: string): ParsedSource {
   if (source.startsWith("system:")) return { type: "system", institutionId: null };
   if (source.startsWith("recurring:")) return { type: "recurring", institutionId: null };
 
+  // Hyperliquid: "hyperliquid:fill:hash", "hyperliquid:funding:key", "hyperliquid:ledger:hash"
+  if (source.startsWith("hyperliquid:")) return { type: "chain", institutionId: null, chainName: "hl" };
+
   // Blockchain chain syncs: "sol-sync:id", "aptos-sync:id", etc.
   const CHAIN_SYNC_PREFIXES: Record<string, string> = {
     "sol-sync": "sol", "hl-sync": "hl", "sui-sync": "sui", "aptos-sync": "aptos",
