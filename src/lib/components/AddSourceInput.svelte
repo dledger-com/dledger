@@ -5,6 +5,7 @@
   import ChevronsUpDown from "lucide-svelte/icons/chevrons-up-down";
   import type { ExchangeId } from "$lib/cex/types.js";
   import { getAllCexAdapters } from "$lib/cex/index.js";
+  import ExchangeIcon from "$lib/components/ExchangeIcon.svelte";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 
   let {
@@ -665,7 +666,7 @@
               value={exchange.name}
               onSelect={() => selectCex(exchange.id)}
             >
-              {exchange.name}
+              <ExchangeIcon exchangeId={exchange.id} size={16} />{exchange.name}
             </Command.Item>
           {/each}
         </Command.Group>

@@ -14,6 +14,7 @@
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { exportGainLossCsv } from "$lib/utils/csv-export.js";
   import Download from "lucide-svelte/icons/download";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
@@ -179,7 +180,7 @@
               {@const gl = parseFloat(line.gain_loss)}
               <Table.Row>
                 <Table.Cell>
-                  <Badge variant="outline">{line.currency}</Badge>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
                 </Table.Cell>
                 {#if hasProtocols}
                   <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>

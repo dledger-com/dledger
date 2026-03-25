@@ -21,6 +21,7 @@
   import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
 
   const settings = new SettingsStore();
   const code = $derived(page.params.code ?? "");
@@ -333,6 +334,15 @@
       </Card.Content>
     </Card.Root>
   {:else}
+    <!-- Header -->
+    <div class="flex items-center gap-3">
+      <CoinIcon code={code} size={32} />
+      <div>
+        <h2 class="text-xl font-semibold">{currency.code}</h2>
+        <p class="text-sm text-muted-foreground">{currency.name}</p>
+      </div>
+    </div>
+
     <!-- Summary row -->
     <div class="grid gap-4 sm:grid-cols-3">
       <Card.Root>

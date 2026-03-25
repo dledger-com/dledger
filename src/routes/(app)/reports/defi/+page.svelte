@@ -11,6 +11,7 @@
   import { getBackend } from "$lib/backend.js";
   import { computeDefiPositions } from "$lib/utils/defi-positions.js";
   import type { ProtocolSummary } from "$lib/utils/defi-positions.js";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
@@ -106,7 +107,7 @@
                   {#each proto.supplies as pos}
                     <Table.Row>
                       <Table.Cell>
-                        <Badge variant="outline">{pos.currency}</Badge>
+                        <span class="inline-flex items-center gap-1"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline">{pos.currency}</Badge></span>
                       </Table.Cell>
                       <Table.Cell class="text-sm">{pos.account}</Table.Cell>
                       <Table.Cell class="text-right font-mono">{pos.balance}</Table.Cell>
@@ -140,7 +141,7 @@
                   {#each proto.borrows as pos}
                     <Table.Row>
                       <Table.Cell>
-                        <Badge variant="outline">{pos.currency}</Badge>
+                        <span class="inline-flex items-center gap-1"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline">{pos.currency}</Badge></span>
                       </Table.Cell>
                       <Table.Cell class="text-sm">{pos.account}</Table.Cell>
                       <Table.Cell class="text-right font-mono text-negative">{pos.balance}</Table.Cell>
@@ -174,7 +175,7 @@
                   {#each proto.rewards as pos}
                     <Table.Row>
                       <Table.Cell>
-                        <Badge variant="outline">{pos.currency}</Badge>
+                        <span class="inline-flex items-center gap-1"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline">{pos.currency}</Badge></span>
                       </Table.Cell>
                       <Table.Cell class="text-sm">{pos.account}</Table.Cell>
                       <Table.Cell class="text-right font-mono text-positive">{pos.balance}</Table.Cell>

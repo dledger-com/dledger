@@ -26,6 +26,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import Copy from "lucide-svelte/icons/copy";
   import Check from "lucide-svelte/icons/check";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
 
   const journalStore = new JournalStore();
   const accountStore = new AccountStore();
@@ -371,7 +372,7 @@
                   {accountName(item.account_id)}
                 </a>
               </Table.Cell>
-              <Table.Cell>{item.currency}</Table.Cell>
+              <Table.Cell><span class="inline-flex items-center gap-1"><CoinIcon code={item.currency} size={14} />{item.currency}</span></Table.Cell>
               <Table.Cell class="text-right font-mono">
                 {amount > 0 ? formatCurrencyFull(item.amount, item.currency) : ""}
               </Table.Cell>

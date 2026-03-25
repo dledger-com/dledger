@@ -34,6 +34,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import Filter from "lucide-svelte/icons/filter";
   import { inferAssetType } from "$lib/currency-type.js";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import DpriceAssetDialog from "$lib/components/DpriceAssetDialog.svelte";
   import { isDpriceActive } from "$lib/data/settings.svelte.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
@@ -512,7 +513,8 @@
                     <div class="min-w-0 flex-1">
                       <!-- Line 1: Name + Value -->
                       <div class="flex items-baseline justify-between gap-2">
-                        <span class="font-medium truncate">
+                        <span class="font-medium truncate flex items-center gap-1.5">
+                          <CoinIcon code={c.code} size={18} />
                           {c.name}
                           {#if c.is_hidden}
                             <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
@@ -584,10 +586,13 @@
                         onblur={() => commitRename()}
                       />
                     {:else}
-                      {c.name}
-                      {#if c.is_hidden}
-                        <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
-                      {/if}
+                      <div class="flex items-center gap-1.5">
+                        <CoinIcon code={c.code} />
+                        {c.name}
+                        {#if c.is_hidden}
+                          <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
+                        {/if}
+                      </div>
                     {/if}
                   </Table.Cell>
                 {/if}

@@ -12,6 +12,7 @@
     import Trash2 from "lucide-svelte/icons/trash-2";
     import EllipsisVertical from "lucide-svelte/icons/ellipsis-vertical";
     import type { BlockchainConfig } from "$lib/blockchain-registry.js";
+    import ChainIcon from "$lib/components/ChainIcon.svelte";
 
     let {
         config,
@@ -66,7 +67,7 @@
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="font-mono text-sm truncate">{mobileShortAddr(account.address)}</span>
                     <button onclick={() => copyToClipboard(account.address)} class="shrink-0 text-muted-foreground hover:text-foreground"><Copy class="h-3 w-3" /></button>
-                    <Badge variant="secondary" class="text-[10px]">{config.name}</Badge>
+                    <Badge variant="secondary" class="gap-1 text-[10px]"><ChainIcon chainName={config.id} size={14} />{config.name}</Badge>
                 </div>
                 <div class="flex items-baseline gap-x-1.5 mt-0.5 text-xs text-muted-foreground">
                     {#if isEditing}
@@ -122,10 +123,10 @@
         {/if}
     </Table.Cell>
     <Table.Cell>
-        <Badge variant="secondary">{config.name}</Badge>
+        <Badge variant="secondary" class="gap-1"><ChainIcon chainName={config.id} size={14} />{config.name}</Badge>
     </Table.Cell>
     <Table.Cell>
-        <Badge variant="secondary">{config.name}</Badge>
+        <Badge variant="secondary" class="gap-1"><ChainIcon chainName={config.id} size={14} />{config.name}</Badge>
     </Table.Cell>
     <Table.Cell class="text-sm text-muted-foreground">
         {account.last_sync

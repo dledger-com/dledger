@@ -10,6 +10,7 @@
   import { formatCurrency } from "$lib/utils/format.js";
   import { getBackend } from "$lib/backend.js";
   import { computeProtocolPnL, type ProtocolPnL } from "$lib/utils/protocol-pnl.js";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
@@ -103,7 +104,7 @@
                   <Badge variant="outline" class="text-positive border-green-300 dark:border-green-700">{m.report_revenue()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge variant="outline">{line.currency}</Badge>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
                 </Table.Cell>
                 <Table.Cell class="text-right font-mono text-positive">
                   +{formatCurrency(parseFloat(line.amount), line.currency)}
@@ -116,7 +117,7 @@
                   <Badge variant="outline" class="text-negative border-red-300 dark:border-red-700">{m.report_expense()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge variant="outline">{line.currency}</Badge>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
                 </Table.Cell>
                 <Table.Cell class="text-right font-mono text-negative">
                   -{formatCurrency(parseFloat(line.amount), line.currency)}

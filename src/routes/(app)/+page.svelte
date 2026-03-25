@@ -25,6 +25,7 @@
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
   import OnboardingChecklist from "$lib/components/OnboardingChecklist.svelte";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import * as m from "$paraglide/messages.js";
   import {
     getCachedRecentEntries, setCachedRecentEntries,
@@ -424,13 +425,13 @@
             <div class="mt-2 text-xs space-y-0.5">
               {#each summary.converted as c}
                 <div class="flex justify-between gap-4">
-                  <span>{c.currency}</span>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={c.currency} size={14} />{c.currency}</span>
                   <span class="font-mono">{formatCurrency(c.amount, c.currency)}</span>
                 </div>
               {/each}
               {#each summary.unconverted as c}
                 <div class="flex justify-between gap-4 text-muted-foreground">
-                  <span>{c.currency} ({m.dashboard_no_rate()})</span>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={c.currency} size={14} />{c.currency} ({m.dashboard_no_rate()})</span>
                   <span class="font-mono">{formatCurrency(c.amount, c.currency)}</span>
                 </div>
               {/each}

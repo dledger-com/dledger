@@ -20,6 +20,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
@@ -160,7 +161,7 @@
               {#each wallet.holdings as holding}
                 <Table.Row>
                   <Table.Cell>
-                    <Badge variant="outline">{holding.currency}</Badge>
+                    <span class="inline-flex items-center gap-1"><CoinIcon code={holding.currency} size={14} /><Badge variant="outline">{holding.currency}</Badge></span>
                   </Table.Cell>
                   <Table.Cell class="text-right font-mono">{holding.amount}</Table.Cell>
                   <Table.Cell class="text-right font-mono">

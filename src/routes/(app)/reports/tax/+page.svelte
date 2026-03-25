@@ -14,6 +14,7 @@
   import Download from "lucide-svelte/icons/download";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import CoinIcon from "$lib/components/CoinIcon.svelte";
   import * as m from "$paraglide/messages.js";
 
   const settings = new SettingsStore();
@@ -239,7 +240,7 @@
                   </Badge>
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge variant="outline">{line.currency}</Badge>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
                 </Table.Cell>
                 <Table.Cell class="text-muted-foreground">{line.acquired_date}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{line.disposed_date}</Table.Cell>
@@ -284,7 +285,7 @@
               <Table.Row>
                 <Table.Cell>{inc.account_name}</Table.Cell>
                 <Table.Cell>
-                  <Badge variant="outline">{inc.currency}</Badge>
+                  <span class="inline-flex items-center gap-1"><CoinIcon code={inc.currency} size={14} /><Badge variant="outline">{inc.currency}</Badge></span>
                 </Table.Cell>
                 <Table.Cell class="text-right font-mono">{formatCurrency(inc.amount, inc.currency)}</Table.Cell>
               </Table.Row>

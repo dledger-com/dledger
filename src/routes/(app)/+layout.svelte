@@ -15,6 +15,9 @@
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { setFormatLocale } from "$lib/utils/format.js";
   import { untrack } from "svelte";
+  import { onMount } from "svelte";
+  import { getBackend } from "$lib/backend.js";
+  import { initCoinIcons } from "$lib/data/coin-icons.svelte.js";
 
   let { children } = $props();
 
@@ -25,6 +28,13 @@
   });
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
+
+  // Initialize coin icon cache (non-blocking, best-effort)
+  onMount(() => {
+    getBackend().listCurrencies().then((currencies) => {
+      initCoinIcons(currencies.map((c) => c.code));
+    }).catch(() => { /* non-critical */ });
+  });
 
   // Clear content when dialogs close, and advance batch queue.
   // scheduleAdvance() is wrapped in untrack() so these effects only

@@ -64,6 +64,8 @@
     import SortableHeader from "$lib/components/SortableHeader.svelte";
     import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
     import AddSourceInput from "$lib/components/AddSourceInput.svelte";
+    import ExchangeIcon from "$lib/components/ExchangeIcon.svelte";
+    import ChainIcon from "$lib/components/ChainIcon.svelte";
     import { getDefaultPresetRegistry } from "$lib/csv-presets/index.js";
     import { getPluginManager } from "$lib/plugins/manager.js";
     import CategorizationRulesEditor from "$lib/components/CategorizationRulesEditor.svelte";
@@ -1024,7 +1026,7 @@
                                                     <div class="flex items-center gap-1.5 flex-wrap">
                                                         <span class="font-mono text-sm truncate">{account.address_or_xpub.length > 16 ? `${account.address_or_xpub.slice(0, 10)}...${account.address_or_xpub.slice(-6)}` : account.address_or_xpub}</span>
                                                         <button onclick={() => copyToClipboard(account.address_or_xpub)} class="shrink-0 text-muted-foreground hover:text-foreground"><Copy class="h-3 w-3" /></button>
-                                                        <Badge variant="secondary" class="text-[10px]">{m.sources_bitcoin()}</Badge>
+                                                        <Badge variant="secondary" class="gap-1 text-[10px]"><ChainIcon chainName="bitcoin" size={14} />{m.sources_bitcoin()}</Badge>
                                                     </div>
                                                     <div class="flex items-baseline gap-x-1.5 mt-0.5 text-xs text-muted-foreground">
                                                         {#if editingRowId === account.id}
@@ -1082,7 +1084,7 @@
                                             </Badge>
                                         </Table.Cell>
                                         <Table.Cell>
-                                            <Badge variant="secondary">{m.sources_bitcoin()}</Badge>
+                                            <Badge variant="secondary" class="gap-1"><ChainIcon chainName="bitcoin" size={14} />{m.sources_bitcoin()}</Badge>
                                         </Table.Cell>
                                         <Table.Cell class="text-sm text-muted-foreground">
                                             {account.last_sync
@@ -1243,7 +1245,7 @@
                                                         <div class="flex items-center gap-1.5 flex-wrap">
                                                             <span class="font-mono text-sm truncate">{formatAddress(group.address)}</span>
                                                             <button onclick={() => copyToClipboard(group.address)} class="shrink-0 text-muted-foreground hover:text-foreground"><Copy class="h-3 w-3" /></button>
-                                                            <Badge variant="secondary" class="text-[10px]">{m.sources_evm()}</Badge>
+                                                            <Badge variant="secondary" class="gap-1 text-[10px]"><ChainIcon chainId={1} size={14} />{m.sources_evm()}</Badge>
                                                         </div>
                                                         <div class="flex items-baseline gap-x-1.5 mt-0.5 text-xs text-muted-foreground">
                                                             <span>{group.label}</span>
@@ -1253,7 +1255,7 @@
                                                         </div>
                                                         <div class="flex flex-wrap gap-0.5 mt-1">
                                                             {#each group.chainIds as chainId}
-                                                                <Badge variant="secondary" class="text-[10px]">{getChainName(chainId)}</Badge>
+                                                                <Badge variant="secondary" class="gap-1 text-[10px]"><ChainIcon chainId={chainId} size={14} />{getChainName(chainId)}</Badge>
                                                             {/each}
                                                         </div>
                                                     </div>
@@ -1289,12 +1291,12 @@
                                             </Table.Cell>
                                             <Table.Cell>{group.label}</Table.Cell>
                                             <Table.Cell>
-                                                <Badge variant="secondary">{m.sources_evm()}</Badge>
+                                                <Badge variant="secondary" class="gap-1"><ChainIcon chainId={1} size={14} />{m.sources_evm()}</Badge>
                                             </Table.Cell>
                                             <Table.Cell>
                                                 <div class="flex flex-wrap gap-1">
                                                     {#each group.chainIds as chainId}
-                                                        <Badge variant="secondary">{getChainName(chainId)}</Badge>
+                                                        <Badge variant="secondary" class="gap-1"><ChainIcon chainId={chainId} size={14} />{getChainName(chainId)}</Badge>
                                                     {/each}
                                                 </div>
                                             </Table.Cell>
@@ -1362,7 +1364,7 @@
                                         <div class="flex items-center justify-between gap-2">
                                             <div class="min-w-0 flex-1">
                                                 <div class="flex items-center gap-2">
-                                                    <Badge variant="secondary" class="shrink-0 text-[10px]">{EXCHANGE_NAMES[account.exchange] ?? account.exchange}</Badge>
+                                                    <Badge variant="secondary" class="shrink-0 gap-1 text-[10px]"><ExchangeIcon exchangeId={account.exchange} size={14} />{EXCHANGE_NAMES[account.exchange] ?? account.exchange}</Badge>
                                                     {#if editingRowId === account.id}
                                                         <Input class="h-7 text-xs flex-1" bind:value={editingRowLabel} onkeydown={(e) => { if (e.key === "Enter") saveEditLabel("cex"); if (e.key === "Escape") editingRowId = null; }} />
                                                     {:else}
@@ -1414,7 +1416,7 @@
                                 <!-- Desktop row -->
                                 <Table.Row class="hidden sm:table-row">
                                     <Table.Cell>
-                                        <Badge variant="secondary">{EXCHANGE_NAMES[account.exchange] ?? account.exchange}</Badge>
+                                        <Badge variant="secondary" class="gap-1"><ExchangeIcon exchangeId={account.exchange} size={14} />{EXCHANGE_NAMES[account.exchange] ?? account.exchange}</Badge>
                                     </Table.Cell>
                                     <Table.Cell class="font-medium">
                                         {#if editingRowId === account.id}
