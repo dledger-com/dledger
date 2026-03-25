@@ -708,10 +708,12 @@
                                             evmSelectedIndexes = next;
                                         }}
                                     />
-                                    <Tooltip.Root>
-                                        <Tooltip.Trigger class="font-mono text-xs truncate">{address.slice(0, 10)}...{address.slice(-6)}</Tooltip.Trigger>
-                                        <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{address}</p></Tooltip.Content>
-                                    </Tooltip.Root>
+                                    <div class="flex-1 w-0">
+                                        <Tooltip.Root>
+                                            <Tooltip.Trigger class="font-mono text-xs truncate block w-full text-left">{address}</Tooltip.Trigger>
+                                            <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{address}</p></Tooltip.Content>
+                                        </Tooltip.Root>
+                                    </div>
                                     <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(address); }} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                         <Copy class="h-3 w-3" />
                                     </button>
@@ -901,10 +903,12 @@
                                             btcSelectedIndexes = next;
                                         }}
                                     />
-                                    <Tooltip.Root>
-                                        <Tooltip.Trigger class="font-mono text-xs truncate">{xpub.slice(0, 16)}...{xpub.slice(-8)}</Tooltip.Trigger>
-                                        <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{xpub}</p></Tooltip.Content>
-                                    </Tooltip.Root>
+                                    <div class="flex-1 w-0">
+                                        <Tooltip.Root>
+                                            <Tooltip.Trigger class="font-mono text-xs truncate block w-full text-left">{xpub}</Tooltip.Trigger>
+                                            <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{xpub}</p></Tooltip.Content>
+                                        </Tooltip.Root>
+                                    </div>
                                     <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(xpub); }} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                         <Copy class="h-3 w-3" />
                                     </button>

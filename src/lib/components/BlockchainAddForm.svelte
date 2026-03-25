@@ -198,10 +198,12 @@
                         }}
                     />
                     <span class="font-mono">{derived.index}</span>
-                    <Tooltip.Root>
-                        <Tooltip.Trigger class="font-mono text-left truncate flex-1">{shortAddr(derived.address)}</Tooltip.Trigger>
-                        <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{derived.address}</p></Tooltip.Content>
-                    </Tooltip.Root>
+                    <div class="flex-1 w-0">
+                        <Tooltip.Root>
+                            <Tooltip.Trigger class="font-mono text-left truncate block w-full">{derived.address}</Tooltip.Trigger>
+                            <Tooltip.Content><p class="font-mono text-xs break-all max-w-80">{derived.address}</p></Tooltip.Content>
+                        </Tooltip.Root>
+                    </div>
                     <Button variant="ghost" size="sm" class="h-5 w-5 p-0" onclick={() => copyToClipboard(derived.address)}>
                         <Copy class="h-3 w-3" />
                     </Button>
