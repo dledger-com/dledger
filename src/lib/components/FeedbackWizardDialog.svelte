@@ -1,6 +1,5 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
@@ -46,8 +45,6 @@
   let loadedPluginName = $state("");
   let promptCopied = $state(false);
   let infoCopied = $state(false);
-  let llmPromptExpanded = $state(false);
-
   // Save source code for persistence after successful load
   let lastLoadedSourceCode = $state("");
 
@@ -63,7 +60,6 @@
     loadedPluginName = "";
     promptCopied = false;
     infoCopied = false;
-    llmPromptExpanded = false;
     lastLoadedSourceCode = "";
   }
 
@@ -191,9 +187,9 @@
           <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">{m.feedback_source_diy_label()}</p>
           {#each [
             { type: "csv" as SourceType, icon: FileSpreadsheet, name: m.feedback_source_csv(), desc: m.feedback_source_csv_desc(), difficulty: m.feedback_difficulty_easy() },
+            { type: "pdf" as SourceType, icon: FileText, name: m.feedback_source_pdf(), desc: m.feedback_source_pdf_desc(), difficulty: m.feedback_difficulty_advanced() },
             { type: "cex" as SourceType, icon: ArrowUpDown, name: m.feedback_source_cex(), desc: m.feedback_source_cex_desc(), difficulty: m.feedback_difficulty_moderate() },
             { type: "defi" as SourceType, icon: Blocks, name: m.feedback_source_defi(), desc: m.feedback_source_defi_desc(), difficulty: m.feedback_difficulty_moderate() },
-            { type: "pdf" as SourceType, icon: FileText, name: m.feedback_source_pdf(), desc: m.feedback_source_pdf_desc(), difficulty: m.feedback_difficulty_advanced() },
           ] as item (item.type)}
             <button
               type="button"
@@ -240,7 +236,7 @@
           </button>
           <Dialog.Title>{m.feedback_llm_title({ type: sourceTypeLabel(sourceType) })}</Dialog.Title>
         </div>
-        <Dialog.Description>{m.feedback_llm_desc()}</Dialog.Description>
+        <Dialog.Description>{sourceType === "csv" || sourceType === "pdf" ? m.feedback_llm_desc_file() : m.feedback_llm_desc_api()}</Dialog.Description>
       </Dialog.Header>
 
       <div class="space-y-4">
@@ -262,18 +258,13 @@
           </button>
         </div>
 
-        <!-- What's included (collapsible) -->
-        <Collapsible.Root bind:open={llmPromptExpanded}>
-          <Collapsible.Trigger class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronLeft class="h-3 w-3 transition-transform {llmPromptExpanded ? '-rotate-90' : ''}" />
-            {m.feedback_llm_whats_included()}
-          </Collapsible.Trigger>
-          <Collapsible.Content>
-            <p class="mt-2 text-xs text-muted-foreground">
-              {m.feedback_llm_whats_included_desc()}
-            </p>
-          </Collapsible.Content>
-        </Collapsible.Root>
+        <!-- What's included -->
+        <div>
+          <p class="text-xs font-medium text-muted-foreground">{m.feedback_llm_whats_included()}</p>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {m.feedback_llm_whats_included_desc()}
+          </p>
+        </div>
       </div>
 
       <Dialog.Footer>

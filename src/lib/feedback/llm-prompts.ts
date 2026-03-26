@@ -274,10 +274,11 @@ export function generateLlmPrompt(type: SourceType): string {
       parts.push(CEX_EXAMPLE);
       parts.push("```");
       parts.push("");
+      parts.push("## Exchange details");
       parts.push("The exchange name is: [NAME]");
-      parts.push("The API documentation is at: [URL]");
+      parts.push("The exchange website/API documentation: [URL]");
       parts.push("");
-      parts.push("Please implement a CexAdapter with proper authentication and pagination.");
+      parts.push("Please look up the API documentation from the URL above and implement a CexAdapter with proper authentication and pagination.");
       break;
 
     case "defi":
@@ -291,12 +292,14 @@ export function generateLlmPrompt(type: SourceType): string {
       parts.push(DEFI_EXAMPLE);
       parts.push("```");
       parts.push("");
+      parts.push("## Protocol details");
       parts.push("The protocol name is: [NAME]");
+      parts.push("The protocol website/docs: [URL]");
       parts.push("The contract address(es): [0x...]");
       parts.push("The chain: [Ethereum/Polygon/Arbitrum/etc.]");
       parts.push("What it does: [DESCRIBE: swaps, lending, staking, etc.]");
       parts.push("");
-      parts.push("Please implement a TransactionHandler that matches and processes these transactions.");
+      parts.push("Please look up the protocol from the URL above and implement a TransactionHandler that matches and processes these transactions.");
       break;
 
     case "pdf":
