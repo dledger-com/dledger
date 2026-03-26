@@ -1,14 +1,31 @@
 <script lang="ts">
     import { getExchangeIconUrl } from "$lib/data/exchange-icons.js";
     import { INSTITUTION_REGISTRY } from "$lib/cex/institution-registry.js";
+    import { cacheExternalIcon, onCoinIconsChanged } from "$lib/data/coin-icons.svelte.js";
 
     let { exchangeId, size = 16 }: { exchangeId: string; size?: number } = $props();
 
-    const url = $derived(getExchangeIconUrl(exchangeId));
+    const rawUrl = $derived(getExchangeIconUrl(exchangeId));
 
-    const faviconUrl = $derived.by(() => {
+    const faviconRawUrl = $derived.by(() => {
         const info = INSTITUTION_REGISTRY[exchangeId];
         if (info?.url) return `https://www.google.com/s2/favicons?domain=${info.url}&sz=32`;
+        return null;
+    });
+
+    // Subscribe to icon cache updates for reactivity
+    let _tick = $state(0);
+    $effect(() => onCoinIconsChanged(() => _tick++));
+
+    const url = $derived.by(() => {
+        void _tick;
+        if (rawUrl) return cacheExternalIcon(`exchange:${exchangeId}`, rawUrl);
+        return null;
+    });
+
+    const faviconUrl = $derived.by(() => {
+        void _tick;
+        if (faviconRawUrl) return cacheExternalIcon(`favicon:${exchangeId}`, faviconRawUrl);
         return null;
     });
 

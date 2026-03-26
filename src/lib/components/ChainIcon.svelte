@@ -1,12 +1,29 @@
 <script lang="ts">
     import { getChainIconUrl, getNamedChainIconUrl } from "$lib/data/chain-icons.js";
+    import { cacheExternalIcon, onCoinIconsChanged } from "$lib/data/coin-icons.svelte.js";
 
     let { chainId, chainName, size = 16 }: { chainId?: number; chainName?: string; size?: number } = $props();
 
-    const url = $derived.by(() => {
+    // Subscribe to icon cache updates for reactivity
+    let _tick = $state(0);
+    $effect(() => onCoinIconsChanged(() => _tick++));
+
+    const cacheKey = $derived.by(() => {
+        if (chainName) return `chain:${chainName.toLowerCase()}`;
+        if (chainId != null) return `chain:${chainId}`;
+        return null;
+    });
+
+    const externalUrl = $derived.by(() => {
         if (chainId != null) return getChainIconUrl(chainId);
         if (chainName) return getNamedChainIconUrl(chainName);
         return null;
+    });
+
+    const url = $derived.by(() => {
+        void _tick; // reactive dependency on cache changes
+        if (cacheKey && externalUrl) return cacheExternalIcon(cacheKey, externalUrl);
+        return externalUrl;
     });
 
     let errored = $state(false);

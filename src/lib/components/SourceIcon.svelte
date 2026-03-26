@@ -1,11 +1,23 @@
 <script lang="ts">
     import { getSourceIconUrl, parseSourceId, getProtocolToken, getSourceNativeCurrency, isL2Chain } from "$lib/data/source-icons.js";
     import CoinIcon from "$lib/components/CoinIcon.svelte";
+    import { cacheExternalIcon, onCoinIconsChanged } from "$lib/data/coin-icons.svelte.js";
 
     let { source, descriptionData, size = 16 }: { source: string; descriptionData?: string; size?: number } = $props();
 
     const parsed = $derived(parseSourceId(source));
-    const iconUrl = $derived(getSourceIconUrl(source));
+    const rawIconUrl = $derived(getSourceIconUrl(source));
+
+    // Subscribe to icon cache updates for reactivity
+    let _tick = $state(0);
+    $effect(() => onCoinIconsChanged(() => _tick++));
+
+    const iconUrl = $derived.by(() => {
+        void _tick;
+        if (!rawIconUrl) return null;
+        const cacheKey = `source:${source.slice(0, 40)}`;
+        return cacheExternalIcon(cacheKey, rawIconUrl);
+    });
 
     // Priority: protocol token → L2 chain icon → L1/non-EVM native currency CoinIcon → fallback
     const coinCode = $derived.by(() => {
