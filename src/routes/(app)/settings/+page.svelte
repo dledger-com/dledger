@@ -67,6 +67,7 @@
     import { loadPluginFromCode } from "$lib/feedback/plugin-loader.js";
     import { saveCustomPlugin } from "$lib/plugins/custom-plugins.js";
     import Plus from "lucide-svelte/icons/plus";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
     import ExportDialog from "$lib/components/ExportDialog.svelte";
     import DledgerImportDialog from "$lib/components/DledgerImportDialog.svelte";
     const settings = new SettingsStore();
@@ -111,7 +112,7 @@
         }
     }
 
-    let showAddPlugin = $state(false);
+    let addPluginDialogOpen = $state(false);
     let addPluginCode = $state("");
     let addPluginError = $state("");
 
@@ -126,7 +127,7 @@
             await saveCustomPlugin(getBackend(), result.plugin!, addPluginCode);
             await loadCustomPlugins();
             toast.success(msg.feedback_load_success({ name: result.plugin!.name }));
-            showAddPlugin = false;
+            addPluginDialogOpen = false;
             addPluginCode = "";
         } catch (e) {
             addPluginError = e instanceof Error ? e.message : String(e);
@@ -1794,37 +1795,16 @@
                     </Card.Title>
                     <Card.Description>{msg.settings_plugins_desc()}</Card.Description>
                 </div>
-                <Button variant="outline" size="sm" onclick={() => { showAddPlugin = !showAddPlugin; addPluginError = ""; }}>
+                <Button size="sm" onclick={() => { addPluginDialogOpen = true; addPluginCode = ""; addPluginError = ""; }}>
                     <Plus class="mr-1 h-4 w-4" />
                     {msg.settings_plugins_add()}
                 </Button>
             </div>
         </Card.Header>
         <Card.Content class="space-y-4">
-            {#if showAddPlugin}
-                <div class="space-y-3 rounded-md border p-3">
-                    <p class="text-xs text-muted-foreground">{msg.feedback_load_desc()}</p>
-                    <textarea
-                      class="flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      placeholder="// Paste your plugin code here..."
-                      bind:value={addPluginCode}
-                    ></textarea>
-                    {#if addPluginError}
-                        <p class="text-xs text-destructive">{addPluginError}</p>
-                    {/if}
-                    <div class="flex gap-2">
-                        <Button size="sm" disabled={!addPluginCode.trim()} onclick={handleAddPlugin}>
-                            {msg.feedback_load_validate()}
-                        </Button>
-                        <Button variant="ghost" size="sm" onclick={() => { showAddPlugin = false; addPluginCode = ""; addPluginError = ""; }}>
-                            {msg.btn_cancel()}
-                        </Button>
-                    </div>
-                </div>
-            {/if}
-            {#if customPlugins.length === 0 && !showAddPlugin}
+            {#if customPlugins.length === 0}
                 <p class="text-sm text-muted-foreground">{msg.settings_plugins_none()}</p>
-            {:else if customPlugins.length > 0}
+            {:else}
                 {#each customPlugins as plugin (plugin.id)}
                     <div class="flex items-center justify-between rounded-md border p-3">
                         <div class="space-y-0.5">
@@ -1863,6 +1843,34 @@
             {/if}
         </Card.Content>
     </Card.Root>
+
+    <!-- Add Plugin Dialog -->
+    <Dialog.Root bind:open={addPluginDialogOpen}>
+        <Dialog.Content class="sm:max-w-lg">
+            <Dialog.Header>
+                <Dialog.Title>{msg.settings_plugins_add()}</Dialog.Title>
+                <Dialog.Description>{msg.feedback_load_desc()}</Dialog.Description>
+            </Dialog.Header>
+            <div class="space-y-4">
+                <textarea
+                  class="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  placeholder="// Paste your plugin code here..."
+                  bind:value={addPluginCode}
+                ></textarea>
+                {#if addPluginError}
+                    <p class="text-xs text-destructive">{addPluginError}</p>
+                {/if}
+            </div>
+            <Dialog.Footer>
+                <Button variant="outline" onclick={() => { addPluginDialogOpen = false; }}>
+                    {msg.btn_cancel()}
+                </Button>
+                <Button disabled={!addPluginCode.trim()} onclick={handleAddPlugin}>
+                    {msg.feedback_load_validate()}
+                </Button>
+            </Dialog.Footer>
+        </Dialog.Content>
+    </Dialog.Root>
 
     <!-- Data Management -->
     <Card.Root>

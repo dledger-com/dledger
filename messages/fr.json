@@ -1029,7 +1029,7 @@
   "feedback_llm_whats_included_desc": "Le prompt contient les interfaces TypeScript que votre plugin doit implémenter, un exemple fonctionnel et le code d'enregistrement. Remplissez les espaces réservés avant d'envoyer.",
   "feedback_llm_have_code": "J'ai le code",
   "feedback_load_title": "Charger votre plugin",
-  "feedback_load_desc": "Collez le code généré par le LLM ci-dessous.",
+  "feedback_load_desc": "Collez le code de votre plugin ci-dessous.",
   "feedback_load_warning": "Ne chargez que du code de confiance. Il s'exécute avec tous les droits de l'application.",
   "feedback_load_validate": "Valider et charger",
   "feedback_load_success": "Plugin « {name} » chargé et enregistré avec succès !",

@@ -1029,7 +1029,7 @@
   "feedback_llm_whats_included_desc": "The prompt contains the TypeScript interfaces your plugin must implement, a working example, and the registration boilerplate. Fill in the placeholders before sending.",
   "feedback_llm_have_code": "I have the code",
   "feedback_load_title": "Load your plugin",
-  "feedback_load_desc": "Paste the code the LLM generated below.",
+  "feedback_load_desc": "Paste your plugin code below.",
   "feedback_load_warning": "Only load code you trust. This runs with full app permissions.",
   "feedback_load_validate": "Validate & Load",
   "feedback_load_success": "Plugin \"{name}\" loaded and saved successfully!",
