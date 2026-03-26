@@ -104,7 +104,7 @@
           class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors text-foreground hover:bg-accent cursor-pointer"
         >
           <MessageCircleQuestion class="h-5 w-5" />
-          {m.feedback_title()}
+          {m.feedback_sidebar()}
         </button>
       </div>
     </Drawer.Content>

@@ -82,7 +82,7 @@
       onclick={() => onfeedback?.()}
     >
       <MessageCircleQuestion class="h-4 w-4" />
-      <span>{m.feedback_title()}</span>
+      <span>{m.feedback_sidebar()}</span>
     </button>
     <div class="flex items-center justify-between px-2 py-1">
       <span class="text-xs text-muted-foreground">dLedger {versionLabel}</span>

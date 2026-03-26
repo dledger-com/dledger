@@ -994,6 +994,7 @@
   "dialog_no_dprice_assets": "Aucun actif trouvé dans dprice",
   "label_no_prices": "pas de prix",
   "feedback_title": "Comment pouvons-nous vous aider ?",
+  "feedback_sidebar": "Aide & retours",
   "feedback_desc": "Obtenir de l'aide, signaler un problème ou partager vos commentaires",
   "feedback_missing_source": "Une source est manquante",
   "feedback_missing_source_desc": "Ma banque, exchange ou protocole n'est pas pris en charge",

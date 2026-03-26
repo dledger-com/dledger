@@ -994,6 +994,7 @@
   "dialog_no_dprice_assets": "No matching assets found in dprice",
   "label_no_prices": "no prices",
   "feedback_title": "How can we help?",
+  "feedback_sidebar": "Help & feedback",
   "feedback_desc": "Get help, report an issue, or share your feedback",
   "feedback_missing_source": "A source is missing",
   "feedback_missing_source_desc": "My bank, exchange, or protocol isn't supported",
