@@ -960,7 +960,7 @@
                         </span>
                         <button
                           type="button"
-                          class="mt-1.5 inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
+                          class="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
                           onclick={() => feedbackWizard.openMissingSource()}
                         >
                           <MessageCircleQuestion class="h-3 w-3" />
