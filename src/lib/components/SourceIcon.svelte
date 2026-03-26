@@ -1,10 +1,26 @@
 <script lang="ts">
-    import { getSourceIconUrl, parseSourceId } from "$lib/data/source-icons.js";
+    import { getSourceIconUrl, parseSourceId, getProtocolToken, getSourceNativeCurrency, isL2Chain } from "$lib/data/source-icons.js";
+    import CoinIcon from "$lib/components/CoinIcon.svelte";
 
-    let { source, size = 16 }: { source: string; size?: number } = $props();
+    let { source, descriptionData, size = 16 }: { source: string; descriptionData?: string; size?: number } = $props();
 
     const parsed = $derived(parseSourceId(source));
     const iconUrl = $derived(getSourceIconUrl(source));
+
+    // Priority: protocol token → L2 chain icon → L1/non-EVM native currency CoinIcon → fallback
+    const coinCode = $derived.by(() => {
+        // 1. Protocol token (from description_data)
+        const proto = getProtocolToken(descriptionData);
+        if (proto) return proto;
+
+        // 2. EVM L2 → null (fall through to chain icon via iconUrl)
+        if ((parsed.type === "etherscan" || parsed.type === "thegraph") && parsed.chainId) {
+            if (isL2Chain(parsed.chainId)) return null;
+        }
+
+        // 3. L1 / non-EVM chain → native currency CoinIcon
+        return getSourceNativeCurrency(parsed);
+    });
 
     let errored = $state(false);
     $effect(() => { void source; errored = false; });
@@ -25,7 +41,9 @@
     });
 </script>
 
-{#if iconUrl && !errored}
+{#if coinCode}
+    <CoinIcon code={coinCode} {size} />
+{:else if iconUrl && !errored}
     <img
         src={iconUrl}
         alt=""

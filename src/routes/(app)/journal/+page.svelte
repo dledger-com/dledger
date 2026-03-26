@@ -2394,7 +2394,7 @@
                                                 <div
                                                     class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 min-w-0 mt-0.5"
                                                 >
-                                                    {#if journalShowSourceIcons}<SourceIcon source={entry.source} size={14} />{/if}
+                                                    {#if journalShowSourceIcons}<SourceIcon source={entry.source} descriptionData={entry.description_data} size={14} />{/if}
                                                     {#if columnVisibility.description !== false}
                                                         <span
                                                             class="font-medium overflow-clip text-ellipsis whitespace-nowrap"
@@ -2490,7 +2490,7 @@
                                                         <div
                                                             class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0"
                                                         >
-                                                            {#if journalShowSourceIcons}<SourceIcon source={entry.source} size={14} />{/if}
+                                                            {#if journalShowSourceIcons}<SourceIcon source={entry.source} descriptionData={entry.description_data} size={14} />{/if}
                                                             <span
                                                                 class="font-medium overflow-clip text-ellipsis whitespace-nowrap max-w-md"
                                                                 title={entry.description}

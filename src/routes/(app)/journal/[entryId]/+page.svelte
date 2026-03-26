@@ -244,7 +244,7 @@
           <div>
             <dt class="text-muted-foreground">Source</dt>
             <dd class="font-medium flex items-center gap-1.5">
-              <SourceIcon source={entry.source} size={16} />
+              <SourceIcon source={entry.source} descriptionData={entry.description_data} size={16} />
               {getSourceLabel(entry.source)}
             </dd>
           </div>

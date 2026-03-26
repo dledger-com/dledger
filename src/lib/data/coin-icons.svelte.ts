@@ -24,6 +24,10 @@ const COINGECKO_IDS: Record<string, string> = {
   FTM: "fantom", CELO: "celo", GLMR: "moonbeam", MOVR: "moonriver",
   MNT: "mantle", APE: "apecoin", CHZ: "chiliz", VET: "vechain",
   BERA: "berachain", HYPE: "hyperliquid",
+  JUP: "jupiter-exchange-solana", JTO: "jito-governance-token",
+  RAY: "raydium", MNDE: "marinade",
+  ETC: "ethereum-classic", FLR: "flare-networks", BCH: "bitcoin-cash",
+  CRO: "crypto-com-chain", S: "sonic-3", BTT: "bittorrent",
   // Fiat
   USD: "", EUR: "", GBP: "", JPY: "", CHF: "", CAD: "", AUD: "", CNY: "",
 };

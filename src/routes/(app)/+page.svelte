@@ -638,7 +638,7 @@
                     </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
-                    <SourceIcon source={entry.source} size={14} />
+                    <SourceIcon source={entry.source} descriptionData={entry.description_data} size={14} />
                     <span class="font-medium text-sm truncate">{entry.description}</span>
                     {#if entryTags.get(entry.id)?.length}
                       <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
@@ -655,7 +655,7 @@
               <Table.Cell class="text-muted-foreground text-sm">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px] whitespace-nowrap">
                 <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
-                  <SourceIcon source={entry.source} size={14} />
+                  <SourceIcon source={entry.source} descriptionData={entry.description_data} size={14} />
                   <a href="/journal/{entry.id}" class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</a>
                   {#if entryTags.get(entry.id)?.length}
                     <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />

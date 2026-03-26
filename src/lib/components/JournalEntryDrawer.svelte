@@ -231,7 +231,7 @@
       </div>
       {#if entry}
         <p class="text-base font-semibold leading-snug flex items-center gap-1.5">
-          <SourceIcon source={entry.source} size={20} />
+          <SourceIcon source={entry.source} descriptionData={entry.description_data} size={20} />
           {entry.description}
         </p>
       {/if}
@@ -277,7 +277,7 @@
                 <dt class="text-muted-foreground">{m.label_source()}</dt>
                 <dd>
                   <div class="flex items-center gap-1.5 min-w-0">
-                    <SourceIcon source={entry.source} size={16} />
+                    <SourceIcon source={entry.source} descriptionData={entry.description_data} size={16} />
                     {#if isLongValue(entry.source)}
                       <Tooltip.Root>
                         <Tooltip.Trigger class="truncate font-medium cursor-default text-left">
