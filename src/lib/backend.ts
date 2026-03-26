@@ -45,6 +45,7 @@ import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
+import type { CustomPluginRecord } from "./plugins/custom-plugins.js";
 
 export interface Reconciliation {
   id: string;
@@ -437,6 +438,12 @@ export interface Backend {
   getFrenchTaxReport(taxYear: number): Promise<PersistedFrenchTaxReport | null>;
   listFrenchTaxReportYears(): Promise<number[]>;
   deleteFrenchTaxReport(taxYear: number): Promise<void>;
+
+  // Custom plugins
+  listCustomPlugins(): Promise<CustomPluginRecord[]>;
+  saveCustomPlugin(plugin: CustomPluginRecord): Promise<void>;
+  deleteCustomPlugin(id: string): Promise<void>;
+  setCustomPluginEnabled(id: string, enabled: boolean): Promise<void>;
 
   // Database repair
   repairDatabase(): Promise<string[]>;
@@ -1165,6 +1172,12 @@ class TauriBackend implements Backend {
   async clearAllData(): Promise<void> {
     return this.invoke("clear_all_data");
   }
+
+  // Custom plugins (not implemented in Tauri backend — browser-only feature)
+  async listCustomPlugins(): Promise<CustomPluginRecord[]> { return []; }
+  async saveCustomPlugin(_plugin: CustomPluginRecord): Promise<void> { /* noop */ }
+  async deleteCustomPlugin(_id: string): Promise<void> { /* noop */ }
+  async setCustomPluginEnabled(_id: string, _enabled: boolean): Promise<void> { /* noop */ }
 }
 
 // Store backend on globalThis so it survives Vite HMR module replacement.

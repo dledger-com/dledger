@@ -23,6 +23,7 @@
   let includeRaw = $state(false);
   let includeApiKeys = $state(false);
   let includeSettings = $state(true);
+  let includePlugins = $state(true);
   let exporting = $state(false);
   let progressMessage = $state("");
 
@@ -40,6 +41,7 @@
     includeRaw = false;
     includeApiKeys = false;
     includeSettings = true;
+    includePlugins = true;
     exporting = false;
     progressMessage = "";
   }
@@ -62,6 +64,7 @@
           includeRawTransactions: includeRaw,
           includeApiKeys,
           includeSettings,
+          includePlugins,
         },
         (msg) => { progressMessage = msg; },
       );
@@ -132,6 +135,11 @@
         <label class="flex items-center gap-2 text-sm">
           <Checkbox bind:checked={includeApiKeys} />
           Include API keys
+        </label>
+
+        <label class="flex items-center gap-2 text-sm">
+          <Checkbox bind:checked={includePlugins} />
+          Include custom plugins
         </label>
 
         <div>

@@ -34,6 +34,7 @@ export interface ExportOptions {
 	includeRawTransactions?: boolean;
 	includeSettings?: boolean;
 	includeApiKeys?: boolean;
+	includePlugins?: boolean;
 }
 
 export type ImportMode = "replace" | "merge-skip";
@@ -50,6 +51,7 @@ export interface ImportResult {
 	entries_imported: number;
 	currencies_imported: number;
 	rates_imported: number;
+	plugins_imported: number;
 	skipped: number;
 	warnings: string[];
 }

@@ -155,6 +155,7 @@
       if (result.entries_imported > 0) parts.push(`${result.entries_imported} entries`);
       if (result.currencies_imported > 0) parts.push(`${result.currencies_imported} currencies`);
       if (result.rates_imported > 0) parts.push(`${result.rates_imported} rates`);
+      if (result.plugins_imported > 0) parts.push(`${result.plugins_imported} plugins`);
       const summary = parts.length > 0 ? `Imported ${parts.join(", ")}` : "Import complete (no new data)";
       if (result.skipped > 0) {
         toast.success(`${summary}. ${result.skipped} skipped.`);

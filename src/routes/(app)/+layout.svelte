@@ -11,6 +11,7 @@
   const PdfImportDialog = () => import("$lib/components/PdfImportDialog.svelte");
   const LedgerImportDialog = () => import("$lib/components/LedgerImportDialog.svelte");
   const DledgerImportDialog = () => import("$lib/components/DledgerImportDialog.svelte");
+  const FeedbackWizardDialog = () => import("$lib/components/FeedbackWizardDialog.svelte");
   import { importDrop } from "$lib/data/import-drop.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { setFormatLocale } from "$lib/utils/format.js";
@@ -18,8 +19,10 @@
   import { onMount } from "svelte";
   import { getBackend } from "$lib/backend.js";
   import { initCoinIcons } from "$lib/data/coin-icons.svelte.js";
+  import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
 
   let { children } = $props();
+  let feedbackOpen = $state(false);
 
   const settings = new SettingsStore();
 
@@ -29,11 +32,13 @@
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
 
-  // Initialize coin icon cache (non-blocking, best-effort)
+  // Initialize coin icon cache and load custom plugins (non-blocking, best-effort)
   onMount(() => {
-    getBackend().listCurrencies().then((currencies) => {
+    const backend = getBackend();
+    backend.listCurrencies().then((currencies) => {
       initCoinIcons(currencies.map((c) => c.code));
     }).catch(() => { /* non-critical */ });
+    loadCustomPlugins(backend).catch(() => { /* non-critical */ });
   });
 
   // Clear content when dialogs close, and advance batch queue.
@@ -76,14 +81,14 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar />
+  <AppSidebar onfeedback={() => { feedbackOpen = true; }} />
   <Sidebar.Inset>
     <TopBar showSidebarTrigger={isDesktop.current} />
     <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4">
       {@render children?.()}
     </main>
   </Sidebar.Inset>
-  <BottomTabBar />
+  <BottomTabBar onfeedback={() => { feedbackOpen = true; }} />
 </Sidebar.Provider>
 
 <GlobalDropZone />
@@ -131,5 +136,10 @@
       bind:open={importDrop.dledgerOpen}
       initialFile={importDrop.dledgerFile ?? undefined}
     />
+  {/await}
+{/if}
+{#if feedbackOpen}
+  {#await FeedbackWizardDialog() then mod}
+    <mod.default bind:open={feedbackOpen} />
   {/await}
 {/if}

@@ -61,6 +61,9 @@
     import type { Locale } from "$paraglide/runtime.js";
     import Download from "lucide-svelte/icons/download";
     import Upload from "lucide-svelte/icons/upload";
+    import Trash2 from "lucide-svelte/icons/trash-2";
+    import Puzzle from "lucide-svelte/icons/puzzle";
+    import type { CustomPluginRecord } from "$lib/plugins/custom-plugins.js";
     import ExportDialog from "$lib/components/ExportDialog.svelte";
     import DledgerImportDialog from "$lib/components/DledgerImportDialog.svelte";
     const settings = new SettingsStore();
@@ -68,6 +71,42 @@
     // Export/Import dialog state
     let exportDialogOpen = $state(false);
     let importDialogOpen = $state(false);
+
+    // Custom plugins state
+    let customPlugins = $state<CustomPluginRecord[]>([]);
+
+    async function loadCustomPlugins() {
+        try {
+            customPlugins = await getBackend().listCustomPlugins();
+        } catch (e) {
+            console.error("Failed to load custom plugins:", e);
+        }
+    }
+
+    async function togglePluginEnabled(plugin: CustomPluginRecord) {
+        try {
+            await getBackend().setCustomPluginEnabled(plugin.id, !plugin.enabled);
+            await loadCustomPlugins();
+            toast.success(
+                !plugin.enabled
+                    ? msg.settings_plugins_enabled()
+                    : msg.settings_plugins_disabled(),
+            );
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    async function deletePlugin(plugin: CustomPluginRecord) {
+        if (!window.confirm(msg.settings_plugins_delete_confirm({ name: plugin.name }))) return;
+        try {
+            await getBackend().deleteCustomPlugin(plugin.id);
+            await loadCustomPlugins();
+            toast.success(`Deleted plugin "${plugin.name}"`);
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+        }
+    }
 
     // Service test state
     let testResults = $state<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>>({});
@@ -669,6 +708,7 @@
         loadCurrencies();
         loadDpriceStatus();
         loadDpriceLocalPath();
+        loadCustomPlugins();
     });
 </script>
 
@@ -1715,6 +1755,58 @@
                     {creatingDefaults ? msg.state_creating() : msg.settings_create_accounts()}
                 </Button>
             </div>
+        </Card.Content>
+    </Card.Root>
+
+    <!-- Custom Plugins -->
+    <Card.Root>
+        <Card.Header>
+            <Card.Title class="flex items-center gap-2">
+                <Puzzle class="h-5 w-5" />
+                {msg.settings_plugins_title()}
+            </Card.Title>
+            <Card.Description>{msg.settings_plugins_desc()}</Card.Description>
+        </Card.Header>
+        <Card.Content class="space-y-4">
+            {#if customPlugins.length === 0}
+                <p class="text-sm text-muted-foreground">{msg.settings_plugins_none()}</p>
+            {:else}
+                {#each customPlugins as plugin (plugin.id)}
+                    <div class="flex items-center justify-between rounded-md border p-3">
+                        <div class="space-y-0.5">
+                            <p class="text-sm font-medium">{plugin.name}</p>
+                            <p class="text-xs text-muted-foreground">
+                                v{plugin.version}
+                                {#if plugin.description}
+                                    &mdash; {plugin.description}
+                                {/if}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {msg.settings_plugins_loaded_at({ date: new Date(plugin.created_at).toLocaleDateString() })}
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-muted-foreground">
+                                    {plugin.enabled ? msg.settings_plugins_enabled() : msg.settings_plugins_disabled()}
+                                </span>
+                                <Switch
+                                    checked={plugin.enabled}
+                                    onCheckedChange={() => togglePluginEnabled(plugin)}
+                                />
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                class="h-8 w-8 text-destructive hover:text-destructive"
+                                onclick={() => deletePlugin(plugin)}
+                            >
+                                <Trash2 class="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                {/each}
+            {/if}
         </Card.Content>
     </Card.Root>
 

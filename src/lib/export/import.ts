@@ -28,6 +28,7 @@ export async function importData(
 		entries_imported: 0,
 		currencies_imported: 0,
 		rates_imported: 0,
+		plugins_imported: 0,
 		skipped: 0,
 		warnings: [],
 	};
@@ -237,6 +238,33 @@ export async function importData(
 			for (const acc of sources.cex ?? []) { try { await backend.addExchangeAccount(acc); } catch { /* skip */ } }
 		} catch (e) {
 			result.warnings.push(`sources: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+
+	// Custom plugins
+	if (files["plugins.json"]) {
+		try {
+			const pluginsMeta: Array<{ id: string; name: string; version: string; description: string; enabled: boolean }> =
+				JSON.parse(strFromU8(files["plugins.json"]));
+			for (const meta of pluginsMeta) {
+				const sourceFile = files[`plugins/${meta.id}.js`];
+				if (!sourceFile) continue;
+				try {
+					await backend.saveCustomPlugin({
+						id: meta.id,
+						name: meta.name,
+						version: meta.version,
+						description: meta.description,
+						source_code: strFromU8(sourceFile),
+						enabled: meta.enabled,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString(),
+					});
+					result.plugins_imported++;
+				} catch { result.skipped++; }
+			}
+		} catch (e) {
+			result.warnings.push(`plugins: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	}
 

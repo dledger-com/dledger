@@ -9,8 +9,15 @@
   import PiggyBank from "lucide-svelte/icons/piggy-bank";
   import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Settings from "lucide-svelte/icons/settings";
+  import MessageCircleQuestion from "lucide-svelte/icons/message-circle-question";
   import Ellipsis from "lucide-svelte/icons/ellipsis";
   import * as m from "$paraglide/messages.js";
+
+  let {
+    onfeedback,
+  }: {
+    onfeedback?: () => void;
+  } = $props();
 
   const tabs = [
     { title: () => m.nav_dashboard_short(), href: "/", icon: LayoutDashboard },
@@ -91,6 +98,14 @@
           <Settings class="h-5 w-5" />
           {m.nav_settings()}
         </a>
+        <button
+          type="button"
+          onclick={() => { moreOpen = false; onfeedback?.(); }}
+          class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors text-foreground hover:bg-accent cursor-pointer"
+        >
+          <MessageCircleQuestion class="h-5 w-5" />
+          {m.feedback_title()}
+        </button>
       </div>
     </Drawer.Content>
   </Drawer.Portal>

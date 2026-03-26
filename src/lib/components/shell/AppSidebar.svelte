@@ -8,10 +8,17 @@
   import BarChart3 from "lucide-svelte/icons/bar-chart-3";
   import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Settings from "lucide-svelte/icons/settings";
+  import MessageCircleQuestion from "lucide-svelte/icons/message-circle-question";
   import PiggyBank from "lucide-svelte/icons/piggy-bank";
   import Coins from "lucide-svelte/icons/coins";
   import ThemeToggle from "./ThemeToggle.svelte";
   import * as m from "$paraglide/messages.js";
+
+  let {
+    onfeedback,
+  }: {
+    onfeedback?: () => void;
+  } = $props();
 
   const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
 
@@ -72,6 +79,13 @@
     <div class="flex items-center justify-between px-2 py-1">
       <span class="text-xs text-muted-foreground">dLedger {versionLabel}</span>
       <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+          onclick={() => onfeedback?.()}
+        >
+          <MessageCircleQuestion class="h-4 w-4" />
+        </button>
         <a
           href="/settings"
           class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"

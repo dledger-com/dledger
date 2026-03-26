@@ -21,6 +21,7 @@ export async function exportData(
 	const settings = loadSettings();
 	const includeRaw = options.includeRawTransactions ?? false;
 	const includeSettings = options.includeSettings ?? true;
+	const includePlugins = options.includePlugins ?? true;
 
 	// 1. Gather all data
 	onProgress?.("Gathering accounts...");
@@ -122,6 +123,18 @@ export async function exportData(
 		rawTransactions = await backend.queryRawTransactions("");
 	}
 
+	// Custom plugins
+	let customPlugins: Array<{ id: string; name: string; version: string; description: string; source_code: string; enabled: boolean }> | null = null;
+	if (includePlugins) {
+		onProgress?.("Gathering plugins...");
+		try {
+			customPlugins = (await backend.listCustomPlugins()).map(p => ({
+				id: p.id, name: p.name, version: p.version, description: p.description,
+				source_code: p.source_code, enabled: p.enabled,
+			}));
+		} catch { /* optional — old schema may lack table */ }
+	}
+
 	// 2. Build manifest
 	const manifest: ExportManifest = {
 		exportVersion: EXPORT_VERSION,
@@ -136,6 +149,7 @@ export async function exportData(
 			budgets: budgets.length,
 			reconciliations: reconciliations.length,
 			...(rawTransactions ? { rawTransactions: rawTransactions.length } : {}),
+			plugins: customPlugins?.length ?? 0,
 		},
 	};
 
@@ -172,6 +186,13 @@ export async function exportData(
 	}
 	if (rawTransactions) {
 		zipFiles["raw-transactions.json"] = strToU8(JSON.stringify(rawTransactions));
+	}
+	if (customPlugins && customPlugins.length > 0) {
+		const pluginsMeta = customPlugins.map(({ source_code: _, ...meta }) => meta);
+		zipFiles["plugins.json"] = strToU8(JSON.stringify(pluginsMeta, null, 2));
+		for (const p of customPlugins) {
+			zipFiles[`plugins/${p.id}.js`] = strToU8(p.source_code);
+		}
 	}
 
 	const zipBytes = zipSync(zipFiles);

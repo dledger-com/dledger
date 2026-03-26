@@ -28,6 +28,7 @@ import type {
 } from "./types/index.js";
 import type { Backend, CurrencyRateSource, Reconciliation, UnreconciledLineItem } from "./backend.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
+import type { CustomPluginRecord } from "./plugins/custom-plugins.js";
 import { parseTags } from "./utils/tags.js";
 import { isSpamCurrency } from "./currency-validation.js";
 
@@ -1271,6 +1272,20 @@ PRAGMA foreign_keys = ON;
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_monero_account_address ON monero_account(address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (30)");
+        }
+        if (currentVersion < 31) {
+          db.exec(`CREATE TABLE IF NOT EXISTS custom_plugin (
+            id TEXT PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL,
+            version TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            source_code TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )`);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (31)");
         }
       }
     }
@@ -6046,6 +6061,46 @@ PRAGMA foreign_keys = ON;
     this.db = new this.sql.Database();
     this.db.exec("PRAGMA foreign_keys=ON");
     SqlJsBackend.initFreshSchema(this.db);
+    this.scheduleSave();
+  }
+
+  // Custom plugins
+  async listCustomPlugins(): Promise<CustomPluginRecord[]> {
+    return this.query(
+      "SELECT id, name, version, description, source_code, enabled, created_at, updated_at FROM custom_plugin ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string,
+        name: row.name as string,
+        version: row.version as string,
+        description: (row.description as string) ?? "",
+        source_code: row.source_code as string,
+        enabled: (row.enabled as number) === 1,
+        created_at: row.created_at as string,
+        updated_at: row.updated_at as string,
+      }),
+    );
+  }
+
+  async saveCustomPlugin(plugin: CustomPluginRecord): Promise<void> {
+    this.run(
+      `INSERT OR REPLACE INTO custom_plugin (id, name, version, description, source_code, enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [plugin.id, plugin.name, plugin.version, plugin.description, plugin.source_code, plugin.enabled ? 1 : 0, plugin.created_at, plugin.updated_at],
+    );
+    this.scheduleSave();
+  }
+
+  async deleteCustomPlugin(id: string): Promise<void> {
+    this.run("DELETE FROM custom_plugin WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async setCustomPluginEnabled(id: string, enabled: boolean): Promise<void> {
+    this.run(
+      "UPDATE custom_plugin SET enabled = ?, updated_at = ? WHERE id = ?",
+      [enabled ? 1 : 0, new Date().toISOString(), id],
+    );
     this.scheduleSave();
   }
 }
