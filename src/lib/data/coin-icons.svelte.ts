@@ -131,6 +131,10 @@ async function saveIconsToIDB(newIcons: Map<string, string>): Promise<void> {
 
 async function fetchAsDataUri(url: string): Promise<string | null> {
   try {
+    // TODO: CoinGecko CDN and Google Favicons block cross-origin fetch (CORS).
+    // Proxy through backend to enable local caching.
+    if (url.includes("coingecko.com") || url.includes("google.com/s2/favicons")) return null;
+
     // Use "small" size (~64px) for compact icons
     const smallUrl = url.replace("/large/", "/small/");
     const resp = await fetch(smallUrl);
