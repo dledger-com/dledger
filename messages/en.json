@@ -1011,6 +1011,8 @@
   "feedback_source_defi_desc": "On-chain protocol handler (Aave, Uniswap...)",
   "feedback_source_pdf": "PDF statement",
   "feedback_source_pdf_desc": "Bank PDF statement parser",
+  "feedback_source_human": "Get help from a human",
+  "feedback_source_human_desc": "Ask us to add support for your source",
   "feedback_difficulty_easy": "Easiest",
   "feedback_difficulty_moderate": "Moderate",
   "feedback_difficulty_advanced": "Advanced",

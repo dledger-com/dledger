@@ -17,6 +17,7 @@
   import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Blocks from "lucide-svelte/icons/blocks";
   import FileText from "lucide-svelte/icons/file-text";
+  import HandHelping from "lucide-svelte/icons/hand-helping";
   import ChevronLeft from "lucide-svelte/icons/chevron-left";
   import Copy from "lucide-svelte/icons/copy";
   import Check from "lucide-svelte/icons/check";
@@ -204,6 +205,18 @@
             <Badge variant="secondary" class="shrink-0">{item.difficulty}</Badge>
           </button>
         {/each}
+
+        <button
+          type="button"
+          class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"
+          onclick={() => { step = "bug-report"; }}
+        >
+          <HandHelping class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div class="flex-1">
+            <p class="text-sm font-medium">{m.feedback_source_human()}</p>
+            <p class="text-xs text-muted-foreground">{m.feedback_source_human_desc()}</p>
+          </div>
+        </button>
       </div>
 
     <!-- Step: LLM Guide -->
