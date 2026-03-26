@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
@@ -43,6 +44,7 @@
   let pluginCode = $state("");
   let loadError = $state("");
   let loadedPluginName = $state("");
+  let sourceUrl = $state("");
   let promptCopied = $state(false);
   let infoCopied = $state(false);
   // Save source code for persistence after successful load
@@ -55,6 +57,7 @@
   function reset() {
     step = "choose";
     sourceType = "csv";
+    sourceUrl = "";
     pluginCode = "";
     loadError = "";
     loadedPluginName = "";
@@ -240,15 +243,30 @@
       </Dialog.Header>
 
       <div class="space-y-4">
+        <!-- URL input for API-based types -->
+        {#if sourceType === "cex" || sourceType === "defi"}
+          <div class="space-y-1">
+            <label for="source-url" class="text-sm font-medium">
+              {sourceType === "cex" ? m.feedback_source_cex() : m.feedback_source_defi()} URL
+            </label>
+            <Input
+              id="source-url"
+              type="url"
+              placeholder="https://..."
+              bind:value={sourceUrl}
+            />
+          </div>
+        {/if}
+
         <!-- Prompt block -->
         <div class="relative">
           <div class="rounded-lg bg-muted p-4 pr-12 font-mono text-xs max-h-64 overflow-y-auto whitespace-pre-wrap break-words">
-            {generateLlmPrompt(sourceType)}
+            {generateLlmPrompt(sourceType, sourceUrl || undefined)}
           </div>
           <button
             type="button"
             class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors"
-            onclick={() => copyToClipboard(generateLlmPrompt(sourceType), "prompt")}
+            onclick={() => copyToClipboard(generateLlmPrompt(sourceType, sourceUrl || undefined), "prompt")}
           >
             {#if promptCopied}
               <Check class="h-4 w-4 text-green-500" />

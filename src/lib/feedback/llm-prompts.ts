@@ -232,7 +232,7 @@ function sourceTypeLabel(type: SourceType): string {
   }
 }
 
-export function generateLlmPrompt(type: SourceType): string {
+export function generateLlmPrompt(type: SourceType, url?: string): string {
   const parts: string[] = [];
 
   parts.push(`I need help creating a dLedger ${sourceTypeLabel(type)} plugin.`);
@@ -275,10 +275,9 @@ export function generateLlmPrompt(type: SourceType): string {
       parts.push("```");
       parts.push("");
       parts.push("## Exchange details");
-      parts.push("The exchange name is: [NAME]");
-      parts.push("The exchange website/API documentation: [URL]");
+      parts.push(`The exchange website/API documentation: ${url ?? "[URL]"}`);
       parts.push("");
-      parts.push("Please look up the API documentation from the URL above and implement a CexAdapter with proper authentication and pagination.");
+      parts.push("Please look up the exchange name and API documentation from the URL above and implement a CexAdapter with proper authentication and pagination.");
       break;
 
     case "defi":
@@ -293,13 +292,12 @@ export function generateLlmPrompt(type: SourceType): string {
       parts.push("```");
       parts.push("");
       parts.push("## Protocol details");
-      parts.push("The protocol name is: [NAME]");
-      parts.push("The protocol website/docs: [URL]");
+      parts.push(`The protocol website/docs: ${url ?? "[URL]"}`);
       parts.push("The contract address(es): [0x...]");
       parts.push("The chain: [Ethereum/Polygon/Arbitrum/etc.]");
       parts.push("What it does: [DESCRIBE: swaps, lending, staking, etc.]");
       parts.push("");
-      parts.push("Please look up the protocol from the URL above and implement a TransactionHandler that matches and processes these transactions.");
+      parts.push("Please look up the protocol name and details from the URL above and implement a TransactionHandler that matches and processes these transactions.");
       break;
 
     case "pdf":
