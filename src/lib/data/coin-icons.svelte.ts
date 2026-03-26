@@ -117,35 +117,62 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
   _icons = loadFromStorage();
   notify();
 
-  // Find symbols that need fetching
-  const missing: string[] = [];
+  // Find symbols that need fetching — split into known IDs and unknown (try by lowercase symbol)
+  const knownMissing: string[] = [];
+  const unknownMissing: string[] = [];
   for (const code of currencyCodes) {
     const upper = code.toUpperCase();
     if (_icons.has(upper)) continue;
     if (COINGECKO_IDS[upper] === "") continue; // fiat — no icon
-    if (COINGECKO_IDS[upper]) missing.push(upper);
+    if (COINGECKO_IDS[upper]) {
+      knownMissing.push(upper);
+    } else {
+      unknownMissing.push(upper);
+    }
   }
 
-  if (missing.length === 0) return;
+  if (knownMissing.length === 0 && unknownMissing.length === 0) return;
 
-  // Batch fetch from CoinGecko (max 250 per request)
   try {
-    const geckoIds = missing
-      .map(s => COINGECKO_IDS[s])
-      .filter(Boolean);
-    const unique = [...new Set(geckoIds)];
+    // Batch 1: fetch well-known currencies by their CoinGecko ID
+    if (knownMissing.length > 0) {
+      const geckoIds = knownMissing
+        .map(s => COINGECKO_IDS[s])
+        .filter(Boolean);
+      const unique = [...new Set(geckoIds)];
 
-    for (let i = 0; i < unique.length; i += 250) {
-      const batch = unique.slice(i, i + 250);
-      const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
-      const resp = await fetch(url);
-      if (!resp.ok) continue;
-      const data = await resp.json() as Array<{ id: string; symbol: string; image: string }>;
+      for (let i = 0; i < unique.length; i += 250) {
+        const batch = unique.slice(i, i + 250);
+        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const data = await resp.json() as Array<{ id: string; symbol: string; image: string }>;
 
-      for (const coin of data) {
-        const upper = coin.symbol.toUpperCase();
-        if (coin.image && !coin.image.includes("missing")) {
-          _icons.set(upper, coin.image);
+        for (const coin of data) {
+          const upper = coin.symbol.toUpperCase();
+          if (coin.image && !coin.image.includes("missing")) {
+            _icons.set(upper, coin.image);
+          }
+        }
+      }
+    }
+
+    // Batch 2: try unknown currencies by lowercase symbol as CoinGecko ID (works for many tokens)
+    if (unknownMissing.length > 0) {
+      const guessIds = unknownMissing.map(s => s.toLowerCase());
+
+      for (let i = 0; i < guessIds.length; i += 250) {
+        const batch = guessIds.slice(i, i + 250);
+        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const data = await resp.json() as Array<{ id: string; symbol: string; image: string }>;
+
+        for (const coin of data) {
+          const upper = coin.symbol.toUpperCase();
+          if (coin.image && !coin.image.includes("missing")) {
+            _icons.set(upper, coin.image);
+          }
         }
       }
     }
