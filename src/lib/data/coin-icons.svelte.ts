@@ -28,8 +28,19 @@ const COINGECKO_IDS: Record<string, string> = {
   RAY: "raydium", MNDE: "marinade",
   ETC: "ethereum-classic", FLR: "flare-networks", BCH: "bitcoin-cash",
   CRO: "crypto-com-chain", S: "sonic-3", BTT: "bittorrent",
-  // Fiat
+  // Fiat (empty string = skip CoinGecko fetch, flags handled by FIAT_FLAGS below)
   USD: "", EUR: "", GBP: "", JPY: "", CHF: "", CAD: "", AUD: "", CNY: "",
+};
+
+/** Fiat currency code → ISO 3166-1 alpha-2 country code for circle flag icons */
+const FIAT_FLAGS: Record<string, string> = {
+  USD: "us", EUR: "european_union", GBP: "gb", JPY: "jp",
+  CHF: "ch", CAD: "ca", AUD: "au", CNY: "cn",
+  NZD: "nz", SEK: "se", NOK: "no", DKK: "dk",
+  SGD: "sg", HKD: "hk", KRW: "kr", INR: "in",
+  BRL: "br", MXN: "mx", ZAR: "za", PLN: "pl",
+  CZK: "cz", HUF: "hu", TRY: "tr", THB: "th",
+  RUB: "ru", ILS: "il", AED: "ae", SAR: "sa",
 };
 
 const STORAGE_KEY = "coin-icon-cache";
@@ -67,7 +78,10 @@ function notify(): void {
  * Get icon URL for a currency symbol. Returns null if not cached.
  */
 export function getCoinIconUrl(symbol: string): string | null {
-  return _icons.get(symbol.toUpperCase()) ?? null;
+  const upper = symbol.toUpperCase();
+  const flag = FIAT_FLAGS[upper];
+  if (flag) return `https://hatscripts.github.io/circle-flags/flags/${flag}.svg`;
+  return _icons.get(upper) ?? null;
 }
 
 /**
