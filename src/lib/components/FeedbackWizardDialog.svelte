@@ -34,8 +34,10 @@
 
   let {
     open = $bindable(false),
+    initialStep = null,
   }: {
     open: boolean;
+    initialStep?: string | null;
   } = $props();
 
   type WizardStep = "choose" | "source-type" | "llm-guide" | "load-plugin" | "contribute" | "bug-report" | "general" | "done";
@@ -68,7 +70,12 @@
   }
 
   $effect(() => {
-    if (open) reset();
+    if (open) {
+      reset();
+      if (initialStep === "source-type") {
+        step = "source-type";
+      }
+    }
   });
 
   function goBack() {

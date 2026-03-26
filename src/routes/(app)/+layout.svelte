@@ -20,9 +20,9 @@
   import { getBackend } from "$lib/backend.js";
   import { initCoinIcons } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
+  import { feedbackWizard } from "$lib/data/feedback.svelte.js";
 
   let { children } = $props();
-  let feedbackOpen = $state(false);
 
   const settings = new SettingsStore();
 
@@ -81,14 +81,14 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar onfeedback={() => { feedbackOpen = true; }} />
+  <AppSidebar onfeedback={() => { feedbackWizard.openDefault(); }} />
   <Sidebar.Inset>
     <TopBar showSidebarTrigger={isDesktop.current} />
     <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4">
       {@render children?.()}
     </main>
   </Sidebar.Inset>
-  <BottomTabBar onfeedback={() => { feedbackOpen = true; }} />
+  <BottomTabBar onfeedback={() => { feedbackWizard.openDefault(); }} />
 </Sidebar.Provider>
 
 <GlobalDropZone />
@@ -138,8 +138,8 @@
     />
   {/await}
 {/if}
-{#if feedbackOpen}
+{#if feedbackWizard.open}
   {#await FeedbackWizardDialog() then mod}
-    <mod.default bind:open={feedbackOpen} />
+    <mod.default bind:open={feedbackWizard.open} initialStep={feedbackWizard.initialStep} />
   {/await}
 {/if}

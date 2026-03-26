@@ -1018,6 +1018,7 @@
   "feedback_difficulty_easy": "Le plus simple",
   "feedback_difficulty_moderate": "Modéré",
   "feedback_difficulty_advanced": "Avancé",
+  "feedback_missing_source_link": "Votre source est absente ? Obtenez de l'aide pour l'ajouter",
   "feedback_llm_title": "Créer un plugin {type} avec un LLM",
   "feedback_llm_desc_file": "Copiez le prompt ci-dessous dans votre LLM favori (ChatGPT, Claude, etc.) et obtenez du code fonctionnel. Vous pouvez joindre votre fichier pour donner au LLM des données concrètes.",
   "feedback_llm_desc_api": "Entrez l'URL du site web ci-dessous, puis copiez le prompt dans votre LLM favori (ChatGPT, Claude, etc.) pour obtenir du code fonctionnel.",

@@ -8,6 +8,8 @@
     import { Input } from "$lib/components/ui/input/index.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { cn } from "$lib/utils.js";
+    import { feedbackWizard } from "$lib/data/feedback.svelte.js";
+    import MessageCircleQuestion from "lucide-svelte/icons/message-circle-question";
     import { getBackend } from "$lib/backend.js";
     import { toast } from "svelte-sonner";
     import { v7 as uuidv7 } from "uuid";
@@ -571,6 +573,14 @@
                 onSelectCardano={() => startAddChain("cardano")}
                 onSelectMonero={() => startAddChain("xmr")}
             />
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
+              onclick={() => { open = false; feedbackWizard.openMissingSource(); }}
+            >
+              <MessageCircleQuestion class="h-3 w-3" />
+              {m.feedback_missing_source_link()}
+            </button>
         {:else if addSourceMode === "cex"}
             <div class="space-y-3">
                 <Input

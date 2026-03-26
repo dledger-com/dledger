@@ -13,6 +13,8 @@
         getHiddenCurrencySet,
     } from "$lib/data/hidden-currencies.svelte.js";
     import { toast } from "svelte-sonner";
+    import { feedbackWizard } from "$lib/data/feedback.svelte.js";
+    import MessageCircleQuestion from "lucide-svelte/icons/message-circle-question";
     import * as Command from "$lib/components/ui/command/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
     import { cn } from "$lib/utils.js";
@@ -956,6 +958,14 @@
                                 {/each}
                             </span>
                         </span>
+                        <button
+                          type="button"
+                          class="mt-1.5 inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
+                          onclick={() => feedbackWizard.openMissingSource()}
+                        >
+                          <MessageCircleQuestion class="h-3 w-3" />
+                          {m.feedback_missing_source_link()}
+                        </button>
                     </Card.Description>
                 </div>
                 <Button size="sm" class="shrink-0" onclick={handleImportClick}>
