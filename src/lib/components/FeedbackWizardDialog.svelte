@@ -25,6 +25,7 @@
   import GitPullRequest from "lucide-svelte/icons/git-pull-request";
   import Mail from "lucide-svelte/icons/mail";
   import ExternalLink from "lucide-svelte/icons/external-link";
+  import Github from "lucide-svelte/icons/github";
   import TriangleAlert from "lucide-svelte/icons/triangle-alert";
   import Info from "lucide-svelte/icons/info";
 
@@ -431,7 +432,7 @@
             rel="noopener noreferrer"
             class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted"
           >
-            <ExternalLink class="h-5 w-5 shrink-0 text-muted-foreground" />
+            <Github class="h-5 w-5 shrink-0 text-muted-foreground" />
             <p class="text-sm font-medium">{m.feedback_bug_github()}</p>
           </a>
 
@@ -463,7 +464,7 @@
           rel="noopener noreferrer"
           class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted"
         >
-          <ExternalLink class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <Github class="h-5 w-5 shrink-0 text-muted-foreground" />
           <p class="text-sm font-medium">{m.feedback_general_github()}</p>
         </a>
 
