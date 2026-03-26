@@ -15,7 +15,7 @@ import {
   formatTokenAmount,
   type ItemAccum,
 } from "./item-builder.js";
-import { AAVE, isAavePool, ZERO_ADDRESS } from "./addresses.js";
+import { AAVE, isAavePool, ZERO_ADDRESS, isRadiantPool, RADIANT } from "./addresses.js";
 import { fetchAaveSubgraphData } from "./aave-subgraph.js";
 import { shortAddr } from "../browser-etherscan.js";
 import { defiAssets, defiLiabilities, defiIncome, defiExpense, tradingAccount, walletExternal } from "../accounts/paths.js";
@@ -323,6 +323,18 @@ async function buildProtocolItems(
   return { items, actions, unprocessed, walletConsumptionItems };
 }
 
+// ---- Protocol detection (Aave vs Radiant) ----
+
+type AaveLikeProtocol = "Aave" | "Radiant";
+
+function detectAaveProtocol(group: TxHashGroup): AaveLikeProtocol {
+  if (group.normal) {
+    const to = group.normal.to.toLowerCase();
+    if (isRadiantPool(to)) return "Radiant";
+  }
+  return "Aave";
+}
+
 // ---- Handler ----
 
 export const aaveHandler: TransactionHandler = {
@@ -330,7 +342,7 @@ export const aaveHandler: TransactionHandler = {
   name: "Aave",
   description: "Interprets Aave lending/borrowing transactions",
   website: "https://aave.com",
-  supportedChainIds: [1, 42161, 10, 137, 8453],
+  supportedChainIds: [1, 42161, 10, 137, 8453, 56],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {
     if (group.normal) {
@@ -338,6 +350,8 @@ export const aaveHandler: TransactionHandler = {
       if (isAavePool(to, ctx.chainId)) return 55;
       if (to === AAVE.WRAPPED_TOKEN_GATEWAY) return 55;
       if (to === AAVE.SWAP_COLLATERAL_ADAPTER) return 55;
+      // Radiant pools
+      if (isRadiantPool(to)) return 55;
     }
 
     for (const erc20 of group.erc20s) {
@@ -356,6 +370,10 @@ export const aaveHandler: TransactionHandler = {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
     const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
+
+    // Detect protocol variant (Aave vs Radiant)
+    const protocolVariant = detectAaveProtocol(group);
+    const protocolName = protocolVariant as string;
 
     // Ensure native currency for item building
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
@@ -417,6 +435,7 @@ export const aaveHandler: TransactionHandler = {
 
     // Step 5: Reclassify remaining Equity:External:* items
     // If no protocol actions detected (pure rewards), reclassify as income
+    const rewardsAccount = defiIncome(protocolName, "Rewards");
     if (protocol.actions.length === 0) {
       const hasOnlyInflows = walletItems.some(
         (i) => i.account.startsWith("Equity:") && i.account.includes(":External:") && i.amount.isNegative(),
@@ -426,7 +445,7 @@ export const aaveHandler: TransactionHandler = {
       if (hasOnlyInflows) {
         walletItems = walletItems.map((item) => {
           if (item.account.startsWith("Equity:") && item.account.includes(":External:")) {
-            return { ...item, account: defiIncome("Aave", "Rewards") };
+            return { ...item, account: rewardsAccount };
           }
           return item;
         });
@@ -457,27 +476,27 @@ export const aaveHandler: TransactionHandler = {
         }
         return part;
       });
-      description = `Aave: ${actionParts.join(" + ")} (${hashShort})`;
+      description = `${protocolName}: ${actionParts.join(" + ")} (${hashShort})`;
     } else {
       // Claim rewards or unknown — check wallet items for inflows
       const rewardItems = walletItems.filter(
-        (i) => i.account === defiIncome("Aave", "Rewards") || (i.account.startsWith("Assets:") && i.amount.isPositive()),
+        (i) => i.account === rewardsAccount || (i.account.startsWith("Assets:") && i.amount.isPositive()),
       );
       if (rewardItems.length > 0) {
         const rewardAsset = rewardItems.find((i) => i.account.startsWith("Assets:"));
         const amountStr = rewardAsset
           ? ` ${formatTokenAmount(rewardAsset.amount, rewardAsset.currency)}`
           : "";
-        description = `Aave: Claim Rewards${amountStr} (${hashShort})`;
+        description = `${protocolName}: Claim Rewards${amountStr} (${hashShort})`;
       } else {
-        description = `Aave: Interact (${hashShort})`;
+        description = `${protocolName}: Interact (${hashShort})`;
       }
     }
 
     // Determine actions for metadata
     let actionSet = protocol.actions.length > 0
       ? [...new Set(protocol.actions.map((a) => a.action))].join(",")
-      : walletItems.some((i) => i.account === defiIncome("Aave", "Rewards"))
+      : walletItems.some((i) => i.account === rewardsAccount)
         ? "CLAIM_REWARDS"
         : "UNKNOWN";
 
@@ -493,6 +512,10 @@ export const aaveHandler: TransactionHandler = {
       "handler:version": version,
     };
 
+    if (protocolVariant !== "Aave") {
+      metadata["handler:protocol"] = protocolName;
+    }
+
     // Add interest metadata when detected
     for (const a of protocol.actions) {
       if (a.interest) {
@@ -503,8 +526,8 @@ export const aaveHandler: TransactionHandler = {
       }
     }
 
-    // Enrichment: fetch historical data from Aave protocol subgraphs (opt-in)
-    if (ctx.enrichment && protocol.actions.length > 0 && ctx.settings.theGraphEnabled !== false) {
+    // Enrichment: fetch historical data from Aave protocol subgraphs (opt-in, Aave only)
+    if (ctx.enrichment && protocolVariant === "Aave" && protocol.actions.length > 0 && ctx.settings.theGraphEnabled !== false) {
       try {
         const subgraphData = await fetchAaveSubgraphData(
           ctx.settings.theGraphApiKey, ctx.chainId, group.hash, isV2,
@@ -527,12 +550,12 @@ export const aaveHandler: TransactionHandler = {
             metadata["handler:debt_price_usd"] = liq.debt_price_usd;
             actionSet = "LIQUIDATION";
             metadata["handler:action"] = actionSet;
-            description = `Aave: Liquidation — ${liq.collateral_amount} ${liq.collateral_asset} seized, ${liq.debt_amount} ${liq.debt_asset} repaid (${hashShort})`;
+            description = `${protocolName}: Liquidation — ${liq.collateral_amount} ${liq.collateral_asset} seized, ${liq.debt_amount} ${liq.debt_asset} repaid (${hashShort})`;
           }
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        metadata["handler:warnings"] = `Aave subgraph enrichment failed: ${msg}`;
+        metadata["handler:warnings"] = `${protocolName} subgraph enrichment failed: ${msg}`;
       }
     }
 
@@ -542,7 +565,7 @@ export const aaveHandler: TransactionHandler = {
     const handlerEntry = buildHandlerEntry({
       date,
       description,
-      descriptionData: { type: "defi", protocol: "Aave", action: descriptionAction, chain: ctx.chain.name, txHash: group.hash },
+      descriptionData: { type: "defi", protocol: protocolName, action: descriptionAction, chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

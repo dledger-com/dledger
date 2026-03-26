@@ -43,6 +43,27 @@ const PROTOCOL_TOKEN: Record<string, string> = {
   "Compound": "COMP", "MakerDAO/Spark": "MKR", "Yearn": "YFI",
   "Balancer": "BAL", "EigenLayer": "EIGEN", "Pendle": "PENDLE",
   "Jupiter": "JUP", "Raydium": "RAY", "Jito": "JTO", "Marinade": "MNDE",
+  // Phase 1 — DEX/bridge forks
+  "SushiSwap": "SUSHI", "PancakeSwap": "CAKE", "QuickSwap": "QUICK", "Camelot": "GRAIL",
+  "Paraswap": "PSP", "Odos": "ODOS", "OpenOcean": "OOE",
+  "Hop": "HOP", "Circle CCTP": "USDC",
+  // Phase 2 — lending
+  "Morpho": "MORPHO", "Liquity": "LQTY", "Venus": "XVS",
+  // Phase 3 — yield/ve(3,3)
+  "Convex": "CVX", "Aura": "AURA", "Aerodrome": "AERO", "Velodrome": "VELO",
+  // Phase 4 — liquid staking
+  "Rocket Pool": "RPL", "ether.fi": "ETHFI", "Kelp": "RSETH",
+  "Renzo": "REZ", "Swell": "SWELL", "StakeWise": "SWISE",
+  "Frax Ether": "FXS", "Ethena": "ENA",
+  // Phase 5 — vault aggregators
+  "Beefy": "BIFI", "Harvest": "FARM", "Sommelier": "SOMM", "Badger": "BADGER",
+  // Phase 6 — reward claims
+  "Merkl": "ANGLE", "Votium": "CVX",
+  // Phase 7 — additional lending
+  "Euler": "EUL", "Radiant": "RDNT", "Silo": "SILO",
+  // Phase 8-12 — advanced protocols
+  "GMX": "GMX", "Origin": "OGN", "Notional": "NOTE",
+  "Synthetix": "SNX", "dYdX": "DYDX",
 };
 
 /** EVM L2 chain IDs — these keep their chain logo instead of native currency icon */

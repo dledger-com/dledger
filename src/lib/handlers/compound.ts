@@ -18,10 +18,26 @@ import {
 import { ZERO_ADDRESS, isCompoundContract } from "./addresses.js";
 import { defiLiabilities, defiIncome } from "../accounts/paths.js";
 
+// ---- Protocol detection ----
+
+type CompoundProtocol = "Compound" | "Venus";
+
+function detectProtocol(chainId: number): CompoundProtocol {
+  return chainId === 56 ? "Venus" : "Compound";
+}
+
 // ---- Token detection ----
 
 function isCToken(symbol: string): boolean {
   return /^c[A-Z]/.test(symbol);
+}
+
+function isVToken(symbol: string): boolean {
+  return /^v[A-Z]/.test(symbol);
+}
+
+function isProtocolToken(symbol: string, protocol: CompoundProtocol): boolean {
+  return protocol === "Venus" ? isVToken(symbol) : isCToken(symbol);
 }
 
 function isCTokenV3(symbol: string): boolean {
@@ -41,26 +57,33 @@ const ACTION_LABELS: Record<CompoundAction, string> = {
   UNKNOWN: "Interact with",
 };
 
-function classifyAction(erc20s: Erc20Tx[], addr: string): CompoundAction {
+/** Reward token for the given protocol */
+function rewardToken(protocol: CompoundProtocol): string {
+  return protocol === "Venus" ? "XVS" : "COMP";
+}
+
+function classifyAction(erc20s: Erc20Tx[], addr: string, protocol: CompoundProtocol): CompoundAction {
   const flows = analyzeErc20Flows(erc20s, addr);
+  const reward = rewardToken(protocol);
+  const isProtoToken = (s: string) => isProtocolToken(s, protocol);
 
-  const cTokenMinted = flows.some((f) => isCToken(f.symbol) && f.isMint);
-  const cTokenBurned = flows.some((f) => isCToken(f.symbol) && f.isBurn);
-  const compInflow = flows.some(
-    (f) => f.symbol === "COMP" && f.direction === "in",
+  const protoTokenMinted = flows.some((f) => isProtoToken(f.symbol) && f.isMint);
+  const protoTokenBurned = flows.some((f) => isProtoToken(f.symbol) && f.isBurn);
+  const rewardInflow = flows.some(
+    (f) => f.symbol === reward && f.direction === "in",
   );
-  const hasNonCompOutflow = flows.some(
-    (f) => f.direction === "out" && f.symbol !== "COMP" && !isCToken(f.symbol),
+  const hasNonRewardOutflow = flows.some(
+    (f) => f.direction === "out" && f.symbol !== reward && !isProtoToken(f.symbol),
   );
-  const hasNonCompInflow = flows.some(
-    (f) => f.direction === "in" && f.symbol !== "COMP" && !isCToken(f.symbol),
+  const hasNonRewardInflow = flows.some(
+    (f) => f.direction === "in" && f.symbol !== reward && !isProtoToken(f.symbol),
   );
 
-  if (cTokenMinted) return "SUPPLY";
-  if (cTokenBurned) return "WITHDRAW";
-  if (compInflow && !hasNonCompOutflow) return "CLAIM_COMP";
-  if (hasNonCompInflow && !cTokenMinted && !cTokenBurned) return "BORROW";
-  if (hasNonCompOutflow && !cTokenMinted && !cTokenBurned) return "REPAY";
+  if (protoTokenMinted) return "SUPPLY";
+  if (protoTokenBurned) return "WITHDRAW";
+  if (rewardInflow && !hasNonRewardOutflow) return "CLAIM_COMP";
+  if (hasNonRewardInflow && !protoTokenMinted && !protoTokenBurned) return "BORROW";
+  if (hasNonRewardOutflow && !protoTokenMinted && !protoTokenBurned) return "REPAY";
 
   return "UNKNOWN";
 }
@@ -70,10 +93,12 @@ function classifyAction(erc20s: Erc20Tx[], addr: string): CompoundAction {
 function findUnderlyingFlow(
   erc20s: Erc20Tx[],
   addr: string,
+  protocol: CompoundProtocol,
 ): { symbol: string; amount: import("decimal.js-light").default } | null {
   const flows = analyzeErc20Flows(erc20s, addr);
+  const reward = rewardToken(protocol);
   for (const flow of flows) {
-    if (!isCToken(flow.symbol) && flow.symbol !== "COMP") {
+    if (!isProtocolToken(flow.symbol, protocol) && flow.symbol !== reward) {
       return { symbol: flow.symbol, amount: flow.amount };
     }
   }
@@ -107,11 +132,12 @@ export const compoundHandler: TransactionHandler = {
   name: "Compound Finance",
   description: "Interprets Compound lending/borrowing transactions",
   website: "https://compound.finance",
-  supportedChainIds: [1, 42161, 10, 137, 8453],
+  supportedChainIds: [1, 42161, 10, 137, 8453, 56],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {
+    const protocol = detectProtocol(ctx.chainId);
     for (const erc20 of group.erc20s) {
-      if (isCToken(erc20.tokenSymbol)) return 55;
+      if (isProtocolToken(erc20.tokenSymbol, protocol)) return 55;
     }
 
     if (group.normal) {
@@ -131,7 +157,9 @@ export const compoundHandler: TransactionHandler = {
     const hashShort =
       group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
-    const action = classifyAction(group.erc20s, addr);
+    const protocol = detectProtocol(ctx.chainId);
+    const protocolName = protocol as string;
+    const action = classifyAction(group.erc20s, addr, protocol);
 
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
 
@@ -147,11 +175,11 @@ export const compoundHandler: TransactionHandler = {
     // Reclassify counterparty accounts based on action
     if (action === "BORROW") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: defiLiabilities("Compound", "Borrow") },
+        { from: "Equity:*:External:*", to: defiLiabilities(protocolName, "Borrow") },
       ]);
     } else if (action === "CLAIM_COMP") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: defiIncome("Compound", "Rewards") },
+        { from: "Equity:*:External:*", to: defiIncome(protocolName, "Rewards") },
       ]);
     }
 
@@ -162,29 +190,33 @@ export const compoundHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const underlying = findUnderlyingFlow(group.erc20s, addr);
+    const underlying = findUnderlyingFlow(group.erc20s, addr, protocol);
     const actionLabel = ACTION_LABELS[action];
     const amountStr = underlying
       ? formatTokenAmount(underlying.amount, underlying.symbol)
       : "";
     const description = amountStr
-      ? `Compound: ${actionLabel} ${amountStr} (${hashShort})`
-      : `Compound: ${actionLabel} (${hashShort})`;
+      ? `${protocolName}: ${actionLabel} ${amountStr} (${hashShort})`
+      : `${protocolName}: ${actionLabel} (${hashShort})`;
 
     // Determine version
     const hasCTokenV3 = group.erc20s.some((tx) => isCTokenV3(tx.tokenSymbol));
     const version = hasCTokenV3 ? "V3" : "V2";
 
-    // Find cToken symbol
-    const cTokenSymbol =
-      group.erc20s.find((tx) => isCToken(tx.tokenSymbol))?.tokenSymbol ?? "";
+    // Find protocol token symbol (cToken or vToken)
+    const protoTokenSymbol =
+      group.erc20s.find((tx) => isProtocolToken(tx.tokenSymbol, protocol))?.tokenSymbol ?? "";
 
     const metadata: Record<string, string> = {
       handler: "compound",
       "handler:action": action,
       "handler:version": version,
-      "handler:ctoken": cTokenSymbol,
+      "handler:ctoken": protoTokenSymbol,
     };
+
+    if (protocol !== "Compound") {
+      metadata["handler:protocol"] = protocolName;
+    }
 
     // Enrichment: fetch APY data from DefiLlama (opt-in)
     if (ctx.enrichment && action !== "CLAIM_COMP" && underlying) {
@@ -203,7 +235,7 @@ export const compoundHandler: TransactionHandler = {
     const handlerEntry = buildHandlerEntry({
       date,
       description,
-      descriptionData: { type: "defi", protocol: "Compound", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      descriptionData: { type: "defi", protocol: protocolName, action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,
@@ -211,10 +243,10 @@ export const compoundHandler: TransactionHandler = {
       sourcePrefix: ctx.sourcePrefix,
     });
 
-    // Currency hints: cTokens should not fetch exchange rates
+    // Currency hints: protocol tokens (cTokens/vTokens) should not fetch exchange rates
     const cTokenCurrencies = allItems
       .map((i) => i.currency)
-      .filter((c) => isCToken(c))
+      .filter((c) => isProtocolToken(c, protocol))
       .filter((c, i, arr) => arr.indexOf(c) === i);
 
     const currencyHints: Record<string, null> = {};

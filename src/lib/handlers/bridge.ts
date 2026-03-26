@@ -22,6 +22,8 @@ type BridgeAction = "BRIDGE_DEPOSIT" | "BRIDGE_FILL";
 const PROTOCOL_NAMES: Record<string, string> = {
   across: "Across",
   stargate: "Stargate",
+  hop: "Hop",
+  cctp: "Circle CCTP",
 };
 
 function classifyAction(
@@ -49,8 +51,8 @@ function classifyAction(
 export const bridgeHandler: TransactionHandler = {
   id: "bridge",
   name: "Cross-Chain Bridge",
-  description: "Interprets cross-chain bridge transactions (Across, Stargate)",
-  supportedChainIds: [1, 42161, 10, 137, 8453],
+  description: "Interprets cross-chain bridge transactions (Across, Stargate, Hop, Circle CCTP)",
+  supportedChainIds: [1, 42161, 10, 137, 8453, 100, 43114],
 
   match(group: TxHashGroup, ctx: HandlerContext): number {
     if (!group.normal) return 0;

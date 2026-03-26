@@ -19,13 +19,17 @@ const PROTOCOL_NAMES: Record<string, string> = {
   "1inch": "1inch",
   "0x": "0x",
   cow: "CoW Protocol",
+  paraswap: "Paraswap",
+  odos: "Odos",
+  openocean: "OpenOcean",
+  firebird: "Firebird",
 };
 
 export const dexAggregatorHandler: TransactionHandler = {
   id: "dex-aggregator",
   name: "DEX Aggregator",
-  description: "Interprets swaps through DEX aggregators (1inch, 0x, CoW Protocol)",
-  supportedChainIds: [1, 42161, 10, 137, 8453, 56, 43114, 100],
+  description: "Interprets swaps through DEX aggregators (1inch, 0x, CoW Protocol, Paraswap, Odos, OpenOcean, Firebird)",
+  supportedChainIds: [1, 42161, 10, 137, 8453, 56, 43114, 100, 250, 1284],
 
   match(group: TxHashGroup, _ctx: HandlerContext): number {
     if (!group.normal) return 0;

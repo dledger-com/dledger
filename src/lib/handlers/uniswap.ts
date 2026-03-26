@@ -15,7 +15,7 @@ import {
   formatTokenAmount,
   type TokenFlow,
 } from "./item-builder.js";
-import { ZERO_ADDRESS, UNISWAP, isUniswapRouter } from "./addresses.js";
+import { ZERO_ADDRESS, UNISWAP, isUniswapRouter, isUniswapFork, UNISWAP_FORKS, UNISWAP_FORK_LP_SYMBOLS, type UniswapForkId } from "./addresses.js";
 import { defiIncome } from "../accounts/paths.js";
 
 // ---- Action types ----
@@ -39,12 +39,27 @@ const ACTION_LABELS: Record<UniswapAction, string> = {
   UNKNOWN: "Interact",
 };
 
+// ---- Fork detection ----
+
+function detectFork(group: TxHashGroup): { forkId: UniswapForkId | null; protocolName: string } {
+  if (group.normal) {
+    const fork = isUniswapFork(group.normal.to);
+    if (fork) return { forkId: fork, protocolName: UNISWAP_FORKS[fork].name };
+  }
+  return { forkId: null, protocolName: "Uniswap" };
+}
+
+/** Check if a symbol is a V2-style LP token (UNI-V2 or fork LP) */
+function isV2LpSymbol(symbol: string): boolean {
+  return symbol === "UNI-V2" || UNISWAP_FORK_LP_SYMBOLS.has(symbol);
+}
+
 // ---- Classification ----
 
 function classifyAction(group: TxHashGroup, flows: TokenFlow[], addr: string): UniswapAction {
-  // Check for UNI-V2 LP token mint/burn
-  const v2Minted = flows.some((f) => f.symbol === "UNI-V2" && f.isMint && f.direction === "in");
-  const v2Burned = flows.some((f) => f.symbol === "UNI-V2" && f.isBurn && f.direction === "out");
+  // Check for UNI-V2 / fork LP token mint/burn
+  const v2Minted = flows.some((f) => isV2LpSymbol(f.symbol) && f.isMint && f.direction === "in");
+  const v2Burned = flows.some((f) => isV2LpSymbol(f.symbol) && f.isBurn && f.direction === "out");
 
   if (v2Minted) return "ADD_LIQUIDITY_V2";
   if (v2Burned) return "REMOVE_LIQUIDITY_V2";
@@ -86,8 +101,8 @@ function classifyAction(group: TxHashGroup, flows: TokenFlow[], addr: string): U
 // ---- Version detection ----
 
 function detectVersion(group: TxHashGroup, flows: TokenFlow[]): string {
-  // UNI-V2 LP token present
-  if (flows.some((f) => f.symbol === "UNI-V2")) return "V2";
+  // UNI-V2 or fork LP token present
+  if (flows.some((f) => isV2LpSymbol(f.symbol))) return "V2";
 
   // UNI-V3-POS NFT present
   if (group.erc721s.some((tx) => tx.tokenSymbol === "UNI-V3-POS")) return "V3";
@@ -100,17 +115,17 @@ function detectVersion(group: TxHashGroup, flows: TokenFlow[]): string {
 
 // ---- Swap description ----
 
-function buildSwapDescription(flows: TokenFlow[], hashShort: string): string {
+function buildSwapDescription(flows: TokenFlow[], hashShort: string, protocol: string = "Uniswap"): string {
   const outFlow = flows.find((f) => f.direction === "out");
   const inFlow = flows.find((f) => f.direction === "in");
 
   if (outFlow && inFlow) {
     const fromStr = formatTokenAmount(outFlow.amount, outFlow.symbol);
     const toStr = formatTokenAmount(inFlow.amount, inFlow.symbol);
-    return `Uniswap: Swap ${fromStr} for ${toStr} (${hashShort})`;
+    return `${protocol}: Swap ${fromStr} for ${toStr} (${hashShort})`;
   }
 
-  return `Uniswap: Swap (${hashShort})`;
+  return `${protocol}: Swap (${hashShort})`;
 }
 
 // ---- Enrichment via The Graph ----
@@ -179,12 +194,12 @@ export const uniswapHandler: TransactionHandler = {
   supportedChainIds: [1, 42161, 10, 137, 8453, 56, 43114],
 
   match(group: TxHashGroup, _ctx: HandlerContext): number {
-    // Check normal.to against all Uniswap routers
+    // Check normal.to against all Uniswap routers (including forks)
     if (group.normal && isUniswapRouter(group.normal.to)) return 55;
 
-    // Check ERC20 symbol for UNI-V2
+    // Check ERC20 symbol for UNI-V2 or fork LP tokens
     for (const erc20 of group.erc20s) {
-      if (erc20.tokenSymbol === "UNI-V2") return 55;
+      if (isV2LpSymbol(erc20.tokenSymbol)) return 55;
     }
 
     // Check ERC721 symbol for UNI-V3-POS
@@ -206,6 +221,7 @@ export const uniswapHandler: TransactionHandler = {
     const flows = analyzeErc20Flows(group.erc20s, addr);
     const action = classifyAction(group, flows, addr);
     const version = detectVersion(group, flows);
+    const { forkId, protocolName } = detectFork(group);
 
     // Ensure native currency for item building
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
@@ -216,7 +232,7 @@ export const uniswapHandler: TransactionHandler = {
     // Reclassify counterparty accounts for fee collection
     if (action === "COLLECT_FEES_V3") {
       merged = remapCounterpartyAccounts(merged, [
-        { from: "Equity:*:External:*", to: defiIncome("Uniswap", "Fees") },
+        { from: "Equity:*:External:*", to: defiIncome(protocolName, "Fees") },
       ]);
     }
 
@@ -229,9 +245,9 @@ export const uniswapHandler: TransactionHandler = {
     // Build description
     let description: string;
     if (action === "SWAP") {
-      description = buildSwapDescription(flows, hashShort);
+      description = buildSwapDescription(flows, hashShort, protocolName);
     } else {
-      description = `Uniswap: ${ACTION_LABELS[action]} (${hashShort})`;
+      description = `${protocolName}: ${ACTION_LABELS[action]} (${hashShort})`;
     }
 
     const metadata: Record<string, string> = {
@@ -239,6 +255,7 @@ export const uniswapHandler: TransactionHandler = {
       "handler:action": action,
       "handler:version": version,
     };
+    if (forkId) metadata["handler:protocol"] = forkId;
 
     // Enrichment: fetch pool info from The Graph (opt-in)
     if (ctx.enrichment && action === "SWAP" && ctx.settings.theGraphEnabled !== false) {
@@ -257,7 +274,7 @@ export const uniswapHandler: TransactionHandler = {
     const handlerEntry = buildHandlerEntry({
       date,
       description,
-      descriptionData: { type: "defi", protocol: "Uniswap", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      descriptionData: { type: "defi", protocol: protocolName, action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,
@@ -265,11 +282,11 @@ export const uniswapHandler: TransactionHandler = {
       sourcePrefix: ctx.sourcePrefix,
     });
 
-    // Currency hints: UNI-V2 LP tokens have no public rate source
+    // Currency hints: UNI-V2 / fork LP tokens have no public rate source
     const currencyHints: Record<string, string | null> = {};
     const v2LpTokens = allItems
       .map((i) => i.currency)
-      .filter((c) => c === "UNI-V2")
+      .filter((c) => isV2LpSymbol(c))
       .filter((c, i, arr) => arr.indexOf(c) === i);
     for (const token of v2LpTokens) {
       currencyHints[token] = null;

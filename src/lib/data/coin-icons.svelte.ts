@@ -28,6 +28,19 @@ const COINGECKO_IDS: Record<string, string> = {
   RAY: "raydium", MNDE: "marinade",
   ETC: "ethereum-classic", FLR: "flare-networks", BCH: "bitcoin-cash",
   CRO: "crypto-com-chain", S: "sonic-3", BTT: "bittorrent",
+  // DeFi protocol tokens
+  SUSHI: "sushi", CAKE: "pancakeswap-token", QUICK: "quickswap",
+  GRAIL: "camelot-token", PSP: "paraswap", HOP: "hop-protocol",
+  MORPHO: "morpho", LQTY: "liquity", XVS: "venus",
+  CVX: "convex-finance", AURA: "aura-finance",
+  AERO: "aerodrome-finance", VELO: "velodrome-finance",
+  ETHFI: "ether-fi", REZ: "renzo", SWELL: "swell-network",
+  SWISE: "stakewise", FXS: "frax-share", ENA: "ethena",
+  BIFI: "beefy-finance", FARM: "harvest-finance",
+  SOMM: "sommelier", BADGER: "badger-dao", ANGLE: "angle-protocol",
+  EUL: "euler", RDNT: "radiant-capital",
+  GMX: "gmx", OGN: "origin-protocol", NOTE: "notional-finance",
+  DYDX: "dydx-chain",
   // Fiat (empty string = skip CoinGecko fetch, flags handled by FIAT_FLAGS below)
   USD: "", EUR: "", GBP: "", JPY: "", CHF: "", CAD: "", AUD: "", CNY: "",
 };
