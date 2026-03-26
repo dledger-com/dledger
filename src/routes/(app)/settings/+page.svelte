@@ -64,6 +64,9 @@
     import Trash2 from "lucide-svelte/icons/trash-2";
     import Puzzle from "lucide-svelte/icons/puzzle";
     import type { CustomPluginRecord } from "$lib/plugins/custom-plugins.js";
+    import { loadPluginFromCode } from "$lib/feedback/plugin-loader.js";
+    import { saveCustomPlugin } from "$lib/plugins/custom-plugins.js";
+    import Plus from "lucide-svelte/icons/plus";
     import ExportDialog from "$lib/components/ExportDialog.svelte";
     import DledgerImportDialog from "$lib/components/DledgerImportDialog.svelte";
     const settings = new SettingsStore();
@@ -105,6 +108,28 @@
             toast.success(`Deleted plugin "${plugin.name}"`);
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    let showAddPlugin = $state(false);
+    let addPluginCode = $state("");
+    let addPluginError = $state("");
+
+    async function handleAddPlugin() {
+        addPluginError = "";
+        const result = loadPluginFromCode(addPluginCode);
+        if (!result.success) {
+            addPluginError = result.error ?? "Unknown error";
+            return;
+        }
+        try {
+            await saveCustomPlugin(getBackend(), result.plugin!, addPluginCode);
+            await loadCustomPlugins();
+            toast.success(msg.feedback_load_success({ name: result.plugin!.name }));
+            showAddPlugin = false;
+            addPluginCode = "";
+        } catch (e) {
+            addPluginError = e instanceof Error ? e.message : String(e);
         }
     }
 
@@ -1761,16 +1786,45 @@
     <!-- Custom Plugins -->
     <Card.Root>
         <Card.Header>
-            <Card.Title class="flex items-center gap-2">
-                <Puzzle class="h-5 w-5" />
-                {msg.settings_plugins_title()}
-            </Card.Title>
-            <Card.Description>{msg.settings_plugins_desc()}</Card.Description>
+            <div class="flex items-center justify-between">
+                <div>
+                    <Card.Title class="flex items-center gap-2">
+                        <Puzzle class="h-5 w-5" />
+                        {msg.settings_plugins_title()}
+                    </Card.Title>
+                    <Card.Description>{msg.settings_plugins_desc()}</Card.Description>
+                </div>
+                <Button variant="outline" size="sm" onclick={() => { showAddPlugin = !showAddPlugin; addPluginError = ""; }}>
+                    <Plus class="mr-1 h-4 w-4" />
+                    {msg.settings_plugins_add()}
+                </Button>
+            </div>
         </Card.Header>
         <Card.Content class="space-y-4">
-            {#if customPlugins.length === 0}
+            {#if showAddPlugin}
+                <div class="space-y-3 rounded-md border p-3">
+                    <p class="text-xs text-muted-foreground">{msg.feedback_load_desc()}</p>
+                    <textarea
+                      class="flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      placeholder="// Paste your plugin code here..."
+                      bind:value={addPluginCode}
+                    ></textarea>
+                    {#if addPluginError}
+                        <p class="text-xs text-destructive">{addPluginError}</p>
+                    {/if}
+                    <div class="flex gap-2">
+                        <Button size="sm" disabled={!addPluginCode.trim()} onclick={handleAddPlugin}>
+                            {msg.feedback_load_validate()}
+                        </Button>
+                        <Button variant="ghost" size="sm" onclick={() => { showAddPlugin = false; addPluginCode = ""; addPluginError = ""; }}>
+                            {msg.btn_cancel()}
+                        </Button>
+                    </div>
+                </div>
+            {/if}
+            {#if customPlugins.length === 0 && !showAddPlugin}
                 <p class="text-sm text-muted-foreground">{msg.settings_plugins_none()}</p>
-            {:else}
+            {:else if customPlugins.length > 0}
                 {#each customPlugins as plugin (plugin.id)}
                     <div class="flex items-center justify-between rounded-md border p-3">
                         <div class="space-y-0.5">
