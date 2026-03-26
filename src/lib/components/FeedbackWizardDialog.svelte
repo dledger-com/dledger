@@ -128,17 +128,6 @@
 
 <Dialog.Root bind:open>
   <Dialog.Content class={dialogClass}>
-    <!-- Back button for sub-steps -->
-    {#if step !== "choose" && step !== "done"}
-      <button
-        type="button"
-        class="absolute left-4 top-4 text-muted-foreground hover:text-foreground transition-colors"
-        onclick={goBack}
-      >
-        <ChevronLeft class="h-4 w-4" />
-      </button>
-    {/if}
-
     <!-- Step: Choose -->
     {#if step === "choose"}
       <Dialog.Header>
@@ -186,8 +175,13 @@
 
     <!-- Step: Source Type -->
     {:else if step === "source-type"}
-      <Dialog.Header class="pl-6">
-        <Dialog.Title>{m.feedback_source_type_title()}</Dialog.Title>
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_source_type_title()}</Dialog.Title>
+        </div>
       </Dialog.Header>
 
       <div class="space-y-2">
@@ -214,8 +208,13 @@
 
     <!-- Step: LLM Guide -->
     {:else if step === "llm-guide"}
-      <Dialog.Header class="pl-6">
-        <Dialog.Title>{m.feedback_llm_title({ type: sourceTypeLabel(sourceType) })}</Dialog.Title>
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_llm_title({ type: sourceTypeLabel(sourceType) })}</Dialog.Title>
+        </div>
         <Dialog.Description>{m.feedback_llm_desc()}</Dialog.Description>
       </Dialog.Header>
 
@@ -270,8 +269,13 @@
 
     <!-- Step: Load Plugin -->
     {:else if step === "load-plugin"}
-      <Dialog.Header class="pl-6">
-        <Dialog.Title>{m.feedback_load_title()}</Dialog.Title>
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_load_title()}</Dialog.Title>
+        </div>
         <Dialog.Description>{m.feedback_load_desc()}</Dialog.Description>
       </Dialog.Header>
 
@@ -309,8 +313,13 @@
 
     <!-- Step: Contribute -->
     {:else if step === "contribute"}
-      <Dialog.Header class="pl-6">
-        <Dialog.Title>{m.feedback_contribute_title()}</Dialog.Title>
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_contribute_title()}</Dialog.Title>
+        </div>
         <Dialog.Description>{m.feedback_contribute_desc()}</Dialog.Description>
       </Dialog.Header>
 
@@ -348,8 +357,13 @@
 
     <!-- Step: Bug Report -->
     {:else if step === "bug-report"}
-      <Dialog.Header class="pl-6">
-        <Dialog.Title>{m.feedback_bug_title()}</Dialog.Title>
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_bug_title()}</Dialog.Title>
+        </div>
         <Dialog.Description>{m.feedback_bug_desc()}</Dialog.Description>
       </Dialog.Header>
 
@@ -399,8 +413,13 @@
 
     <!-- Step: General Feedback -->
     {:else if step === "general"}
-      <Dialog.Header class="pl-6">
-        <Dialog.Title>{m.feedback_general_title()}</Dialog.Title>
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_general_title()}</Dialog.Title>
+        </div>
       </Dialog.Header>
 
       <div class="space-y-2">
