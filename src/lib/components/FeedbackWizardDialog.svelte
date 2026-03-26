@@ -247,7 +247,7 @@
         {#if sourceType === "cex" || sourceType === "defi"}
           <div class="space-y-1">
             <label for="source-url" class="text-sm font-medium">
-              {sourceType === "cex" ? m.feedback_source_cex() : m.feedback_source_defi()} URL
+              {m.feedback_llm_website_url()}
             </label>
             <Input
               id="source-url"

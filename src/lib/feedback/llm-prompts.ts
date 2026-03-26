@@ -275,9 +275,9 @@ export function generateLlmPrompt(type: SourceType, url?: string): string {
       parts.push("```");
       parts.push("");
       parts.push("## Exchange details");
-      parts.push(`The exchange website/API documentation: ${url ?? "[URL]"}`);
+      parts.push(`The exchange website: ${url ?? "[URL]"}`);
       parts.push("");
-      parts.push("Please look up the exchange name and API documentation from the URL above and implement a CexAdapter with proper authentication and pagination.");
+      parts.push("Please visit the website above, find the exchange name and API documentation, then implement a CexAdapter with proper authentication and pagination.");
       break;
 
     case "defi":
@@ -292,12 +292,12 @@ export function generateLlmPrompt(type: SourceType, url?: string): string {
       parts.push("```");
       parts.push("");
       parts.push("## Protocol details");
-      parts.push(`The protocol website/docs: ${url ?? "[URL]"}`);
+      parts.push(`The protocol website: ${url ?? "[URL]"}`);
       parts.push("The contract address(es): [0x...]");
       parts.push("The chain: [Ethereum/Polygon/Arbitrum/etc.]");
       parts.push("What it does: [DESCRIBE: swaps, lending, staking, etc.]");
       parts.push("");
-      parts.push("Please look up the protocol name and details from the URL above and implement a TransactionHandler that matches and processes these transactions.");
+      parts.push("Please visit the website above, find the protocol name and relevant documentation, then implement a TransactionHandler that matches and processes these transactions.");
       break;
 
     case "pdf":
