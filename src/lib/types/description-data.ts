@@ -15,7 +15,7 @@ export type DescriptionData =
   | { type: "hl-fill"; coin: string; side: "long" | "short"; closedPnl?: string; spent?: string; received?: string }
   | { type: "hl-funding"; coin: string; usdc: string }
   | { type: "hl-ledger"; action: "deposit" | "withdrawal" | "liquidation" | "transfer"; usdc?: string }
-  | { type: "system"; action: "reversal" | "pad" | "recurring"; ref?: string };
+  | { type: "system"; action: "reversal" | "pad"; ref?: string };
 
 // ── Centralized builders (use these instead of constructing DescriptionData inline) ──
 
@@ -147,7 +147,6 @@ export function renderDescription(data: DescriptionData): string {
       switch (data.action) {
         case "reversal": return `Reversal${data.ref ? ` of: ${data.ref}` : ""}`;
         case "pad": return `Pad${data.ref ? `: ${data.ref}` : ""}`;
-        case "recurring": return `Recurring${data.ref ? `: ${data.ref}` : ""}`;
       }
   }
 }

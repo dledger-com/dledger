@@ -199,7 +199,6 @@
   "toast_ml_applied": "ML suggestions applied",
   "toast_template_created": "Template created",
   "toast_template_deleted": "Template deleted",
-  "toast_recurring_created": "Recurring template created",
   "toast_rate_fetched": "Fetched {code} rate from {source}",
   "toast_rate_source_updated": "Updated {code} rate source to {source}",
   "toast_address_added": "Address added to {count} chain(s)",
@@ -320,8 +319,6 @@
   "dashboard_currencies_other": "{count} currencies",
   "dashboard_without_rate": ", {count} without rate",
   "dashboard_no_rate": "no rate",
-  "dashboard_recurring_due_one": "1 recurring template due",
-  "dashboard_recurring_due_other": "{count} recurring templates due",
 
   "chart_net_worth": "Net Worth",
   "chart_net_worth_desc": "Asset + liability totals in {currency} over time.",
@@ -445,8 +442,6 @@
   "btn_keep_editing": "Keep Editing",
   "btn_discard": "Discard",
   "btn_void_entry": "Void Entry",
-  "btn_make_recurring": "Make Recurring",
-
   "label_simple": "Simple",
   "label_exchange": "Exchange",
   "label_source": "Source",

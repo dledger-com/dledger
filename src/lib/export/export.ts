@@ -111,9 +111,8 @@ export async function exportData(
 		})),
 	};
 
-	onProgress?.("Gathering budgets and templates...");
+	onProgress?.("Gathering budgets...");
 	const budgets = await backend.listBudgets();
-	const recurring = await backend.listRecurringTemplates();
 	const reconciliations = await backend.listReconciliations();
 
 	// Raw transactions (optional, can be very large)
@@ -135,7 +134,6 @@ export async function exportData(
 			currencies: currencies.length,
 			exchangeRates: exchangeRates.length,
 			budgets: budgets.length,
-			recurringTemplates: recurring.length,
 			reconciliations: reconciliations.length,
 			...(rawTransactions ? { rawTransactions: rawTransactions.length } : {}),
 		},
@@ -166,7 +164,6 @@ export async function exportData(
 		"exchange-rates.json": strToU8(JSON.stringify(exchangeRates)),
 		"sources.json": strToU8(JSON.stringify(sources)),
 		"budgets.json": strToU8(JSON.stringify(budgets)),
-		"recurring.json": strToU8(JSON.stringify(recurring)),
 		"reconciliations.json": strToU8(JSON.stringify(reconciliations)),
 	};
 

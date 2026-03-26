@@ -106,10 +106,6 @@ describe("renderDescription", () => {
       .toBe("Pad");
   });
 
-  it("renders system recurring", () => {
-    expect(renderDescription({ type: "system", action: "recurring", ref: "template-1" }))
-      .toBe("Recurring: template-1");
-  });
 });
 
 describe("DescriptionData round-trip", () => {

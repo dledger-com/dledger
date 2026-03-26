@@ -26,7 +26,7 @@ import type {
   BalanceAssertion,
   BalanceAssertionResult,
 } from "./types/index.js";
-import type { Backend, CurrencyRateSource, Reconciliation, RecurringTemplate, UnreconciledLineItem } from "./backend.js";
+import type { Backend, CurrencyRateSource, Reconciliation, UnreconciledLineItem } from "./backend.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
 import { parseTags } from "./utils/tags.js";
 import { isSpamCurrency } from "./currency-validation.js";
@@ -477,12 +477,6 @@ export class SqlJsBackend implements Backend {
       reconciliation_id TEXT NOT NULL, line_item_id TEXT NOT NULL,
       PRIMARY KEY (reconciliation_id, line_item_id)
     )`);
-    // Recurring templates (v10)
-    db.exec(`CREATE TABLE IF NOT EXISTS recurring_template (
-      id TEXT PRIMARY KEY, description TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
-      interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
-      is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
-    )`);
     // Token address mapping (v12, updated v17)
     db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
       currency TEXT NOT NULL, asset_type TEXT NOT NULL DEFAULT '', param TEXT NOT NULL DEFAULT '',
@@ -795,14 +789,6 @@ export class SqlJsBackend implements Backend {
           db.exec(`CREATE TABLE IF NOT EXISTS reconciliation_line_item (
             reconciliation_id TEXT NOT NULL, line_item_id TEXT NOT NULL,
             PRIMARY KEY (reconciliation_id, line_item_id)
-          )`);
-        }
-        if (currentVersion < 10) {
-          // Migrate v9 → v10: recurring templates
-          db.exec(`CREATE TABLE IF NOT EXISTS recurring_template (
-            id TEXT PRIMARY KEY, description TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
-            interval_val INTEGER NOT NULL DEFAULT 1, next_date TEXT NOT NULL, end_date TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1, line_items_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
           )`);
         }
         if (currentVersion < 11) {
@@ -2044,7 +2030,7 @@ PRAGMA foreign_keys = ON;
   async mergeAccounts(
     sourceId: string,
     targetId: string,
-  ): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }> {
+  ): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; metadata: number }> {
     if (sourceId === targetId) throw new Error("cannot merge an account into itself");
 
     const source = this.getAccountById(sourceId);
@@ -2058,7 +2044,7 @@ PRAGMA foreign_keys = ON;
       throw new Error(`cannot merge root account "${source.full_name}"`);
     }
 
-    const totals = { lineItems: 0, lots: 0, assertions: 0, reconciliations: 0, templates: 0, metadata: 0 };
+    const totals = { lineItems: 0, lots: 0, assertions: 0, reconciliations: 0, metadata: 0 };
 
     // Helper: move all data from one account to another and delete the source
     const mergeData = (srcId: string, tgtId: string): void => {
@@ -2091,28 +2077,7 @@ PRAGMA foreign_keys = ON;
       const recCount = this.query("SELECT changes() AS c", [], (r) => r.c as number)[0] ?? 0;
       totals.reconciliations += recCount;
 
-      // 6. recurring_templates — update account_id refs inside line_items_json
-      const templates = this.query(
-        "SELECT id, line_items_json FROM recurring_template",
-        [],
-        (row) => ({ id: row.id as string, json: row.line_items_json as string }),
-      );
-      for (const tmpl of templates) {
-        const items = JSON.parse(tmpl.json || "[]") as Array<{ account_id: string }>;
-        let changed = false;
-        for (const item of items) {
-          if (item.account_id === srcId) {
-            item.account_id = tgtId;
-            changed = true;
-          }
-        }
-        if (changed) {
-          this.run("UPDATE recurring_template SET line_items_json = ? WHERE id = ?", [JSON.stringify(items), tmpl.id]);
-          totals.templates++;
-        }
-      }
-
-      // 7. Delete source from closure table and account table
+      // 6. Delete source from closure table and account table
       this.run("DELETE FROM account_closure WHERE ancestor_id = ? OR descendant_id = ?", [srcId, srcId]);
       this.run("DELETE FROM account WHERE id = ?", [srcId]);
     };
@@ -5934,54 +5899,6 @@ PRAGMA foreign_keys = ON;
     return { reconciliation: rec, lineItemIds };
   }
 
-  // ---- Recurring templates ----
-
-  async createRecurringTemplate(template: RecurringTemplate): Promise<void> {
-    this.run(
-      `INSERT INTO recurring_template (id, description, frequency, interval_val, next_date, end_date, is_active, line_items_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [template.id, template.description, template.frequency, template.interval,
-       template.next_date, template.end_date, template.is_active ? 1 : 0,
-       JSON.stringify(template.line_items), template.created_at],
-    );
-    this.scheduleSave();
-  }
-
-  async listRecurringTemplates(): Promise<RecurringTemplate[]> {
-    return this.query(
-      "SELECT id, description, frequency, interval_val, next_date, end_date, is_active, line_items_json, created_at FROM recurring_template ORDER BY next_date ASC",
-      [],
-      (row) => ({
-        id: row.id as string,
-        description: row.description as string,
-        frequency: row.frequency as RecurringTemplate["frequency"],
-        interval: row.interval_val as number,
-        next_date: row.next_date as string,
-        end_date: (row.end_date as string) || null,
-        is_active: (row.is_active as number) !== 0,
-        line_items: JSON.parse((row.line_items_json as string) || "[]"),
-        created_at: row.created_at as string,
-      }),
-    );
-  }
-
-  async updateRecurringTemplate(template: RecurringTemplate): Promise<void> {
-    this.run(
-      `UPDATE recurring_template SET description = ?, frequency = ?, interval_val = ?,
-       next_date = ?, end_date = ?, is_active = ?, line_items_json = ?
-       WHERE id = ?`,
-      [template.description, template.frequency, template.interval,
-       template.next_date, template.end_date, template.is_active ? 1 : 0,
-       JSON.stringify(template.line_items), template.id],
-    );
-    this.scheduleSave();
-  }
-
-  async deleteRecurringTemplate(id: string): Promise<void> {
-    this.run("DELETE FROM recurring_template WHERE id = ?", [id]);
-    this.scheduleSave();
-  }
-
   // ---- Database export/import ----
 
   async exportDatabase(): Promise<Uint8Array> {
@@ -6030,7 +5947,7 @@ PRAGMA foreign_keys = ON;
       "lot_disposal", "lot", "line_item", "entry_link",
       "journal_entry_metadata", "balance_assertion", "audit_log",
       "journal_entry", "raw_transaction", "currency_rate_source",
-      "budget", "recurring_template", "french_tax_report", "currency_token_address",
+      "budget", "french_tax_report", "currency_token_address",
       "account_metadata", "account_closure", "account", "currency",
     ]);
     try { this.db.exec("UPDATE exchange_account SET last_sync = NULL"); } catch { /* may not exist */ }

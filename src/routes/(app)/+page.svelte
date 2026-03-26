@@ -20,7 +20,6 @@
   import { computeNetWorthSeries, computeExpenseBreakdown, type NetWorthPoint, type ExpenseCategory } from "$lib/utils/balance-history.js";
   import { ExchangeRateCache } from "$lib/utils/exchange-rate-cache.js";
   import { getBackend } from "$lib/backend.js";
-  import { countDueTemplates } from "$lib/utils/recurring.js";
   import { toast } from "svelte-sonner";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
@@ -291,17 +290,6 @@
       })
       .catch((e) => { if (!signal.aborted) console.error("Charts failed:", e); });
 
-    // Stream 6: Recurring templates toast (independent)
-    countDueTemplates(getBackend())
-      .then((count) => {
-        if (signal.aborted) return;
-        if (count > 0) {
-          toast.info(count === 1 ? m.dashboard_recurring_due_one() : m.dashboard_recurring_due_other({ count: String(count) }), {
-            action: { label: m.btn_generate(), onClick: () => { window.location.href = "/journal/recurring"; } },
-          });
-        }
-      })
-      .catch(() => {});
   });
 
   // ── Invalidation subscriptions ──────────────────────────────────

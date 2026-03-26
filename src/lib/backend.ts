@@ -67,24 +67,6 @@ export interface UnreconciledLineItem {
   is_reconciled: boolean;
 }
 
-export interface RecurringTemplate {
-  id: string;
-  description: string;
-  frequency: "daily" | "weekly" | "monthly" | "yearly";
-  interval: number;
-  next_date: string;
-  end_date: string | null;
-  is_active: boolean;
-  line_items: TemplateLineItem[];
-  created_at: string;
-}
-
-export interface TemplateLineItem {
-  account_id: string;
-  currency: string;
-  amount: string;
-}
-
 export interface CurrencyRateSource {
   currency: string;
   asset_type?: string;
@@ -437,12 +419,6 @@ export interface Backend {
   listReconciliations(accountId?: string): Promise<Reconciliation[]>;
   getReconciliationDetail(id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null>;
 
-  // Recurring templates
-  createRecurringTemplate(template: RecurringTemplate): Promise<void>;
-  listRecurringTemplates(): Promise<RecurringTemplate[]>;
-  updateRecurringTemplate(template: RecurringTemplate): Promise<void>;
-  deleteRecurringTemplate(id: string): Promise<void>;
-
   // Database export/import (optional)
   exportDatabase?(): Promise<Uint8Array>;
   importDatabase?(data: Uint8Array): Promise<void>;
@@ -454,7 +430,7 @@ export interface Backend {
 
   // Account rename / merge
   renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }>;
-  mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }>;
+  mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; metadata: number }>;
 
   // French tax reports
   saveFrenchTaxReport(taxYear: number, report: FrenchTaxReport, checklist?: Record<string, boolean>): Promise<void>;
@@ -630,20 +606,6 @@ class TauriBackend implements Backend {
   }
   async getReconciliationDetail(id: string): Promise<{ reconciliation: Reconciliation; lineItemIds: string[] } | null> {
     return this.invoke("get_reconciliation_detail", { id });
-  }
-
-  // Recurring templates
-  async createRecurringTemplate(template: RecurringTemplate): Promise<void> {
-    return this.invoke("create_recurring_template", { template });
-  }
-  async listRecurringTemplates(): Promise<RecurringTemplate[]> {
-    return this.invoke("list_recurring_templates");
-  }
-  async updateRecurringTemplate(template: RecurringTemplate): Promise<void> {
-    return this.invoke("update_recurring_template", { template });
-  }
-  async deleteRecurringTemplate(id: string): Promise<void> {
-    return this.invoke("delete_recurring_template", { id });
   }
 
   // Exchange rates
@@ -1158,7 +1120,7 @@ class TauriBackend implements Backend {
   async renameAccountPrefix(oldPrefix: string, newPrefix: string): Promise<{ renamed: number; skipped: number }> {
     return this.invoke("rename_account_prefix", { oldPrefix, newPrefix });
   }
-  async mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number }> {
+  async mergeAccounts(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; metadata: number }> {
     return this.invoke("merge_accounts", { sourceId, targetId });
   }
 

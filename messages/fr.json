@@ -199,7 +199,6 @@
   "toast_ml_applied": "Suggestions IA appliquées",
   "toast_template_created": "Modèle créé",
   "toast_template_deleted": "Modèle supprimé",
-  "toast_recurring_created": "Modèle récurrent créé",
   "toast_rate_fetched": "Taux {code} récupéré depuis {source}",
   "toast_rate_source_updated": "Source de taux {code} mise à jour vers {source}",
   "toast_address_added": "Adresse ajoutée à {count} chaîne(s)",
@@ -320,8 +319,6 @@
   "dashboard_currencies_other": "{count} devises",
   "dashboard_without_rate": ", {count} sans taux",
   "dashboard_no_rate": "sans taux",
-  "dashboard_recurring_due_one": "1 modèle récurrent en attente",
-  "dashboard_recurring_due_other": "{count} modèles récurrents en attente",
 
   "chart_net_worth": "Patrimoine net",
   "chart_net_worth_desc": "Total des actifs et passifs en {currency} dans le temps.",
@@ -445,8 +442,6 @@
   "btn_keep_editing": "Continuer la modification",
   "btn_discard": "Abandonner",
   "btn_void_entry": "Annuler l'écriture",
-  "btn_make_recurring": "Rendre récurrent",
-
   "label_simple": "Simple",
   "label_exchange": "Échange",
   "label_source": "Source",

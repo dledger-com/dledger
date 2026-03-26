@@ -10,8 +10,6 @@
   import { entryInvolvesHidden } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
-  import { goto } from "$app/navigation";
-  import { templateFromEntry } from "$lib/utils/recurring.js";
   import TagInput from "$lib/components/TagInput.svelte";
   import LinkInput from "$lib/components/LinkInput.svelte";
   import FlowView from "$lib/components/FlowView.svelte";
@@ -482,14 +480,6 @@
     {#if entry && entry.status === "confirmed"}
       <Drawer.Footer>
         <div class="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onclick={async () => {
-            if (!entry) return;
-            const template = templateFromEntry(entry, viewItems);
-            await getBackend().createRecurringTemplate(template);
-            toast.success(m.toast_recurring_created());
-            open = false;
-            goto("/journal/recurring");
-          }}>{m.btn_make_recurring()}</Button>
           <Button variant="destructive" size="sm" onclick={handleVoid}>{m.btn_void_entry()}</Button>
         </div>
       </Drawer.Footer>

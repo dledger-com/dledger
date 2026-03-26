@@ -15,7 +15,6 @@
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
-  import { templateFromEntry } from "$lib/utils/recurring.js";
   import TagInput from "$lib/components/TagInput.svelte";
   import LinkInput from "$lib/components/LinkInput.svelte";
   import { parseTags, serializeTags, TAGS_META_KEY, NOTE_META_KEY } from "$lib/utils/tags.js";
@@ -178,13 +177,6 @@
       setTopBarActions([
         { type: 'button', label: 'Edit Entry', href: `/journal/new?edit=${entryId}`, variant: 'outline' },
         { type: 'menu', items: [
-          { label: 'Make Recurring', onclick: async () => {
-            if (!entry) return;
-            const template = templateFromEntry(entry, items);
-            await getBackend().createRecurringTemplate(template);
-            toast.success("Recurring template created");
-            goto("/journal/recurring");
-          }},
           { label: 'Void Entry', onclick: handleVoid }
         ]}
       ]);

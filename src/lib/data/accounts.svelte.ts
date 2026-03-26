@@ -125,7 +125,7 @@ export class AccountStore {
     }
   }
 
-  async merge(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; templates: number; metadata: number } | null> {
+  async merge(sourceId: string, targetId: string): Promise<{ lineItems: number; lots: number; assertions: number; reconciliations: number; metadata: number } | null> {
     try {
       const result = await getBackend().mergeAccounts(sourceId, targetId);
       await this.load();

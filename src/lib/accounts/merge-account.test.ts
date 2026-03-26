@@ -215,40 +215,6 @@ describe("mergeAccounts", () => {
       expect(recs.length).toBe(1);
     });
 
-    it("updates recurring template JSON", async () => {
-      const { backend, accounts } = await seedBasicLedger();
-      const allAccounts = await backend.listAccounts();
-      const assetsRoot = allAccounts.find((a) => a.full_name === "Assets")!;
-      const savings = await createAccount(backend, {
-        parent_id: assetsRoot.id,
-        account_type: "asset",
-        name: "Savings",
-        full_name: "Assets:Savings",
-      });
-
-      await backend.createRecurringTemplate({
-        id: uuidv7(),
-        description: "Monthly transfer",
-        frequency: "monthly",
-        interval: 1,
-        next_date: "2024-02-01",
-        end_date: null,
-        is_active: true,
-        line_items: [
-          { account_id: savings.id, currency: "USD", amount: "500" },
-          { account_id: accounts.bank.id, currency: "USD", amount: "-500" },
-        ],
-        created_at: "2024-01-01",
-      });
-
-      const result = await backend.mergeAccounts(savings.id, accounts.bank.id);
-      expect(result.templates).toBe(1);
-
-      const templates = await backend.listRecurringTemplates();
-      const tmpl = templates[0];
-      expect(tmpl.line_items.every((li) => li.account_id !== savings.id)).toBe(true);
-      expect(tmpl.line_items.some((li) => li.account_id === accounts.bank.id)).toBe(true);
-    });
   });
 
   // ---- Children handling ----

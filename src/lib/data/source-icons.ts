@@ -9,7 +9,7 @@ import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 import { BLOCKCHAIN_CHAINS } from "$lib/blockchain-registry.js";
 
 export interface ParsedSource {
-  type: "cex" | "csv" | "etherscan" | "thegraph" | "btc" | "chain" | "manual" | "system" | "recurring" | "unknown";
+  type: "cex" | "csv" | "etherscan" | "thegraph" | "btc" | "chain" | "manual" | "system" | "unknown";
   institutionId: string | null;
   chainId?: number;
   chainName?: string;
@@ -104,7 +104,6 @@ export function parseSourceId(source: string): ParsedSource {
   // Manual and system
   if (source === "manual") return { type: "manual", institutionId: null };
   if (source.startsWith("system:")) return { type: "system", institutionId: null };
-  if (source.startsWith("recurring:")) return { type: "recurring", institutionId: null };
 
   // Hyperliquid: "hyperliquid:fill:hash", "hyperliquid:funding:key", "hyperliquid:ledger:hash"
   if (source.startsWith("hyperliquid:")) return { type: "chain", institutionId: null, chainName: "hl" };
@@ -198,7 +197,6 @@ export function getSourceLabel(source: string): string {
     case "chain": return parsed.chainName ?? "Blockchain";
     case "manual": return "Manual";
     case "system": return "System";
-    case "recurring": return "Recurring";
     default: return source.length > 20 ? source.slice(0, 20) + "\u2026" : source;
   }
 }
