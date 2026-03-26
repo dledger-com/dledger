@@ -130,10 +130,8 @@ function classifySource(
     return disabledSources?.has("frankfurter") ? null : "frankfurter";
   }
   if (assetType === "crypto") {
-    if (tokenAddressCurrencies?.has(currency) || COINGECKO_IDS[currency]) {
-      return pickCryptoSource(!!COINGECKO_IDS[currency]);
-    }
-    return null;
+    // Trust the "crypto" classification — try crypto sources even for non-hardcoded tokens
+    return pickCryptoSource(!!COINGECKO_IDS[currency]);
   }
   if (assetType === "stock" || assetType === "commodity" || assetType === "index" || assetType === "bond") return null;
   // 4. Unclassified fallback: existing heuristics
@@ -143,7 +141,9 @@ function classifySource(
   if (tokenAddressCurrencies?.has(currency) || COINGECKO_IDS[currency]) {
     return pickCryptoSource(!!COINGECKO_IDS[currency]);
   }
-  return null; // No known pricing path — skip
+  // Last resort: try defillama for any unclassified currency
+  if (!disabledSources?.has("defillama")) return "defillama";
+  return null;
 }
 
 // ---- Find missing rates ----
@@ -1447,9 +1447,13 @@ export function enqueueRateBackfill(
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total }),
         }, hiddenCurrencies, dpriceAssets);
 
-        // Mark failed currencies as unfetchable (rate_source = "none", set_by = "auto")
+        // Mark failed currencies as unfetchable — but only if they don't already have a working source
         if (result.failedCurrencies.length > 0) {
+          const storedSources = await backend.getCurrencyRateSources();
+          const failSourceMap = new Map(storedSources.map(s => [s.currency, s]));
           for (const code of result.failedCurrencies) {
+            const stored = failSourceMap.get(code);
+            if (stored && stored.rate_source && stored.rate_source !== "none") continue;
             await backend.setCurrencyRateSource(code, "none", "auto");
           }
         }

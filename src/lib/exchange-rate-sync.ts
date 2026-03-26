@@ -88,12 +88,11 @@ function autoDetectSource(
     return disabledSources?.has("frankfurter") ? "none" : "frankfurter";
   }
   if (assetType === "crypto") {
-    if (hasTokenAddress || COINGECKO_IDS[code]) {
-      if (!disabledSources?.has("defillama")) return "defillama";
-      if (!disabledSources?.has("coingecko")) return "coingecko";
-      if (!disabledSources?.has("binance")) return "binance";
-      return "none";
-    }
+    // Trust the "crypto" classification — try all crypto sources even for unknown symbols.
+    // DefiLlama accepts arbitrary symbols (searches by symbol), so it can handle non-hardcoded tokens.
+    if (!disabledSources?.has("defillama")) return "defillama";
+    if ((hasTokenAddress || COINGECKO_IDS[code]) && !disabledSources?.has("coingecko")) return "coingecko";
+    if (!disabledSources?.has("binance")) return "binance";
     return "none";
   }
   if (assetType === "stock") return "none"; // finnhub requires API key; dprice handles stocks
@@ -108,6 +107,8 @@ function autoDetectSource(
     if (!disabledSources?.has("binance")) return "binance";
     return "none";
   }
+  // Last resort: try defillama for any unclassified currency (it searches by symbol)
+  if (!disabledSources?.has("defillama")) return "defillama";
   return "none";
 }
 
@@ -806,10 +807,12 @@ export async function syncExchangeRates(
     result.newlyDetected.push(code);
   }
 
-  // Auto-hide: ALL currencies that failed, not just auto-detect ones.
-  // setCurrencyRateSource priority system prevents overriding user/handler settings.
+  // Auto-hide: currencies that failed AND don't already have a working stored source.
+  // Don't downgrade existing sources to "none" just because one sync run didn't serve them.
   for (const code of allFailed) {
     if (allSucceeded.has(code)) continue; // succeeded on another source
+    const stored = sourceMap.get(code);
+    if (stored && stored.rate_source && stored.rate_source !== "none") continue; // preserve existing working source
     const changed = await backend.setCurrencyRateSource(code, "none", "auto");
     if (changed) {
       result.autoHidden.push(code);

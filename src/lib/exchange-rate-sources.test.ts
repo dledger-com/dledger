@@ -80,14 +80,26 @@ describe("findMissingRates source classification", () => {
     expect(requests[0].source).toBe("defillama");
   });
 
-  it("skips unknown crypto with no COINGECKO_IDS and no token address", async () => {
+  it("routes unknown unclassified currency to defillama as last resort", async () => {
     await backend.createCurrency({ code: "RANDOMTOKEN", asset_type: "", param: "", name: "Random", decimal_places: 18, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "RANDOMTOKEN", date: "2024-03-01" },
     ]);
 
-    expect(requests).toHaveLength(0); // No pricing path — skipped
+    expect(requests).toHaveLength(1);
+    expect(requests[0].source).toBe("defillama");
+  });
+
+  it("skips unclassified currency when all sources are disabled", async () => {
+    await backend.createCurrency({ code: "RANDOMTOKEN", asset_type: "", param: "", name: "Random", decimal_places: 18, is_base: false });
+
+    const disabled = new Set(["frankfurter", "coingecko", "defillama", "binance", "cryptocompare", "finnhub"]);
+    const requests = await findMissingRates(backend, "USD", [
+      { currency: "RANDOMTOKEN", date: "2024-03-01" },
+    ], undefined, undefined, disabled);
+
+    expect(requests).toHaveLength(0);
   });
 
   it("respects DB-stored rate source override", async () => {
@@ -184,19 +196,32 @@ describe("findMissingRates source classification", () => {
     expect(requests[0].source).toBe("cryptocompare");
   });
 
-  it("collects unsourceable currencies when out-parameter is provided", async () => {
+  it("collects unsourceable currencies when all sources disabled", async () => {
     await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN Token", decimal_places: 8, is_base: false });
 
     const unsourceable = new Set<string>();
+    const disabled = new Set(["frankfurter", "coingecko", "defillama", "binance", "cryptocompare", "finnhub"]);
     const requests = await findMissingRates(
       backend, "USD",
       [{ currency: "DEPIN", date: "2024-06-01" }],
-      undefined, undefined, undefined,
+      undefined, undefined, disabled,
       unsourceable,
     );
 
     expect(requests).toHaveLength(0);
     expect(unsourceable.has("DEPIN")).toBe(true);
+  });
+
+  it("routes unclassified DEPIN to defillama by default", async () => {
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN Token", decimal_places: 8, is_base: false });
+
+    const requests = await findMissingRates(
+      backend, "USD",
+      [{ currency: "DEPIN", date: "2024-06-01" }],
+    );
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].source).toBe("defillama");
   });
 
   it("does not collect user-set none currencies as unsourceable", async () => {
