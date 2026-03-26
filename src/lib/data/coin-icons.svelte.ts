@@ -326,6 +326,8 @@ export function getCoinIconCount(): number {
 
 // In-flight fetches to avoid duplicate requests for the same key
 const _inflight = new Map<string, Promise<string | null>>();
+// Keys that failed to fetch (404, CORS, etc.) — don't retry within this session
+const _failedKeys = new Set<string>();
 
 /**
  * Get a cached icon by arbitrary key (e.g., "chain:bitcoin", "exchange:kraken").
@@ -348,8 +350,8 @@ export function cacheExternalIcon(key: string, url: string): string {
   const cached = _icons.get(key);
   if (cached && isLocalCache(cached)) return cached;
 
-  // Already fetching this key
-  if (_inflight.has(key)) return cached ?? url;
+  // Already fetching or previously failed — use external URL as-is
+  if (_inflight.has(key) || _failedKeys.has(key)) return cached ?? url;
 
   // Fetch in background
   const promise = fetchAsDataUri(url).then(async (dataUri) => {
@@ -359,6 +361,8 @@ export function cacheExternalIcon(key: string, url: string): string {
       saveToStorage(_icons);
       await saveIconsToIDB(new Map([[key, dataUri]]));
       notify();
+    } else {
+      _failedKeys.add(key); // don't retry failed fetches this session
     }
     return dataUri;
   });
