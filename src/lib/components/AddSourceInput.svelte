@@ -6,6 +6,7 @@
   import type { ExchangeId } from "$lib/cex/types.js";
   import { getAllCexAdapters } from "$lib/cex/index.js";
   import ExchangeIcon from "$lib/components/ExchangeIcon.svelte";
+  import ChainIcon from "$lib/components/ChainIcon.svelte";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 
   let {
@@ -538,125 +539,125 @@
         <Command.Group heading="Blockchain">
           {#if onSelectAlgorand}
             <Command.Item value="Algorand" keywords={["algorand", "algo"]} onSelect={() => selectAlgorand()}>
-              Algorand
+              <ChainIcon chainName="algorand" size={16} />Algorand
             </Command.Item>
           {/if}
           {#if onSelectAptos}
             <Command.Item value="Aptos" keywords={["aptos", "apt", "move"]} onSelect={() => selectAptos()}>
-              Aptos
+              <ChainIcon chainName="aptos" size={16} />Aptos
             </Command.Item>
           {/if}
           {#if onSelectBitcoin}
             <Command.Item value="Bitcoin" keywords={["bitcoin", "btc", "xpub", "ypub", "zpub"]} onSelect={() => selectBitcoin()}>
-              Bitcoin
+              <ChainIcon chainName="bitcoin" size={16} />Bitcoin
             </Command.Item>
           {/if}
           {#if onSelectBch}
             <Command.Item value="Bitcoin Cash" keywords={["bitcoin cash", "bch"]} onSelect={() => selectBch()}>
-              Bitcoin Cash
+              <ChainIcon chainName="bch" size={16} />Bitcoin Cash
             </Command.Item>
           {/if}
           {#if onSelectBittensor}
             <Command.Item value="Bittensor" keywords={["bittensor", "tao", "substrate"]} onSelect={() => selectBittensor()}>
-              Bittensor
+              <ChainIcon chainName="bittensor" size={16} />Bittensor
             </Command.Item>
           {/if}
           {#if onSelectCardano}
             <Command.Item value="Cardano" keywords={["cardano", "ada"]} onSelect={() => selectCardano()}>
-              Cardano
+              <ChainIcon chainName="cardano" size={16} />Cardano
             </Command.Item>
           {/if}
           {#if onSelectCosmos}
             <Command.Item value="Cosmos" keywords={["cosmos", "atom", "ibc"]} onSelect={() => selectCosmos()}>
-              Cosmos
+              <ChainIcon chainName="cosmos" size={16} />Cosmos
             </Command.Item>
           {/if}
           {#if onSelectDoge}
             <Command.Item value="Dogecoin" keywords={["dogecoin", "doge"]} onSelect={() => selectDoge()}>
-              Dogecoin
+              <ChainIcon chainName="doge" size={16} />Dogecoin
             </Command.Item>
           {/if}
           <Command.Item value="EVM" keywords={chainKeywords} onSelect={() => selectBlockchain()}>
-            EVM (Ethereum, Arbitrum, Base...)
+            <ChainIcon chainId={1} size={16} />EVM (Ethereum, Arbitrum, Base...)
           </Command.Item>
           {#if onSelectHedera}
             <Command.Item value="Hedera" keywords={["hedera", "hbar"]} onSelect={() => selectHedera()}>
-              Hedera
+              <ChainIcon chainName="hedera" size={16} />Hedera
             </Command.Item>
           {/if}
           {#if onSelectHyperliquid}
             <Command.Item value="Hyperliquid" keywords={["hyperliquid", "hl", "perp", "futures", "dex"]} onSelect={() => selectHyperliquid()}>
-              Hyperliquid
+              <ChainIcon chainName="hl" size={16} />Hyperliquid
             </Command.Item>
           {/if}
           {#if onSelectKaspa}
             <Command.Item value="Kaspa" keywords={["kaspa", "kas"]} onSelect={() => selectKaspa()}>
-              Kaspa
+              <ChainIcon chainName="kaspa" size={16} />Kaspa
             </Command.Item>
           {/if}
           {#if onSelectLtc}
             <Command.Item value="Litecoin" keywords={["litecoin", "ltc"]} onSelect={() => selectLtc()}>
-              Litecoin
+              <ChainIcon chainName="ltc" size={16} />Litecoin
             </Command.Item>
           {/if}
           {#if onSelectMonero}
             <Command.Item value="Monero" keywords={["monero", "xmr", "privacy"]} onSelect={() => selectMonero()}>
-              Monero
+              <ChainIcon chainName="xmr" size={16} />Monero
             </Command.Item>
           {/if}
           {#if onSelectNear}
             <Command.Item value="NEAR" keywords={["near", "near protocol"]} onSelect={() => selectNear()}>
-              NEAR
+              <ChainIcon chainName="near" size={16} />NEAR
             </Command.Item>
           {/if}
           {#if onSelectPolkadot}
             <Command.Item value="Polkadot" keywords={["polkadot", "dot", "substrate"]} onSelect={() => selectPolkadot()}>
-              Polkadot
+              <ChainIcon chainName="polkadot" size={16} />Polkadot
             </Command.Item>
           {/if}
           {#if onSelectSolana}
             <Command.Item value="Solana" keywords={["solana", "sol", "phantom", "solflare"]} onSelect={() => selectSolana()}>
-              Solana
+              <ChainIcon chainName="solana" size={16} />Solana
             </Command.Item>
           {/if}
           {#if onSelectStacks}
             <Command.Item value="Stacks" keywords={["stacks", "stx", "bitcoin"]} onSelect={() => selectStacks()}>
-              Stacks
+              <ChainIcon chainName="stacks" size={16} />Stacks
             </Command.Item>
           {/if}
           {#if onSelectStellar}
             <Command.Item value="Stellar" keywords={["stellar", "xlm"]} onSelect={() => selectStellar()}>
-              Stellar
+              <ChainIcon chainName="stellar" size={16} />Stellar
             </Command.Item>
           {/if}
           {#if onSelectSui}
             <Command.Item value="Sui" keywords={["sui", "move"]} onSelect={() => selectSui()}>
-              Sui
+              <ChainIcon chainName="sui" size={16} />Sui
             </Command.Item>
           {/if}
           {#if onSelectTezos}
             <Command.Item value="Tezos" keywords={["tezos", "xtz", "tz1"]} onSelect={() => selectTezos()}>
-              Tezos
+              <ChainIcon chainName="tezos" size={16} />Tezos
             </Command.Item>
           {/if}
           {#if onSelectTon}
             <Command.Item value="TON" keywords={["ton", "toncoin", "telegram"]} onSelect={() => selectTon()}>
-              TON
+              <ChainIcon chainName="ton" size={16} />TON
             </Command.Item>
           {/if}
           {#if onSelectTron}
             <Command.Item value="TRON" keywords={["tron", "trx"]} onSelect={() => selectTron()}>
-              TRON
+              <ChainIcon chainName="tron" size={16} />TRON
             </Command.Item>
           {/if}
           {#if onSelectXrp}
             <Command.Item value="XRP" keywords={["xrp", "ripple", "xrpl"]} onSelect={() => selectXrp()}>
-              XRP
+              <ChainIcon chainName="xrp" size={16} />XRP
             </Command.Item>
           {/if}
           {#if onSelectZcash}
             <Command.Item value="Zcash" keywords={["zcash", "zec"]} onSelect={() => selectZcash()}>
-              Zcash
+              <ChainIcon chainName="zcash" size={16} />Zcash
             </Command.Item>
           {/if}
         </Command.Group>

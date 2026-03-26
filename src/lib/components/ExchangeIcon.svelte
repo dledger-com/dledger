@@ -1,14 +1,24 @@
 <script lang="ts">
     import { getExchangeIconUrl } from "$lib/data/exchange-icons.js";
+    import { INSTITUTION_REGISTRY } from "$lib/cex/institution-registry.js";
 
     let { exchangeId, size = 16 }: { exchangeId: string; size?: number } = $props();
 
     const url = $derived(getExchangeIconUrl(exchangeId));
+
+    const faviconUrl = $derived.by(() => {
+        const info = INSTITUTION_REGISTRY[exchangeId];
+        if (info?.url) return `https://www.google.com/s2/favicons?domain=${info.url}&sz=32`;
+        return null;
+    });
+
     let errored = $state(false);
+    let faviconErrored = $state(false);
 
     $effect(() => {
         void exchangeId;
         errored = false;
+        faviconErrored = false;
     });
 
     function hashColor(s: string): string {
@@ -29,6 +39,15 @@
         style="width:{size}px;height:{size}px"
         loading="lazy"
         onerror={() => errored = true}
+    />
+{:else if faviconUrl && !faviconErrored}
+    <img
+        src={faviconUrl}
+        alt=""
+        class="inline-block shrink-0 object-cover"
+        style="width:{size}px;height:{size}px"
+        loading="lazy"
+        onerror={() => faviconErrored = true}
     />
 {:else}
     <span
