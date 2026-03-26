@@ -76,16 +76,17 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
+    <button
+      type="button"
+      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors cursor-pointer"
+      onclick={() => onfeedback?.()}
+    >
+      <MessageCircleQuestion class="h-4 w-4" />
+      <span>{m.feedback_title()}</span>
+    </button>
     <div class="flex items-center justify-between px-2 py-1">
       <span class="text-xs text-muted-foreground">dLedger {versionLabel}</span>
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-          onclick={() => onfeedback?.()}
-        >
-          <MessageCircleQuestion class="h-4 w-4" />
-        </button>
         <a
           href="/settings"
           class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
