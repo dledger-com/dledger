@@ -14,6 +14,7 @@
 
   "btn_save": "Enregistrer",
   "btn_cancel": "Annuler",
+  "btn_load_from_file": "Charger depuis un fichier",
   "btn_delete": "Supprimer",
   "btn_create": "Créer",
   "btn_export": "Exporter",

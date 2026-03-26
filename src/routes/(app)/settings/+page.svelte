@@ -115,6 +115,14 @@
     let addPluginDialogOpen = $state(false);
     let addPluginCode = $state("");
     let addPluginError = $state("");
+    let pluginFileInput: HTMLInputElement | undefined = $state();
+
+    function handlePluginFileLoad() {
+        const file = pluginFileInput?.files?.[0];
+        if (!file) return;
+        file.text().then((text) => { addPluginCode = text; });
+        if (pluginFileInput) pluginFileInput.value = "";
+    }
 
     async function handleAddPlugin() {
         addPluginError = "";
@@ -1861,13 +1869,28 @@
                     <p class="text-xs text-destructive">{addPluginError}</p>
                 {/if}
             </div>
-            <Dialog.Footer>
-                <Button variant="outline" onclick={() => { addPluginDialogOpen = false; }}>
-                    {msg.btn_cancel()}
-                </Button>
-                <Button disabled={!addPluginCode.trim()} onclick={handleAddPlugin}>
-                    {msg.feedback_load_validate()}
-                </Button>
+            <Dialog.Footer class="flex-col sm:flex-row gap-2">
+                <div class="flex-1">
+                    <Button variant="outline" size="sm" onclick={() => pluginFileInput?.click()}>
+                        <Upload class="mr-1 h-4 w-4" />
+                        {msg.btn_load_from_file()}
+                    </Button>
+                    <input
+                      bind:this={pluginFileInput}
+                      type="file"
+                      accept=".js,.ts,.mjs,.txt"
+                      class="hidden"
+                      onchange={handlePluginFileLoad}
+                    />
+                </div>
+                <div class="flex gap-2">
+                    <Button variant="outline" onclick={() => { addPluginDialogOpen = false; }}>
+                        {msg.btn_cancel()}
+                    </Button>
+                    <Button disabled={!addPluginCode.trim()} onclick={handleAddPlugin}>
+                        {msg.feedback_load_validate()}
+                    </Button>
+                </div>
             </Dialog.Footer>
         </Dialog.Content>
     </Dialog.Root>

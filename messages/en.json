@@ -14,6 +14,7 @@
 
   "btn_save": "Save",
   "btn_cancel": "Cancel",
+  "btn_load_from_file": "Load from file",
   "btn_delete": "Delete",
   "btn_create": "Create",
   "btn_export": "Export",
