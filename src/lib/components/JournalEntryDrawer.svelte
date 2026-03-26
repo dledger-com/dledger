@@ -355,7 +355,9 @@
                   </div>
               </div>
               {#if displayMeta.length > 0}
-                <dl class="grid grid-cols-2 gap-3">
+                <details>
+                  <summary class="text-xs text-muted-foreground cursor-pointer">{m.btn_more_metadata()}</summary>
+                <dl class="grid grid-cols-2 gap-3 mt-2">
                   {#each displayMeta as [key, value]}
                     <div class={isMultiAddressKey(key) && value.includes(",") ? "min-w-0 col-span-2" : "min-w-0"}>
                       <dt class="text-muted-foreground">{formatMetaKey(key)}</dt>
@@ -419,6 +421,7 @@
                     </div>
                   {/each}
                 </dl>
+                </details>
               {/if}
             </div>
           </section>

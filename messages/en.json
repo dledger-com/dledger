@@ -41,6 +41,7 @@
   "btn_apply_ml_suggestions": "Apply ML Suggestions",
   "btn_view_debug_mode": "View in debug mode",
   "btn_more_details": "More details",
+  "btn_more_metadata": "More metadata",
   "btn_show_warnings": "Show warnings",
 
   "label_account": "Account",
