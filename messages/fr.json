@@ -1013,6 +1013,8 @@
   "feedback_source_pdf_desc": "Analyseur de relevé bancaire PDF",
   "feedback_source_human": "Obtenir l'aide d'un humain",
   "feedback_source_human_desc": "Demandez-nous d'ajouter le support de votre source",
+  "feedback_source_diy_label": "Créer le plugin vous-même avec un LLM",
+  "feedback_source_or_label": "Ou",
   "feedback_difficulty_easy": "Le plus simple",
   "feedback_difficulty_moderate": "Modéré",
   "feedback_difficulty_advanced": "Avancé",

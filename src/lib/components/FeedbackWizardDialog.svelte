@@ -185,27 +185,39 @@
         </div>
       </Dialog.Header>
 
-      <div class="space-y-2">
-        {#each [
-          { type: "csv" as SourceType, icon: FileSpreadsheet, name: m.feedback_source_csv(), desc: m.feedback_source_csv_desc(), difficulty: m.feedback_difficulty_easy() },
-          { type: "cex" as SourceType, icon: ArrowUpDown, name: m.feedback_source_cex(), desc: m.feedback_source_cex_desc(), difficulty: m.feedback_difficulty_moderate() },
-          { type: "defi" as SourceType, icon: Blocks, name: m.feedback_source_defi(), desc: m.feedback_source_defi_desc(), difficulty: m.feedback_difficulty_moderate() },
-          { type: "pdf" as SourceType, icon: FileText, name: m.feedback_source_pdf(), desc: m.feedback_source_pdf_desc(), difficulty: m.feedback_difficulty_advanced() },
-        ] as item (item.type)}
-          <button
-            type="button"
-            class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"
-            onclick={() => { sourceType = item.type; step = "llm-guide"; }}
-          >
-            <item.icon class="h-5 w-5 shrink-0 text-muted-foreground" />
-            <div class="flex-1">
-              <p class="text-sm font-medium">{item.name}</p>
-              <p class="text-xs text-muted-foreground">{item.desc}</p>
-            </div>
-            <Badge variant="secondary" class="shrink-0">{item.difficulty}</Badge>
-          </button>
-        {/each}
+      <div class="space-y-4">
+        <!-- DIY with LLM section -->
+        <div class="space-y-2">
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">{m.feedback_source_diy_label()}</p>
+          {#each [
+            { type: "csv" as SourceType, icon: FileSpreadsheet, name: m.feedback_source_csv(), desc: m.feedback_source_csv_desc(), difficulty: m.feedback_difficulty_easy() },
+            { type: "cex" as SourceType, icon: ArrowUpDown, name: m.feedback_source_cex(), desc: m.feedback_source_cex_desc(), difficulty: m.feedback_difficulty_moderate() },
+            { type: "defi" as SourceType, icon: Blocks, name: m.feedback_source_defi(), desc: m.feedback_source_defi_desc(), difficulty: m.feedback_difficulty_moderate() },
+            { type: "pdf" as SourceType, icon: FileText, name: m.feedback_source_pdf(), desc: m.feedback_source_pdf_desc(), difficulty: m.feedback_difficulty_advanced() },
+          ] as item (item.type)}
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"
+              onclick={() => { sourceType = item.type; step = "llm-guide"; }}
+            >
+              <item.icon class="h-5 w-5 shrink-0 text-muted-foreground" />
+              <div class="flex-1">
+                <p class="text-sm font-medium">{item.name}</p>
+                <p class="text-xs text-muted-foreground">{item.desc}</p>
+              </div>
+              <Badge variant="secondary" class="shrink-0">{item.difficulty}</Badge>
+            </button>
+          {/each}
+        </div>
 
+        <!-- Divider -->
+        <div class="flex items-center gap-3">
+          <div class="h-px flex-1 bg-border"></div>
+          <span class="text-xs text-muted-foreground">{m.feedback_source_or_label()}</span>
+          <div class="h-px flex-1 bg-border"></div>
+        </div>
+
+        <!-- Human help section -->
         <button
           type="button"
           class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"

@@ -1013,6 +1013,8 @@
   "feedback_source_pdf_desc": "Bank PDF statement parser",
   "feedback_source_human": "Get help from a human",
   "feedback_source_human_desc": "Ask us to add support for your source",
+  "feedback_source_diy_label": "Create the plugin yourself with a LLM",
+  "feedback_source_or_label": "Or",
   "feedback_difficulty_easy": "Easiest",
   "feedback_difficulty_moderate": "Moderate",
   "feedback_difficulty_advanced": "Advanced",
