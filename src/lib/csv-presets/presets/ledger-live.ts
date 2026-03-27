@@ -107,7 +107,7 @@ export const ledgerLivePreset: CsvPreset = {
         const walletAccount = walletAssets(chain, accountName);
         const descData = operationDescription(chain, "fee", ticker);
         records.push({
-          date, description: renderDescription(descData),
+          date, description: renderDescription(descData), descriptionData: descData,
           lines: [
             { account: chainFees(chain), currency: ticker, amount: fees.toString() },
             { account: walletAccount, currency: ticker, amount: (-fees).toString() },
@@ -121,7 +121,7 @@ export const ledgerLivePreset: CsvPreset = {
       const walletAccount = walletAssets(chain, accountName);
 
       const lines: CsvRecord["lines"] = [];
-      let desc = "";
+      let descData: import("$lib/types/description-data.js").DescriptionData | undefined;
 
       if (opType === "IN") {
         // Receive: credit wallet, debit equity
@@ -130,8 +130,7 @@ export const ledgerLivePreset: CsvPreset = {
           { account: walletAccount, currency: ticker, amount: netAmount.toString() },
           { account: EQUITY_EXTERNAL, currency: ticker, amount: (-netAmount).toString() },
         );
-        const descData = onchainTransferDescription(chain, ticker, "received", { txHash: hash });
-        desc = renderDescription(descData);
+        descData = onchainTransferDescription(chain, ticker, "received", { txHash: hash });
       } else if (opType === "OUT") {
         // Send: the amount already includes fees for UTXO chains
         // Net send = amount - fees (deducted from wallet), fees go to expense
@@ -149,8 +148,7 @@ export const ledgerLivePreset: CsvPreset = {
           );
         }
         if (lines.length === 0) continue;
-        const descData = onchainTransferDescription(chain, ticker, "sent", { txHash: hash });
-        desc = renderDescription(descData);
+        descData = onchainTransferDescription(chain, ticker, "sent", { txHash: hash });
       } else if (opType === "FEES") {
         // Fee-only transaction (e.g., ETH gas for token approval)
         if (fees <= 0) continue;
@@ -158,13 +156,12 @@ export const ledgerLivePreset: CsvPreset = {
           { account: chainFees(chain), currency: ticker, amount: fees.toString() },
           { account: walletAccount, currency: ticker, amount: (-fees).toString() },
         );
-        const descData = operationDescription(chain, "fee", ticker);
-        desc = renderDescription(descData);
+        descData = operationDescription(chain, "fee", ticker);
       } else {
         continue;
       }
 
-      records.push({ date, description: desc, lines, sourceKey: hash || undefined });
+      records.push({ date, description: renderDescription(descData!), descriptionData: descData, lines, sourceKey: hash || undefined });
     }
 
     return records;
