@@ -242,9 +242,12 @@ export async function importRecords(
   // Merge grouped records before dedup so we can mark all at once
   const mergedGroups: CsvRecord[] = [];
   for (const [, group] of groups) {
+    // Prefer description/descriptionData from the primary record (non-fee, first with descriptionData)
+    const primary = group.find((r) => r.descriptionData) ?? group[0];
     mergedGroups.push({
       date: group[0].date,
-      description: group[0].description,
+      description: primary.description,
+      descriptionData: primary.descriptionData,
       lines: group.flatMap((r) => r.lines),
       sourceKey: group[0].sourceKey,
       ...(group[0].metadata ? { metadata: group[0].metadata } : {}),
