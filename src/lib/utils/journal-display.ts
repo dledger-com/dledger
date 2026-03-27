@@ -155,16 +155,20 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 	}
 
 	// Classify account types
-	let hasIncome = false, hasExpense = false, hasEquity = false;
+	let hasIncome = false, hasExpense = false, hasEquity = false, hasNonExpenseDebit = false;
 	for (const item of items) {
 		const name = accountIdToName.get(item.account_id) ?? "";
 		if (name.startsWith("Equity:") || name === "Equity") hasEquity = true;
 		else if (name.startsWith("Income:") || name === "Income") hasIncome = true;
 		else if (name.startsWith("Expenses:") || name === "Expenses") hasExpense = true;
+		// Check for positive (debit) amounts on non-expense accounts (asset transfers)
+		if (parseFloat(item.amount) > 0 && !name.startsWith("Expenses:") && name !== "Expenses") {
+			hasNonExpenseDebit = true;
+		}
 	}
 
-	// Single direction
-	const isMixed = (hasEquity || hasIncome) && hasExpense;
+	// Mixed: expense+income/equity, OR expense alongside non-expense debits (e.g., fee + DeFi transfer)
+	const isMixed = ((hasEquity || hasIncome) && hasExpense) || (hasExpense && hasNonExpenseDebit);
 	if (!isMixed) {
 		const dir: AmountDirection = hasIncome ? "income" : hasExpense ? "expense" : "default";
 		const text = debits.length === 0 ? "" : debits.map(b => formatCurrency(b.amount, b.currency)).join(", ");
