@@ -198,6 +198,27 @@ async function ensureCurrency(
   currencyCache.add(code);
 }
 
+/** Rank descriptionData types for group merge priority: defi > transfer > fee/other */
+function descriptionPriority(rec: CsvRecord): number {
+  if (!rec.descriptionData) return 0;
+  const t = (rec.descriptionData as { type?: string }).type;
+  if (t === "defi" || t === "sol-defi") return 3;
+  if (t === "onchain-transfer" || t === "btc-transfer" || t === "sol-transfer") return 2;
+  if (t === "cex-transfer") return 1;
+  return 0; // cex-operation (fee), generic-import, etc.
+}
+
+/** Pick the most significant record from a group for description/icon. */
+function pickPrimaryRecord(group: CsvRecord[]): CsvRecord {
+  let best = group[0];
+  let bestPri = descriptionPriority(best);
+  for (let i = 1; i < group.length; i++) {
+    const pri = descriptionPriority(group[i]);
+    if (pri > bestPri) { best = group[i]; bestPri = pri; }
+  }
+  return best;
+}
+
 export async function importRecords(
   backend: Backend,
   records: CsvRecord[],
@@ -242,8 +263,8 @@ export async function importRecords(
   // Merge grouped records before dedup so we can mark all at once
   const mergedGroups: CsvRecord[] = [];
   for (const [, group] of groups) {
-    // Prefer description/descriptionData from the primary record (non-fee, first with descriptionData)
-    const primary = group.find((r) => r.descriptionData) ?? group[0];
+    // Prefer description from the most significant record: defi > transfer > fee
+    const primary = pickPrimaryRecord(group);
     mergedGroups.push({
       date: group[0].date,
       description: primary.description,
