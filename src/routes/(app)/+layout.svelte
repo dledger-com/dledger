@@ -20,6 +20,7 @@
   import { getBackend } from "$lib/backend.js";
   import { initCoinIcons } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
 
   let { children } = $props();
@@ -35,10 +36,16 @@
   // Initialize coin icon cache and load custom plugins (non-blocking, best-effort)
   onMount(() => {
     const backend = getBackend();
-    backend.listCurrencies().then((currencies) => {
-      initCoinIcons(currencies.map((c) => c.code));
-    }).catch(() => { /* non-critical */ });
+    const refreshIcons = () => {
+      backend.listCurrencies().then((currencies) => {
+        initCoinIcons(currencies.map((c) => c.code));
+      }).catch(() => { /* non-critical */ });
+    };
+    refreshIcons();
     loadCustomPlugins(backend).catch(() => { /* non-critical */ });
+
+    // Re-initialize icons when new currencies are created (e.g., after CSV/OFX import)
+    return onInvalidate("currencies", refreshIcons);
   });
 
   // Clear content when dialogs close, and advance batch queue.

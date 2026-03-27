@@ -1,7 +1,7 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
 import { walletAssets, chainFees, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
-import { transferDescription, operationDescription } from "$lib/types/description-data.js";
+import { onchainTransferDescription, operationDescription } from "$lib/types/description-data.js";
 import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx } from "./shared.js";
 
@@ -86,7 +86,7 @@ export const ledgerLivePreset: CsvPreset = {
       if (amount === 0 && fees > 0 && opType !== "FEES") {
         const chain = currencyToChain(ticker);
         const walletAccount = walletAssets(chain, accountName);
-        const descData = operationDescription("Ledger", "fee", ticker);
+        const descData = operationDescription(chain, "fee", ticker);
         records.push({
           date, description: renderDescription(descData),
           lines: [
@@ -111,7 +111,7 @@ export const ledgerLivePreset: CsvPreset = {
           { account: walletAccount, currency: ticker, amount: netAmount.toString() },
           { account: EQUITY_EXTERNAL, currency: ticker, amount: (-netAmount).toString() },
         );
-        const descData = transferDescription("Ledger", "deposit", ticker);
+        const descData = onchainTransferDescription(chain, ticker, "received", { txHash: hash });
         desc = renderDescription(descData);
       } else if (opType === "OUT") {
         // Send: the amount already includes fees for UTXO chains
@@ -127,7 +127,7 @@ export const ledgerLivePreset: CsvPreset = {
             { account: walletAccount, currency: ticker, amount: (-fees).toString() },
           );
         }
-        const descData = transferDescription("Ledger", "withdrawal", ticker);
+        const descData = onchainTransferDescription(chain, ticker, "sent", { txHash: hash });
         desc = renderDescription(descData);
       } else if (opType === "FEES") {
         // Fee-only transaction (e.g., ETH gas for token approval)
@@ -136,7 +136,7 @@ export const ledgerLivePreset: CsvPreset = {
           { account: chainFees(chain), currency: ticker, amount: fees.toString() },
           { account: walletAccount, currency: ticker, amount: (-fees).toString() },
         );
-        const descData = operationDescription("Ledger", "fee", ticker);
+        const descData = operationDescription(chain, "fee", ticker);
         desc = renderDescription(descData);
       } else {
         continue;
