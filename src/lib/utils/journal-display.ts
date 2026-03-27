@@ -3,7 +3,7 @@
  * Used by both the dashboard (recent entries) and journal page (full table).
  */
 import type { LineItem, CurrencyBalance } from "../types/index.js";
-import { formatCurrency, formatAmountOnly } from "./format.js";
+import { formatCurrency } from "./format.js";
 
 export type AmountDirection = "income" | "expense" | "default";
 
@@ -147,8 +147,8 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 			direction: "default",
 			currencies: [debits[0].currency, debits[1].currency],
 			segments: [
-				{ amount: formatAmountOnly(debits[0].amount), currency: debits[0].currency },
-				{ amount: formatAmountOnly(debits[1].amount), currency: debits[1].currency },
+				{ amount: debits[0].amount, currency: debits[0].currency },
+				{ amount: debits[1].amount, currency: debits[1].currency },
 			],
 			isTrade: true,
 		}];
@@ -168,7 +168,7 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 	if (!isMixed) {
 		const dir: AmountDirection = hasIncome ? "income" : hasExpense ? "expense" : "default";
 		const text = debits.length === 0 ? "" : debits.map(b => formatCurrency(b.amount, b.currency)).join(", ");
-		return [{ text, direction: dir, currencies: debits.map(b => b.currency), segments: debits.map(b => ({ amount: formatAmountOnly(b.amount), currency: b.currency })) }];
+		return [{ text, direction: dir, currencies: debits.map(b => b.currency), segments: debits.map(b => ({ amount: b.amount, currency: b.currency })) }];
 	}
 
 	// Mixed: split expense from rest
@@ -194,11 +194,11 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 
 	if (mainByCode.size > 0) {
 		const total = [...mainByCode.values()].reduce((s, a) => s + a, 0);
-		parts.push({ text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "), direction: mainDir, total, currencies: [...mainByCode.keys()], segments: [...mainByCode].map(([c, a]) => ({ amount: formatAmountOnly(String(a)), currency: c })) });
+		parts.push({ text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "), direction: mainDir, total, currencies: [...mainByCode.keys()], segments: [...mainByCode].map(([c, a]) => ({ amount: String(a), currency: c })) });
 	}
 	if (expenseByCode.size > 0) {
 		const total = [...expenseByCode.values()].reduce((s, a) => s + a, 0);
-		parts.push({ text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "), direction: "expense", total, currencies: [...expenseByCode.keys()], segments: [...expenseByCode].map(([c, a]) => ({ amount: formatAmountOnly(String(a)), currency: c })) });
+		parts.push({ text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "), direction: "expense", total, currencies: [...expenseByCode.keys()], segments: [...expenseByCode].map(([c, a]) => ({ amount: String(a), currency: c })) });
 	}
 
 	parts.sort((a, b) => b.total - a.total);
