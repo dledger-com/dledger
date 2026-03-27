@@ -3,7 +3,7 @@
  * Priority: protocol CoinIcon > L2 chain icon > L1 native CoinIcon > exchange icon > fallback.
  */
 import { INSTITUTION_REGISTRY, type InstitutionInfo } from "$lib/cex/institution-registry.js";
-import { EXCHANGE_ICONS } from "$lib/data/exchange-icons.js";
+import { getExchangeIconUrl } from "$lib/data/exchange-icons.js";
 import { CHAIN_ICONS, NAMED_CHAIN_ICONS } from "$lib/data/chain-icons.js";
 import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 import { BLOCKCHAIN_CHAINS } from "$lib/blockchain-registry.js";
@@ -127,7 +127,7 @@ export function parseSourceId(source: string): ParsedSource {
     }
 
     // CEX adapter sync: "exchangeId:refid" (e.g., "kraken:TXID123")
-    if (INSTITUTION_REGISTRY[prefix] || EXCHANGE_ICONS[prefix]) {
+    if (INSTITUTION_REGISTRY[prefix]) {
       return { type: "cex", institutionId: prefix };
     }
   }
@@ -141,23 +141,16 @@ export function parseSourceId(source: string): ParsedSource {
 export function getSourceIconUrl(source: string): string | null {
   const parsed = parseSourceId(source);
 
-  // CEX: prefer CoinGecko exchange icon (higher quality)
+  // CEX: exchange favicon
   if (parsed.type === "cex" && parsed.institutionId) {
-    const exchangeUrl = EXCHANGE_ICONS[parsed.institutionId];
-    if (exchangeUrl) return exchangeUrl;
-    // Fallback to favicon
-    const info = INSTITUTION_REGISTRY[parsed.institutionId];
-    if (info?.url) return `https://www.google.com/s2/favicons?domain=${info.url}&sz=32`;
+    const url = getExchangeIconUrl(parsed.institutionId);
+    if (url) return url;
   }
 
-  // CSV/OFX/PDF: check if preset has a matching CEX icon, then favicon
+  // CSV/OFX/PDF: check if preset has a matching exchange icon
   if (parsed.type === "csv" && parsed.institutionId) {
-    // Some CSV presets match exchange IDs (e.g., "kraken" preset)
-    const exchangeUrl = EXCHANGE_ICONS[parsed.institutionId];
-    if (exchangeUrl) return exchangeUrl;
-    // Try institution registry for favicon
-    const info = INSTITUTION_REGISTRY[parsed.institutionId];
-    if (info?.url) return `https://www.google.com/s2/favicons?domain=${info.url}&sz=32`;
+    const url = getExchangeIconUrl(parsed.institutionId);
+    if (url) return url;
   }
 
   // Blockchain sources: use chain icon (for L2s and fallback)
