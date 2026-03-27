@@ -216,7 +216,8 @@ async function fetchBlockchair(
 	signal?: AbortSignal,
 ): Promise<NormalizedTx[]> {
 	// First, get the list of transaction hashes from the dashboard
-	const dashUrl = `${config.apiBaseUrl}/bitcoin-cash/dashboards/address/${address}?transaction_details=true&limit=100`;
+	const chainPath = config.blockchairPath ?? config.id;
+	const dashUrl = `${config.apiBaseUrl}/${chainPath}/dashboards/address/${address}?transaction_details=true&limit=100`;
 	const dashBody = await rateLimitedGet(dashUrl, config.apiBaseUrl, config.apiProxyPrefix, signal);
 	const dash: BlockchairDashboard = JSON.parse(dashBody);
 
@@ -232,7 +233,7 @@ async function fetchBlockchair(
 
 		const batch = txDetails.slice(i, i + 10);
 		const hashes = batch.map((t) => t.hash).join(",");
-		const txUrl = `${config.apiBaseUrl}/bitcoin-cash/dashboards/transactions/${hashes}`;
+		const txUrl = `${config.apiBaseUrl}/${chainPath}/dashboards/transactions/${hashes}`;
 		const txBody = await rateLimitedGet(txUrl, config.apiBaseUrl, config.apiProxyPrefix, signal);
 		const txData: BlockchairRawTx = JSON.parse(txBody);
 

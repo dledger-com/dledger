@@ -21,6 +21,9 @@ const base58check = createBase58check(sha256);
 const P2PKH_VERSION: Record<string, number> = {
 	doge: 0x1e,
 	ltc: 0x30,
+	dash: 0x4c,
+	bsv: 0x00,
+	grs: 0x24,
 };
 
 // ── Helpers ──────────────────────────────────────────────

@@ -23,6 +23,7 @@ const CHAIN_SOURCE_PREFIXES: Record<string, string> = {
   "algorand": "algorand", "kaspa": "kaspa", "stacks": "stacks", "zcash": "zcash",
   "hedera": "hedera", "bittensor": "bittensor", "monero": "xmr",
   "doge": "doge", "ltc": "ltc", "bch": "bch",
+  "dash": "dash", "bsv": "bsv", "xec": "xec", "grs": "grs",
 };
 
 /** Task queue key prefixes (not used in journal entries, but in sync task keys) */
@@ -30,7 +31,8 @@ const CHAIN_SYNC_PREFIXES: Record<string, string> = {
   "sol-sync": "sol", "hl-sync": "hl", "sui-sync": "sui", "aptos-sync": "aptos",
   "ton-sync": "ton", "tezos-sync": "tezos", "cosmos-sync": "cosmos",
   "polkadot-sync": "polkadot", "doge-sync": "doge", "ltc-sync": "ltc",
-  "bch-sync": "bch", "xrp-sync": "xrp", "tron-sync": "tron",
+  "bch-sync": "bch", "dash-sync": "dash", "bsv-sync": "bsv",
+  "xec-sync": "xec", "grs-sync": "grs", "xrp-sync": "xrp", "tron-sync": "tron",
   "stellar-sync": "stellar", "bittensor-sync": "bittensor", "hedera-sync": "hedera",
   "near-sync": "near", "algorand-sync": "algorand", "kaspa-sync": "kaspa",
   "zcash-sync": "zcash", "stacks-sync": "stacks", "cardano-sync": "cardano",

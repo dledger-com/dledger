@@ -587,6 +587,31 @@ export class SqlJsBackend implements Backend {
       created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bch_account_address ON bch_account(address)");
+    // BTC Forks Wave 2 (v31)
+    db.exec(`CREATE TABLE IF NOT EXISTS dash_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_dash_account_address ON dash_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS bsv_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bsv_account_address ON bsv_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS xec_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_xec_account_address ON xec_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS grs_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_grs_account_address ON grs_account(address)");
     // Tier 2 (v29)
     db.exec(`CREATE TABLE IF NOT EXISTS xrp_account (
       id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
@@ -4920,6 +4945,222 @@ PRAGMA foreign_keys = ON;
     this.beginTransaction();
     try {
       const result = await syncBtcForkAccount(this, { ...account, chain: "bch" }, BTC_FORK_CHAINS.bch, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Dash accounts ----
+
+  async listDashAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM dash_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "dash" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addDashAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO dash_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateDashAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE dash_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeDashAccount(id: string): Promise<void> {
+    this.run("DELETE FROM dash_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateDashSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE dash_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncDash(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "dash" }, BTC_FORK_CHAINS.dash, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Bitcoin SV accounts ----
+
+  async listBsvAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM bsv_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "bsv" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addBsvAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO bsv_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateBsvAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE bsv_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeBsvAccount(id: string): Promise<void> {
+    this.run("DELETE FROM bsv_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateBsvSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE bsv_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncBsv(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "bsv" }, BTC_FORK_CHAINS.bsv, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- eCash accounts ----
+
+  async listXecAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM xec_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "xec" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addXecAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO xec_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateXecAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE xec_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeXecAccount(id: string): Promise<void> {
+    this.run("DELETE FROM xec_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateXecSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE xec_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncXec(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "xec" }, BTC_FORK_CHAINS.xec, onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Groestlcoin accounts ----
+
+  async listGrsAccounts(): Promise<import("./btc-fork/types.js").BtcForkAccount[]> {
+    return this.query(
+      "SELECT id, address, label, last_sync, created_at FROM grs_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, chain: "grs" as const, address: row.address as string, label: row.label as string,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addGrsAccount(account: Omit<import("./btc-fork/types.js").BtcForkAccount, "last_sync" | "chain">): Promise<void> {
+    this.run(
+      `INSERT INTO grs_account (id, address, label, last_sync, created_at) VALUES (?, ?, ?, NULL, ?)`,
+      [account.id, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateGrsAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE grs_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeGrsAccount(id: string): Promise<void> {
+    this.run("DELETE FROM grs_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateGrsSyncTimestamp(id: string): Promise<void> {
+    this.run("UPDATE grs_account SET last_sync = ? WHERE id = ?", [new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncGrs(
+    account: import("./btc-fork/types.js").BtcForkAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./btc-fork/types.js").BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBtcForkAccount(this, { ...account, chain: "grs" }, BTC_FORK_CHAINS.grs, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {

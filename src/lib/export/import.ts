@@ -225,6 +225,10 @@ export async function importData(
 			for (const acc of sources.doge ?? []) { try { await backend.addDogeAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.ltc ?? []) { try { await backend.addLtcAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.bch ?? []) { try { await backend.addBchAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.dash ?? []) { try { await backend.addDashAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.bsv ?? []) { try { await backend.addBsvAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.xec ?? []) { try { await backend.addXecAccount(acc); } catch { /* skip */ } }
+			for (const acc of sources.grs ?? []) { try { await backend.addGrsAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.xrp ?? []) { try { await backend.addXrpAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.tron ?? []) { try { await backend.addTronAccount(acc); } catch { /* skip */ } }
 			for (const acc of sources.stellar ?? []) { try { await backend.addStellarAccount(acc); } catch { /* skip */ } }

@@ -282,6 +282,21 @@ export const INSTITUTION_REGISTRY: Record<string, InstitutionInfo> = {
     url: "bitfinex.com",
     foreign: true,
   },
+  bitpanda: {
+    legalEntity: "Bitpanda GmbH",
+    address: "Stella-Klein-Löw-Weg 17, 1020 Wien",
+    country: "Austria",
+    url: "bitpanda.com",
+    foreign: true,
+    note: "MiCA via FMA Austria",
+  },
+  hitbtc: {
+    legalEntity: "HIT Solutions Inc.",
+    address: "Suite 202, 2nd Floor, Eden Plaza, Eden Island, Mahé",
+    country: "Seychelles",
+    url: "hitbtc.com",
+    foreign: true,
+  },
   bittrex: {
     legalEntity: "Bittrex Global GmbH",
     address: "Dr. Grass-Strasse 12, 9490 Vaduz",

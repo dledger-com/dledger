@@ -21,3 +21,4 @@ export { kucoinPreset } from "./kucoin.js";
 export { voletPreset } from "./volet.js";
 export { celsiusPreset } from "./celsius.js";
 export { hyperliquidPreset } from "./hyperliquid.js";
+export { ledgerLivePreset } from "./ledger-live.js";

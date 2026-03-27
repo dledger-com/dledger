@@ -33,7 +33,7 @@ export type { DescriptionData } from "./description-data.js";
 export { renderDescription } from "./description-data.js";
 
 /** Chain IDs excluded from Etherscan free tier — routed to Routescan instead. */
-export const ETHERSCAN_PAID_ONLY_CHAINS = new Set([56, 8453, 10, 43114]);
+export const ETHERSCAN_PAID_ONLY_CHAINS = new Set([56, 8453, 10, 43114, 30, 66, 128, 321, 2020, 10001, 1666600000]);
 
 export interface LedgerImportResult {
   accounts_created: number;
@@ -58,6 +58,7 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 10,     name: "Optimism",        native_currency: "ETH",    decimals: 18 },
   { chain_id: 14,     name: "Flare",           native_currency: "FLR",    decimals: 18 },
   { chain_id: 25,     name: "Cronos",          native_currency: "CRO",    decimals: 18 },
+  { chain_id: 30,     name: "RSK",             native_currency: "RBTC",   decimals: 18 },
   { chain_id: 42161,  name: "Arbitrum",        native_currency: "ETH",    decimals: 18 },
   { chain_id: 8453,   name: "Base",            native_currency: "ETH",    decimals: 18 },
   { chain_id: 59144,  name: "Linea",           native_currency: "ETH",    decimals: 18 },
@@ -67,9 +68,14 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 137,    name: "Polygon",         native_currency: "POL",    decimals: 18 },
   { chain_id: 43114,  name: "Avalanche",       native_currency: "AVAX",   decimals: 18 },
   { chain_id: 100,    name: "Gnosis",          native_currency: "xDAI",   decimals: 18 },
+  { chain_id: 128,    name: "HECO",            native_currency: "HT",     decimals: 18 },
   { chain_id: 50,     name: "XDC",             native_currency: "XDC",    decimals: 18 },
+  { chain_id: 66,     name: "OKTC",            native_currency: "OKT",    decimals: 18 },
   { chain_id: 61,     name: "Ethereum Classic", native_currency: "ETC",   decimals: 18 },
   { chain_id: 130,    name: "Unichain",        native_currency: "ETH",    decimals: 18 },
+  { chain_id: 250,    name: "Fantom",          native_currency: "FTM",    decimals: 18 },
+  { chain_id: 321,    name: "KCC",             native_currency: "KCS",    decimals: 18 },
+  { chain_id: 324,    name: "zkSync Era",      native_currency: "ETH",    decimals: 18 },
   { chain_id: 143,    name: "Monad",           native_currency: "MON",    decimals: 18 },
   { chain_id: 146,    name: "Sonic",           native_currency: "S",      decimals: 18 },
   { chain_id: 199,    name: "BitTorrent Chain", native_currency: "BTT",   decimals: 18 },
@@ -82,10 +88,12 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 1285,   name: "Moonriver",       native_currency: "MOVR",   decimals: 18 },
   { chain_id: 1329,   name: "Sei",             native_currency: "SEI",    decimals: 18 },
   { chain_id: 1923,   name: "Swellchain",      native_currency: "ETH",    decimals: 18 },
+  { chain_id: 2020,   name: "Ronin",           native_currency: "RON",    decimals: 18 },
   { chain_id: 2741,   name: "Abstract",        native_currency: "ETH",    decimals: 18 },
   { chain_id: 4326,   name: "MegaETH",         native_currency: "ETH",    decimals: 18 },
   { chain_id: 4352,   name: "Memecore",        native_currency: "MCORE",  decimals: 18 },
   { chain_id: 5000,   name: "Mantle",          native_currency: "MNT",    decimals: 18 },
+  { chain_id: 10001,  name: "EthereumPoW",     native_currency: "ETHW",   decimals: 18 },
   { chain_id: 9745,   name: "Plasma",          native_currency: "PLASMA", decimals: 18 },
   { chain_id: 33139,  name: "ApeChain",        native_currency: "APE",    decimals: 18 },
   { chain_id: 42220,  name: "Celo",            native_currency: "CELO",   decimals: 18 },
@@ -94,6 +102,7 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   { chain_id: 100009, name: "VeChain",         native_currency: "VET",    decimals: 18 },
   { chain_id: 167000, name: "Taiko",           native_currency: "ETH",    decimals: 18 },
   { chain_id: 747474, name: "Katana",          native_currency: "ETH",    decimals: 18 },
+  { chain_id: 1666600000, name: "Harmony",    native_currency: "ONE",    decimals: 18 },
 ];
 
 export interface BalanceAssertion {

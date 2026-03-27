@@ -24,6 +24,9 @@ import { PoloniexAdapter } from "../../cex/poloniex-cex.js";
 import { BitvavoAdapter } from "../../cex/bitvavo.js";
 import { PhemexAdapter } from "../../cex/phemex.js";
 import { WhitebitAdapter } from "../../cex/whitebit.js";
+import { BitfinexAdapter } from "../../cex/bitfinex.js";
+import { BitpandaAdapter } from "../../cex/bitpanda.js";
+import { HitbtcAdapter } from "../../cex/hitbtc.js";
 
 export const builtinCexAdapters: CexAdapter[] = [
   new KrakenAdapter(),
@@ -71,4 +74,8 @@ export const builtinCexAdapters: CexAdapter[] = [
   new BitvavoAdapter(),
   new PhemexAdapter(),
   new WhitebitAdapter(),
+  // Wave 4
+  new BitfinexAdapter(),
+  new BitpandaAdapter(),
+  new HitbtcAdapter(),
 ];

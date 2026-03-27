@@ -96,6 +96,46 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.bch, input),
 		deriveAddresses: null, // CashAddr not supported from seed yet
 	},
+	// Dash
+	{
+		id: "dash", name: "Dash", symbol: "DASH",
+		addressRegex: /^X[1-9A-HJ-NP-Za-km-z]{33}$/,
+		addressPlaceholder: "X...", addressSlicePrefix: 6, addressSliceSuffix: 4, caseSensitive: true,
+		backendList: "listDashAccounts", backendAdd: "addDashAccount", backendRemove: "removeDashAccount",
+		backendUpdateLabel: "updateDashAccountLabel", backendSync: "syncDash", syncTaskPrefix: "dash-sync",
+		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.dash, input),
+		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.dash, m, c, p, s),
+	},
+	// Bitcoin SV
+	{
+		id: "bsv", name: "Bitcoin SV", symbol: "BSV",
+		addressRegex: /^1[1-9A-HJ-NP-Za-km-z]{25,33}$/,
+		addressPlaceholder: "1...", addressSlicePrefix: 6, addressSliceSuffix: 4, caseSensitive: true,
+		backendList: "listBsvAccounts", backendAdd: "addBsvAccount", backendRemove: "removeBsvAccount",
+		backendUpdateLabel: "updateBsvAccountLabel", backendSync: "syncBsv", syncTaskPrefix: "bsv-sync",
+		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.bsv, input),
+		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.bsv, m, c, p, s),
+	},
+	// eCash
+	{
+		id: "xec", name: "eCash", symbol: "XEC",
+		addressRegex: /^(ecash:)?[qp][a-z0-9]{41}$/,
+		addressPlaceholder: "ecash:q...", addressSlicePrefix: 12, addressSliceSuffix: 4, caseSensitive: false,
+		backendList: "listXecAccounts", backendAdd: "addXecAccount", backendRemove: "removeXecAccount",
+		backendUpdateLabel: "updateXecAccountLabel", backendSync: "syncXec", syncTaskPrefix: "xec-sync",
+		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.xec, input),
+		deriveAddresses: null, // CashAddr not supported from seed yet
+	},
+	// Groestlcoin
+	{
+		id: "grs", name: "Groestlcoin", symbol: "GRS",
+		addressRegex: /^(F[a-km-zA-HJ-NP-Z1-9]{33}|grs1[a-z0-9]{39,59})$/,
+		addressPlaceholder: "grs1...", addressSlicePrefix: 8, addressSliceSuffix: 4, caseSensitive: true,
+		backendList: "listGrsAccounts", backendAdd: "addGrsAccount", backendRemove: "removeGrsAccount",
+		backendUpdateLabel: "updateGrsAccountLabel", backendSync: "syncGrs", syncTaskPrefix: "grs-sync",
+		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.grs, input),
+		deriveAddresses: null, // GRS uses Groestl hash, not SHA-256 — needs custom derivation
+	},
 	// Bittensor
 	{
 		id: "bittensor", name: "Bittensor", symbol: "TAO",

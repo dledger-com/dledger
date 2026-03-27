@@ -197,14 +197,16 @@
     // 1b. Load source count for onboarding checklist
     try {
       const backend = getBackend();
-      const [eth, btc, sol, hl, sui, apt, ton, tez, cos, dot, doge, ltc, bch, xrp, tron, stellar, bittensor, hedera, near, algorand, kaspa, zcash, stacks, cex] = await Promise.all([
+      const [eth, btc, sol, hl, sui, apt, ton, tez, cos, dot, doge, ltc, bch, dash, bsv, xec, grs, xrp, tron, stellar, bittensor, hedera, near, algorand, kaspa, zcash, stacks, cex] = await Promise.all([
         backend.listEtherscanAccounts(), backend.listBitcoinAccounts(),
         backend.listSolanaAccounts(), backend.listHyperliquidAccounts(),
         backend.listSuiAccounts(), backend.listAptosAccounts(),
         backend.listTonAccounts(), backend.listTezosAccounts(),
         backend.listCosmosAccounts(), backend.listPolkadotAccounts(),
         backend.listDogeAccounts(), backend.listLtcAccounts(),
-        backend.listBchAccounts(), backend.listXrpAccounts(),
+        backend.listBchAccounts(), backend.listDashAccounts(),
+        backend.listBsvAccounts(), backend.listXecAccounts(),
+        backend.listGrsAccounts(), backend.listXrpAccounts(),
         backend.listTronAccounts(), backend.listStellarAccounts(),
         backend.listBittensorAccounts(), backend.listHederaAccounts(),
         backend.listNearAccounts(), backend.listAlgorandAccounts(),
@@ -212,7 +214,7 @@
         backend.listStacksAccounts(),
         backend.listExchangeAccounts(),
       ]);
-      sourceCount = eth.length + btc.length + sol.length + hl.length + sui.length + apt.length + ton.length + tez.length + cos.length + dot.length + doge.length + ltc.length + bch.length + xrp.length + tron.length + stellar.length + bittensor.length + hedera.length + near.length + algorand.length + kaspa.length + zcash.length + stacks.length + cex.length;
+      sourceCount = eth.length + btc.length + sol.length + hl.length + sui.length + apt.length + ton.length + tez.length + cos.length + dot.length + doge.length + ltc.length + bch.length + dash.length + bsv.length + xec.length + grs.length + xrp.length + tron.length + stellar.length + bittensor.length + hedera.length + near.length + algorand.length + kaspa.length + zcash.length + stacks.length + cex.length;
     } catch { /* non-critical */ }
 
     // 2. Yield to guarantee browser paints skeleton/cached state before heavy queries.

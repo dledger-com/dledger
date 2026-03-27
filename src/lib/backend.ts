@@ -257,6 +257,38 @@ export interface Backend {
   updateBchSyncTimestamp(id: string): Promise<void>;
   syncBch(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
 
+  // Dash
+  listDashAccounts(): Promise<BtcForkAccount[]>;
+  addDashAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeDashAccount(id: string): Promise<void>;
+  updateDashAccountLabel(id: string, label: string): Promise<void>;
+  updateDashSyncTimestamp(id: string): Promise<void>;
+  syncDash(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
+  // Bitcoin SV
+  listBsvAccounts(): Promise<BtcForkAccount[]>;
+  addBsvAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeBsvAccount(id: string): Promise<void>;
+  updateBsvAccountLabel(id: string, label: string): Promise<void>;
+  updateBsvSyncTimestamp(id: string): Promise<void>;
+  syncBsv(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
+  // eCash
+  listXecAccounts(): Promise<BtcForkAccount[]>;
+  addXecAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeXecAccount(id: string): Promise<void>;
+  updateXecAccountLabel(id: string, label: string): Promise<void>;
+  updateXecSyncTimestamp(id: string): Promise<void>;
+  syncXec(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
+  // Groestlcoin
+  listGrsAccounts(): Promise<BtcForkAccount[]>;
+  addGrsAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void>;
+  removeGrsAccount(id: string): Promise<void>;
+  updateGrsAccountLabel(id: string, label: string): Promise<void>;
+  updateGrsSyncTimestamp(id: string): Promise<void>;
+  syncGrs(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult>;
+
   // XRP
   listXrpAccounts(): Promise<XrpAccount[]>;
   addXrpAccount(account: Omit<XrpAccount, "last_sync" | "last_marker">): Promise<void>;
@@ -905,6 +937,54 @@ class TauriBackend implements Backend {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     return syncBtcForkAccount(this, { ...account, chain: "bch" }, BTC_FORK_CHAINS.bch, onProgress, signal);
+  }
+
+  // Dash
+  async listDashAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_dash_accounts"); }
+  async addDashAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_dash_account", { account }); }
+  async removeDashAccount(id: string): Promise<void> { return this.invoke("remove_dash_account", { id }); }
+  async updateDashAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_dash_account_label", { id, label }); }
+  async updateDashSyncTimestamp(id: string): Promise<void> { return this.invoke("update_dash_sync_timestamp", { id }); }
+  async syncDash(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "dash" }, BTC_FORK_CHAINS.dash, onProgress, signal);
+  }
+
+  // Bitcoin SV
+  async listBsvAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_bsv_accounts"); }
+  async addBsvAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_bsv_account", { account }); }
+  async removeBsvAccount(id: string): Promise<void> { return this.invoke("remove_bsv_account", { id }); }
+  async updateBsvAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_bsv_account_label", { id, label }); }
+  async updateBsvSyncTimestamp(id: string): Promise<void> { return this.invoke("update_bsv_sync_timestamp", { id }); }
+  async syncBsv(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "bsv" }, BTC_FORK_CHAINS.bsv, onProgress, signal);
+  }
+
+  // eCash
+  async listXecAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_xec_accounts"); }
+  async addXecAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_xec_account", { account }); }
+  async removeXecAccount(id: string): Promise<void> { return this.invoke("remove_xec_account", { id }); }
+  async updateXecAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_xec_account_label", { id, label }); }
+  async updateXecSyncTimestamp(id: string): Promise<void> { return this.invoke("update_xec_sync_timestamp", { id }); }
+  async syncXec(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "xec" }, BTC_FORK_CHAINS.xec, onProgress, signal);
+  }
+
+  // Groestlcoin
+  async listGrsAccounts(): Promise<BtcForkAccount[]> { return this.invoke("list_grs_accounts"); }
+  async addGrsAccount(account: Omit<BtcForkAccount, "last_sync" | "chain">): Promise<void> { return this.invoke("add_grs_account", { account }); }
+  async removeGrsAccount(id: string): Promise<void> { return this.invoke("remove_grs_account", { id }); }
+  async updateGrsAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_grs_account_label", { id, label }); }
+  async updateGrsSyncTimestamp(id: string): Promise<void> { return this.invoke("update_grs_sync_timestamp", { id }); }
+  async syncGrs(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
+    const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
+    const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
+    return syncBtcForkAccount(this, { ...account, chain: "grs" }, BTC_FORK_CHAINS.grs, onProgress, signal);
   }
 
   // XRP

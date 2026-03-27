@@ -1,6 +1,6 @@
 // BTC-fork chain types — shared module for DOGE, LTC, and BCH.
 
-export type BtcForkChain = "doge" | "ltc" | "bch";
+export type BtcForkChain = "doge" | "ltc" | "bch" | "dash" | "bsv" | "xec" | "grs";
 
 export interface BtcForkChainConfig {
 	id: BtcForkChain;
@@ -12,6 +12,7 @@ export interface BtcForkChainConfig {
 	apiBaseUrl: string;
 	apiProxyPrefix: string;
 	apiStyle: "mempool" | "blockcypher" | "blockchair";
+	blockchairPath?: string;
 }
 
 export interface BtcForkAccount {
@@ -87,5 +88,54 @@ export const BTC_FORK_CHAINS: Record<BtcForkChain, BtcForkChainConfig> = {
 		apiBaseUrl: "https://api.blockchair.com",
 		apiProxyPrefix: "/api/bch",
 		apiStyle: "blockchair",
+		blockchairPath: "bitcoin-cash",
+	},
+	dash: {
+		id: "dash",
+		name: "Dash",
+		symbol: "DASH",
+		coinType: 5,
+		decimals: 8,
+		addressRegex: /^X[1-9A-HJ-NP-Za-km-z]{33}$/,
+		apiBaseUrl: "https://api.blockchair.com",
+		apiProxyPrefix: "/api/dash",
+		apiStyle: "blockchair",
+		blockchairPath: "dash",
+	},
+	bsv: {
+		id: "bsv",
+		name: "Bitcoin SV",
+		symbol: "BSV",
+		coinType: 236,
+		decimals: 8,
+		addressRegex: /^1[1-9A-HJ-NP-Za-km-z]{25,33}$/,
+		apiBaseUrl: "https://api.blockchair.com",
+		apiProxyPrefix: "/api/bsv",
+		apiStyle: "blockchair",
+		blockchairPath: "bitcoin-sv",
+	},
+	xec: {
+		id: "xec",
+		name: "eCash",
+		symbol: "XEC",
+		coinType: 145,
+		decimals: 8,
+		addressRegex: /^(ecash:)?[qp][a-z0-9]{41}$/,
+		apiBaseUrl: "https://api.blockchair.com",
+		apiProxyPrefix: "/api/xec",
+		apiStyle: "blockchair",
+		blockchairPath: "ecash",
+	},
+	grs: {
+		id: "grs",
+		name: "Groestlcoin",
+		symbol: "GRS",
+		coinType: 17,
+		decimals: 8,
+		addressRegex: /^(F[a-km-zA-HJ-NP-Z1-9]{33}|grs1[a-z0-9]{39,59})$/,
+		apiBaseUrl: "https://api.blockchair.com",
+		apiProxyPrefix: "/api/grs",
+		apiStyle: "blockchair",
+		blockchairPath: "groestlcoin",
 	},
 };

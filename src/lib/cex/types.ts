@@ -7,7 +7,9 @@ export type ExchangeId =
   // Wave 2
   | "bingx" | "bitmart" | "upbit" | "bithumb"
   // Wave 3
-  | "lbank" | "xtcom" | "gemini" | "coinex" | "poloniex" | "bitvavo" | "phemex" | "whitebit";
+  | "lbank" | "xtcom" | "gemini" | "coinex" | "poloniex" | "bitvavo" | "phemex" | "whitebit"
+  // Wave 4
+  | "bitfinex" | "bitpanda" | "hitbtc";
 
 export interface ExchangeAccount {
   id: string;
