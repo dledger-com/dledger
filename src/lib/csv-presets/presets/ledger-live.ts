@@ -1,9 +1,10 @@
 import type { CsvPreset, CsvRecord } from "../types.js";
 import type { CsvImportOptions } from "$lib/utils/csv-import.js";
-import { walletAssets, chainFees, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
-import { onchainTransferDescription, operationDescription } from "$lib/types/description-data.js";
+import { walletAssets, chainFees, defiAssets, EQUITY_EXTERNAL } from "$lib/accounts/paths.js";
+import { onchainTransferDescription, operationDescription, defiActionDescription } from "$lib/types/description-data.js";
 import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx } from "./shared.js";
+import { isAToken, extractATokenUnderlying } from "$lib/handlers/aave.js";
 
 function hasLedgerHeaders(h: string[]): boolean {
   const lower = h.map((c) => c.trim().toLowerCase());
@@ -87,8 +88,12 @@ export const ledgerLivePreset: CsvPreset = {
       const date = rawDate.slice(0, 10); // ISO 8601 "2025-06-23T09:12:18.000Z" → "2025-06-23"
       if (!date || date.length !== 10) continue;
 
-      const ticker = (row[tickerIdx] ?? "").trim().toUpperCase();
-      if (!ticker) continue;
+      const rawTicker = (row[tickerIdx] ?? "").trim();
+      if (!rawTicker) continue;
+
+      // Detect Aave aTokens (aEthWBTC, aEthwstETH, etc.) and extract underlying
+      const aTokenUnderlying = isAToken(rawTicker) ? extractATokenUnderlying(rawTicker) : null;
+      const ticker = aTokenUnderlying ? aTokenUnderlying.toUpperCase() : rawTicker.toUpperCase();
 
       const rawAmount = parseFloat(row[amountIdx] ?? "0");
       const amount = isNaN(rawAmount) ? 0 : Math.abs(rawAmount);
@@ -120,11 +125,36 @@ export const ledgerLivePreset: CsvPreset = {
 
       const chain = detectChain(ticker, accountXpub);
       const walletAccount = walletAssets(chain, accountName);
+      const aaveSupply = aTokenUnderlying ? defiAssets("Aave", "Supply") : null;
 
       const lines: CsvRecord["lines"] = [];
       let descData: import("$lib/types/description-data.js").DescriptionData | undefined;
 
-      if (opType === "IN") {
+      if (opType === "IN" && aaveSupply) {
+        // Aave aToken received → supply position (underlying deposited to Aave)
+        lines.push(
+          { account: aaveSupply, currency: ticker, amount: amount.toString() },
+          { account: walletAccount, currency: ticker, amount: (-amount).toString() },
+        );
+        descData = defiActionDescription("Aave", "supply", chain, hash, `Supply ${ticker}`);
+      } else if (opType === "OUT" && aaveSupply) {
+        // Aave aToken sent → withdraw position (underlying withdrawn from Aave)
+        const netSend = amount - fees;
+        if (netSend > 0) {
+          lines.push(
+            { account: walletAccount, currency: ticker, amount: netSend.toString() },
+            { account: aaveSupply, currency: ticker, amount: (-netSend).toString() },
+          );
+        }
+        if (fees > 0) {
+          lines.push(
+            { account: chainFees(chain), currency: ticker, amount: fees.toString() },
+            { account: walletAccount, currency: ticker, amount: (-fees).toString() },
+          );
+        }
+        if (lines.length === 0) continue;
+        descData = defiActionDescription("Aave", "withdraw", chain, hash, `Withdraw ${ticker}`);
+      } else if (opType === "IN") {
         // Receive: credit wallet, debit equity
         const netAmount = amount;
         lines.push(
