@@ -276,11 +276,9 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
         for (const coin of data) {
           const upper = coin.symbol.toUpperCase();
           if (coin.image && !coin.image.includes("missing")) {
-            const dataUri = await fetchAsDataUri(coin.image);
-            if (dataUri) {
-              _icons.set(upper, dataUri);
-              newIcons.set(upper, dataUri);
-            }
+            const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+            _icons.set(upper, icon);
+            newIcons.set(upper, icon);
           }
         }
       }
@@ -300,11 +298,9 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
         for (const coin of data) {
           const upper = coin.symbol.toUpperCase();
           if (coin.image && !coin.image.includes("missing")) {
-            const dataUri = await fetchAsDataUri(coin.image);
-            if (dataUri) {
-              _icons.set(upper, dataUri);
-              newIcons.set(upper, dataUri);
-            }
+            const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+            _icons.set(upper, icon);
+            newIcons.set(upper, icon);
           }
         }
       }
