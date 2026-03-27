@@ -4,7 +4,7 @@ import { walletAssets, chainFees, defiAssets, EQUITY_EXTERNAL } from "$lib/accou
 import { onchainTransferDescription, operationDescription, defiActionDescription } from "$lib/types/description-data.js";
 import { renderDescription } from "$lib/types/description-data.js";
 import { colIdx } from "./shared.js";
-import { isAToken, extractATokenUnderlying } from "$lib/handlers/aave.js";
+import { isAToken, extractATokenUnderlying, aaveActionDescription } from "$lib/handlers/aave.js";
 
 function hasLedgerHeaders(h: string[]): boolean {
   const lower = h.map((c) => c.trim().toLowerCase());
@@ -136,7 +136,7 @@ export const ledgerLivePreset: CsvPreset = {
           { account: aaveSupply, currency: ticker, amount: amount.toString() },
           { account: walletAccount, currency: ticker, amount: (-amount).toString() },
         );
-        descData = defiActionDescription("Aave", "supply", chain, hash, `Supply ${ticker}`);
+        descData = defiActionDescription("Aave", "supply", chain, hash, aaveActionDescription("Supply", amount, ticker, hash));
       } else if (opType === "OUT" && aaveSupply) {
         // Aave aToken sent → withdraw position (underlying withdrawn from Aave)
         const netSend = amount - fees;
@@ -153,7 +153,8 @@ export const ledgerLivePreset: CsvPreset = {
           );
         }
         if (lines.length === 0) continue;
-        descData = defiActionDescription("Aave", "withdraw", chain, hash, `Withdraw ${ticker}`);
+        descData = defiActionDescription("Aave", "withdraw", chain, hash, aaveActionDescription("Withdraw", netSend > 0 ? netSend : amount, ticker, hash));
+
       } else if (opType === "IN") {
         // Receive: credit wallet, debit equity
         const netAmount = amount;

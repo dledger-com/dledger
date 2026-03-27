@@ -65,6 +65,14 @@ export function extractDebtTokenUnderlying(symbol: string): string | null {
   return m ? m[1] : null;
 }
 
+// ---- Description helpers ----
+
+/** Build a standardized Aave action description: "Aave: Supply 1.5 WBTC (0x1234…abcd)" */
+export function aaveActionDescription(action: string, amount: number | string, currency: string, txHash: string): string {
+  const hashShort = txHash.length > 10 ? `${txHash.slice(0, 6)}…${txHash.slice(-4)}` : txHash;
+  return `Aave: ${action} ${amount} ${currency} (${hashShort})`;
+}
+
 // ---- Protocol item building ----
 
 type AaveAction = "SUPPLY" | "WITHDRAW" | "BORROW" | "REPAY" | "CLAIM_REWARDS" | "LIQUIDATION" | "UNKNOWN";
