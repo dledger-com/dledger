@@ -219,6 +219,30 @@ export function getProtocolToken(descriptionData?: string): string | null {
 }
 
 /**
+ * Get a chain icon URL from description_data for CSV/import entries.
+ * For onchain-transfer, cex-operation, and btc-transfer types, returns the chain icon.
+ */
+export function getDescriptionChainIcon(descriptionData?: string): string | null {
+  if (!descriptionData) return null;
+  try {
+    const parsed = JSON.parse(descriptionData);
+    if (parsed.type === "onchain-transfer" && parsed.chain) {
+      return NAMED_CHAIN_ICONS[parsed.chain.toLowerCase()] ?? null;
+    }
+    if (parsed.type === "cex-operation" && parsed.exchange) {
+      return NAMED_CHAIN_ICONS[parsed.exchange.toLowerCase()] ?? null;
+    }
+    if (parsed.type === "btc-transfer") {
+      return NAMED_CHAIN_ICONS["bitcoin"] ?? null;
+    }
+    if (parsed.type === "sol-transfer") {
+      return NAMED_CHAIN_ICONS["solana"] ?? null;
+    }
+  } catch { /* invalid JSON — ignore */ }
+  return null;
+}
+
+/**
  * Get the native currency symbol for an EVM L1 on-chain source.
  * Only returns a coin code for EVM L1 chains — non-EVM chains (Bitcoin, Solana,
  * Hyperliquid, etc.) already have reliable direct icon URLs in NAMED_CHAIN_ICONS,

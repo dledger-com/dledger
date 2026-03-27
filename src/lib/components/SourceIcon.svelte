@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getSourceIconUrl, parseSourceId, getProtocolToken, getSourceNativeCurrency, isL2Chain } from "$lib/data/source-icons.js";
+    import { getSourceIconUrl, parseSourceId, getProtocolToken, getDescriptionChainIcon, getSourceNativeCurrency, isL2Chain } from "$lib/data/source-icons.js";
     import CoinIcon from "$lib/components/CoinIcon.svelte";
     import { cacheExternalIcon, onCoinIconsChanged } from "$lib/data/coin-icons.svelte.js";
 
@@ -12,11 +12,17 @@
     let _tick = $state(0);
     $effect(() => onCoinIconsChanged(() => _tick++));
 
+    // Chain icon from descriptionData takes priority (for CSV imports with chain context)
+    const descChainIconUrl = $derived(getDescriptionChainIcon(descriptionData));
+
     const iconUrl = $derived.by(() => {
         void _tick;
-        if (!rawIconUrl) return null;
-        const cacheKey = `source:${source.slice(0, 40)}`;
-        return cacheExternalIcon(cacheKey, rawIconUrl);
+        const url = descChainIconUrl ?? rawIconUrl;
+        if (!url) return null;
+        const cacheKey = descChainIconUrl
+            ? `desc-chain:${descriptionData?.slice(0, 40)}`
+            : `source:${source.slice(0, 40)}`;
+        return cacheExternalIcon(cacheKey, url);
     });
 
     // Priority: protocol token → L2 chain icon → L1/non-EVM native currency CoinIcon → fallback

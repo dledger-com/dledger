@@ -192,20 +192,21 @@ function isLocalCache(value: string): boolean {
  * Call once on app startup with the list of currency codes the user has.
  */
 export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
-  if (_initialized) return;
-  _initialized = true;
+  if (!_initialized) {
+    _initialized = true;
 
-  // Merge IndexedDB cache (may have more entries than localStorage due to quota)
-  const idbIcons = await loadIconsFromIDB();
-  if (idbIcons.size > 0) {
-    let merged = false;
-    for (const [k, v] of idbIcons) {
-      if (!_icons.has(k) || !isLocalCache(_icons.get(k)!)) {
-        _icons.set(k, v);
-        merged = true;
+    // Merge IndexedDB cache (may have more entries than localStorage due to quota)
+    const idbIcons = await loadIconsFromIDB();
+    if (idbIcons.size > 0) {
+      let merged = false;
+      for (const [k, v] of idbIcons) {
+        if (!_icons.has(k) || !isLocalCache(_icons.get(k)!)) {
+          _icons.set(k, v);
+          merged = true;
+        }
       }
+      if (merged) notify();
     }
-    if (merged) notify();
   }
 
   // Cache fiat flag SVGs as data URIs
