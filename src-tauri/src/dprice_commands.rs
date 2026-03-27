@@ -542,8 +542,11 @@ pub async fn dprice_asset_proxy(
             });
         }
 
-        // Fetch from source
-        let mut resp = ureq::get(&url).call().map_err(|e| format!("upstream fetch failed: {e}"))?;
+        // Fetch from source with browser-like User-Agent (some CDNs block default UAs)
+        let mut resp = ureq::get(&url)
+            .header("User-Agent", "Mozilla/5.0 (compatible; dledger/1.0)")
+            .call()
+            .map_err(|e| format!("upstream fetch failed: {e}"))?;
 
         let status = resp.status().as_u16();
         if status < 200 || status >= 300 {
