@@ -229,6 +229,9 @@ export function getDescriptionChainIcon(descriptionData?: string): string | null
     if (parsed.type === "onchain-transfer" && parsed.chain) {
       return NAMED_CHAIN_ICONS[parsed.chain.toLowerCase()] ?? null;
     }
+    if (parsed.type === "defi" && parsed.chain) {
+      return NAMED_CHAIN_ICONS[parsed.chain.toLowerCase()] ?? null;
+    }
     if (parsed.type === "cex-operation" && parsed.exchange) {
       return NAMED_CHAIN_ICONS[parsed.exchange.toLowerCase()] ?? null;
     }
