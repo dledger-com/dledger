@@ -72,12 +72,31 @@ export const ledgerLivePreset: CsvPreset = {
       const ticker = (row[tickerIdx] ?? "").trim().toUpperCase();
       if (!ticker) continue;
 
-      const amount = Math.abs(parseFloat(row[amountIdx] ?? "0"));
-      const fees = Math.abs(parseFloat(row[feesIdx] ?? "0"));
+      const rawAmount = parseFloat(row[amountIdx] ?? "0");
+      const amount = isNaN(rawAmount) ? 0 : Math.abs(rawAmount);
+      const rawFees = parseFloat(row[feesIdx] ?? "0");
+      const fees = isNaN(rawFees) ? 0 : Math.abs(rawFees);
       const hash = (row[hashIdx] ?? "").trim();
       const accountName = (row[accountIdx] ?? "Ledger").trim();
 
-      if (isNaN(amount) || amount === 0 && opType !== "FEES") continue;
+      // Skip rows with no financial impact
+      if (amount === 0 && fees === 0) continue;
+
+      // Treat zero-amount rows with fees as fee-only operations
+      if (amount === 0 && fees > 0 && opType !== "FEES") {
+        const chain = currencyToChain(ticker);
+        const walletAccount = walletAssets(chain, accountName);
+        const descData = operationDescription("Ledger", "fee", ticker);
+        records.push({
+          date, description: renderDescription(descData),
+          lines: [
+            { account: chainFees(chain), currency: ticker, amount: fees.toString() },
+            { account: walletAccount, currency: ticker, amount: (-fees).toString() },
+          ],
+          sourceKey: hash || undefined,
+        });
+        continue;
+      }
 
       const chain = currencyToChain(ticker);
       const walletAccount = walletAssets(chain, accountName);
