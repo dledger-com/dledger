@@ -31,6 +31,8 @@ export const CHAIN_ICONS: Record<number, string> = {
 
 /** Named chain ID (non-EVM) → icon URL */
 export const NAMED_CHAIN_ICONS: Record<string, string> = {
+  ethereum:  `${TW}/ethereum/info/logo.png`,
+  eth:       `${TW}/ethereum/info/logo.png`,
   bitcoin:   `${TW}/bitcoin/info/logo.png`,
   btc:       `${TW}/bitcoin/info/logo.png`,
   sol:       `${TW}/solana/info/logo.png`,

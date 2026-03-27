@@ -16,14 +16,31 @@ function hasLedgerHeaders(h: string[]): boolean {
   );
 }
 
-/** Ledger Live uses "BTC", "ETH" etc. — map to a chain name for wallet account paths. */
-function currencyToChain(ticker: string): string {
-  const map: Record<string, string> = {
-    BTC: "Bitcoin", ETH: "Ethereum", SOL: "Solana", DOT: "Polkadot",
-    ATOM: "Cosmos", BNB: "BSC", ADA: "Cardano", XRP: "XRP",
-    AVAX: "Avalanche", MATIC: "Polygon", NEAR: "NEAR", ALGO: "Algorand",
-  };
-  return map[ticker] ?? ticker;
+/** Map native currency tickers to chain names */
+const TICKER_TO_CHAIN: Record<string, string> = {
+  BTC: "Bitcoin", ETH: "Ethereum", SOL: "Solana", DOT: "Polkadot",
+  ATOM: "Cosmos", BNB: "BSC", ADA: "Cardano", XRP: "XRP",
+  AVAX: "Avalanche", MATIC: "Polygon", POL: "Polygon", NEAR: "NEAR", ALGO: "Algorand",
+  LTC: "Litecoin", DOGE: "Dogecoin", XLM: "Stellar", XTZ: "Tezos",
+  TON: "TON", FLR: "Flare", CRO: "Cronos", FTM: "Fantom",
+};
+
+/**
+ * Detect chain from ticker + account address (xpub column).
+ * For native currencies, use the ticker→chain map.
+ * For tokens (ERC-20 etc.), detect from the account address format.
+ */
+function detectChain(ticker: string, accountXpub: string): string {
+  // Known native currencies
+  const known = TICKER_TO_CHAIN[ticker];
+  if (known) return known;
+
+  // Detect chain from account address format
+  if (accountXpub.startsWith("0x")) return "Ethereum";
+  if (/^(xpub|ypub|zpub)/.test(accountXpub)) return "Bitcoin";
+
+  // Fallback: use ticker as chain name (shouldn't happen often)
+  return ticker;
 }
 
 export const ledgerLivePreset: CsvPreset = {
@@ -50,6 +67,7 @@ export const ledgerLivePreset: CsvPreset = {
     const feesIdx = colIdx(headers, "Operation Fees");
     const hashIdx = colIdx(headers, "Operation Hash");
     const accountIdx = colIdx(headers, "Account Name");
+    const xpubIdx = colIdx(headers, "Account xpub");
 
     if ([dateIdx, tickerIdx, typeIdx, amountIdx, hashIdx].some((i) => i === -1)) return null;
 
@@ -78,13 +96,14 @@ export const ledgerLivePreset: CsvPreset = {
       const fees = isNaN(rawFees) ? 0 : Math.abs(rawFees);
       const hash = (row[hashIdx] ?? "").trim();
       const accountName = (row[accountIdx] ?? "Ledger").trim();
+      const accountXpub = xpubIdx >= 0 ? (row[xpubIdx] ?? "").trim() : "";
 
       // Skip rows with no financial impact
       if (amount === 0 && fees === 0) continue;
 
       // Treat zero-amount rows with fees as fee-only operations
       if (amount === 0 && fees > 0 && opType !== "FEES") {
-        const chain = currencyToChain(ticker);
+        const chain = detectChain(ticker, accountXpub);
         const walletAccount = walletAssets(chain, accountName);
         const descData = operationDescription(chain, "fee", ticker);
         records.push({
@@ -98,7 +117,7 @@ export const ledgerLivePreset: CsvPreset = {
         continue;
       }
 
-      const chain = currencyToChain(ticker);
+      const chain = detectChain(ticker, accountXpub);
       const walletAccount = walletAssets(chain, accountName);
 
       const lines: CsvRecord["lines"] = [];

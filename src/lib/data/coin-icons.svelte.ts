@@ -187,11 +187,14 @@ function isLocalCache(value: string): boolean {
   return value.startsWith("data:");
 }
 
+let _fetching = false;
+
 /**
  * Initialize coin icons: load from IndexedDB, then fetch missing icons from CoinGecko as data URIs.
- * Call once on app startup with the list of currency codes the user has.
+ * Safe to call multiple times — IDB load runs once, CoinGecko fetch skips already-cached codes.
  */
 export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
+  if (_fetching) return; // avoid concurrent fetches
   if (!_initialized) {
     _initialized = true;
 
@@ -252,6 +255,7 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
 
   if (knownMissing.length === 0 && unknownMissing.length === 0) return;
 
+  _fetching = true;
   const newIcons = new Map<string, string>();
 
   try {
@@ -313,6 +317,8 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
     }
   } catch {
     // Network error — use whatever we have cached
+  } finally {
+    _fetching = false;
   }
 }
 
