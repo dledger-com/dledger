@@ -132,8 +132,9 @@ async function saveIconsToIDB(newIcons: Map<string, string>): Promise<void> {
 let _proxyAsset: ((url: string) => Promise<Blob | null>) | null = null;
 
 /**
- * Set the asset proxy function. When set, CORS-blocked icon URLs (CoinGecko, Google Favicons)
- * are routed through the dprice asset-proxy endpoint for caching and CORS bypass.
+ * Set the asset proxy function. When set, all external icon URLs are routed through the
+ * dprice asset-proxy endpoint for server-side caching and CORS bypass. If the proxy fails
+ * (e.g., domain not in allowlist), falls back to direct fetch for non-CORS-blocked URLs.
  */
 export function setAssetProxy(fn: (url: string) => Promise<Blob | null>): void {
   _proxyAsset = fn;
@@ -150,18 +151,24 @@ function blobToDataUri(blob: Blob): Promise<string | null> {
   });
 }
 
+/** URLs that browsers block via CORS — cannot direct-fetch, must proxy or skip */
+const CORS_BLOCKED = ["coingecko.com", "google.com/s2/favicons"];
+
 async function fetchAsDataUri(url: string): Promise<string | null> {
   try {
-    const needsProxy = url.includes("coingecko.com") || url.includes("google.com/s2/favicons");
-    if (needsProxy) {
-      if (!_proxyAsset) return null; // no proxy available — skip
-      const blob = await _proxyAsset(url);
-      if (!blob) return null;
-      return blobToDataUri(blob);
-    }
-
     // Use "small" size (~64px) for compact icons
     const smallUrl = url.replace("/large/", "/small/");
+
+    // When proxy is available, route ALL external URLs through it for server-side caching
+    if (_proxyAsset) {
+      const blob = await _proxyAsset(smallUrl);
+      if (blob) return blobToDataUri(blob);
+      // Proxy failed (domain not in allowlist, network error, etc.) — fall through to direct fetch
+    }
+
+    // Without proxy, CORS-blocked URLs cannot be fetched directly — skip them
+    if (CORS_BLOCKED.some((d) => url.includes(d))) return null;
+
     const resp = await fetch(smallUrl);
     if (!resp.ok) return null;
     const blob = await resp.blob();
