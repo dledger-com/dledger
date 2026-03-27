@@ -74,6 +74,7 @@ export interface DpriceClient {
   queryAssets(filter: DpriceAssetFilter, limit?: number): Promise<DpriceAssetInfo[]>;
   exportDb(): Promise<Uint8Array>;
   importDb(data: Uint8Array): Promise<string>;
+  proxyAsset(url: string): Promise<Blob | null>;
 }
 
 class TauriDpriceClient implements DpriceClient {
@@ -162,6 +163,18 @@ class TauriDpriceClient implements DpriceClient {
 
   async importDb(data: Uint8Array): Promise<string> {
     return this.invoke("dprice_import_db", { data: Array.from(data) });
+  }
+
+  async proxyAsset(url: string): Promise<Blob | null> {
+    try {
+      const resp = await this.invoke<{ content_type: string; data: number[] }>(
+        "dprice_asset_proxy",
+        { url },
+      );
+      return new Blob([new Uint8Array(resp.data)], { type: resp.content_type });
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -338,6 +351,18 @@ class HttpDpriceClient implements DpriceClient {
 
   async importDb(_data: Uint8Array): Promise<string> {
     throw new Error("dprice DB import is not supported in browser mode");
+  }
+
+  async proxyAsset(url: string): Promise<Blob | null> {
+    try {
+      const resp = await fetch(
+        `${this.baseUrl}/api/v1/asset-proxy?url=${encodeURIComponent(url)}`,
+      );
+      if (!resp.ok) return null;
+      return resp.blob();
+    } catch {
+      return null;
+    }
   }
 }
 

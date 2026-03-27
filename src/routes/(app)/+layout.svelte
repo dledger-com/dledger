@@ -18,10 +18,11 @@
   import { untrack } from "svelte";
   import { onMount } from "svelte";
   import { getBackend } from "$lib/backend.js";
-  import { initCoinIcons } from "$lib/data/coin-icons.svelte.js";
+  import { initCoinIcons, setAssetProxy } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
+  import { createDpriceClient } from "$lib/dprice-client.js";
 
   let { children } = $props();
 
@@ -36,6 +37,14 @@
   // Initialize coin icon cache and load custom plugins (non-blocking, best-effort)
   onMount(() => {
     const backend = getBackend();
+
+    // Set up dprice asset proxy for CORS-blocked icon URLs
+    const dpriceClient = createDpriceClient({
+      dpriceMode: settings.settings.dpriceMode,
+      dpriceUrl: settings.settings.dpriceUrl,
+    });
+    setAssetProxy((url) => dpriceClient.proxyAsset(url));
+
     const refreshIcons = () => {
       backend.listCurrencies().then((currencies) => {
         initCoinIcons(currencies.map((c) => c.code));

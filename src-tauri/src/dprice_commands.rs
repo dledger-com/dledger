@@ -509,6 +509,83 @@ pub async fn dprice_local_db_path(
         .ok_or_else(|| "invalid path encoding".to_string())
 }
 
+#[derive(Serialize)]
+pub struct DpriceAssetProxyResponse {
+    pub content_type: String,
+    pub data: Vec<u8>,
+}
+
+#[tauri::command]
+pub async fn dprice_asset_proxy(
+    state: State<'_, DpriceState>,
+    url: String,
+) -> Result<DpriceAssetProxyResponse, String> {
+    use dprice::db::asset_cache::AssetCache;
+    use dprice::server::asset_proxy::validate_url;
+
+    let config = &state.config.asset_cache;
+
+    // Validate URL against allowlist
+    validate_url(&url, config)?;
+
+    let cache_path = state.active_db_path().with_file_name("asset-cache.db");
+    let max_bytes = config.max_size_kb * 1024;
+
+    // All I/O in spawn_blocking (ureq is sync, SQLite is sync)
+    tokio::task::spawn_blocking(move || {
+        // Check cache
+        let cache = AssetCache::open(&cache_path).map_err(|e| e.to_string())?;
+        if let Some(asset) = cache.get(&url).map_err(|e| e.to_string())? {
+            return Ok(DpriceAssetProxyResponse {
+                content_type: asset.content_type,
+                data: asset.data,
+            });
+        }
+
+        // Fetch from source
+        let mut resp = ureq::get(&url).call().map_err(|e| format!("upstream fetch failed: {e}"))?;
+
+        let status = resp.status().as_u16();
+        if status < 200 || status >= 300 {
+            return Err(format!("upstream returned {status}"));
+        }
+
+        let content_type = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .split(';')
+            .next()
+            .unwrap_or("application/octet-stream")
+            .trim()
+            .to_string();
+
+        let data = resp
+            .body_mut()
+            .read_to_vec()
+            .map_err(|e| format!("failed to read body: {e}"))?;
+
+        if data.len() as u64 > max_bytes {
+            return Err(format!(
+                "response size {} exceeds limit of {} KB",
+                data.len(),
+                max_bytes / 1024
+            ));
+        }
+
+        // Store in cache (best-effort)
+        let _ = cache.put(&url, &content_type, &data);
+
+        Ok(DpriceAssetProxyResponse {
+            content_type,
+            data,
+        })
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

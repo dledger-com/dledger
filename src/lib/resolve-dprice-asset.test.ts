@@ -16,6 +16,7 @@ function mockClient(assets: DpriceAssetInfo[]): DpriceClient {
     async ensurePrices() { return []; },
     async exportDb() { return new Uint8Array(); },
     async importDb() { return ""; },
+    async proxyAsset() { return null; },
   };
 }
 

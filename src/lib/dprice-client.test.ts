@@ -55,6 +55,7 @@ describe("dprice-client", () => {
       queryAssets: async () => [],
       exportDb: async () => new Uint8Array(),
       importDb: async () => "ok",
+      proxyAsset: async () => null,
     };
     expect(_typeCheck).toBeDefined();
   });

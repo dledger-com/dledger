@@ -127,25 +127,45 @@ async function saveIconsToIDB(newIcons: Map<string, string>): Promise<void> {
   } catch { /* ignore */ }
 }
 
+// ---- Asset proxy (CORS bypass) ----
+
+let _proxyAsset: ((url: string) => Promise<Blob | null>) | null = null;
+
+/**
+ * Set the asset proxy function. When set, CORS-blocked icon URLs (CoinGecko, Google Favicons)
+ * are routed through the dprice asset-proxy endpoint for caching and CORS bypass.
+ */
+export function setAssetProxy(fn: (url: string) => Promise<Blob | null>): void {
+  _proxyAsset = fn;
+}
+
 // ---- Image fetching ----
+
+function blobToDataUri(blob: Blob): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+}
 
 async function fetchAsDataUri(url: string): Promise<string | null> {
   try {
-    // TODO: CoinGecko CDN and Google Favicons block cross-origin fetch (CORS).
-    // Proxy through backend to enable local caching.
-    if (url.includes("coingecko.com") || url.includes("google.com/s2/favicons")) return null;
+    const needsProxy = url.includes("coingecko.com") || url.includes("google.com/s2/favicons");
+    if (needsProxy) {
+      if (!_proxyAsset) return null; // no proxy available — skip
+      const blob = await _proxyAsset(url);
+      if (!blob) return null;
+      return blobToDataUri(blob);
+    }
 
     // Use "small" size (~64px) for compact icons
     const smallUrl = url.replace("/large/", "/small/");
     const resp = await fetch(smallUrl);
     if (!resp.ok) return null;
     const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
+    return blobToDataUri(blob);
   } catch { return null; }
 }
 
