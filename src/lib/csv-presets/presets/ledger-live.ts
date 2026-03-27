@@ -112,6 +112,7 @@ export const ledgerLivePreset: CsvPreset = {
             { account: chainFees(chain), currency: ticker, amount: fees.toString() },
             { account: walletAccount, currency: ticker, amount: (-fees).toString() },
           ],
+          groupKey: hash || undefined,
           sourceKey: hash || undefined,
         });
         continue;
@@ -161,7 +162,7 @@ export const ledgerLivePreset: CsvPreset = {
         continue;
       }
 
-      records.push({ date, description: renderDescription(descData!), descriptionData: descData, lines, sourceKey: hash || undefined });
+      records.push({ date, description: renderDescription(descData!), descriptionData: descData, lines, groupKey: hash || undefined, sourceKey: hash || undefined });
     }
 
     return records;
