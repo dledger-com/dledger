@@ -117,16 +117,19 @@ export const ledgerLivePreset: CsvPreset = {
         // Send: the amount already includes fees for UTXO chains
         // Net send = amount - fees (deducted from wallet), fees go to expense
         const netSend = amount - fees;
-        lines.push(
-          { account: walletAccount, currency: ticker, amount: (-netSend).toString() },
-          { account: EQUITY_EXTERNAL, currency: ticker, amount: netSend.toString() },
-        );
+        if (netSend > 0) {
+          lines.push(
+            { account: walletAccount, currency: ticker, amount: (-netSend).toString() },
+            { account: EQUITY_EXTERNAL, currency: ticker, amount: netSend.toString() },
+          );
+        }
         if (fees > 0) {
           lines.push(
             { account: chainFees(chain), currency: ticker, amount: fees.toString() },
             { account: walletAccount, currency: ticker, amount: (-fees).toString() },
           );
         }
+        if (lines.length === 0) continue;
         const descData = onchainTransferDescription(chain, ticker, "sent", { txHash: hash });
         desc = renderDescription(descData);
       } else if (opType === "FEES") {
