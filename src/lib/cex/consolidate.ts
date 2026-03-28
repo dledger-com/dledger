@@ -83,7 +83,13 @@ export async function retroactiveConsolidate(
     }
   }
 
-  // 2. Build indexes
+  // 2. Batch-load all metadata in one query (avoids N+1)
+  const allEntryIds = nonVoided.map(([entry]) => entry.id);
+  const allMeta = backend.getMetadataBatch
+    ? await backend.getMetadataBatch(allEntryIds)
+    : new Map<string, Record<string, string>>();
+
+  // Build indexes
   // CEX entries with txid metadata (not already consolidated)
   const cexEntriesWithTxid = new Map<string, CexIndexEntry>();
   // CEX deposit/withdrawal entries WITHOUT txid (fallback matching)
@@ -94,9 +100,10 @@ export async function retroactiveConsolidate(
   for (const [entry, items] of nonVoided) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
+    const meta = allMeta.get(entry.id) ?? {};
+
     if (entry.source.startsWith("etherscan:")) {
       // Etherscan entry — extract hash from source (etherscan:{chainId}:{hash})
-      const meta = await backend.getMetadata(entry.id);
       if (meta["cex_linked"]) continue; // already consolidated
 
       const parts = entry.source.split(":");
@@ -106,7 +113,6 @@ export async function retroactiveConsolidate(
       }
     } else {
       // Potential CEX entry
-      const meta = await backend.getMetadata(entry.id);
       if (meta["cex_linked"]) continue; // already consolidated
       if (!meta["exchange"]) continue; // not a CEX entry
 

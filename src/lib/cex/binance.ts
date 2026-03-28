@@ -1,6 +1,6 @@
 import type { CexAdapter, CexLedgerRecord, ExchangeId } from "./types.js";
 import { normalizeTxid } from "./pipeline.js";
-import { cexFetch, abortableDelay } from "./fetch.js";
+import { cexFetch, abortableDelay, assertCexOk } from "./fetch.js";
 import { hmacSha256Hex } from "./crypto-utils.js";
 
 /** Configuration for Binance and Binance-compatible regional exchanges. */
@@ -256,6 +256,7 @@ export class BinanceAdapter implements CexAdapter {
         }
 
         const result = await this.signedGet("/api/v3/myTrades", params, apiKey, apiSecret, signal);
+        assertCexOk(this.exchangeName, result);
         const trades = JSON.parse(result.body) as BinanceTrade[];
 
         if (!Array.isArray(trades) || trades.length === 0) {
@@ -365,6 +366,7 @@ export class BinanceAdapter implements CexAdapter {
         });
 
         const result = await this.signedGet("/sapi/v1/capital/deposit/hisrec", params, apiKey, apiSecret, signal);
+        assertCexOk(this.exchangeName, result);
         const deposits = JSON.parse(result.body) as BinanceDeposit[];
 
         if (!Array.isArray(deposits) || deposits.length === 0) break;
@@ -431,6 +433,7 @@ export class BinanceAdapter implements CexAdapter {
         });
 
         const result = await this.signedGet("/sapi/v1/capital/withdraw/history", params, apiKey, apiSecret, signal);
+        assertCexOk(this.exchangeName, result);
         const withdrawals = JSON.parse(result.body) as BinanceWithdrawal[];
 
         if (!Array.isArray(withdrawals) || withdrawals.length === 0) break;

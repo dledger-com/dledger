@@ -255,11 +255,11 @@
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch((e) => { if (!signal.aborted) console.warn("Asset conversion failed:", e); }),
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch((e) => { if (!signal.aborted) console.warn("Liability conversion failed:", e); }),
         );
       }
     });
@@ -273,11 +273,11 @@
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch((e) => { if (!signal.aborted) console.warn("Revenue conversion failed:", e); }),
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch((e) => { if (!signal.aborted) console.warn("Net income conversion failed:", e); }),
         );
       }
     });
@@ -333,11 +333,11 @@
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.assets.totals, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch((e) => { if (!signal.aborted) console.warn("Asset conversion failed:", e); }),
           convertBalances(
             filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch((e) => { if (!signal.aborted) console.warn("Liability conversion failed:", e); }),
         );
       }
     });
@@ -350,11 +350,11 @@
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch((e) => { if (!signal.aborted) console.warn("Revenue conversion failed:", e); }),
           convertBalances(
             filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
             base, date, sharedCache, signal,
-          ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch(() => {}),
+          ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch((e) => { if (!signal.aborted) console.warn("Net income conversion failed:", e); }),
         );
       }
     });

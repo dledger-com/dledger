@@ -1,3 +1,30 @@
+/** Error thrown when a CEX API returns a non-2xx HTTP status. */
+export class CexApiError extends Error {
+  constructor(
+    public readonly exchange: string,
+    public readonly status: number,
+    public readonly body: string,
+  ) {
+    super(`${exchange} API error (${status}): ${body.slice(0, 200)}`);
+    this.name = "CexApiError";
+  }
+
+  get isRateLimited(): boolean {
+    return this.status === 429;
+  }
+
+  get isAuthError(): boolean {
+    return this.status === 401 || this.status === 403;
+  }
+}
+
+/** Throw a CexApiError if the response status is not 2xx. */
+export function assertCexOk(exchange: string, result: { status: number; body: string }): void {
+  if (result.status < 200 || result.status >= 300) {
+    throw new CexApiError(exchange, result.status, result.body);
+  }
+}
+
 /**
  * Shared fetch utility for CEX adapters.
  * - Tauri mode: uses the proxy_fetch Rust command (ureq, no CORS)

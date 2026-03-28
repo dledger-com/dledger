@@ -1648,7 +1648,7 @@ impl Storage for SqliteStorage {
         // We need to use a savepoint for nesting support.
         // rusqlite's transaction/savepoint requires &mut Connection, but we only have &self.
         // We execute raw SQL for savepoint management and pass self as the storage.
-        let id = SAVEPOINT_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let id = SAVEPOINT_COUNTER.fetch_add(1, Ordering::SeqCst);
         let savepoint_name = format!("sp_{id}");
         {
             let conn = self.conn.borrow();
@@ -2154,13 +2154,29 @@ impl Storage for SqliteStorage {
     }
 
     fn add_exchange_account(&self, account: &serde_json::Value) -> StorageResult<()> {
+        let id = account["id"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                StorageError::Internal(
+                    "exchange account missing required field 'id'".to_string(),
+                )
+            })?;
+        let exchange = account["exchange"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                StorageError::Internal(
+                    "exchange account missing required field 'exchange'".to_string(),
+                )
+            })?;
         let conn = self.conn.borrow();
         conn.execute(
             "INSERT INTO exchange_account (id, exchange, label, api_key, api_secret, linked_etherscan_account_id, passphrase, opened_at, closed_at, last_sync, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
-                account["id"].as_str().unwrap_or_default(),
-                account["exchange"].as_str().unwrap_or_default(),
+                id,
+                exchange,
                 account["label"].as_str().unwrap_or_default(),
                 account["api_key"].as_str().unwrap_or_default(),
                 account["api_secret"].as_str().unwrap_or_default(),
