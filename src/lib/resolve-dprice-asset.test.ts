@@ -104,13 +104,15 @@ describe("resolveDpriceAsset disambiguation", () => {
     expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
   });
 
-  it("returns ambiguous when no heuristic resolves", async () => {
-    // Two candidates with prices, no distinguishing hints
+  it("picks best candidate when no heuristic resolves", async () => {
+    // Two candidates with prices, no distinguishing hints —
+    // picks the one with most recent last_price_date
     const result = await resolveDpriceAsset(
       mockClient([DEPIN_HL, DEPIN_BASE]),
       "DEPIN", "",
     );
-    expect(result).toBe("ambiguous");
+    // DEPIN_HL has last_price_date "2026-03-17" vs DEPIN_BASE "2026-03-15"
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
   });
 
   it("backward compat: no hints still works", async () => {

@@ -184,6 +184,21 @@ export async function resolveDpriceAsset(
     if (byName.length === 1) return pick(byName[0]);
   }
 
+  // 6. Best candidate — when multiple assets remain, prefer the one with
+  // the most recent price data (most actively tracked in dprice)
+  if (candidates.length > 1) {
+    const sorted = [...candidates].sort((a, b) => {
+      const aDate = a.last_price_date ?? "";
+      const bDate = b.last_price_date ?? "";
+      if (aDate !== bDate) return bDate.localeCompare(aDate);
+      // Tie-break: longest history (earliest first_price_date)
+      const aFirst = a.first_price_date ?? "9999";
+      const bFirst = b.first_price_date ?? "9999";
+      return aFirst.localeCompare(bFirst);
+    });
+    return pick(sorted[0]);
+  }
+
   return "ambiguous";
 }
 
