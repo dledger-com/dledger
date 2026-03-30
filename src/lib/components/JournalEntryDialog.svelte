@@ -60,6 +60,7 @@
   let formLinks = $state<string[]>([]);
   let formNote = $state("");
   let formMetadata = $state<Record<string, string>>({});
+  let formDescriptionData = $state<string | undefined>(undefined);
   let tagSuggestions = $state<string[]>([]);
   let formLinkSuggestions = $state<string[]>([]);
   let metaKeySuggestions = $state<string[]>([]);
@@ -217,6 +218,7 @@
 
       formDate = origEntry.date;
       formDescription = origEntry.description;
+      formDescriptionData = origEntry.description_data;
       if (origItems.length > 0) formCurrency = origItems[0].currency;
 
       const formLines: FormLine[] = origItems.map((item) => {
@@ -314,6 +316,7 @@
     if (mode === "edit" && entryId) {
       const journalEntry: JournalEntry = {
         id: newEntryId, date: formDate, description: formDescription,
+        ...(formDescriptionData ? { description_data: formDescriptionData } : {}),
         status: "confirmed", source: "system:edit", voided_by: null, created_at: today,
       };
       const metaToSave = { ...formMetadata };
@@ -390,6 +393,7 @@
     } else if (mode === "new") {
       formDate = new Date().toISOString().slice(0, 10);
       formDescription = "";
+      formDescriptionData = undefined;
       formCurrency = "EUR";
       formTags = [];
       formLinks = [];

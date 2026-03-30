@@ -1,6 +1,7 @@
 import initSqlJs, { type Database, type SqlJsStatic } from "sql.js";
 import Decimal from "decimal.js-light";
 import { v7 as uuidv7 } from "uuid";
+import { renderDescription, DESCRIPTION_FORMAT_VERSION, type DescriptionData } from "./types/description-data.js";
 import type {
   Account,
   AccountType,
@@ -1342,6 +1343,26 @@ PRAGMA foreign_keys = ON;
       )`);
       backend.scheduleSave();
     }
+
+    // ── Description format auto-regeneration ──
+    // When DESCRIPTION_FORMAT_VERSION bumps, re-render all descriptions from stored description_data.
+    const DESC_VERSION_KEY = "dledger-description-format-version";
+    const storedDescVersion = parseInt(localStorage.getItem(DESC_VERSION_KEY) ?? "0", 10);
+    if (storedDescVersion < DESCRIPTION_FORMAT_VERSION) {
+      const rows = db.exec("SELECT id, description_data FROM journal_entry WHERE description_data IS NOT NULL AND description_data != ''");
+      if (rows.length > 0 && rows[0].values.length > 0) {
+        for (const [id, descDataJson] of rows[0].values) {
+          try {
+            const data = JSON.parse(descDataJson as string) as DescriptionData;
+            const newDesc = renderDescription(data);
+            db.run("UPDATE journal_entry SET description = ? WHERE id = ?", [newDesc, id as string]);
+          } catch { /* skip entries with invalid description_data */ }
+        }
+        backend.scheduleSave();
+      }
+      localStorage.setItem(DESC_VERSION_KEY, String(DESCRIPTION_FORMAT_VERSION));
+    }
+
     return backend;
   }
 
