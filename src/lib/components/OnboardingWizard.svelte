@@ -16,6 +16,7 @@
     import Wallet from "lucide-svelte/icons/wallet";
     import Check from "lucide-svelte/icons/check";
     import { importDrop } from "$lib/data/import-drop.svelte.js";
+    import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
 
     let {
         open = $bindable(true),
@@ -142,11 +143,21 @@
                         <Select.Root type="single" value={currency} onValueChange={(v) => { if (v) currency = v; }}>
                             <Select.Trigger class="w-full">
                                 {@const cur = COMMON_CURRENCIES.find(c => c.code === currency)}
-                                {cur ? `${cur.code} — ${cur.name}` : currency}
+                                {@const flagUrl = getFiatFlagUrl(currency)}
+                                <span class="inline-flex items-center gap-2">
+                                    {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                    {cur ? `${cur.code} — ${cur.name}` : currency}
+                                </span>
                             </Select.Trigger>
                             <Select.Content>
                                 {#each COMMON_CURRENCIES as c}
-                                    <Select.Item value={c.code}>{c.code} — {c.name}</Select.Item>
+                                    {@const flagUrl = getFiatFlagUrl(c.code)}
+                                    <Select.Item value={c.code}>
+                                        <span class="inline-flex items-center gap-2">
+                                            {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                            {c.code} — {c.name}
+                                        </span>
+                                    </Select.Item>
                                 {/each}
                             </Select.Content>
                         </Select.Root>

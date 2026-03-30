@@ -47,7 +47,7 @@ const COINGECKO_IDS: Record<string, string> = {
 };
 
 /** Fiat currency code → ISO 3166-1 alpha-2 country code for circle flag icons */
-const FIAT_FLAGS: Record<string, string> = {
+export const FIAT_FLAGS: Record<string, string> = {
   USD: "us", EUR: "european_union", GBP: "gb", JPY: "jp",
   CHF: "ch", CAD: "ca", AUD: "au", CNY: "cn",
   NZD: "nz", SEK: "se", NOK: "no", DKK: "dk",
@@ -56,6 +56,12 @@ const FIAT_FLAGS: Record<string, string> = {
   CZK: "cz", HUF: "hu", TRY: "tr", THB: "th",
   RUB: "ru", ILS: "il", AED: "ae", SAR: "sa",
 };
+
+/** Returns a circle-flag SVG URL for a fiat currency code, or undefined. */
+export function getFiatFlagUrl(code: string): string | undefined {
+  const flag = FIAT_FLAGS[code.toUpperCase()];
+  return flag ? `https://hatscripts.github.io/circle-flags/flags/${flag}.svg` : undefined;
+}
 
 // ---- localStorage (sync, fast first render) ----
 

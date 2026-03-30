@@ -31,6 +31,7 @@
     import { mode, setMode } from "mode-watcher";
     import * as Select from "$lib/components/ui/select/index.js";
     import ListFilter from "$lib/components/ListFilter.svelte";
+    import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
     import { invalidate } from "$lib/data/invalidation.js";
     import {
         DEFAULT_PATH_CONFIG,
@@ -765,7 +766,11 @@
                                 {settings.currency}
                             {:else}
                                 {@const cur = currencies.find((c) => c.code === settings.currency)}
-                                {cur ? `${cur.code} - ${cur.name}` : settings.currency}
+                                {@const flagUrl = getFiatFlagUrl(settings.currency)}
+                                <span class="inline-flex items-center gap-2">
+                                    {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                    {cur ? `${cur.code} - ${cur.name}` : settings.currency}
+                                </span>
                             {/if}
                         </Select.Trigger>
                         <Select.Content>
@@ -773,7 +778,13 @@
                                 <Select.Item value={settings.currency}>{settings.currency}</Select.Item>
                             {:else}
                                 {#each currencies as c (c.code)}
-                                    <Select.Item value={c.code}>{c.code} - {c.name}</Select.Item>
+                                    {@const flagUrl = getFiatFlagUrl(c.code)}
+                                    <Select.Item value={c.code}>
+                                        <span class="inline-flex items-center gap-2">
+                                            {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                            {c.code} - {c.name}
+                                        </span>
+                                    </Select.Item>
                                 {/each}
                             {/if}
                         </Select.Content>
