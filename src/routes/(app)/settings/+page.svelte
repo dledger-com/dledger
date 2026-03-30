@@ -32,6 +32,7 @@
     import * as Select from "$lib/components/ui/select/index.js";
     import ListFilter from "$lib/components/ListFilter.svelte";
     import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
+    import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
     import { invalidate } from "$lib/data/invalidation.js";
     import {
         DEFAULT_PATH_CONFIG,
@@ -375,6 +376,26 @@
 
     // Currency list from backend (needed for base currency select + asset type overrides)
     let currencies = $state<Currency[]>([]);
+
+    // Merge backend currencies with common fiat currencies for base currency selector
+    const baseCurrencyOptions = $derived.by(() => {
+        const seen = new Set<string>();
+        const result: { code: string; name: string }[] = [];
+        // Common currencies first (stable order)
+        for (const c of COMMON_CURRENCIES) {
+            seen.add(c.code);
+            const fromDb = currencies.find((db) => db.code === c.code);
+            result.push({ code: c.code, name: fromDb?.name || c.name });
+        }
+        // Then any additional currencies from DB
+        for (const c of currencies) {
+            if (!seen.has(c.code)) {
+                seen.add(c.code);
+                result.push({ code: c.code, name: c.name });
+            }
+        }
+        return result;
+    });
 
     // Currency asset type override state
     const ASSET_TYPES: { value: CurrencyAssetType; label: string }[] = [
@@ -762,31 +783,23 @@
                     <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
                     <Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
                         <Select.Trigger class="w-full">
-                            {#if currencies.length === 0}
-                                {settings.currency}
-                            {:else}
-                                {@const cur = currencies.find((c) => c.code === settings.currency)}
-                                {@const flagUrl = getFiatFlagUrl(settings.currency)}
-                                <span class="inline-flex items-center gap-2">
-                                    {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
-                                    {cur ? `${cur.code} - ${cur.name}` : settings.currency}
-                                </span>
-                            {/if}
+                            {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
+                            {@const flagUrl = getFiatFlagUrl(settings.currency)}
+                            <span class="inline-flex items-center gap-2">
+                                {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                {cur ? `${cur.code} — ${cur.name}` : settings.currency}
+                            </span>
                         </Select.Trigger>
                         <Select.Content>
-                            {#if currencies.length === 0}
-                                <Select.Item value={settings.currency}>{settings.currency}</Select.Item>
-                            {:else}
-                                {#each currencies as c (c.code)}
-                                    {@const flagUrl = getFiatFlagUrl(c.code)}
-                                    <Select.Item value={c.code}>
-                                        <span class="inline-flex items-center gap-2">
-                                            {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
-                                            {c.code} - {c.name}
-                                        </span>
-                                    </Select.Item>
-                                {/each}
-                            {/if}
+                            {#each baseCurrencyOptions as c (c.code)}
+                                {@const flagUrl = getFiatFlagUrl(c.code)}
+                                <Select.Item value={c.code}>
+                                    <span class="inline-flex items-center gap-2">
+                                        {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                        {c.code} — {c.name}
+                                    </span>
+                                </Select.Item>
+                            {/each}
                         </Select.Content>
                     </Select.Root>
                 </div>

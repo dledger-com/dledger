@@ -17,6 +17,7 @@
     import Check from "lucide-svelte/icons/check";
     import { importDrop } from "$lib/data/import-drop.svelte.js";
     import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
+    import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
 
     let {
         open = $bindable(true),
@@ -32,17 +33,6 @@
     let preset = $state<DefaultAccountSet>("standard");
     let accountsCreated = $state(false);
     let sourceAdded = $state(false);
-
-    const COMMON_CURRENCIES = [
-        { code: "EUR", name: "Euro" },
-        { code: "USD", name: "US Dollar" },
-        { code: "GBP", name: "British Pound" },
-        { code: "CHF", name: "Swiss Franc" },
-        { code: "CAD", name: "Canadian Dollar" },
-        { code: "AUD", name: "Australian Dollar" },
-        { code: "JPY", name: "Japanese Yen" },
-        { code: "CNY", name: "Chinese Yuan" },
-    ];
 
     const STEPS = [
         m.onboarding_step_welcome(),
