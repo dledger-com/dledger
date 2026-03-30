@@ -51,6 +51,11 @@
   let formDate = $state(new Date().toISOString().slice(0, 10));
   let formDescription = $state("");
   let formCurrency = $state("EUR");
+  const currencyStep = $derived.by(() => {
+    const cur = accountStore.currencies.find((c) => c.code === formCurrency);
+    const decimals = cur?.decimal_places ?? 2;
+    return decimals > 0 ? (1 / 10 ** decimals).toFixed(decimals) : "1";
+  });
   let formTags = $state<string[]>([]);
   let formLinks = $state<string[]>([]);
   let formNote = $state("");
@@ -551,7 +556,7 @@
                           <span class="text-xs text-muted-foreground">{m.label_debit()}</span>
                           <Input
                             type="number"
-                            step="0.01"
+                            step={currencyStep}
                             min="0"
                             placeholder="0.00"
                             bind:value={line.debit}
@@ -563,7 +568,7 @@
                           <span class="text-xs text-muted-foreground">{m.label_credit()}</span>
                           <Input
                             type="number"
-                            step="0.01"
+                            step={currencyStep}
                             min="0"
                             placeholder="0.00"
                             bind:value={line.credit}
