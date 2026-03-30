@@ -90,11 +90,11 @@ export const bridgeHandler: TransactionHandler = {
     if (action === "BRIDGE_DEPOSIT") {
       const outflow = flows.find((f) => f.direction === "out");
       const tokenSymbol = outflow ? outflow.symbol : ctx.chain.native_currency;
-      summary = `${protocolName}: Bridge ${tokenSymbol}`;
+      summary = `${protocolName} (${ctx.chain.name}): Bridge ${tokenSymbol}`;
     } else {
       const inflow = flows.find((f) => f.direction === "in");
       const tokenSymbol = inflow ? inflow.symbol : ctx.chain.native_currency;
-      summary = `${protocolName}: Receive ${tokenSymbol}`;
+      summary = `${protocolName} (${ctx.chain.name}): Receive ${tokenSymbol}`;
     }
 
     const metadata: Record<string, string> = {

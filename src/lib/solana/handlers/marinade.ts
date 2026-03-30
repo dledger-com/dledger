@@ -91,7 +91,7 @@ export const marinadeHandler: SolanaHandler = {
     if (merged.length === 0) return { type: "skip", reason: "No Marinade operation detected" };
 
     const date = new Date(tx.timestamp * 1000).toISOString().split("T")[0];
-    const summary = `Marinade: ${action} SOL/mSOL`;
+    const summary = `Marinade (Solana): ${action} SOL/mSOL`;
     const descriptionData = solDefiDescription("Marinade", action, tx.signature, summary);
 
     const entry: HandlerEntry = {

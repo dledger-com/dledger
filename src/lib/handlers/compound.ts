@@ -189,7 +189,7 @@ export const compoundHandler: TransactionHandler = {
 
     // Build description
     const actionLabel = ACTION_LABELS[action];
-    const summary = `${protocolName}: ${actionLabel}`;
+    const summary = `${protocolName} (${ctx.chain.name}): ${actionLabel}`;
 
     // Determine version
     const hasCTokenV3 = group.erc20s.some((tx) => isCTokenV3(tx.tokenSymbol));

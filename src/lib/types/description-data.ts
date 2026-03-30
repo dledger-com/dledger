@@ -1,3 +1,6 @@
+/** Bump this when renderDescription() output format changes — triggers auto-regeneration of all descriptions on next startup. */
+export const DESCRIPTION_FORMAT_VERSION = 2;
+
 export type DescriptionData =
   | { type: "cex-trade"; exchange: string; spent: string; received: string }
   | { type: "cex-transfer"; exchange: string; direction: "deposit" | "withdrawal"; currency: string }
@@ -112,23 +115,23 @@ export function renderDescription(data: DescriptionData): string {
     case "onchain-transfer": {
       const dir = data.direction === "sent" ? "Send" : data.direction === "received" ? "Receive" : "Transfer";
       const cp = data.counterparty ? ` ${data.direction === "sent" ? "to" : "from"} ${data.counterparty}` : "";
-      return `${dir} ${data.currency}${cp}`;
+      return `${data.chain}: ${dir} ${data.currency}${cp}`;
     }
     case "onchain-contract":
       return data.action === "creation"
-        ? "Contract creation"
-        : `Internal transfer ${data.currency}`;
+        ? `${data.chain}: Contract creation`
+        : `${data.chain}: Internal transfer ${data.currency}`;
     case "defi":
-      return data.summary ?? `${data.protocol}: ${capitalize(data.action)}`;
+      return data.summary ?? `${data.protocol} (${data.chain}): ${capitalize(data.action)}`;
     case "fee":
-      return "Network fee";
+      return `${data.chain}: Network fee`;
     case "btc-transfer": {
       const dir = data.direction === "sent" ? "Send"
         : data.direction === "received" ? "Receive"
         : data.direction === "self" ? "Transfer"
         : "Consolidation";
       const cp = data.counterparty ? ` ${data.direction === "sent" ? "to" : "from"} ${data.counterparty}` : "";
-      return `${dir} BTC${cp}`;
+      return `Bitcoin: ${dir} BTC${cp}`;
     }
     case "sol-transfer": {
       const dir = data.direction === "sent" ? "Send"
@@ -136,10 +139,10 @@ export function renderDescription(data: DescriptionData): string {
         : "Transfer";
       const token = data.tokenSymbol ? ` ${data.tokenSymbol}` : " SOL";
       const cp = data.counterparty ? ` ${data.direction === "sent" ? "to" : "from"} ${data.counterparty}` : "";
-      return `${dir}${token}${cp}`;
+      return `Solana: ${dir}${token}${cp}`;
     }
     case "sol-defi":
-      return data.summary ?? `${data.protocol}: ${capitalize(data.action)}`;
+      return data.summary ?? `${data.protocol} (Solana): ${capitalize(data.action)}`;
     case "hl-fill": {
       if (data.spent && data.received) {
         return `Hyperliquid: Trade ${data.spent} → ${data.received}`;

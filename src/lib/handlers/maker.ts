@@ -176,7 +176,7 @@ export const makerHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const summary = `MakerDAO/Spark: ${ACTION_LABELS[action]}`;
+    const summary = `MakerDAO/Spark (${ctx.chain.name}): ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "maker",

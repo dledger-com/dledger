@@ -258,8 +258,8 @@ export const pendleHandler: TransactionHandler = {
     const actionLabel = ACTION_LABELS[action];
     const marketInfo = marketName || underlying || "";
     const summary = marketInfo
-      ? `Pendle: ${actionLabel} ${marketInfo}`
-      : `Pendle: ${actionLabel}`;
+      ? `Pendle (${ctx.chain.name}): ${actionLabel} ${marketInfo}`
+      : `Pendle (${ctx.chain.name}): ${actionLabel}`;
 
     const metadata: Record<string, string> = {
       handler: "pendle",

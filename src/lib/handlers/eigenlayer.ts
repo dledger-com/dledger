@@ -176,7 +176,7 @@ export const eigenLayerHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const summary = `EigenLayer: ${ACTION_LABELS[action]}`;
+    const summary = `EigenLayer (${ctx.chain.name}): ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "eigenlayer",

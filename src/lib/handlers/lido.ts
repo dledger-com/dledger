@@ -102,8 +102,8 @@ function classifyAction(
 
 // ---- Summary builder ----
 
-function buildSummary(action: LidoAction): string {
-  return `Lido: ${ACTION_LABELS[action]}`;
+function buildSummary(action: LidoAction, chainName: string): string {
+  return `Lido (${chainName}): ${ACTION_LABELS[action]}`;
 }
 
 // ---- Enrichment via Lido API ----
@@ -179,7 +179,7 @@ export const lidoHandler: TransactionHandler = {
 
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
-    const summary = buildSummary(action);
+    const summary = buildSummary(action, ctx.chain.name);
 
     const metadata: Record<string, string> = {
       handler: "lido",

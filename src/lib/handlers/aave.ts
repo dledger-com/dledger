@@ -478,16 +478,16 @@ export const aaveHandler: TransactionHandler = {
         if (a.action === "REPAY") return a.viaAdapter ? "Repay with Collateral" : "Repay";
         return "Interact";
       });
-      summary = `${protocolName}: ${actionLabels.join(" + ")}`;
+      summary = `${protocolName} (${ctx.chain.name}): ${actionLabels.join(" + ")}`;
     } else {
       // Claim rewards or unknown — check wallet items for inflows
       const rewardItems = walletItems.filter(
         (i) => i.account === rewardsAccount || (i.account.startsWith("Assets:") && i.amount.isPositive()),
       );
       if (rewardItems.length > 0) {
-        summary = `${protocolName}: Claim Rewards`;
+        summary = `${protocolName} (${ctx.chain.name}): Claim Rewards`;
       } else {
-        summary = `${protocolName}: Interact`;
+        summary = `${protocolName} (${ctx.chain.name}): Interact`;
       }
     }
 
@@ -548,7 +548,7 @@ export const aaveHandler: TransactionHandler = {
             metadata["handler:debt_price_usd"] = liq.debt_price_usd;
             actionSet = "LIQUIDATION";
             metadata["handler:action"] = actionSet;
-            summary = `${protocolName}: Liquidation`;
+            summary = `${protocolName} (${ctx.chain.name}): Liquidation`;
           }
         }
       } catch (e: unknown) {

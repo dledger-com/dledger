@@ -148,7 +148,7 @@ export const eulerHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const summary = `Euler: ${ACTION_LABELS[action]}`;
+    const summary = `Euler (${ctx.chain.name}): ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "euler",

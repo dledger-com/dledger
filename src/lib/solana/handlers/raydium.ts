@@ -102,7 +102,7 @@ export const raydiumHandler: SolanaHandler = {
     const spentStr = outflows.map(o => `${o.amount} ${o.symbol}`).join(", ") || "?";
     const receivedStr = inflows.map(i => `${i.amount} ${i.symbol}`).join(", ") || "?";
 
-    const summary = `Raydium swap: ${spentStr} → ${receivedStr}`;
+    const summary = `Raydium (Solana): Swap ${spentStr} → ${receivedStr}`;
     const descriptionData = solDefiDescription("Raydium", "swap", tx.signature, summary);
 
     const entry: HandlerEntry = {

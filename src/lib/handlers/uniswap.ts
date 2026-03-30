@@ -115,15 +115,16 @@ function detectVersion(group: TxHashGroup, flows: TokenFlow[]): string {
 
 // ---- Swap description ----
 
-function buildSwapSummary(flows: TokenFlow[], protocol: string = "Uniswap"): string {
+function buildSwapSummary(flows: TokenFlow[], protocol: string = "Uniswap", chainName?: string): string {
   const outFlow = flows.find((f) => f.direction === "out");
   const inFlow = flows.find((f) => f.direction === "in");
+  const prefix = chainName ? `${protocol} (${chainName})` : protocol;
 
   if (outFlow && inFlow) {
-    return `${protocol}: Swap ${outFlow.symbol} \u2192 ${inFlow.symbol}`;
+    return `${prefix}: Swap ${outFlow.symbol} \u2192 ${inFlow.symbol}`;
   }
 
-  return `${protocol}: Swap`;
+  return `${prefix}: Swap`;
 }
 
 // ---- Enrichment via The Graph ----
@@ -242,9 +243,9 @@ export const uniswapHandler: TransactionHandler = {
     // Build description
     let summary: string;
     if (action === "SWAP") {
-      summary = buildSwapSummary(flows, protocolName);
+      summary = buildSwapSummary(flows, protocolName, ctx.chain.name);
     } else {
-      summary = `${protocolName}: ${ACTION_LABELS[action]}`;
+      summary = `${protocolName} (${ctx.chain.name}): ${ACTION_LABELS[action]}`;
     }
 
     const metadata: Record<string, string> = {

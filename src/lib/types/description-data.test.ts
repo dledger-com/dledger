@@ -41,35 +41,35 @@ describe("renderDescription", () => {
     expect(renderDescription({
       type: "onchain-transfer", chain: "Ethereum", currency: "ETH",
       direction: "sent", counterparty: "0xabc...def", txHash: "0x123",
-    })).toBe("Send ETH to 0xabc...def");
+    })).toBe("Ethereum: Send ETH to 0xabc...def");
   });
 
   it("renders onchain-transfer received without counterparty", () => {
     expect(renderDescription({
       type: "onchain-transfer", chain: "Polygon", currency: "MATIC",
       direction: "received", txHash: "0x456",
-    })).toBe("Receive MATIC");
+    })).toBe("Polygon: Receive MATIC");
   });
 
   it("renders onchain-transfer self", () => {
     expect(renderDescription({
       type: "onchain-transfer", chain: "Ethereum", currency: "USDC",
       direction: "self", txHash: "0x789", tokenCount: 3,
-    })).toBe("Transfer USDC");
+    })).toBe("Ethereum: Transfer USDC");
   });
 
   it("renders onchain-contract creation", () => {
     expect(renderDescription({
       type: "onchain-contract", chain: "Ethereum", currency: "ETH",
       action: "creation", txHash: "0xaaa",
-    })).toBe("Contract creation");
+    })).toBe("Ethereum: Contract creation");
   });
 
   it("renders onchain-contract internal-transfer", () => {
     expect(renderDescription({
       type: "onchain-contract", chain: "BSC", currency: "BNB",
       action: "internal-transfer", txHash: "0xbbb",
-    })).toBe("Internal transfer BNB");
+    })).toBe("BSC: Internal transfer BNB");
   });
 
   it("renders defi with summary", () => {
@@ -83,7 +83,7 @@ describe("renderDescription", () => {
     expect(renderDescription({
       type: "defi", protocol: "Aave", action: "supply",
       chain: "Ethereum", txHash: "0xddd",
-    })).toBe("Aave: Supply");
+    })).toBe("Aave (Ethereum): Supply");
   });
 
   it("renders defi multi-action via summary", () => {
@@ -96,49 +96,49 @@ describe("renderDescription", () => {
   it("renders fee", () => {
     expect(renderDescription({
       type: "fee", chain: "Ethereum", currency: "ETH", txHash: "0xfff",
-    })).toBe("Network fee");
+    })).toBe("Ethereum: Network fee");
   });
 
   it("renders btc-transfer sent", () => {
     expect(renderDescription({
       type: "btc-transfer", direction: "sent", txid: "abc123", counterparty: "bc1q...xyz",
-    })).toBe("Send BTC to bc1q...xyz");
+    })).toBe("Bitcoin: Send BTC to bc1q...xyz");
   });
 
   it("renders btc-transfer received", () => {
     expect(renderDescription({
       type: "btc-transfer", direction: "received", txid: "abc123",
-    })).toBe("Receive BTC");
+    })).toBe("Bitcoin: Receive BTC");
   });
 
   it("renders btc-transfer self", () => {
     expect(renderDescription({
       type: "btc-transfer", direction: "self", txid: "abc123",
-    })).toBe("Transfer BTC");
+    })).toBe("Bitcoin: Transfer BTC");
   });
 
   it("renders btc-transfer consolidation", () => {
     expect(renderDescription({
       type: "btc-transfer", direction: "consolidation", txid: "abc123",
-    })).toBe("Consolidation BTC");
+    })).toBe("Bitcoin: Consolidation BTC");
   });
 
   it("renders sol-transfer sent", () => {
     expect(renderDescription({
       type: "sol-transfer", direction: "sent", signature: "abc", counterparty: "JUP6…4nWd",
-    })).toBe("Send SOL to JUP6…4nWd");
+    })).toBe("Solana: Send SOL to JUP6…4nWd");
   });
 
   it("renders sol-transfer received with token", () => {
     expect(renderDescription({
       type: "sol-transfer", direction: "received", signature: "abc", tokenSymbol: "USDC",
-    })).toBe("Receive USDC");
+    })).toBe("Solana: Receive USDC");
   });
 
   it("renders sol-transfer self", () => {
     expect(renderDescription({
       type: "sol-transfer", direction: "self", signature: "abc",
-    })).toBe("Transfer SOL");
+    })).toBe("Solana: Transfer SOL");
   });
 
   it("renders sol-defi with summary", () => {
@@ -151,7 +151,7 @@ describe("renderDescription", () => {
   it("renders sol-defi without summary", () => {
     expect(renderDescription({
       type: "sol-defi", protocol: "Marinade", action: "stake", signature: "abc",
-    })).toBe("Marinade: Stake");
+    })).toBe("Marinade (Solana): Stake");
   });
 
   it("renders hl-fill with spent/received", () => {

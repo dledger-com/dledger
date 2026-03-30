@@ -90,7 +90,7 @@ export const jitoHandler: SolanaHandler = {
     if (merged.length === 0) return { type: "skip", reason: "No Jito operation detected" };
 
     const date = new Date(tx.timestamp * 1000).toISOString().split("T")[0];
-    const summary = `Jito: ${action} SOL/jitoSOL`;
+    const summary = `Jito (Solana): ${action} SOL/jitoSOL`;
     const descriptionData = solDefiDescription("Jito", action, tx.signature, summary);
 
     const entry: HandlerEntry = {

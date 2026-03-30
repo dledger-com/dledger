@@ -97,16 +97,17 @@ const ACTION_LABELS: Record<CurveAction, string> = {
 function buildSummary(
   action: CurveAction,
   flows: TokenFlow[],
+  chainName: string,
 ): string {
   if (action === "SWAP") {
     const outflow = flows.find((f) => f.direction === "out");
     const inflow = flows.find((f) => f.direction === "in");
     if (outflow && inflow) {
-      return `Curve: Swap ${outflow.symbol} \u2192 ${inflow.symbol}`;
+      return `Curve (${chainName}): Swap ${outflow.symbol} \u2192 ${inflow.symbol}`;
     }
   }
 
-  return `Curve: ${ACTION_LABELS[action]}`;
+  return `Curve (${chainName}): ${ACTION_LABELS[action]}`;
 }
 
 // ---- Enrichment via Curve API ----
@@ -200,7 +201,7 @@ export const curveHandler: TransactionHandler = {
 
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
-    const summary = buildSummary(action, flows);
+    const summary = buildSummary(action, flows, ctx.chain.name);
 
     const metadata: Record<string, string> = {
       handler: "curve",

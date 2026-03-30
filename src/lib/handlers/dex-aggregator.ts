@@ -64,9 +64,9 @@ export const dexAggregatorHandler: TransactionHandler = {
 
     let summary: string;
     if (outflow && inflow) {
-      summary = `${protocolName}: Swap ${outflow.symbol} \u2192 ${inflow.symbol}`;
+      summary = `${protocolName} (${ctx.chain.name}): Swap ${outflow.symbol} \u2192 ${inflow.symbol}`;
     } else {
-      summary = `${protocolName}: Swap`;
+      summary = `${protocolName} (${ctx.chain.name}): Swap`;
     }
 
     const metadata: Record<string, string> = {

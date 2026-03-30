@@ -93,7 +93,7 @@ describe("jupiterHandler", () => {
     expect(entry.items.length).toBeGreaterThanOrEqual(4);
 
     // Description should mention Jupiter swap
-    expect(entry.entry.description).toContain("Jupiter swap");
+    expect(entry.entry.description).toContain("Jupiter (Solana)");
     expect(entry.entry.description).toContain("USDC");
 
     // Metadata should have handler info
@@ -132,6 +132,6 @@ describe("jupiterHandler", () => {
     const result = await jupiterHandler.process(tx, makeCtx());
     expect(result.type).toBe("entries");
     if (result.type !== "entries") return;
-    expect(result.entries[0].entry.description).toContain("Jupiter swap");
+    expect(result.entries[0].entry.description).toContain("Jupiter (Solana)");
   });
 });

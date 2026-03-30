@@ -101,7 +101,7 @@ export const nativeStakingHandler: SolanaHandler = {
 
     const date = new Date(tx.timestamp * 1000).toISOString().split("T")[0];
 
-    const summary = `SOL Staking: ${action}`;
+    const summary = `SOL Staking (Solana): ${action}`;
     const descriptionData = solDefiDescription("Stake", action, tx.signature, summary);
 
     const entry: HandlerEntry = {

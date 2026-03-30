@@ -162,7 +162,7 @@ export const yearnHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const summary = `Yearn: ${ACTION_LABELS[action]}`;
+    const summary = `Yearn (${ctx.chain.name}): ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "yearn",

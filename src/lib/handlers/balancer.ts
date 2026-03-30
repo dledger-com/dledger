@@ -211,7 +211,7 @@ export const balancerHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const summary = `Balancer: ${ACTION_LABELS[action]}`;
+    const summary = `Balancer (${ctx.chain.name}): ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "balancer",
