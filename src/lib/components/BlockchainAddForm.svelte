@@ -32,6 +32,7 @@
     let label = $state("");
     let adding = $state(false);
     let privateKeyAck = $state(false);
+    let seedPassphrase = $state("");
     let deriveCount = $state(5);
     let selectedIndexes = $state<Set<number>>(new Set([0]));
     let derivedAddresses = $state<DerivedAddress[]>([]);
@@ -52,7 +53,7 @@
             return;
         }
         try {
-            const results = config.deriveAddresses(address.trim(), deriveCount);
+            const results = config.deriveAddresses(address.trim(), deriveCount, seedPassphrase || undefined);
             derivedAddresses = results;
             const normalize = (a: string) => config.caseSensitive ? a : a.toLowerCase();
             const firstUnknown = results.find(a => !existingAddresses.has(normalize(a.address)));
@@ -93,7 +94,7 @@
                     const lbl = itemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : shortAddr(addr));
                     await (backend as any)[config.backendAdd]({ id: uuidv7(), address: addr, label: lbl, created_at: new Date().toISOString() });
                 }
-                label = ""; privateKeyAck = false;
+                label = ""; privateKeyAck = false; seedPassphrase = "";
                 await onAccountAdded();
                 onClose();
                 toast.success(`${selected.length} ${config.name} address(es) added`);
@@ -179,6 +180,13 @@
                 <input type="checkbox" bind:checked={privateKeyAck} />
                 <span class="text-amber-800 dark:text-amber-200">{m.sources_understand_derive_address()}</span>
             </label>
+        </div>
+    {/if}
+
+    {#if detection.input_type === "seed" && privateKeyAck}
+        <div class="space-y-1">
+            <label for="seed-passphrase" class="text-xs font-medium">{m.sources_bip39_passphrase()}</label>
+            <Input id="seed-passphrase" type="password" placeholder={m.sources_bip39_passphrase_placeholder()} bind:value={seedPassphrase} />
         </div>
     {/if}
 

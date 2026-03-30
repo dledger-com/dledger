@@ -870,6 +870,8 @@
   "sources_private_key_detected": "Clé privée détectée",
   "sources_understand_derive_address": "Je comprends — dériver l'adresse et continuer",
   "sources_understand_derive_pubkey": "Je comprends — dériver la clé publique et continuer",
+  "sources_bip39_passphrase": "Passphrase BIP39 (optionnel)",
+  "sources_bip39_passphrase_placeholder": "Généralement vide",
   "sources_load_more": "Charger plus",
   "sources_deriving": "Dérivation...",
   "sources_address_or_xpub": "Adresse ou clé publique étendue",

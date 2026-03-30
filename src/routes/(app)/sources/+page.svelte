@@ -355,8 +355,8 @@
     async function loadBtcAccounts() {
         try {
             btcAccounts = await getBackend().listBitcoinAccounts();
-        } catch (err) {
-            toast.error(`Failed to load Bitcoin accounts: ${err}`);
+        } catch {
+            // Silently ignore — table may not exist yet if DB schema is older
         }
     }
 
@@ -413,8 +413,8 @@
             const accounts = await (backend as any)[config.backendList]();
             const state = chainStates.get(config.id);
             if (state) { chainStates.set(config.id, { ...state, accounts }); chainStates = new Map(chainStates); }
-        } catch (err) {
-            toast.error(`Failed to load ${config.name} accounts: ${err}`);
+        } catch {
+            // Silently ignore — table may not exist yet if DB schema is older
         }
     }
 

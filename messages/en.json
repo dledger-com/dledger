@@ -870,6 +870,8 @@
   "sources_private_key_detected": "Private Key Detected",
   "sources_understand_derive_address": "I understand — derive address and continue",
   "sources_understand_derive_pubkey": "I understand — derive public key and continue",
+  "sources_bip39_passphrase": "BIP39 Passphrase (optional)",
+  "sources_bip39_passphrase_placeholder": "Usually empty",
   "sources_load_more": "Load more",
   "sources_deriving": "Deriving...",
   "sources_address_or_xpub": "Address or extended public key",
