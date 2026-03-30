@@ -8,7 +8,6 @@
     import { SettingsStore } from "$lib/data/settings.svelte.js";
     import { createDefaultAccounts, DEFAULT_ACCOUNTS, type DefaultAccountSet } from "$lib/accounts/defaults.js";
     import { invalidate } from "$lib/data/invalidation.js";
-    import { goto } from "$app/navigation";
     import ChevronRight from "lucide-svelte/icons/chevron-right";
     import ChevronLeft from "lucide-svelte/icons/chevron-left";
     import Upload from "lucide-svelte/icons/upload";
@@ -18,6 +17,7 @@
     import { importDrop } from "$lib/data/import-drop.svelte.js";
     import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
     import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
+    import AddOnlineSourceDialog from "$lib/components/AddOnlineSourceDialog.svelte";
 
     let {
         open = $bindable(true),
@@ -33,6 +33,7 @@
     let preset = $state<DefaultAccountSet>("standard");
     let accountsCreated = $state(false);
     let sourceAdded = $state(false);
+    let addSourceOpen = $state(false);
 
     const STEPS = [
         m.onboarding_step_welcome(),
@@ -90,10 +91,13 @@
         input.click();
     }
 
-    function navigateToSources() {
-        open = false;
-        onComplete();
-        goto("/sources");
+    function openAddSource() {
+        addSourceOpen = true;
+    }
+
+    function handleSourceAdded() {
+        sourceAdded = true;
+        addSourceOpen = false;
     }
 </script>
 
@@ -199,7 +203,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <button
                         class="flex flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted transition-colors"
-                        onclick={navigateToSources}
+                        onclick={openAddSource}
                     >
                         <Wallet class="h-6 w-6 text-muted-foreground" />
                         <span class="text-sm font-medium">{m.onboarding_exchanges()}</span>
@@ -207,7 +211,7 @@
                     </button>
                     <button
                         class="flex flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted transition-colors"
-                        onclick={navigateToSources}
+                        onclick={openAddSource}
                     >
                         <Globe class="h-6 w-6 text-muted-foreground" />
                         <span class="text-sm font-medium">{m.onboarding_blockchains()}</span>
@@ -255,3 +259,8 @@
         {/if}
     </Dialog.Content>
 </Dialog.Root>
+
+<AddOnlineSourceDialog
+    bind:open={addSourceOpen}
+    onAccountAdded={handleSourceAdded}
+/>

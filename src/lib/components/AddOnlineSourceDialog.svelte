@@ -42,10 +42,10 @@
         onAccountAdded,
     }: {
         open: boolean;
-        existingCexAccounts: ExchangeAccount[];
-        existingEthAccounts: EtherscanAccount[];
-        existingBtcAccounts: BitcoinAccount[];
-        chainStates: Map<string, { accounts: any[] }>;
+        existingCexAccounts?: ExchangeAccount[];
+        existingEthAccounts?: EtherscanAccount[];
+        existingBtcAccounts?: BitcoinAccount[];
+        chainStates?: Map<string, { accounts: any[] }>;
         onAccountAdded: () => void;
     } = $props();
 

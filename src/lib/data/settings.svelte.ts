@@ -249,6 +249,11 @@ export class SettingsStore {
     };
   }
 
+  /** Re-read settings from localStorage (picks up writes from other SettingsStore instances). */
+  reload() {
+    this.settings = loadFromStorage();
+  }
+
   update(partial: Partial<AppSettings>) {
     Object.assign(this.settings, partial);
     saveToStorage(this.settings);

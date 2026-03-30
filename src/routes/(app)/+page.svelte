@@ -437,7 +437,7 @@
 {/snippet}
 
 {#if showOnboardingWizard}
-  <OnboardingWizard onComplete={() => settings.update({ onboardingCompleted: true })} />
+  <OnboardingWizard onComplete={() => { settings.reload(); settings.update({ onboardingCompleted: true }); }} />
 {/if}
 
 <div class="space-y-6">
