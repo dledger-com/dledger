@@ -41,23 +41,24 @@
         m.onboarding_step_done(),
     ];
 
+    async function persistSettings() {
+        settings.update({ currency });
+        if (!accountsCreated) {
+            try {
+                await createDefaultAccounts(getBackend(), preset);
+                accountsCreated = true;
+                invalidate("accounts");
+            } catch { /* may already exist */ }
+        }
+    }
+
     async function handleNext() {
         if (step === 0) {
-            // Save currency
-            settings.update({ currency });
-            // Create accounts if not yet done
-            if (!accountsCreated) {
-                try {
-                    await createDefaultAccounts(getBackend(), preset);
-                    accountsCreated = true;
-                    invalidate("accounts");
-                } catch { /* may already exist */ }
-            }
             step = 1;
         } else if (step === 1) {
+            await persistSettings();
             step = 2;
         } else {
-            // Done
             onComplete();
             open = false;
         }
@@ -67,7 +68,8 @@
         if (step > 0) step--;
     }
 
-    function handleSkipSource() {
+    async function handleSkipSource() {
+        await persistSettings();
         step = 2;
     }
 
