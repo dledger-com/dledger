@@ -283,6 +283,17 @@
     let searchTerm = $state(page.url?.searchParams.get("q") ?? "");
     let showDuplicates = $state(false);
 
+    // Type filters (tri-state: excluded = hidden, normal = shown, only = show only these)
+    type TypeFilterState = "excluded" | "normal" | "only";
+    let filterVoided = $state<TypeFilterState>("excluded");
+    let filterReversal = $state<TypeFilterState>("excluded");
+    function cycleTypeFilter(current: TypeFilterState): TypeFilterState {
+        if (current === "excluded") return "normal";
+        if (current === "normal") return "only";
+        return "excluded";
+    }
+    const typeFilterActive = $derived(filterVoided !== "excluded" || filterReversal !== "excluded");
+
     // Faceted filters
     let selectedAccounts = $state<Set<string>>(new Set());
     let selectedTags = $state<Set<string>>(new Set());
@@ -297,15 +308,16 @@
     const hasFacetedFilters = $derived(
         selectedAccounts.size > 0 ||
             selectedTags.size > 0 ||
-            selectedLinks.size > 0,
+            selectedLinks.size > 0 ||
+            typeFilterActive,
     );
-    let filterTab = $state<"account" | "tags" | "links">("account");
+    let filterTab = $state<"account" | "tags" | "links" | "type">("account");
     let accountSearch = $state("");
     let tagSearch = $state("");
     let linkSearch = $state("");
     let filterPopoverOpen = $state(false);
     const totalFilterCount = $derived(
-        selectedAccounts.size + selectedTags.size + selectedLinks.size,
+        selectedAccounts.size + selectedTags.size + selectedLinks.size + (typeFilterActive ? 1 : 0),
     );
     const filteredAccountOptions = $derived(
         accountSearch
@@ -340,13 +352,14 @@
     function clearActiveFilter() {
         if (filterTab === "account") selectedAccounts = new Set();
         else if (filterTab === "tags") selectedTags = new Set();
-        else selectedLinks = new Set();
+        else if (filterTab === "links") selectedLinks = new Set();
+        else if (filterTab === "type") { filterVoided = "excluded"; filterReversal = "excluded"; }
     }
     let accountInputRef = $state<HTMLInputElement | null>(null);
     let tagInputRef = $state<HTMLInputElement | null>(null);
     let linkInputRef = $state<HTMLInputElement | null>(null);
 
-    function switchFilterTab(tab: "account" | "tags" | "links") {
+    function switchFilterTab(tab: "account" | "tags" | "links" | "type") {
         filterTab = tab;
         tick().then(() => {
             if (tab === "account") accountInputRef?.focus();
@@ -713,8 +726,22 @@
 
     // Post-filter: OR across comma-separated groups, AND within each group
     const displayEntries = $derived.by((): JournalEntry[] => {
+        // Type filter: voided entries and reversals
+        let entries = store.entries;
+        const isVoided = (e: JournalEntry) => e.status === "voided";
+        const isReversal = (e: JournalEntry) => e.source === "system:void";
+        if (filterVoided === "only" || filterReversal === "only") {
+            entries = entries.filter((e) =>
+                (filterVoided === "only" && isVoided(e)) ||
+                (filterReversal === "only" && isReversal(e)),
+            );
+        } else {
+            if (filterVoided === "excluded") entries = entries.filter((e) => !isVoided(e));
+            if (filterReversal === "excluded") entries = entries.filter((e) => !isReversal(e));
+        }
+
         const { groups } = searchFilters;
-        if (groups.length === 0) return store.entries;
+        if (groups.length === 0) return entries;
         const single = groups.length === 1;
         // Single group: tags/links already filtered by backend SQL, no client-side filtering needed
         if (
@@ -722,10 +749,10 @@
             groups[0].tags.length === 0 &&
             groups[0].links.length === 0
         )
-            return store.entries;
-        if (single) return store.entries;
+            return entries;
+        if (single) return entries;
         // Multi-group: client-side OR filtering across groups
-        return store.entries.filter((entry) => {
+        return entries.filter((entry) => {
             return groups.some(({ tags, links, text }) => {
                 if (text) {
                     const lower = text.toLowerCase();
@@ -1925,11 +1952,11 @@
             </Popover.Trigger>
             <Popover.Content class="w-[280px] p-0" align="start" forceMount>
                 <div class="flex border-b">
-                    {#each [["account", m.label_account(), selectedAccounts.size] as const, ["tags", m.label_tags(), selectedTags.size] as const, ["links", m.label_links(), selectedLinks.size] as const] as [tab, label, count]}
+                    {#each [["account", m.label_account(), selectedAccounts.size] as const, ["tags", m.label_tags(), selectedTags.size] as const, ["links", m.label_links(), selectedLinks.size] as const, ["type", m.label_type(), typeFilterActive ? 1 : 0] as const] as [tab, label, count]}
                         <button
                             class="flex-1 px-2 py-1.5 text-sm font-medium transition-colors
                                 {filterTab === tab ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'}"
-                            onclick={() => switchFilterTab(tab as "account" | "tags" | "links")}
+                            onclick={() => switchFilterTab(tab as "account" | "tags" | "links" | "type")}
                         >
                             {label}{count > 0 ? ` (${count})` : ''}
                         </button>
@@ -2061,6 +2088,38 @@
                         {/if}
                     </div>
                 </div>
+                <div class:hidden={filterTab !== "type"}>
+                    <div class="text-foreground overflow-hidden p-1 space-y-0.5">
+                        {#each [
+                            [filterVoided, (v: TypeFilterState) => { filterVoided = v; }, m.journal_type_voided()] as const,
+                            [filterReversal, (v: TypeFilterState) => { filterReversal = v; }, m.journal_type_reversal()] as const,
+                        ] as [state, setter, label]}
+                            <button
+                                type="button"
+                                class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0"
+                                onclick={() => setter(cycleTypeFilter(state))}
+                            >
+                                <Checkbox
+                                    checked={state === "only"}
+                                    indeterminate={state === "excluded"}
+                                    class="pointer-events-none"
+                                />
+                                <span class="truncate">{label}</span>
+                                <span class="ml-auto text-xs text-muted-foreground">
+                                    {state === "excluded" ? m.journal_type_hidden() : state === "only" ? m.journal_type_only() : m.journal_type_shown()}
+                                </span>
+                            </button>
+                        {/each}
+                    </div>
+                    {#if typeFilterActive}
+                        <div class="bg-border -mx-1 h-px"></div>
+                        <div class="text-foreground overflow-hidden p-1">
+                            <button type="button" class="relative flex w-full cursor-default items-center justify-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground" onclick={clearActiveFilter}>
+                                {m.journal_clear_filters()}
+                            </button>
+                        </div>
+                    {/if}
+                </div>
             </Popover.Content>
         </Popover.Root>
         {#if hasFacetedFilters}
@@ -2072,6 +2131,8 @@
                     selectedAccounts = new Set();
                     selectedTags = new Set();
                     selectedLinks = new Set();
+                    filterVoided = "excluded";
+                    filterReversal = "excluded";
                 }}
             >
                 <span class="hidden sm:inline">{m.btn_reset()}</span>
