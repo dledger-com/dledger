@@ -195,7 +195,6 @@ describe("eulerHandler", () => {
 
       expect(entry.entry.description).toContain("Euler");
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("1000 USDC");
 
       expect(entry.metadata.handler).toBe("euler");
       expect(entry.metadata["handler:action"]).toBe("SUPPLY");

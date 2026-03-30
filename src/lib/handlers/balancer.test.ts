@@ -160,7 +160,6 @@ describe("balancerHandler", () => {
       const entry = result.entries[0];
 
       expect(entry.entry.description).toContain("Join Pool");
-      expect(entry.entry.description).toContain("WETH");
       expect(entry.metadata.handler).toBe("balancer");
       expect(entry.metadata["handler:action"]).toBe("JOIN_POOL");
       expect(entry.metadata["handler:bpt_token"]).toBe("B-stETH-STABLE");

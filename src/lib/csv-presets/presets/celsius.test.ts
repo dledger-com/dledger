@@ -56,7 +56,7 @@ describe("celsiusPreset", () => {
 
       const rec = records![0];
       expect(rec.date).toBe("2022-07-14");
-      expect(rec.description).toBe("Celsius interest reward: CEL");
+      expect(rec.description).toBe("Celsius: Interest reward CEL");
       expect(rec.lines).toEqual([
         { account: exchangeAssetsCurrency("Celsius", "CEL"), currency: "CEL", amount: "136.10650041534834" },
         { account: exchangeIncome("Celsius", "Rewards"), currency: "CEL", amount: "-136.10650041534834" },
@@ -94,7 +94,7 @@ describe("celsiusPreset", () => {
       expect(records).toHaveLength(1);
 
       const rec = records![0];
-      expect(rec.description).toBe("Celsius promo reward: AVAX");
+      expect(rec.description).toBe("Celsius: Promo reward AVAX");
       expect(rec.lines).toEqual([
         { account: exchangeAssetsCurrency("Celsius", "AVAX"), currency: "AVAX", amount: "31.79411151939548" },
         { account: exchangeIncome("Celsius", "Promo"), currency: "AVAX", amount: "-31.79411151939548" },
@@ -113,7 +113,7 @@ describe("celsiusPreset", () => {
       expect(records).toHaveLength(1);
 
       const rec = records![0];
-      expect(rec.description).toBe("Celsius deposit: USDC");
+      expect(rec.description).toBe("Celsius: Deposit USDC");
       expect(rec.lines).toEqual([
         { account: exchangeAssetsCurrency("Celsius", "USDC"), currency: "USDC", amount: "130002.5" },
         { account: EQUITY_EXTERNAL, currency: "USDC", amount: "-130002.5" },
@@ -148,8 +148,8 @@ describe("celsiusPreset", () => {
         }),
       ]);
       expect(records).toHaveLength(2);
-      expect(records![0].description).toContain("interest");
-      expect(records![1].description).toContain("deposit");
+      expect(records![0].description).toContain("Interest");
+      expect(records![1].description).toContain("Deposit");
     });
   });
 });

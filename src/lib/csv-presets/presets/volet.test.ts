@@ -52,7 +52,7 @@ describe("voletPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2026-03-05");
-      expect(r.description).toBe("Volet deposit: EUR");
+      expect(r.description).toBe("Volet: Deposit EUR");
       expect(r.sourceKey).toBe("8fba9cff-0e6e-4d74-b981-b90f200d0ca7");
 
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Volet", "EUR") && parseFloat(l.amount) === 106.32)).toBe(true);
@@ -69,7 +69,7 @@ describe("voletPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2026-03-02");
-      expect(r.description).toBe("Volet withdrawal: EUR");
+      expect(r.description).toBe("Volet: Withdrawal EUR");
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Volet", "EUR") && parseFloat(l.amount) === -0.87)).toBe(true);
     });
 
@@ -83,7 +83,7 @@ describe("voletPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2023-04-01");
-      expect(r.description).toContain("trade:");
+      expect(r.description).toContain("Trade");
 
       // BUY side: credit currency (EUR) is base, debit currency (USD) is quote
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Volet", "EUR") && parseFloat(l.amount) === 90.24)).toBe(true);

@@ -15,6 +15,7 @@ import {
 } from "./item-builder.js";
 import { ZERO_ADDRESS } from "./addresses.js";
 import { defiIncome } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Constants ----
 
@@ -219,7 +220,6 @@ export const pendleHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const action = classifyAction(group.erc20s, addr);
 
@@ -257,9 +257,9 @@ export const pendleHandler: TransactionHandler = {
 
     const actionLabel = ACTION_LABELS[action];
     const marketInfo = marketName || underlying || "";
-    const description = marketInfo
-      ? `Pendle: ${actionLabel} ${marketInfo} (${hashShort})`
-      : `Pendle: ${actionLabel} (${hashShort})`;
+    const summary = marketInfo
+      ? `Pendle: ${actionLabel} ${marketInfo}`
+      : `Pendle: ${actionLabel}`;
 
     const metadata: Record<string, string> = {
       handler: "pendle",
@@ -275,10 +275,11 @@ export const pendleHandler: TransactionHandler = {
       metadata["handler:warnings"] = warnings.join("; ");
     }
 
+    const descData = { type: "defi" as const, protocol: "Pendle", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: "Pendle", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

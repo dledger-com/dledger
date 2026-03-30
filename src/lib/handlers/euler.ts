@@ -4,7 +4,7 @@ import type {
   HandlerResult,
   TxHashGroup,
 } from "./types.js";
-import { timestampToDate, weiToNative } from "../browser-etherscan.js";
+import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
@@ -12,10 +12,10 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
 } from "./item-builder.js";
 import { isEulerContract } from "./addresses.js";
 import { defiAssets, defiLiabilities } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Token detection ----
 
@@ -119,7 +119,6 @@ export const eulerHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     // Ensure native currency
     await ctx.ensureCurrency(ctx.chain.native_currency, ctx.chain.decimals);
@@ -149,24 +148,7 @@ export const eulerHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const flows = analyzeErc20Flows(group.erc20s, addr);
-    const primaryFlow = flows.find((f) =>
-      (action === "SUPPLY" && f.direction === "out") ||
-      (action === "WITHDRAW" && f.direction === "in") ||
-      (action === "BORROW" && f.direction === "in") ||
-      (action === "REPAY" && f.direction === "out"),
-    );
-
-    let description: string;
-    if (primaryFlow) {
-      description = `Euler: ${ACTION_LABELS[action]} ${formatTokenAmount(primaryFlow.amount, primaryFlow.symbol)} (${hashShort})`;
-    } else if (action !== "UNKNOWN" && group.normal && group.normal.value !== "0") {
-      // Native ETH flow
-      const ethAmount = weiToNative(group.normal.value, ctx.chain.decimals);
-      description = `Euler: ${ACTION_LABELS[action]} ${formatTokenAmount(ethAmount, ctx.chain.native_currency)} (${hashShort})`;
-    } else {
-      description = `Euler: ${ACTION_LABELS[action]} (${hashShort})`;
-    }
+    const summary = `Euler: ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "euler",
@@ -174,10 +156,11 @@ export const eulerHandler: TransactionHandler = {
     };
 
     const descriptionAction = action.toLowerCase().replace(/_/g, "-");
+    const descData = { type: "defi" as const, protocol: "Euler", action: descriptionAction, chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: "Euler", action: descriptionAction, chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

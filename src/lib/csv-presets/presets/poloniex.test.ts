@@ -37,7 +37,7 @@ describe("poloniexPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2019-04-21");
-      expect(r.description).toBe("Poloniex deposit: ETH");
+      expect(r.description).toBe("Poloniex: Deposit ETH");
       expect(r.sourceKey).toBe("12345678");
 
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Poloniex", "ETH") && parseFloat(l.amount) === 1.5)).toBe(true);
@@ -93,7 +93,7 @@ describe("poloniexPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2019-06-15");
-      expect(r.description).toBe("Poloniex withdrawal: BTC");
+      expect(r.description).toBe("Poloniex: Withdrawal BTC");
       expect(r.sourceKey).toBe("87654321");
 
       // Withdrawal amount is negative
@@ -151,7 +151,7 @@ describe("poloniexPreset", () => {
 
       const r = records![0];
       expect(r.date).toBe("2019-04-21");
-      expect(r.description).toBe("Poloniex trade: BTC → ETH");
+      expect(r.description).toBe("Poloniex: Trade BTC → ETH");
 
       // Buy: receive base (ETH), spend quote (BTC)
       expect(r.lines.some((l) => l.account === exchangeAssetsCurrency("Poloniex", "ETH") && parseFloat(l.amount) === 10)).toBe(true);
@@ -168,7 +168,7 @@ describe("poloniexPreset", () => {
       expect(records!).toHaveLength(1);
 
       const r = records![0];
-      expect(r.description).toBe("Poloniex trade: ETH → USDT");
+      expect(r.description).toBe("Poloniex: Trade ETH → USDT");
     });
 
     it("applies percentage fee on buy (fee on base)", () => {

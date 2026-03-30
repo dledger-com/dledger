@@ -12,11 +12,11 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
   type TokenFlow,
 } from "./item-builder.js";
 import { CURVE, ZERO_ADDRESS } from "./addresses.js";
 import { defiIncome } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Token detection ----
 
@@ -82,34 +82,31 @@ function classifyAction(flows: TokenFlow[], group: TxHashGroup): CurveAction {
   return "UNKNOWN";
 }
 
-// ---- Description builder ----
+// ---- Summary builder ----
 
-function buildDescription(
+const ACTION_LABELS: Record<CurveAction, string> = {
+  SWAP: "Swap",
+  ADD_LIQUIDITY: "Add Liquidity",
+  REMOVE_LIQUIDITY: "Remove Liquidity",
+  CLAIM_CRV: "Claim CRV",
+  STAKE_GAUGE: "Stake Gauge",
+  UNSTAKE_GAUGE: "Unstake Gauge",
+  UNKNOWN: "Interact",
+};
+
+function buildSummary(
   action: CurveAction,
   flows: TokenFlow[],
-  hashShort: string,
 ): string {
   if (action === "SWAP") {
     const outflow = flows.find((f) => f.direction === "out");
     const inflow = flows.find((f) => f.direction === "in");
     if (outflow && inflow) {
-      const outStr = formatTokenAmount(outflow.amount, outflow.symbol);
-      const inStr = formatTokenAmount(inflow.amount, inflow.symbol);
-      return `Curve: Swap ${outStr} for ${inStr} (${hashShort})`;
+      return `Curve: Swap ${outflow.symbol} \u2192 ${inflow.symbol}`;
     }
   }
 
-  const ACTION_LABELS: Record<CurveAction, string> = {
-    SWAP: "Swap",
-    ADD_LIQUIDITY: "Add Liquidity",
-    REMOVE_LIQUIDITY: "Remove Liquidity",
-    CLAIM_CRV: "Claim CRV",
-    STAKE_GAUGE: "Stake Gauge",
-    UNSTAKE_GAUGE: "Unstake Gauge",
-    UNKNOWN: "Interact",
-  };
-
-  return `Curve: ${ACTION_LABELS[action]} (${hashShort})`;
+  return `Curve: ${ACTION_LABELS[action]}`;
 }
 
 // ---- Enrichment via Curve API ----
@@ -180,7 +177,6 @@ export const curveHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const flows = analyzeErc20Flows(group.erc20s, addr);
     const action = classifyAction(flows, group);
@@ -204,7 +200,7 @@ export const curveHandler: TransactionHandler = {
 
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
-    const description = buildDescription(action, flows, hashShort);
+    const summary = buildSummary(action, flows);
 
     const metadata: Record<string, string> = {
       handler: "curve",
@@ -225,19 +221,11 @@ export const curveHandler: TransactionHandler = {
       }
     }
 
-    const CURVE_ACTION_LABELS: Record<CurveAction, string> = {
-      SWAP: "Swap",
-      ADD_LIQUIDITY: "Add Liquidity",
-      REMOVE_LIQUIDITY: "Remove Liquidity",
-      CLAIM_CRV: "Claim CRV",
-      STAKE_GAUGE: "Stake Gauge",
-      UNSTAKE_GAUGE: "Unstake Gauge",
-      UNKNOWN: "Interact",
-    };
+    const descData = { type: "defi" as const, protocol: "Curve", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: "Curve", action: CURVE_ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

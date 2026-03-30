@@ -9,11 +9,10 @@ import {
   buildAllGroupItems,
   mergeItemAccums,
   resolveToLineItems,
-  buildGroupDescription,
   buildHandlerEntry,
   analyzeErc20Flows,
 } from "./item-builder.js";
-import { onchainTransferDescription, onchainContractDescription } from "../types/description-data.js";
+import { onchainTransferDescription, onchainContractDescription, feeDescription, renderDescription } from "../types/description-data.js";
 import type { DescriptionData } from "../types/index.js";
 import { shortAddr } from "../browser-etherscan.js";
 
@@ -47,13 +46,21 @@ export const GenericEtherscanHandler: TransactionHandler = {
     }
 
     const items = await resolveToLineItems(merged, date, ctx);
-    const description = buildGroupDescription(group, addr, chain);
 
     // Build descriptionData based on transaction type
     let descriptionData: DescriptionData;
     const tokenCount = group.erc20s.length + group.erc721s.length + group.erc1155s.length;
 
-    if (group.normal) {
+    // Detect fee-only entries: self-transfer or contract creation with only gas fees
+    const isFeeOnly = group.normal && (() => {
+      const from = group.normal!.from.toLowerCase();
+      const to = group.normal!.to.toLowerCase();
+      return (from === addr && to === addr) || !to;
+    })() && tokenCount === 0;
+
+    if (isFeeOnly) {
+      descriptionData = feeDescription(chain.name, chain.native_currency, group.hash);
+    } else if (group.normal) {
       const from = group.normal.from.toLowerCase();
       const to = group.normal.to.toLowerCase();
       const symbol = chain.native_currency;
@@ -82,6 +89,8 @@ export const GenericEtherscanHandler: TransactionHandler = {
         : undefined;
       descriptionData = onchainTransferDescription(chain.name, mainSymbol, direction, { counterparty, txHash: group.hash, tokenCount: flows.length > 1 ? flows.length : undefined });
     }
+
+    const description = renderDescription(descriptionData);
 
     const handlerEntry = buildHandlerEntry({
       date,

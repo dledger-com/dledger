@@ -88,12 +88,12 @@ describe("cryptoComExchangePreset", () => {
 
       // First record: withdrawal
       expect(records![0].date).toBe("2020-04-30");
-      expect(records![0].description).toContain("withdrawal");
+      expect(records![0].description).toContain("Withdrawal");
       expect(records![0].lines[0].currency).toBe("CRO");
 
       // Second record: deposit
       expect(records![1].date).toBe("2020-04-30");
-      expect(records![1].description).toContain("deposit");
+      expect(records![1].description).toContain("Deposit");
       expect(records![1].lines[0].currency).toBe("VET");
     });
 
@@ -133,8 +133,8 @@ describe("cryptoComExchangePreset", () => {
       const records = cryptoComExchangePreset.transform(REAL_HEADERS, rows);
       expect(records).not.toBeNull();
       expect(records!).toHaveLength(2);
-      expect(records![0].description).toContain("deposit");
-      expect(records![1].description).toContain("withdrawal");
+      expect(records![0].description).toContain("Deposit");
+      expect(records![1].description).toContain("Withdrawal");
     });
 
     it("returns null for unrecognized headers without preamble match", () => {

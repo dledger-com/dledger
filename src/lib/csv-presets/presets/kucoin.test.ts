@@ -229,7 +229,7 @@ describe("kucoin deposits transform", () => {
 
     const r = records![0];
     expect(r.date).toBe("2019-01-03");
-    expect(r.description).toContain("deposit");
+    expect(r.description).toContain("Deposit");
 
     // Amount is positive (deposit)
     const btcLine = r.lines.find((l) => l.currency === "BTC" && l.account.includes("KuCoin"));
@@ -282,7 +282,7 @@ describe("kucoin withdrawals transform", () => {
 
     const r = records![0];
     expect(r.date).toBe("2019-01-03");
-    expect(r.description).toContain("withdrawal");
+    expect(r.description).toContain("Withdrawal");
 
     // Amount is negated (withdrawal)
     const rhocLine = r.lines.find((l) => l.currency === "RHOC" && l.account.includes("KuCoin"));

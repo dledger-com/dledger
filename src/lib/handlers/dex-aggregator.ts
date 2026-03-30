@@ -11,9 +11,9 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
 } from "./item-builder.js";
 import { isAggregator } from "./addresses.js";
+import { renderDescription } from "../types/description-data.js";
 
 const PROTOCOL_NAMES: Record<string, string> = {
   "1inch": "1inch",
@@ -43,7 +43,6 @@ export const dexAggregatorHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const protocolKey = group.normal ? isAggregator(group.normal.to) : null;
     const protocolName = protocolKey ? (PROTOCOL_NAMES[protocolKey] ?? protocolKey) : "DEX Aggregator";
@@ -63,15 +62,11 @@ export const dexAggregatorHandler: TransactionHandler = {
 
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
-    let description: string;
+    let summary: string;
     if (outflow && inflow) {
-      description = `${protocolName}: Swap ${formatTokenAmount(outflow.amount, outflow.symbol)} for ${formatTokenAmount(inflow.amount, inflow.symbol)} (${hashShort})`;
-    } else if (outflow) {
-      description = `${protocolName}: Swap ${formatTokenAmount(outflow.amount, outflow.symbol)} (${hashShort})`;
-    } else if (inflow) {
-      description = `${protocolName}: Swap for ${formatTokenAmount(inflow.amount, inflow.symbol)} (${hashShort})`;
+      summary = `${protocolName}: Swap ${outflow.symbol} \u2192 ${inflow.symbol}`;
     } else {
-      description = `${protocolName}: Swap (${hashShort})`;
+      summary = `${protocolName}: Swap`;
     }
 
     const metadata: Record<string, string> = {
@@ -80,10 +75,11 @@ export const dexAggregatorHandler: TransactionHandler = {
       "handler:protocol": protocolKey ?? "unknown",
     };
 
+    const descData = { type: "defi" as const, protocol: protocolName, action: "swap", chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: protocolName, action: "swap", chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

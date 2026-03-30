@@ -12,11 +12,11 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
   type TokenFlow,
 } from "./item-builder.js";
 import { EIGENLAYER, isEigenLayerContract } from "./addresses.js";
 import { defiIncome } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Action classification ----
 
@@ -147,8 +147,6 @@ export const eigenLayerHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort =
-      group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const flows = analyzeErc20Flows(group.erc20s, addr);
     const action = classifyAction(flows, group, addr);
@@ -178,21 +176,18 @@ export const eigenLayerHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const primary = findPrimaryFlow(flows);
-    const amountStr = primary
-      ? ` ${formatTokenAmount(primary.amount, primary.symbol)}`
-      : "";
-    const description = `EigenLayer: ${ACTION_LABELS[action]}${amountStr} (${hashShort})`;
+    const summary = `EigenLayer: ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "eigenlayer",
       "handler:action": action,
     };
 
+    const descData = { type: "defi" as const, protocol: "EigenLayer", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: "EigenLayer", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

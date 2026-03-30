@@ -4,27 +4,27 @@ import { renderDescription, type DescriptionData } from "./description-data.js";
 describe("renderDescription", () => {
   it("renders cex-trade", () => {
     expect(renderDescription({ type: "cex-trade", exchange: "Binance", spent: "USDT", received: "BTC" }))
-      .toBe("Binance trade: USDT → BTC");
+      .toBe("Binance: Trade USDT → BTC");
   });
 
   it("renders cex-transfer deposit", () => {
     expect(renderDescription({ type: "cex-transfer", exchange: "Kraken", direction: "deposit", currency: "ETH" }))
-      .toBe("Kraken deposit: ETH");
+      .toBe("Kraken: Deposit ETH");
   });
 
   it("renders cex-transfer withdrawal", () => {
     expect(renderDescription({ type: "cex-transfer", exchange: "Coinbase", direction: "withdrawal", currency: "BTC" }))
-      .toBe("Coinbase withdrawal: BTC");
+      .toBe("Coinbase: Withdrawal BTC");
   });
 
   it("renders cex-reward", () => {
     expect(renderDescription({ type: "cex-reward", exchange: "Kraken", kind: "staking", currency: "DOT" }))
-      .toBe("Kraken staking reward: DOT");
+      .toBe("Kraken: Staking reward DOT");
   });
 
   it("renders cex-operation", () => {
     expect(renderDescription({ type: "cex-operation", exchange: "Binance", operation: "fee", currency: "BNB" }))
-      .toBe("Binance fee: BNB");
+      .toBe("Binance: Fee BNB");
   });
 
   it("renders bank with bank name", () => {
@@ -37,53 +37,145 @@ describe("renderDescription", () => {
       .toBe("REWE grocery store");
   });
 
-  it("renders onchain-transfer sent", () => {
+  it("renders onchain-transfer sent with counterparty", () => {
     expect(renderDescription({
       type: "onchain-transfer", chain: "Ethereum", currency: "ETH",
       direction: "sent", counterparty: "0xabc...def", txHash: "0x123",
-    })).toBe("Send ETH on Ethereum to 0xabc...def");
+    })).toBe("Send ETH to 0xabc...def");
   });
 
   it("renders onchain-transfer received without counterparty", () => {
     expect(renderDescription({
       type: "onchain-transfer", chain: "Polygon", currency: "MATIC",
       direction: "received", txHash: "0x456",
-    })).toBe("Receive MATIC on Polygon");
+    })).toBe("Receive MATIC");
   });
 
-  it("renders onchain-transfer self with token count", () => {
+  it("renders onchain-transfer self", () => {
     expect(renderDescription({
       type: "onchain-transfer", chain: "Ethereum", currency: "USDC",
       direction: "self", txHash: "0x789", tokenCount: 3,
-    })).toBe("Self-transfer USDC on Ethereum (3 tokens)");
+    })).toBe("Transfer USDC");
   });
 
   it("renders onchain-contract creation", () => {
     expect(renderDescription({
       type: "onchain-contract", chain: "Ethereum", currency: "ETH",
       action: "creation", txHash: "0xaaa",
-    })).toBe("Contract creation on Ethereum");
+    })).toBe("Contract creation");
   });
 
   it("renders onchain-contract internal-transfer", () => {
     expect(renderDescription({
       type: "onchain-contract", chain: "BSC", currency: "BNB",
       action: "internal-transfer", txHash: "0xbbb",
-    })).toBe("Internal transfer BNB on BSC");
+    })).toBe("Internal transfer BNB");
   });
 
   it("renders defi with summary", () => {
     expect(renderDescription({
       type: "defi", protocol: "Uniswap", action: "swap",
-      chain: "Ethereum", txHash: "0xccc", summary: "Swap 1 ETH for 2000 USDC",
-    })).toBe("Swap 1 ETH for 2000 USDC");
+      chain: "Ethereum", txHash: "0xccc", summary: "Uniswap: Swap WETH → USDC",
+    })).toBe("Uniswap: Swap WETH → USDC");
   });
 
   it("renders defi without summary", () => {
     expect(renderDescription({
       type: "defi", protocol: "Aave", action: "supply",
       chain: "Ethereum", txHash: "0xddd",
-    })).toBe("Aave: supply on Ethereum");
+    })).toBe("Aave: Supply");
+  });
+
+  it("renders defi multi-action via summary", () => {
+    expect(renderDescription({
+      type: "defi", protocol: "Aave", action: "supply+withdraw",
+      chain: "Ethereum", txHash: "0xeee", summary: "Aave: Supply + Withdraw",
+    })).toBe("Aave: Supply + Withdraw");
+  });
+
+  it("renders fee", () => {
+    expect(renderDescription({
+      type: "fee", chain: "Ethereum", currency: "ETH", txHash: "0xfff",
+    })).toBe("Network fee");
+  });
+
+  it("renders btc-transfer sent", () => {
+    expect(renderDescription({
+      type: "btc-transfer", direction: "sent", txid: "abc123", counterparty: "bc1q...xyz",
+    })).toBe("Send BTC to bc1q...xyz");
+  });
+
+  it("renders btc-transfer received", () => {
+    expect(renderDescription({
+      type: "btc-transfer", direction: "received", txid: "abc123",
+    })).toBe("Receive BTC");
+  });
+
+  it("renders btc-transfer self", () => {
+    expect(renderDescription({
+      type: "btc-transfer", direction: "self", txid: "abc123",
+    })).toBe("Transfer BTC");
+  });
+
+  it("renders btc-transfer consolidation", () => {
+    expect(renderDescription({
+      type: "btc-transfer", direction: "consolidation", txid: "abc123",
+    })).toBe("Consolidation BTC");
+  });
+
+  it("renders sol-transfer sent", () => {
+    expect(renderDescription({
+      type: "sol-transfer", direction: "sent", signature: "abc", counterparty: "JUP6…4nWd",
+    })).toBe("Send SOL to JUP6…4nWd");
+  });
+
+  it("renders sol-transfer received with token", () => {
+    expect(renderDescription({
+      type: "sol-transfer", direction: "received", signature: "abc", tokenSymbol: "USDC",
+    })).toBe("Receive USDC");
+  });
+
+  it("renders sol-transfer self", () => {
+    expect(renderDescription({
+      type: "sol-transfer", direction: "self", signature: "abc",
+    })).toBe("Transfer SOL");
+  });
+
+  it("renders sol-defi with summary", () => {
+    expect(renderDescription({
+      type: "sol-defi", protocol: "Jupiter", action: "swap", signature: "abc",
+      summary: "Jupiter: Swap SOL → USDC",
+    })).toBe("Jupiter: Swap SOL → USDC");
+  });
+
+  it("renders sol-defi without summary", () => {
+    expect(renderDescription({
+      type: "sol-defi", protocol: "Marinade", action: "stake", signature: "abc",
+    })).toBe("Marinade: Stake");
+  });
+
+  it("renders hl-fill with spent/received", () => {
+    expect(renderDescription({
+      type: "hl-fill", coin: "BTC", side: "long", spent: "USDC", received: "BTC",
+    })).toBe("Hyperliquid: Trade USDC → BTC");
+  });
+
+  it("renders hl-fill without spent/received", () => {
+    expect(renderDescription({
+      type: "hl-fill", coin: "ETH", side: "short",
+    })).toBe("Hyperliquid: ETH Short");
+  });
+
+  it("renders hl-funding", () => {
+    expect(renderDescription({
+      type: "hl-funding", coin: "BTC", usdc: "10.5",
+    })).toBe("Hyperliquid: Funding BTC");
+  });
+
+  it("renders hl-ledger", () => {
+    expect(renderDescription({
+      type: "hl-ledger", action: "deposit",
+    })).toBe("Hyperliquid: Deposit USDC");
   });
 
   it("renders generic-import", () => {
@@ -118,6 +210,7 @@ describe("DescriptionData round-trip", () => {
     { type: "onchain-transfer", chain: "Ethereum", currency: "ETH", direction: "sent", txHash: "0x123" },
     { type: "onchain-contract", chain: "BSC", currency: "BNB", action: "creation", txHash: "0x456" },
     { type: "defi", protocol: "Uniswap", action: "swap", chain: "Ethereum", txHash: "0x789" },
+    { type: "fee", chain: "Ethereum", currency: "ETH", txHash: "0xabc" },
     { type: "generic-import", source: "csv", text: "Test import" },
     { type: "manual", text: "Manual entry" },
     { type: "system", action: "reversal", ref: "abc" },

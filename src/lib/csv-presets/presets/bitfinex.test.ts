@@ -66,7 +66,7 @@ describe("bitfinexPreset ledger variant", () => {
         ["1", "Exchange 57.35 BFX for BTC @ 0.00082", "BFX", "-57.35", "0", ts, "exchange"],
       ]);
 
-      expect(records![0].description).toBe("Bitfinex trade: BFX → BTC");
+      expect(records![0].description).toBe("Bitfinex: Trade BFX → BTC");
     });
   });
 
@@ -115,9 +115,9 @@ describe("bitfinexPreset ledger variant", () => {
 
       expect(records).toHaveLength(3);
       // Exchange records first, fee record last (regardless of input order)
-      expect(records![0].description).toBe("Bitfinex trade: BFX → BTC");
-      expect(records![1].description).toBe("Bitfinex trade: BFX → BTC");
-      expect(records![2].description).toBe("Bitfinex fee: BTC");
+      expect(records![0].description).toBe("Bitfinex: Trade BFX → BTC");
+      expect(records![1].description).toBe("Bitfinex: Trade BFX → BTC");
+      expect(records![2].description).toBe("Bitfinex: Fee BTC");
     });
 
     it("fee row produces fee + asset lines", () => {

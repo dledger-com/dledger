@@ -221,8 +221,7 @@ describe("buildGroupDescription", () => {
       },
     });
     const desc = buildGroupDescription(group, USER_ADDR, chain);
-    expect(desc).toContain("ETH sent to");
-    expect(desc).toContain("0x12345678");
+    expect(desc).toContain("Send ETH to");
   });
 
   it("describes token-only transfer", () => {
@@ -230,7 +229,7 @@ describe("buildGroupDescription", () => {
       erc20s: [makeErc20({ from: USER_ADDR, to: OTHER_ADDR })],
     });
     const desc = buildGroupDescription(group, USER_ADDR, chain);
-    expect(desc).toContain("TEST sent to");
+    expect(desc).toContain("Send TEST to");
   });
 
   it("adds token count for normal + tokens", () => {
@@ -248,7 +247,7 @@ describe("buildGroupDescription", () => {
       erc20s: [makeErc20()],
     });
     const desc = buildGroupDescription(group, USER_ADDR, chain);
-    expect(desc).toContain("1 token transfer(s)");
+    expect(desc).toContain("1 tokens");
   });
 });
 

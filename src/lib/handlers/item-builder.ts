@@ -341,24 +341,22 @@ function formatTxDescription(
 ): string {
   const from = tx.from.toLowerCase();
   const to = tx.to.toLowerCase();
-  const hashShort = tx.hash.length >= 10 ? tx.hash.substring(0, 10) : tx.hash;
   const currency = chain.native_currency;
 
   if (from === ourAddress && to === ourAddress) {
-    return `${currency} self-transfer (${hashShort})`;
+    return `Transfer ${currency}`;
   } else if (!to) {
-    return `${currency} contract creation (${hashShort})`;
+    return "Contract creation";
   } else if (from === ourAddress) {
-    return `${currency} sent to ${shortAddr(to)} (${hashShort})`;
+    return `Send ${currency} to ${shortAddr(to)}`;
   } else {
-    return `${currency} received from ${shortAddr(from)} (${hashShort})`;
+    return `Receive ${currency} from ${shortAddr(from)}`;
   }
 }
 
 function buildTokenDescription(
   group: TxHashGroup,
   ourAddress: string,
-  hashShort: string,
 ): string {
   const total = group.erc20s.length + group.erc721s.length + group.erc1155s.length;
 
@@ -367,10 +365,10 @@ function buildTokenDescription(
     const from = tx.from.toLowerCase();
     const to = tx.to.toLowerCase();
     if (from === ourAddress) {
-      const base = `${symbol} sent to ${shortAddr(to)} (${hashShort})`;
+      const base = `Send ${symbol} to ${shortAddr(to)}`;
       return total > 1 ? `${base} + ${total - 1} more` : base;
     } else if (to === ourAddress) {
-      const base = `${symbol} received from ${shortAddr(from)} (${hashShort})`;
+      const base = `Receive ${symbol} from ${shortAddr(from)}`;
       return total > 1 ? `${base} + ${total - 1} more` : base;
     }
   }
@@ -380,10 +378,10 @@ function buildTokenDescription(
     const from = tx.from.toLowerCase();
     const to = tx.to.toLowerCase();
     if (from === ourAddress) {
-      const base = `${symbol} sent to ${shortAddr(to)} (${hashShort})`;
+      const base = `Send ${symbol} to ${shortAddr(to)}`;
       return total > 1 ? `${base} + ${total - 1} more` : base;
     } else if (to === ourAddress) {
-      const base = `${symbol} received from ${shortAddr(from)} (${hashShort})`;
+      const base = `Receive ${symbol} from ${shortAddr(from)}`;
       return total > 1 ? `${base} + ${total - 1} more` : base;
     }
   }
@@ -393,15 +391,15 @@ function buildTokenDescription(
     const from = tx.from.toLowerCase();
     const to = tx.to.toLowerCase();
     if (from === ourAddress) {
-      const base = `${symbol} sent to ${shortAddr(to)} (${hashShort})`;
+      const base = `Send ${symbol} to ${shortAddr(to)}`;
       return total > 1 ? `${base} + ${total - 1} more` : base;
     } else if (to === ourAddress) {
-      const base = `${symbol} received from ${shortAddr(from)} (${hashShort})`;
+      const base = `Receive ${symbol} from ${shortAddr(from)}`;
       return total > 1 ? `${base} + ${total - 1} more` : base;
     }
   }
 
-  return `token transfer (${hashShort})`;
+  return "Token transfer";
 }
 
 export function buildGroupDescription(
@@ -409,19 +407,18 @@ export function buildGroupDescription(
   ourAddress: string,
   chain: ChainInfo,
 ): string {
-  const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
   const tokenCount = group.erc20s.length + group.erc721s.length + group.erc1155s.length;
 
   if (group.normal) {
     const base = formatTxDescription(group.normal, ourAddress, chain);
     if (tokenCount > 0) {
-      return `${base} + ${tokenCount} token transfer(s)`;
+      return `${base} + ${tokenCount} tokens`;
     }
     return base;
   } else if (group.internals.length > 0 && tokenCount === 0) {
-    return `${chain.native_currency} internal transfer (${hashShort})`;
+    return `Internal transfer ${chain.native_currency}`;
   } else {
-    return buildTokenDescription(group, ourAddress, hashShort);
+    return buildTokenDescription(group, ourAddress);
   }
 }
 

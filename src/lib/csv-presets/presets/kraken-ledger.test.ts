@@ -32,7 +32,7 @@ describe("krakenLedgerPreset", () => {
       expect(records).not.toBeNull();
       expect(records!.length).toBeGreaterThanOrEqual(1);
 
-      const deposit = records!.find((r) => r.description.includes("deposit"));
+      const deposit = records!.find((r) => r.description.includes("Deposit"));
       expect(deposit).toBeDefined();
       expect(deposit!.lines[0].account).toBe(exchangeAssetsCurrency("Kraken", "BTC"));
       expect(deposit!.lines[0].currency).toBe("BTC");
@@ -48,7 +48,7 @@ describe("krakenLedgerPreset", () => {
       const records = krakenLedgerPreset.transform(headers, rows);
       expect(records).not.toBeNull();
 
-      const tradeRecords = records!.filter((r) => r.description.includes("trade"));
+      const tradeRecords = records!.filter((r) => r.description.includes("Trade"));
       expect(tradeRecords.length).toBeGreaterThanOrEqual(1);
 
       // Should have BTC and USD legs
@@ -103,7 +103,7 @@ describe("krakenLedgerPreset", () => {
 
       const records = krakenLedgerPreset.transform(headers, rows);
       expect(records).not.toBeNull();
-      const wd = records!.find((r) => r.description.includes("withdrawal"));
+      const wd = records!.find((r) => r.description.includes("Withdrawal"));
       expect(wd).toBeDefined();
       expect(wd!.lines[0].account).toBe(exchangeAssetsCurrency("Kraken", "BTC"));
     });

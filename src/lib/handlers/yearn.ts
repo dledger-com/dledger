@@ -12,11 +12,11 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
   type TokenFlow,
 } from "./item-builder.js";
 import { ZERO_ADDRESS, isYearnContract } from "./addresses.js";
 import { defiIncome } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Token detection ----
 
@@ -133,8 +133,6 @@ export const yearnHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort =
-      group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const flows = analyzeErc20Flows(group.erc20s, addr);
     const action = classifyAction(flows);
@@ -164,11 +162,7 @@ export const yearnHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const underlying = findUnderlyingFlow(flows);
-    const amountStr = underlying
-      ? ` ${formatTokenAmount(underlying.amount, underlying.symbol)}`
-      : "";
-    const description = `Yearn: ${ACTION_LABELS[action]}${amountStr} (${hashShort})`;
+    const summary = `Yearn: ${ACTION_LABELS[action]}`;
 
     const metadata: Record<string, string> = {
       handler: "yearn",
@@ -200,10 +194,11 @@ export const yearnHandler: TransactionHandler = {
       }
     }
 
+    const descData = { type: "defi" as const, protocol: "Yearn", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: "Yearn", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

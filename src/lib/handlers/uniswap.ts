@@ -12,11 +12,11 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
   type TokenFlow,
 } from "./item-builder.js";
 import { ZERO_ADDRESS, UNISWAP, isUniswapRouter, isUniswapFork, UNISWAP_FORKS, UNISWAP_FORK_LP_SYMBOLS, type UniswapForkId } from "./addresses.js";
 import { defiIncome } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Action types ----
 
@@ -115,17 +115,15 @@ function detectVersion(group: TxHashGroup, flows: TokenFlow[]): string {
 
 // ---- Swap description ----
 
-function buildSwapDescription(flows: TokenFlow[], hashShort: string, protocol: string = "Uniswap"): string {
+function buildSwapSummary(flows: TokenFlow[], protocol: string = "Uniswap"): string {
   const outFlow = flows.find((f) => f.direction === "out");
   const inFlow = flows.find((f) => f.direction === "in");
 
   if (outFlow && inFlow) {
-    const fromStr = formatTokenAmount(outFlow.amount, outFlow.symbol);
-    const toStr = formatTokenAmount(inFlow.amount, inFlow.symbol);
-    return `${protocol}: Swap ${fromStr} for ${toStr} (${hashShort})`;
+    return `${protocol}: Swap ${outFlow.symbol} \u2192 ${inFlow.symbol}`;
   }
 
-  return `${protocol}: Swap (${hashShort})`;
+  return `${protocol}: Swap`;
 }
 
 // ---- Enrichment via The Graph ----
@@ -216,7 +214,6 @@ export const uniswapHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const flows = analyzeErc20Flows(group.erc20s, addr);
     const action = classifyAction(group, flows, addr);
@@ -243,11 +240,11 @@ export const uniswapHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    let description: string;
+    let summary: string;
     if (action === "SWAP") {
-      description = buildSwapDescription(flows, hashShort, protocolName);
+      summary = buildSwapSummary(flows, protocolName);
     } else {
-      description = `${protocolName}: ${ACTION_LABELS[action]} (${hashShort})`;
+      summary = `${protocolName}: ${ACTION_LABELS[action]}`;
     }
 
     const metadata: Record<string, string> = {
@@ -271,10 +268,11 @@ export const uniswapHandler: TransactionHandler = {
       }
     }
 
+    const descData = { type: "defi" as const, protocol: protocolName, action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: protocolName, action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

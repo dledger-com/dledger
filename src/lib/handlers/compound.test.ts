@@ -143,8 +143,6 @@ describe("compoundHandler", () => {
       const entry = result.entries[0];
 
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("1000 USDC");
-      expect(entry.entry.description).toContain("0x1234abcd");
       expect(entry.metadata.handler).toBe("compound");
       expect(entry.metadata["handler:action"]).toBe("SUPPLY");
       expect(entry.metadata["handler:version"]).toBe("V2");

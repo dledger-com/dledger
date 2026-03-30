@@ -5,16 +5,16 @@ import type {
   TxHashGroup,
   Erc20Tx,
 } from "./types.js";
-import { timestampToDate, weiToNative } from "../browser-etherscan.js";
+import { timestampToDate } from "../browser-etherscan.js";
 import {
   buildAllGroupItems,
   mergeItemAccums,
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
 } from "./item-builder.js";
 import { isLidoContract, LIDO, ZERO_ADDRESS } from "./addresses.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Action classification ----
 
@@ -100,24 +100,10 @@ function classifyAction(
   return "UNKNOWN";
 }
 
-// ---- Description builder ----
+// ---- Summary builder ----
 
-function buildDescription(
-  action: LidoAction,
-  group: TxHashGroup,
-  addr: string,
-  chainDecimals: number,
-): string {
-  const hashShort =
-    group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
-  const label = ACTION_LABELS[action];
-
-  if (action === "STAKE_ETH" && group.normal) {
-    const ethAmount = weiToNative(group.normal.value, chainDecimals);
-    return `Lido: ${label} ${formatTokenAmount(ethAmount, "ETH")} for stETH (${hashShort})`;
-  }
-
-  return `Lido: ${label} (${hashShort})`;
+function buildSummary(action: LidoAction): string {
+  return `Lido: ${ACTION_LABELS[action]}`;
 }
 
 // ---- Enrichment via Lido API ----
@@ -193,12 +179,7 @@ export const lidoHandler: TransactionHandler = {
 
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
-    const description = buildDescription(
-      action,
-      group,
-      addr,
-      ctx.chain.decimals,
-    );
+    const summary = buildSummary(action);
 
     const metadata: Record<string, string> = {
       handler: "lido",
@@ -218,10 +199,11 @@ export const lidoHandler: TransactionHandler = {
       }
     }
 
+    const descData = { type: "defi" as const, protocol: "Lido", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: "Lido", action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

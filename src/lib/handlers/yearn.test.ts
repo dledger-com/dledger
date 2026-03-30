@@ -150,7 +150,6 @@ describe("yearnHandler", () => {
       const entry = result.entries[0];
 
       expect(entry.entry.description).toContain("Deposit");
-      expect(entry.entry.description).toContain("USDC");
       expect(entry.metadata.handler).toBe("yearn");
       expect(entry.metadata["handler:action"]).toBe("DEPOSIT");
       expect(entry.metadata["handler:vault_token"]).toBe("yvUSDC");

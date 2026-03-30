@@ -11,9 +11,9 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
 } from "./item-builder.js";
 import { isBridgeContract } from "./addresses.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Action classification ----
 
@@ -67,7 +67,6 @@ export const bridgeHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const protocol = isBridgeContract(group.normal!.to.toLowerCase(), ctx.chainId)!;
     const protocolName = PROTOCOL_NAMES[protocol] ?? protocol;
@@ -86,20 +85,16 @@ export const bridgeHandler: TransactionHandler = {
 
     // Build description from primary flow token
     const flows = analyzeErc20Flows(group.erc20s, addr);
-    let description: string;
+    let summary: string;
 
     if (action === "BRIDGE_DEPOSIT") {
       const outflow = flows.find((f) => f.direction === "out");
-      const tokenStr = outflow
-        ? formatTokenAmount(outflow.amount, outflow.symbol)
-        : ctx.chain.native_currency;
-      description = `${protocolName}: Bridge ${tokenStr} (${hashShort})`;
+      const tokenSymbol = outflow ? outflow.symbol : ctx.chain.native_currency;
+      summary = `${protocolName}: Bridge ${tokenSymbol}`;
     } else {
       const inflow = flows.find((f) => f.direction === "in");
-      const tokenStr = inflow
-        ? formatTokenAmount(inflow.amount, inflow.symbol)
-        : ctx.chain.native_currency;
-      description = `${protocolName}: Receive ${tokenStr} (${hashShort})`;
+      const tokenSymbol = inflow ? inflow.symbol : ctx.chain.native_currency;
+      summary = `${protocolName}: Receive ${tokenSymbol}`;
     }
 
     const metadata: Record<string, string> = {
@@ -109,10 +104,11 @@ export const bridgeHandler: TransactionHandler = {
     };
 
     const bridgeAction = action === "BRIDGE_DEPOSIT" ? "bridge" : "receive";
+    const descData = { type: "defi" as const, protocol: protocolName, action: bridgeAction, chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: protocolName, action: bridgeAction, chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

@@ -169,7 +169,6 @@ describe("eigenLayerHandler", () => {
       const entry = result.entries[0];
 
       expect(entry.entry.description).toContain("Deposit");
-      expect(entry.entry.description).toContain("stETH");
       expect(entry.metadata.handler).toBe("eigenlayer");
       expect(entry.metadata["handler:action"]).toBe("DEPOSIT");
 

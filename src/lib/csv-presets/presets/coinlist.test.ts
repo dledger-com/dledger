@@ -88,7 +88,7 @@ describe("coinlistPreset", () => {
         ["March 1, 2022 08:00:00 UTC", "Staking Reward", "ALGO", "1.5", "501.5"],
       ]);
 
-      expect(records![0].description).toBe("CoinList staking reward: ALGO");
+      expect(records![0].description).toBe("CoinList: Staking reward ALGO");
       expect(records![0].descriptionData).toEqual({
         type: "cex-reward", exchange: "CoinList", kind: "staking", currency: "ALGO",
       });
@@ -99,7 +99,7 @@ describe("coinlistPreset", () => {
         ["December 18, 2021 14:30:00 UTC", "Sold 8.216919 MINA for 6.47 USDC", "MINA", "-8.216919", "0"],
       ]);
 
-      expect(records![0].description).toBe("CoinList trade: MINA → USDC");
+      expect(records![0].description).toBe("CoinList: Trade MINA → USDC");
       expect(records![0].descriptionData).toEqual({
         type: "cex-trade", exchange: "CoinList", spent: "MINA", received: "USDC",
       });
@@ -110,7 +110,7 @@ describe("coinlistPreset", () => {
         ["January 5, 2022 10:00:00 UTC", "Bought 500 ALGO for 0.5 BTC", "ALGO", "500", "500"],
       ]);
 
-      expect(records![0].description).toBe("CoinList trade: BTC → ALGO");
+      expect(records![0].description).toBe("CoinList: Trade BTC → ALGO");
       expect(records![0].descriptionData).toEqual({
         type: "cex-trade", exchange: "CoinList", spent: "BTC", received: "ALGO",
       });
@@ -121,7 +121,7 @@ describe("coinlistPreset", () => {
         ["February 10, 2022 12:00:00 UTC", "Deposit of 1,854.258221 USDC", "USDC", "1854.258221", "1854.258221"],
       ]);
 
-      expect(records![0].description).toBe("CoinList deposit: USDC");
+      expect(records![0].description).toBe("CoinList: Deposit USDC");
     });
 
     it("withdrawal uses renderDescription format", () => {
@@ -129,7 +129,7 @@ describe("coinlistPreset", () => {
         ["February 15, 2022 12:00:00 UTC", "Withdrawal of 100 BTC to 0xabc", "BTC", "-100", "0"],
       ]);
 
-      expect(records![0].description).toBe("CoinList withdrawal: BTC");
+      expect(records![0].description).toBe("CoinList: Withdrawal BTC");
     });
 
     it("distribution uses operation format", () => {
@@ -137,7 +137,7 @@ describe("coinlistPreset", () => {
         ["March 5, 2022 10:00:00 UTC", "Distribution of HMT", "HMT", "50", "50"],
       ]);
 
-      expect(records![0].description).toBe("CoinList distribution: HMT");
+      expect(records![0].description).toBe("CoinList: Distribution HMT");
     });
   });
 

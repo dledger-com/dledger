@@ -78,7 +78,7 @@ describe("bisqPreset", () => {
       ];
       const records = bisqPreset.transform(TRADE_HEADERS, rows);
       expect(records).toHaveLength(1);
-      expect(records![0].description).toContain("trade:");
+      expect(records![0].description).toContain("Trade");
     });
   });
 
@@ -107,7 +107,7 @@ describe("bisqPreset", () => {
       ];
       const records = bisqPreset.transform(TX_HEADERS, rows);
       expect(records).toHaveLength(1);
-      expect(records![0].description).toContain("deposit");
+      expect(records![0].description).toContain("Deposit");
       const lines = records![0].lines;
       expect(lines.some((l) => l.account === exchangeAssetsCurrency("Bisq", "BTC"))).toBe(true);
       expect(lines.some((l) => l.account === EQUITY_EXTERNAL)).toBe(true);
@@ -119,7 +119,7 @@ describe("bisqPreset", () => {
       ];
       const records = bisqPreset.transform(TX_HEADERS, rows);
       expect(records).toHaveLength(1);
-      expect(records![0].description).toContain("withdrawal");
+      expect(records![0].description).toContain("Withdrawal");
     });
 
     it("skips rows with zero amount", () => {

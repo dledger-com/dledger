@@ -12,13 +12,13 @@ import {
   mergeItemAccums,
   resolveToLineItems,
   buildHandlerEntry,
-  formatTokenAmount,
   type ItemAccum,
 } from "./item-builder.js";
 import { AAVE, isAavePool, ZERO_ADDRESS, isRadiantPool, RADIANT } from "./addresses.js";
 import { fetchAaveSubgraphData } from "./aave-subgraph.js";
 import { shortAddr } from "../browser-etherscan.js";
 import { defiAssets, defiLiabilities, defiIncome, defiExpense, tradingAccount, walletExternal } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Token detection ----
 
@@ -377,7 +377,6 @@ export const aaveHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort = group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     // Detect protocol variant (Aave vs Radiant)
     const protocolVariant = detectAaveProtocol(group);
@@ -470,34 +469,25 @@ export const aaveHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Step 7: Build description from protocol actions
-    let description: string;
+    let summary: string;
     if (protocol.actions.length > 0) {
-      const actionParts = protocol.actions.map((a) => {
-        const label = a.action === "SUPPLY" ? (a.viaAdapter ? "Supply (adapter)" : "Supply")
-          : a.action === "WITHDRAW" ? (a.viaAdapter ? "Withdraw (adapter)" : "Withdraw")
-          : a.action === "BORROW" ? (a.viaAdapter ? "Borrow (adapter)" : "Borrow")
-          : a.action === "REPAY" ? (a.viaAdapter ? "Repay with Collateral" : "Repay")
-          : "Interact";
-        let part = `${label} ${formatTokenAmount(a.amount, a.currency)}`;
-        if (a.interest) {
-          part += ` (+${formatTokenAmount(a.interest, a.currency)} interest)`;
-        }
-        return part;
+      const actionLabels = protocol.actions.map((a) => {
+        if (a.action === "SUPPLY") return a.viaAdapter ? "Supply (adapter)" : "Supply";
+        if (a.action === "WITHDRAW") return a.viaAdapter ? "Withdraw (adapter)" : "Withdraw";
+        if (a.action === "BORROW") return a.viaAdapter ? "Borrow (adapter)" : "Borrow";
+        if (a.action === "REPAY") return a.viaAdapter ? "Repay with Collateral" : "Repay";
+        return "Interact";
       });
-      description = `${protocolName}: ${actionParts.join(" + ")} (${hashShort})`;
+      summary = `${protocolName}: ${actionLabels.join(" + ")}`;
     } else {
       // Claim rewards or unknown — check wallet items for inflows
       const rewardItems = walletItems.filter(
         (i) => i.account === rewardsAccount || (i.account.startsWith("Assets:") && i.amount.isPositive()),
       );
       if (rewardItems.length > 0) {
-        const rewardAsset = rewardItems.find((i) => i.account.startsWith("Assets:"));
-        const amountStr = rewardAsset
-          ? ` ${formatTokenAmount(rewardAsset.amount, rewardAsset.currency)}`
-          : "";
-        description = `${protocolName}: Claim Rewards${amountStr} (${hashShort})`;
+        summary = `${protocolName}: Claim Rewards`;
       } else {
-        description = `${protocolName}: Interact (${hashShort})`;
+        summary = `${protocolName}: Interact`;
       }
     }
 
@@ -558,7 +548,7 @@ export const aaveHandler: TransactionHandler = {
             metadata["handler:debt_price_usd"] = liq.debt_price_usd;
             actionSet = "LIQUIDATION";
             metadata["handler:action"] = actionSet;
-            description = `${protocolName}: Liquidation — ${liq.collateral_amount} ${liq.collateral_asset} seized, ${liq.debt_amount} ${liq.debt_asset} repaid (${hashShort})`;
+            summary = `${protocolName}: Liquidation`;
           }
         }
       } catch (e: unknown) {
@@ -570,10 +560,11 @@ export const aaveHandler: TransactionHandler = {
     const descriptionAction = protocol.actions.length > 0
       ? protocol.actions.map((a) => a.action.toLowerCase().replace(/_/g, "-")).join("+")
       : actionSet === "CLAIM_REWARDS" ? "claim-rewards" : "interact";
+    const descData = { type: "defi" as const, protocol: protocolName, action: descriptionAction, chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: protocolName, action: descriptionAction, chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

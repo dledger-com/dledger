@@ -382,8 +382,8 @@ export async function syncCexAccount(
       const etherscanSource = findEtherscanSourceByTxid(existingSources, record.txid);
       if (etherscanSource && registry) {
         const cexDescription = record.type === "withdrawal"
-          ? `${exchangeName} withdrawal: ${record.asset}`
-          : `${exchangeName} deposit: ${record.asset}`;
+          ? `${exchangeName}: Withdrawal ${record.asset}`
+          : `${exchangeName}: Deposit ${record.asset}`;
         const consolidated = await consolidateWithEtherscan(
           backend,
           registry,

@@ -151,7 +151,6 @@ describe("bridgeHandler", () => {
 
       expect(entry.entry.description).toContain("Across");
       expect(entry.entry.description).toContain("Bridge");
-      expect(entry.entry.description).toContain("1000 USDC");
 
       expect(entry.metadata.handler).toBe("bridge");
       expect(entry.metadata["handler:action"]).toBe("BRIDGE_DEPOSIT");

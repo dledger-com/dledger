@@ -143,7 +143,7 @@ describe("hyperliquidPreset", () => {
 			];
 			const records = hyperliquidPreset.transform(headers, rows)!;
 			expect(records.length).toBe(1);
-			expect(records[0].description).toContain("funding");
+			expect(records[0].description).toContain("Funding");
 			expect(records[0].description).toContain("BTC");
 
 			const incomeLines = records[0].lines.filter(l => l.account.includes("Income"));

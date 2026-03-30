@@ -305,9 +305,8 @@ describe("aaveHandler", () => {
       expect(result.entries).toHaveLength(1);
       const entry = result.entries[0];
 
-      // Description includes "Supply" and the underlying token
+      // Description includes "Supply" (no amounts/tokens in unified format)
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("USDC");
 
       // Metadata
       expect(entry.metadata.handler).toBe("aave");
@@ -384,7 +383,6 @@ describe("aaveHandler", () => {
       const entry = result.entries[0];
 
       expect(entry.entry.description).toContain("Borrow");
-      expect(entry.entry.description).toContain("DAI");
       expect(entry.metadata["handler:action"]).toBe("BORROW");
 
       // No variableDebtDAI in items — only real currencies
@@ -606,7 +604,6 @@ describe("aaveHandler", () => {
 
       const entry = result.entries[0];
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("WETH");
       expect(entry.metadata["handler:action"]).toBe("SUPPLY");
       expect(entry.metadata["handler:version"]).toBe("V3");
 
@@ -684,9 +681,7 @@ describe("aaveHandler", () => {
 
       // Description includes both actions
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("WETH");
       expect(entry.entry.description).toContain("Borrow");
-      expect(entry.entry.description).toContain("USDC");
 
       // Metadata has comma-joined actions
       expect(entry.metadata["handler:action"]).toContain("SUPPLY");
@@ -827,7 +822,6 @@ describe("aaveHandler", () => {
 
       // Should have Supply action
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("WETH");
       expect(entry.metadata["handler:action"]).toBe("SUPPLY");
 
       // No aEthWETH in items
@@ -1013,9 +1007,6 @@ describe("aaveHandler", () => {
       expect(supplyItem).toBeDefined();
       expect(new Decimal(supplyItem!.amount).toFixed(6)).toBe("-1000.000000");
 
-      // Description mentions interest
-      expect(entry.entry.description).toContain("interest");
-
       // Metadata records interest earned
       expect(entry.metadata["handler:interest_earned_usdc"]).toBe("50");
 
@@ -1131,9 +1122,6 @@ describe("aaveHandler", () => {
       const borrowItem = entry.items.find((i) => i.account_id === borrowAcct!.id);
       expect(borrowItem).toBeDefined();
       expect(new Decimal(borrowItem!.amount).toFixed(0)).toBe("500");
-
-      // Description mentions interest
-      expect(entry.entry.description).toContain("interest");
 
       // Metadata records interest paid
       expect(entry.metadata["handler:interest_paid_dai"]).toBe("15");
@@ -1351,9 +1339,8 @@ describe("aaveHandler", () => {
       expect(result.entries).toHaveLength(1);
       const entry = result.entries[0];
 
-      // Description should mention Supply and tBTC
+      // Description should mention Supply
       expect(entry.entry.description).toContain("Supply");
-      expect(entry.entry.description).toContain("tBTC");
 
       // No aEthtBTC in items — only real tBTC
       const currencies = entry.items.map((i) => i.currency);
@@ -1706,7 +1693,6 @@ describe("aaveHandler", () => {
 
       // Description should include "Repay with Collateral"
       expect(entry.entry.description).toContain("Repay with Collateral");
-      expect(entry.entry.description).toContain("USDC");
 
       // Action metadata should contain REPAY
       expect(entry.metadata["handler:action"]).toContain("REPAY");

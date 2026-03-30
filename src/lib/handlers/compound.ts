@@ -13,10 +13,10 @@ import {
   resolveToLineItems,
   buildHandlerEntry,
   analyzeErc20Flows,
-  formatTokenAmount,
 } from "./item-builder.js";
 import { ZERO_ADDRESS, isCompoundContract } from "./addresses.js";
 import { defiLiabilities, defiIncome } from "../accounts/paths.js";
+import { renderDescription } from "../types/description-data.js";
 
 // ---- Protocol detection ----
 
@@ -154,8 +154,6 @@ export const compoundHandler: TransactionHandler = {
   ): Promise<HandlerResult> {
     const addr = ctx.address.toLowerCase();
     const date = timestampToDate(group.timestamp);
-    const hashShort =
-      group.hash.length >= 10 ? group.hash.substring(0, 10) : group.hash;
 
     const protocol = detectProtocol(ctx.chainId);
     const protocolName = protocol as string;
@@ -190,14 +188,8 @@ export const compoundHandler: TransactionHandler = {
     const lineItems = await resolveToLineItems(merged, date, ctx);
 
     // Build description
-    const underlying = findUnderlyingFlow(group.erc20s, addr, protocol);
     const actionLabel = ACTION_LABELS[action];
-    const amountStr = underlying
-      ? formatTokenAmount(underlying.amount, underlying.symbol)
-      : "";
-    const description = amountStr
-      ? `${protocolName}: ${actionLabel} ${amountStr} (${hashShort})`
-      : `${protocolName}: ${actionLabel} (${hashShort})`;
+    const summary = `${protocolName}: ${actionLabel}`;
 
     // Determine version
     const hasCTokenV3 = group.erc20s.some((tx) => isCTokenV3(tx.tokenSymbol));
@@ -219,6 +211,7 @@ export const compoundHandler: TransactionHandler = {
     }
 
     // Enrichment: fetch APY data from DefiLlama (opt-in)
+    const underlying = findUnderlyingFlow(group.erc20s, addr, protocol);
     if (ctx.enrichment && action !== "CLAIM_COMP" && underlying) {
       try {
         const enrichment = await fetchCompoundEnrichment(underlying.symbol, ctx.chainId);
@@ -232,10 +225,11 @@ export const compoundHandler: TransactionHandler = {
       }
     }
 
+    const descData = { type: "defi" as const, protocol: protocolName, action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash, summary };
     const handlerEntry = buildHandlerEntry({
       date,
-      description,
-      descriptionData: { type: "defi", protocol: protocolName, action: ACTION_LABELS[action], chain: ctx.chain.name, txHash: group.hash },
+      description: renderDescription(descData),
+      descriptionData: descData,
       chainId: ctx.chainId,
       hash: group.hash,
       items: lineItems,

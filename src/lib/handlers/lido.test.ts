@@ -174,8 +174,6 @@ describe("lidoHandler", () => {
       expect(result.entries).toHaveLength(1);
       const entry = result.entries[0];
       expect(entry.entry.description).toContain("Stake");
-      expect(entry.entry.description).toContain("10 ETH");
-      expect(entry.entry.description).toContain("stETH");
       expect(entry.metadata.handler).toBe("lido");
       expect(entry.metadata["handler:action"]).toBe("STAKE_ETH");
 
