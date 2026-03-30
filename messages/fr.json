@@ -930,6 +930,7 @@
   "sources_evm_placeholder": "0x... ou xpub",
   "sources_bitcoin": "Bitcoin",
   "sources_evm": "EVM",
+  "sources_scan_activity": "Scanner l'activité",
 
   "task_rate_backfill_auto": "Compléter automatiquement les taux manquants",
   "task_rate_backfill_import": "Compléter les taux pour {count} devise(s) importée(s)",

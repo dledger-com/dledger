@@ -22,7 +22,9 @@
     import ArrowLeft from "lucide-svelte/icons/arrow-left";
     import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
     import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase, deriveEvmAddressesFromSeed, deriveEvmAddressesFromXpub } from "$lib/evm/derive.js";
-    import { detectBtcInputType, convertPrivateKey, deriveMultiXpubsFromSeed } from "$lib/bitcoin/derive.js";
+    import { detectBtcInputType, convertPrivateKey, deriveMultiXpubsFromSeed, deriveAddresses as deriveBtcAddressesFromXpub } from "$lib/bitcoin/derive.js";
+    import { checkEvmActivity, checkBtcActivity } from "$lib/blockchain-activity.js";
+    import { SettingsStore } from "$lib/data/settings.svelte.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
     import { BLOCKCHAIN_CHAINS, getBlockchainConfig } from "$lib/blockchain-registry.js";
     import { SUPPORTED_CHAINS } from "$lib/types/index.js";
@@ -92,6 +94,13 @@
     let btcDerivedXpubs = $state<DerivedBtcXpub[]>([]);
     let btcDeriving = $state(false);
 
+    // -- Activity scanning --
+    const settingsStore = new SettingsStore();
+    let evmActivityStatus = $state<Map<number, boolean | null | "checking">>(new Map());
+    let evmScanAbort = $state<AbortController | null>(null);
+    let btcActivityStatus = $state<Map<number, boolean | null | "checking">>(new Map());
+    let btcScanAbort = $state<AbortController | null>(null);
+
     // -- Derived state --
     const btcDetection: QuickDetection = $derived.by(() => detectInputType(btcNewAddressOrXpub));
     const evmDetection = $derived.by(() => detectEvmInputType(newAddress));
@@ -115,6 +124,14 @@
     // Existing-address sets for duplicate detection
     const existingEvmAddresses = $derived(new Set(existingEthAccounts.map(a => a.address.toLowerCase())));
     const existingBtcXpubs = $derived(new Set(existingBtcAccounts.map(a => a.address_or_xpub)));
+
+    // Reset EVM activity status when derived addresses change
+    $effect(() => {
+        evmDerivedAddresses; // track
+        evmActivityStatus = new Map();
+        evmScanAbort?.abort();
+        evmScanAbort = null;
+    });
 
     // Auto-select first unknown index for EVM multi-index picker
     $effect(() => {
@@ -159,6 +176,11 @@
         const bip = btcSeedBip;
         const pass = btcSeedPassphrase;
         const count = btcDeriveCount;
+
+        // Reset BTC activity status on derivation change
+        btcActivityStatus = new Map();
+        btcScanAbort?.abort();
+        btcScanAbort = null;
 
         if (!input || det.type !== "seed" || !ack) {
             btcDerivedXpubs = [];
@@ -231,6 +253,12 @@
         evmSelectedIndexes = new Set([0]);
         evmItemLabels = new Map();
         btcItemLabels = new Map();
+        evmScanAbort?.abort();
+        evmScanAbort = null;
+        evmActivityStatus = new Map();
+        btcScanAbort?.abort();
+        btcScanAbort = null;
+        btcActivityStatus = new Map();
     }
 
     function generateCexLabel(exchangeId: ExchangeId): string {
@@ -514,6 +542,81 @@
         }
     }
 
+    async function scanEvmActivity() {
+        if (evmDerivedAddresses.length === 0) return;
+        const apiKey = settingsStore.etherscanApiKey;
+        if (!apiKey) {
+            toast.error("Etherscan API key required for activity scanning");
+            return;
+        }
+        const abort = new AbortController();
+        evmScanAbort = abort;
+        const newStatus = new Map<number, boolean | null | "checking">();
+        for (const d of evmDerivedAddresses) newStatus.set(d.index, "checking");
+        evmActivityStatus = new Map(newStatus);
+
+        const activeIndexes: number[] = [];
+        for (const derived of evmDerivedAddresses) {
+            if (abort.signal.aborted) break;
+            try {
+                const result = await checkEvmActivity(derived.address, apiKey, abort.signal);
+                newStatus.set(derived.index, result);
+                evmActivityStatus = new Map(newStatus);
+                if (result === true) activeIndexes.push(derived.index);
+            } catch {
+                newStatus.set(derived.index, null);
+                evmActivityStatus = new Map(newStatus);
+            }
+        }
+
+        if (activeIndexes.length > 0 && !abort.signal.aborted) {
+            evmSelectedIndexes = new Set(activeIndexes);
+        }
+        evmScanAbort = null;
+    }
+
+    function cancelEvmScan() {
+        evmScanAbort?.abort();
+        evmScanAbort = null;
+    }
+
+    async function scanBtcActivity() {
+        if (btcDerivedXpubs.length === 0) return;
+        const abort = new AbortController();
+        btcScanAbort = abort;
+        const newStatus = new Map<number, boolean | null | "checking">();
+        for (const xpub of btcDerivedXpubs) newStatus.set(xpub.index, "checking");
+        btcActivityStatus = new Map(newStatus);
+
+        const activeIndexes: number[] = [];
+        for (const xpub of btcDerivedXpubs) {
+            if (abort.signal.aborted) break;
+            try {
+                const addresses = await deriveBtcAddressesFromXpub(xpub.xpub, btcSeedBip, 0, 0, 1, "mainnet");
+                if (addresses.length > 0) {
+                    const result = await checkBtcActivity(addresses[0], abort.signal);
+                    newStatus.set(xpub.index, result);
+                    if (result === true) activeIndexes.push(xpub.index);
+                } else {
+                    newStatus.set(xpub.index, null);
+                }
+            } catch {
+                newStatus.set(xpub.index, null);
+            }
+            btcActivityStatus = new Map(newStatus);
+        }
+
+        if (activeIndexes.length > 0 && !abort.signal.aborted) {
+            btcSelectedIndexes = new Set(activeIndexes);
+        }
+        btcScanAbort = null;
+    }
+
+    function cancelBtcScan() {
+        btcScanAbort?.abort();
+        btcScanAbort = null;
+    }
+
     function getDialogTitle(): string {
         if (addSourceMode === "idle") {
             return m.sources_add_online_source();
@@ -702,10 +805,24 @@
                 <!-- Multi-index address picker -->
                 {#if evmShowAddressPicker}
                     <div class="space-y-2">
-                        <span class="text-xs font-medium">{m.sources_derived_addresses()}</span>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-medium">{m.sources_derived_addresses()}</span>
+                            {#if evmScanAbort}
+                                <Button variant="outline" size="sm" onclick={cancelEvmScan}>
+                                    <X class="mr-1 h-3 w-3" />
+                                    {m.btn_cancel()}
+                                </Button>
+                            {:else}
+                                <Button variant="outline" size="sm" onclick={scanEvmActivity}>
+                                    <RefreshCw class="mr-1 h-3 w-3" />
+                                    {m.sources_scan_activity()}
+                                </Button>
+                            {/if}
+                        </div>
                         <div class="max-h-48 overflow-y-auto overflow-x-hidden rounded-md border">
                             {#each evmDerivedAddresses as { index, address }}
                                 {@const exists = existingEvmAddresses.has(address.toLowerCase())}
+                                {@const evmStatus = evmActivityStatus.get(index)}
                                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer min-w-0"
                                        class:opacity-50={exists} class:cursor-not-allowed={exists}>
                                     <input
@@ -718,6 +835,15 @@
                                             evmSelectedIndexes = next;
                                         }}
                                     />
+                                    {#if evmStatus === "checking"}
+                                        <RefreshCw class="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                                    {:else if evmStatus === true}
+                                        <span class="h-2 w-2 rounded-full bg-green-500 shrink-0" title="Active"></span>
+                                    {:else if evmStatus === false}
+                                        <span class="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" title="Empty"></span>
+                                    {:else if evmStatus === null}
+                                        <span class="text-xs text-muted-foreground shrink-0" title="Unknown">?</span>
+                                    {/if}
                                     <div class="flex-1 w-0">
                                         <Tooltip.Root>
                                             <Tooltip.Trigger class="font-mono text-xs truncate block w-full text-left">{address}</Tooltip.Trigger>
@@ -891,7 +1017,22 @@
                 <!-- Multi-index xpub picker -->
                 {#if btcDerivedXpubs.length > 0}
                     <div class="space-y-2">
-                        <span class="text-xs font-medium">{m.sources_derived_hd_wallets()}</span>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-medium">{m.sources_derived_hd_wallets()}</span>
+                            {#if !btcDeriving}
+                                {#if btcScanAbort}
+                                    <Button variant="outline" size="sm" onclick={cancelBtcScan}>
+                                        <X class="mr-1 h-3 w-3" />
+                                        {m.btn_cancel()}
+                                    </Button>
+                                {:else}
+                                    <Button variant="outline" size="sm" onclick={scanBtcActivity}>
+                                        <RefreshCw class="mr-1 h-3 w-3" />
+                                        {m.sources_scan_activity()}
+                                    </Button>
+                                {/if}
+                            {/if}
+                        </div>
                         {#if btcDeriving}
                             <div class="flex items-center gap-2 text-xs text-muted-foreground">
                                 <RefreshCw class="h-3 w-3 animate-spin" />
@@ -901,6 +1042,7 @@
                         <div class="max-h-48 overflow-y-auto overflow-x-hidden rounded-md border">
                             {#each btcDerivedXpubs as { index, xpub, keyType }}
                                 {@const exists = existingBtcXpubs.has(xpub)}
+                                {@const btcStatus = btcActivityStatus.get(index)}
                                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer min-w-0"
                                        class:opacity-50={exists} class:cursor-not-allowed={exists}>
                                     <input
@@ -913,6 +1055,15 @@
                                             btcSelectedIndexes = next;
                                         }}
                                     />
+                                    {#if btcStatus === "checking"}
+                                        <RefreshCw class="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                                    {:else if btcStatus === true}
+                                        <span class="h-2 w-2 rounded-full bg-green-500 shrink-0" title="Active"></span>
+                                    {:else if btcStatus === false}
+                                        <span class="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" title="Empty"></span>
+                                    {:else if btcStatus === null}
+                                        <span class="text-xs text-muted-foreground shrink-0" title="Unknown">?</span>
+                                    {/if}
                                     <div class="flex-1 w-0">
                                         <Tooltip.Root>
                                             <Tooltip.Trigger class="font-mono text-xs truncate block w-full text-left">{xpub}</Tooltip.Trigger>

@@ -40,7 +40,12 @@ export interface BlockchainConfig {
 	// Derivation (null = not supported)
 	detectInput: ((input: string) => InputDetection) | null;
 	deriveAddresses: ((mnemonic: string, count: number, passphrase?: string, startIndex?: number) => DerivedAddress[]) | null;
+
+	// Activity checking (undefined = not supported for this chain)
+	checkActivity?: (address: string, signal?: AbortSignal, apiKey?: string) => Promise<boolean | null>;
 }
+
+import { getActivityChecker } from "./blockchain-activity.js";
 
 // Import detection functions synchronously since they're lightweight
 // The derive functions are heavier but only called after seed phrase detection
@@ -76,6 +81,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listAlgorandAccounts", backendAdd: "addAlgorandAccount", backendRemove: "removeAlgorandAccount",
 		backendUpdateLabel: "updateAlgorandAccountLabel", backendSync: "syncAlgorand", syncTaskPrefix: "algorand-sync",
 		detectInput: detectAlgorandInputType, deriveAddresses: deriveAlgorandAddresses,
+		checkActivity: getActivityChecker("algorand") ?? undefined,
 	},
 	// Aptos
 	{
@@ -85,6 +91,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listAptosAccounts", backendAdd: "addAptosAccount", backendRemove: "removeAptosAccount",
 		backendUpdateLabel: "updateAptosAccountLabel", backendSync: "syncAptos", syncTaskPrefix: "aptos-sync",
 		detectInput: detectAptosInputType, deriveAddresses: deriveAptosAddresses,
+		checkActivity: getActivityChecker("aptos") ?? undefined,
 	},
 	// Bitcoin Cash
 	{
@@ -105,6 +112,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateDashAccountLabel", backendSync: "syncDash", syncTaskPrefix: "dash-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.dash, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.dash, m, c, p, s),
+		checkActivity: getActivityChecker("dash") ?? undefined,
 	},
 	// Bitcoin SV
 	{
@@ -144,6 +152,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listBittensorAccounts", backendAdd: "addBittensorAccount", backendRemove: "removeBittensorAccount",
 		backendUpdateLabel: "updateBittensorAccountLabel", backendSync: "syncBittensor", syncTaskPrefix: "bittensor-sync",
 		detectInput: detectBittensorInputType, deriveAddresses: deriveBittensorAddresses,
+		checkActivity: getActivityChecker("bittensor") ?? undefined,
 	},
 	// Cardano
 	{
@@ -153,6 +162,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listCardanoAccounts", backendAdd: "addCardanoAccount", backendRemove: "removeCardanoAccount",
 		backendUpdateLabel: "updateCardanoAccountLabel", backendSync: "syncCardano", syncTaskPrefix: "cardano-sync",
 		detectInput: detectCardanoInputType, deriveAddresses: deriveCardanoAddresses,
+		checkActivity: getActivityChecker("cardano") ?? undefined,
 	},
 	// Cosmos
 	{
@@ -162,6 +172,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listCosmosAccounts", backendAdd: "addCosmosAccount", backendRemove: "removeCosmosAccount",
 		backendUpdateLabel: "updateCosmosAccountLabel", backendSync: "syncCosmos", syncTaskPrefix: "cosmos-sync",
 		detectInput: detectCosmosInputType, deriveAddresses: deriveCosmosAddresses,
+		checkActivity: getActivityChecker("cosmos") ?? undefined,
 	},
 	// Dogecoin
 	{
@@ -172,6 +183,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateDogeAccountLabel", backendSync: "syncDoge", syncTaskPrefix: "doge-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.doge, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.doge, m, c, p, s),
+		checkActivity: getActivityChecker("doge") ?? undefined,
 	},
 	// Hedera
 	{
@@ -203,6 +215,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listKaspaAccounts", backendAdd: "addKaspaAccount", backendRemove: "removeKaspaAccount",
 		backendUpdateLabel: "updateKaspaAccountLabel", backendSync: "syncKaspa", syncTaskPrefix: "kaspa-sync",
 		detectInput: detectKaspaInputType, deriveAddresses: deriveKaspaAddresses,
+		checkActivity: getActivityChecker("kaspa") ?? undefined,
 	},
 	// Litecoin
 	{
@@ -213,6 +226,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateLtcAccountLabel", backendSync: "syncLtc", syncTaskPrefix: "ltc-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.ltc, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.ltc, m, c, p, s),
+		checkActivity: getActivityChecker("ltc") ?? undefined,
 	},
 	// Monero
 	{
@@ -231,6 +245,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listNearAccounts", backendAdd: "addNearAccount", backendRemove: "removeNearAccount",
 		backendUpdateLabel: "updateNearAccountLabel", backendSync: "syncNear", syncTaskPrefix: "near-sync",
 		detectInput: detectNearInputType, deriveAddresses: deriveNearAddresses,
+		checkActivity: getActivityChecker("near") ?? undefined,
 	},
 	// Polkadot
 	{
@@ -240,6 +255,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listPolkadotAccounts", backendAdd: "addPolkadotAccount", backendRemove: "removePolkadotAccount",
 		backendUpdateLabel: "updatePolkadotAccountLabel", backendSync: "syncPolkadot", syncTaskPrefix: "polkadot-sync",
 		detectInput: detectPolkadotInputType, deriveAddresses: derivePolkadotAddresses,
+		checkActivity: getActivityChecker("polkadot") ?? undefined,
 	},
 	// Solana
 	{
@@ -253,6 +269,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 			return { input_type: d.input_type === "keypair" ? "unknown" as const : d.input_type, is_private: d.is_private, valid: d.valid, word_count: d.word_count, description: d.description };
 		},
 		deriveAddresses: deriveSolAddresses,
+		checkActivity: getActivityChecker("sol") ?? undefined,
 	},
 	// Stacks
 	{
@@ -262,6 +279,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listStacksAccounts", backendAdd: "addStacksAccount", backendRemove: "removeStacksAccount",
 		backendUpdateLabel: "updateStacksAccountLabel", backendSync: "syncStacks", syncTaskPrefix: "stacks-sync",
 		detectInput: detectStacksInputType, deriveAddresses: deriveStacksAddresses,
+		checkActivity: getActivityChecker("stacks") ?? undefined,
 	},
 	// Stellar
 	{
@@ -271,6 +289,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listStellarAccounts", backendAdd: "addStellarAccount", backendRemove: "removeStellarAccount",
 		backendUpdateLabel: "updateStellarAccountLabel", backendSync: "syncStellar", syncTaskPrefix: "stellar-sync",
 		detectInput: detectStellarInputType, deriveAddresses: deriveStellarAddresses,
+		checkActivity: getActivityChecker("stellar") ?? undefined,
 	},
 	// Sui
 	{
@@ -280,6 +299,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listSuiAccounts", backendAdd: "addSuiAccount", backendRemove: "removeSuiAccount",
 		backendUpdateLabel: "updateSuiAccountLabel", backendSync: "syncSui", syncTaskPrefix: "sui-sync",
 		detectInput: detectSuiInputType, deriveAddresses: deriveSuiAddresses,
+		checkActivity: getActivityChecker("sui") ?? undefined,
 	},
 	// Tezos
 	{
@@ -289,6 +309,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listTezosAccounts", backendAdd: "addTezosAccount", backendRemove: "removeTezosAccount",
 		backendUpdateLabel: "updateTezosAccountLabel", backendSync: "syncTezos", syncTaskPrefix: "tezos-sync",
 		detectInput: detectTezosInputType, deriveAddresses: deriveTezosAddresses,
+		checkActivity: getActivityChecker("tezos") ?? undefined,
 	},
 	// TON
 	{
@@ -298,6 +319,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listTonAccounts", backendAdd: "addTonAccount", backendRemove: "removeTonAccount",
 		backendUpdateLabel: "updateTonAccountLabel", backendSync: "syncTon", syncTaskPrefix: "ton-sync",
 		detectInput: detectTonInputType, deriveAddresses: deriveTonAddresses,
+		checkActivity: getActivityChecker("ton") ?? undefined,
 	},
 	// TRON
 	{
@@ -307,6 +329,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listTronAccounts", backendAdd: "addTronAccount", backendRemove: "removeTronAccount",
 		backendUpdateLabel: "updateTronAccountLabel", backendSync: "syncTron", syncTaskPrefix: "tron-sync",
 		detectInput: detectTronInputType, deriveAddresses: deriveTronAddresses,
+		checkActivity: getActivityChecker("tron") ?? undefined,
 	},
 	// XRP
 	{
@@ -316,6 +339,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listXrpAccounts", backendAdd: "addXrpAccount", backendRemove: "removeXrpAccount",
 		backendUpdateLabel: "updateXrpAccountLabel", backendSync: "syncXrp", syncTaskPrefix: "xrp-sync",
 		detectInput: detectXrpInputType, deriveAddresses: deriveXrpAddresses,
+		checkActivity: getActivityChecker("xrp") ?? undefined,
 	},
 	// Zcash
 	{
@@ -325,6 +349,7 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listZcashAccounts", backendAdd: "addZcashAccount", backendRemove: "removeZcashAccount",
 		backendUpdateLabel: "updateZcashAccountLabel", backendSync: "syncZcash", syncTaskPrefix: "zcash-sync",
 		detectInput: detectZcashInputType, deriveAddresses: deriveZcashAddresses,
+		checkActivity: getActivityChecker("zcash") ?? undefined,
 	},
 ];
 

@@ -10,6 +10,7 @@
     import Plus from "lucide-svelte/icons/plus";
     import X from "lucide-svelte/icons/x";
     import Copy from "lucide-svelte/icons/copy";
+    import RefreshCw from "lucide-svelte/icons/refresh-cw";
     import type { BlockchainConfig, InputDetection, DerivedAddress } from "$lib/blockchain-registry.js";
 
     let {
@@ -37,6 +38,8 @@
     let selectedIndexes = $state<Set<number>>(new Set([0]));
     let derivedAddresses = $state<DerivedAddress[]>([]);
     let itemLabels = $state<Map<number, string>>(new Map());
+    let activityStatus = $state<Map<number, boolean | null | "checking">>(new Map());
+    let scanAbort = $state<AbortController | null>(null);
 
     // Detection
     const detection = $derived.by((): InputDetection => {
@@ -48,6 +51,7 @@
 
     // Derivation
     $effect(() => {
+        activityStatus = new Map();
         if (!config.deriveAddresses || detection.input_type !== "seed" || !privateKeyAck || !address.trim()) {
             derivedAddresses = [];
             return;
@@ -72,6 +76,40 @@
 
     function copyToClipboard(text: string) {
         navigator.clipboard.writeText(text);
+    }
+
+    async function scanActivity() {
+        if (!config.checkActivity || derivedAddresses.length === 0) return;
+        const abort = new AbortController();
+        scanAbort = abort;
+        const newStatus = new Map<number, boolean | null | "checking">();
+        for (const d of derivedAddresses) newStatus.set(d.index, "checking");
+        activityStatus = new Map(newStatus);
+
+        const activeIndexes: number[] = [];
+        for (const derived of derivedAddresses) {
+            if (abort.signal.aborted) break;
+            try {
+                const result = await config.checkActivity(derived.address, abort.signal);
+                newStatus.set(derived.index, result);
+                activityStatus = new Map(newStatus);
+                if (result === true) activeIndexes.push(derived.index);
+            } catch {
+                newStatus.set(derived.index, null);
+                activityStatus = new Map(newStatus);
+            }
+        }
+
+        // Auto-select active addresses
+        if (activeIndexes.length > 0 && !abort.signal.aborted) {
+            selectedIndexes = new Set(activeIndexes);
+        }
+        scanAbort = null;
+    }
+
+    function cancelScan() {
+        scanAbort?.abort();
+        scanAbort = null;
     }
 
     async function handleAdd() {
@@ -191,9 +229,26 @@
     {/if}
 
     {#if derivedAddresses.length > 0}
+        <div class="flex items-center justify-between">
+            <span class="text-xs text-muted-foreground">{m.sources_derived_addresses()}</span>
+            {#if config.checkActivity}
+                {#if scanAbort}
+                    <Button variant="outline" size="sm" onclick={cancelScan}>
+                        <X class="mr-1 h-3 w-3" />
+                        {m.btn_cancel()}
+                    </Button>
+                {:else}
+                    <Button variant="outline" size="sm" onclick={scanActivity}>
+                        <RefreshCw class="mr-1 h-3 w-3" />
+                        {m.sources_scan_activity()}
+                    </Button>
+                {/if}
+            {/if}
+        </div>
         <div class="max-h-64 space-y-1 overflow-y-auto overflow-x-hidden rounded border p-2">
             {#each derivedAddresses as derived}
                 {@const exists = existingAddresses.has(normalizeAddr(derived.address))}
+                {@const status = activityStatus.get(derived.index)}
                 <label class="flex items-center gap-2 text-xs min-w-0 {exists ? 'opacity-50' : ''}">
                     <input
                         type="checkbox"
@@ -206,6 +261,15 @@
                         }}
                     />
                     <span class="font-mono">{derived.index}</span>
+                    {#if status === "checking"}
+                        <RefreshCw class="h-3 w-3 animate-spin text-muted-foreground" />
+                    {:else if status === true}
+                        <span class="h-2 w-2 rounded-full bg-green-500 shrink-0" title="Active"></span>
+                    {:else if status === false}
+                        <span class="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" title="Empty"></span>
+                    {:else if status === null}
+                        <span class="text-xs text-muted-foreground" title="Unknown">?</span>
+                    {/if}
                     <div class="flex-1 w-0">
                         <Tooltip.Root>
                             <Tooltip.Trigger class="font-mono text-left truncate block w-full">{derived.address}</Tooltip.Trigger>
