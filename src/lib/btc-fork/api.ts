@@ -3,9 +3,9 @@
 import { cexFetch, abortableDelay } from "../cex/fetch.js";
 import type { BtcForkChainConfig, NormalizedTx } from "./types.js";
 
-const RATE_LIMIT_MS = 200;
-const MAX_RETRIES = 3;
-const BASE_RETRY_MS = 2000;
+const RATE_LIMIT_MS = 500; // Blockcypher/Blockchair free tier: 2-5 req/s
+const MAX_RETRIES = 5;
+const BASE_RETRY_MS = 3000;
 
 let lastRequestTime = 0;
 

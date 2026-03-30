@@ -1,9 +1,11 @@
+import { cexFetch, abortableDelay } from "../cex/fetch.js";
 import type { BtcApiTx } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://mempool.space";
-const RATE_LIMIT_MS = 200;
-const MAX_RETRIES = 3;
-const BASE_RETRY_MS = 2000;
+const MEMPOOL_PROXY_PREFIX = "/api/mempool";
+const RATE_LIMIT_MS = 2000; // mempool.space public API: ~10 req/min
+const MAX_RETRIES = 5;
+const BASE_RETRY_MS = 3000;
 
 let lastRequestTime = 0;
 
@@ -12,29 +14,24 @@ export function _resetRateLimiter(): void {
   lastRequestTime = 0;
 }
 
-async function rateLimitedFetch(url: string, signal?: AbortSignal): Promise<Response> {
+async function mempoolGet(url: string, baseUrl: string, signal?: AbortSignal): Promise<{ status: number; body: string }> {
   const now = Date.now();
   const elapsed = now - lastRequestTime;
-  if (elapsed < RATE_LIMIT_MS) {
-    await new Promise(r => setTimeout(r, RATE_LIMIT_MS - elapsed));
-  }
+  if (elapsed < RATE_LIMIT_MS) await abortableDelay(RATE_LIMIT_MS - elapsed, signal);
   lastRequestTime = Date.now();
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (signal?.aborted) throw new Error("Aborted");
-    const res = await fetch(url, { signal });
-    if (res.ok) return res;
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const res = await cexFetch(url, baseUrl, MEMPOOL_PROXY_PREFIX, { method: "GET", headers: { Accept: "application/json" } }, signal);
+    if (res.status >= 200 && res.status < 300) return res;
     if (res.status === 429 && attempt < MAX_RETRIES) {
-      const retryAfter = res.headers.get("Retry-After");
-      const parsed = retryAfter ? parseInt(retryAfter, 10) * 1000 : NaN;
-      const waitMs = isNaN(parsed) ? BASE_RETRY_MS * 2 ** attempt : parsed;
-      await new Promise(r => setTimeout(r, waitMs));
+      await abortableDelay(BASE_RETRY_MS * 2 ** attempt, signal);
       lastRequestTime = Date.now();
       continue;
     }
-    throw new Error(`API error ${res.status}: ${await res.text()}`);
+    throw new Error(`Mempool API error ${res.status}: ${res.body.slice(0, 500)}`);
   }
-  throw new Error("Max retries exceeded");
+  throw new Error("Mempool API: max retries exceeded");
 }
 
 /**
@@ -54,8 +51,8 @@ export async function fetchAddressTxs(
       ? `${baseUrl}/api/address/${address}/txs/chain/${lastTxid}`
       : `${baseUrl}/api/address/${address}/txs`;
 
-    const res = await rateLimitedFetch(url, signal);
-    const txs: BtcApiTx[] = await res.json();
+    const res = await mempoolGet(url, baseUrl, signal);
+    const txs: BtcApiTx[] = JSON.parse(res.body);
 
     if (txs.length === 0) break;
     allTxs.push(...txs);
@@ -76,8 +73,8 @@ export async function fetchAddressInfo(
   signal?: AbortSignal,
 ): Promise<{ tx_count: number; funded_txo_sum: number; spent_txo_sum: number }> {
   const url = `${baseUrl}/api/address/${address}`;
-  const res = await rateLimitedFetch(url, signal);
-  const data = await res.json();
+  const res = await mempoolGet(url, baseUrl, signal);
+  const data = JSON.parse(res.body);
 
   // Mempool.space returns chain_stats and mempool_stats
   const chain = data.chain_stats || {};

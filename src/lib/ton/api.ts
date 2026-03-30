@@ -6,9 +6,9 @@ import type { TonEvent } from "./types.js";
 
 const TON_BASE_URL = "https://tonapi.io";
 const TON_PROXY_PREFIX = "/api/ton";
-const RATE_LIMIT_MS = 200;
-const MAX_RETRIES = 3;
-const BASE_RETRY_MS = 2000;
+const RATE_LIMIT_MS = 1000; // TonAPI free tier: ~1 req/s
+const MAX_RETRIES = 5;
+const BASE_RETRY_MS = 3000;
 const PAGE_SIZE = 50;
 
 let lastRequestTime = 0;

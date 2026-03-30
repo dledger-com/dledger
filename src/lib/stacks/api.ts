@@ -6,9 +6,9 @@ import type { StacksTransaction, StacksTransactionListResponse } from "./types.j
 
 const HIRO_BASE_URL = "https://api.hiro.so";
 const HIRO_PROXY_PREFIX = "/api/stacks";
-const RATE_LIMIT_MS = 200;
-const MAX_RETRIES = 3;
-const BASE_RETRY_MS = 2000;
+const RATE_LIMIT_MS = 1200; // Hiro free tier: 50 req/min
+const MAX_RETRIES = 5;
+const BASE_RETRY_MS = 3000;
 const PAGE_SIZE = 50;
 
 let lastRequestTime = 0;
