@@ -27,6 +27,7 @@
   import CoinIcon from "$lib/components/CoinIcon.svelte";
   import AmountWithIcon from "$lib/components/AmountWithIcon.svelte";
   import SourceIcon from "$lib/components/SourceIcon.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import * as m from "$paraglide/messages.js";
   import {
     getCachedRecentEntries, setCachedRecentEntries,
@@ -511,9 +512,7 @@
         {#if chartsLoading || !AreaChart || !scaleTime || !scaleLinear}
           <Skeleton class="h-48 w-full" />
         {:else if netWorthData.length < 2}
-          <p class="text-sm text-muted-foreground py-12 text-center">
-            {m.empty_not_enough_chart_data()}
-          </p>
+          <EmptyState message={m.empty_not_enough_chart_data()} />
         {:else}
           <div class="h-48">
             <AreaChart
@@ -540,7 +539,7 @@
         {#if chartsLoading || !PieChart}
           <Skeleton class="h-48 w-full" />
         {:else if expenseData.length === 0}
-          <p class="text-sm text-muted-foreground py-12 text-center">{m.empty_no_expenses()}</p>
+          <EmptyState message={m.empty_no_expenses()} />
         {:else}
           <div class="h-48">
             <PieChart
@@ -587,10 +586,8 @@
     </Card.Root>
   {:else if recentEntries.length === 0}
     <Card.Root class="border-x-0 rounded-none shadow-none">
-      <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">
-          {m.empty_no_journal_entries()}
-        </p>
+      <Card.Content>
+        <EmptyState message={m.empty_no_journal_entries()} />
       </Card.Content>
     </Card.Root>
   {:else}

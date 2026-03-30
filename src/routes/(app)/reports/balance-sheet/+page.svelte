@@ -21,10 +21,16 @@
   } from "$lib/exchange-rate-historical.js";
   import { exportBalanceSheetCsv } from "$lib/utils/csv-export.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import Download from "lucide-svelte/icons/download";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection, CurrencyBalance } from "$lib/types/index.js";
   import * as m from "$paraglide/messages.js";
+
+  type BSortKey = "account" | "balance";
+  const bsSort = createSortState<BSortKey>();
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -157,12 +163,19 @@
         </Card.Header>
         {#if filteredLines.length === 0}
           <Card.Content>
-            <p class="text-sm text-muted-foreground py-4 text-center">{m.empty_no_accounts()}</p>
+            <EmptyState message={m.empty_no_accounts()} />
           </Card.Content>
         {:else}
           <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <SortableHeader active={bsSort.key === "account"} direction={bsSort.direction} onclick={() => bsSort.toggle("account")}>{m.label_account()}</SortableHeader>
+                <SortableHeader active={bsSort.key === "balance"} direction={bsSort.direction} onclick={() => bsSort.toggle("balance")} class="text-right">{m.label_balance()}</SortableHeader>
+              </Table.Row>
+            </Table.Header>
             <Table.Body>
-              {#each filteredLines as line (line.account_id)}
+              {@const sortedLines = bsSort.key && bsSort.direction ? sortItems(filteredLines, bsSort.key === "account" ? (l) => l.account_name : (l) => parseFloat(l.balances[0]?.amount ?? "0"), bsSort.direction) : filteredLines}
+              {#each sortedLines as line (line.account_id)}
                 <Table.Row>
                   <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
                   <Table.Cell class="text-right font-mono">
@@ -197,9 +210,7 @@
   {:else}
     <Card.Root>
       <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">
-          {m.empty_no_balance_sheet_data()}
-        </p>
+        <EmptyState message={m.empty_no_balance_sheet_data()} />
       </Card.Content>
     </Card.Root>
   {/if}

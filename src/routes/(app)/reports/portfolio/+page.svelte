@@ -21,7 +21,13 @@
   } from "$lib/exchange-rate-historical.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import * as m from "$paraglide/messages.js";
+
+  type PortSortKey = "currency" | "amount" | "value";
+  const portSort = createSortState<PortSortKey>();
 
   const settings = new SettingsStore();
   let asOf = $state(new Date().toISOString().slice(0, 10));
@@ -108,9 +114,7 @@
   {:else if !hasWallets}
     <Card.Root>
       <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">
-          {m.empty_no_wallet_holdings()}
-        </p>
+        <EmptyState message={m.empty_no_wallet_holdings()} />
       </Card.Content>
     </Card.Root>
   {:else if report}
@@ -152,13 +156,14 @@
           <Table.Root>
             <Table.Header>
               <Table.Row>
-                <Table.Head>{m.label_currency()}</Table.Head>
-                <Table.Head class="text-right">{m.label_amount()}</Table.Head>
-                <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
+                <SortableHeader active={portSort.key === "currency"} direction={portSort.direction} onclick={() => portSort.toggle("currency")}>{m.label_currency()}</SortableHeader>
+                <SortableHeader active={portSort.key === "amount"} direction={portSort.direction} onclick={() => portSort.toggle("amount")} class="text-right">{m.label_amount()}</SortableHeader>
+                <SortableHeader active={portSort.key === "value"} direction={portSort.direction} onclick={() => portSort.toggle("value")} class="text-right">{m.report_value_in({ currency: settings.currency })}</SortableHeader>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {#each wallet.holdings as holding}
+              {@const sortedHoldings = portSort.key && portSort.direction ? sortItems(wallet.holdings, portSort.key === "currency" ? (h) => h.currency : portSort.key === "amount" ? (h) => parseFloat(h.amount) : (h) => h.baseValue ? parseFloat(h.baseValue) : 0, portSort.direction) : wallet.holdings}
+              {#each sortedHoldings as holding}
                 <Table.Row>
                   <Table.Cell>
                     <span class="inline-flex items-center gap-1"><CoinIcon code={holding.currency} size={14} /><Badge variant="outline">{holding.currency}</Badge></span>

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -16,7 +15,9 @@
   import Download from "lucide-svelte/icons/download";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
   import ListFilter from "$lib/components/ListFilter.svelte";
+  import FacetedFilter from "$lib/components/FacetedFilter.svelte";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import * as m from "$paraglide/messages.js";
 
@@ -27,7 +28,7 @@
   let fromDate = $state(`${now.getFullYear()}-01-01`);
   let toDate = $state(now.toISOString().slice(0, 10));
   let generated = $state(false);
-  let filterProtocol = $state("");
+  let filterProtocols = $state<Set<string>>(new Set());
   let searchTerm = $state("");
 
   const hiddenFiltered = $derived(
@@ -40,11 +41,15 @@
     [...new Set(hiddenFiltered.map((l) => l.source_handler).filter((h): h is string => !!h))].sort(),
   );
 
+  const protocolOptions = $derived(
+    uniqueProtocols.map((p) => ({ value: p, label: p })),
+  );
+
   const hasProtocols = $derived(uniqueProtocols.length > 0);
 
   const filteredLines = $derived.by(() => {
-    let lines = filterProtocol
-      ? hiddenFiltered.filter((l) => l.source_handler === filterProtocol)
+    let lines = filterProtocols.size > 0
+      ? hiddenFiltered.filter((l) => l.source_handler && filterProtocols.has(l.source_handler))
       : hiddenFiltered;
     const term = searchTerm.trim().toLowerCase();
     if (term) {
@@ -106,20 +111,7 @@
           </Button>
         {/if}
         {#if hasProtocols}
-          <div class="space-y-1">
-            <span class="text-sm font-medium">{m.report_protocol()}</span>
-            <Select.Root type="single" bind:value={filterProtocol}>
-              <Select.Trigger class="w-40">
-                {filterProtocol || m.range_all()}
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="">{m.range_all()}</Select.Item>
-                {#each uniqueProtocols as protocol (protocol)}
-                  <Select.Item value={protocol}>{protocol}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          </div>
+          <FacetedFilter title={m.report_protocol()} options={protocolOptions} bind:selected={filterProtocols} />
         {/if}
         <ListFilter bind:value={searchTerm} placeholder={m.placeholder_filter_lots()} />
       </div>
@@ -151,10 +143,8 @@
     <!-- Details table -->
     {#if filteredLines.length === 0}
       <Card.Root>
-        <Card.Content class="py-8">
-          <p class="text-sm text-muted-foreground text-center">
-            {m.report_no_lot_disposals()}
-          </p>
+        <Card.Content>
+          <EmptyState message={m.report_no_lot_disposals()} />
         </Card.Content>
       </Card.Root>
     {:else}

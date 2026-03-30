@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
+  import * as m from "$paraglide/messages.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
@@ -9,11 +10,14 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { getBackend, type Reconciliation, type UnreconciledLineItem } from "$lib/backend.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
   import { computeDifference, isDifferenceZero } from "$lib/utils/reconciliation.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import { toast } from "svelte-sonner";
   import { v7 as uuidv7 } from "uuid";
   import type { Account, CurrencyBalance } from "$lib/types/index.js";
@@ -108,7 +112,7 @@
         line_item_count: selectedIds.size,
       };
       await getBackend().markReconciled(rec, [...selectedIds]);
-      toast.success(`${selectedIds.size} items reconciled`);
+      toast.success(m.toast_items_reconciled({ count: String(selectedIds.size) }));
       await loadItems();
       reconciliations = await getBackend().listReconciliations(accountId!);
     } catch (e) {
@@ -141,8 +145,16 @@
     }
   });
 
+  const unsubJournal = onInvalidate("journal", async () => {
+    if (accountId) {
+      reconciliations = await getBackend().listReconciliations(accountId);
+      if (itemsLoaded) await loadItems();
+    }
+  });
+
   onDestroy(() => {
     if (accountId) clearBreadcrumbOverride(accountId);
+    unsubJournal();
   });
 </script>
 
@@ -152,19 +164,19 @@
   {:else if !account}
     <Card.Root>
       <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">Account not found.</p>
+        <EmptyState message={m.error_account_not_found()} />
       </Card.Content>
     </Card.Root>
   {:else}
     <!-- Setup -->
     <Card.Root>
       <Card.Header>
-        <Card.Title>Statement Details</Card.Title>
+        <Card.Title>{m.section_statement_details()}</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex flex-wrap items-end gap-3">
           <div class="space-y-1">
-            <label for="rec-currency" class="text-xs font-medium">Currency</label>
+            <label for="rec-currency" class="text-xs font-medium">{m.label_currency()}</label>
             <Select.Root type="single" bind:value={currency}>
               <Select.Trigger class="w-28">
                 {currency}
@@ -177,14 +189,14 @@
             </Select.Root>
           </div>
           <div class="space-y-1">
-            <label for="rec-date" class="text-xs font-medium">Statement Date</label>
+            <label for="rec-date" class="text-xs font-medium">{m.label_statement_date()}</label>
             <Input id="rec-date" type="date" bind:value={statementDate} class="w-40" />
           </div>
           <div class="space-y-1">
-            <label for="rec-balance" class="text-xs font-medium">Statement Balance</label>
+            <label for="rec-balance" class="text-xs font-medium">{m.label_statement_balance()}</label>
             <Input id="rec-balance" type="text" placeholder="0.00" bind:value={statementBalance} class="w-36" />
           </div>
-          <Button size="sm" onclick={loadItems}>Load Items</Button>
+          <Button size="sm" onclick={loadItems}>{m.btn_load_items()}</Button>
         </div>
       </Card.Content>
     </Card.Root>
@@ -195,27 +207,27 @@
         <Card.Header>
           <div class="flex items-center justify-between">
             <div>
-              <Card.Title>Unreconciled Items ({items.length})</Card.Title>
-              <Card.Description>Check items that match your statement.</Card.Description>
+              <Card.Title>{m.section_unreconciled_items({ count: String(items.length) })}</Card.Title>
+              <Card.Description>{m.desc_unreconciled_items()}</Card.Description>
             </div>
             <div class="flex gap-2">
-              <Button variant="outline" size="sm" onclick={selectAll}>Select All</Button>
-              <Button variant="outline" size="sm" onclick={selectNone}>Clear</Button>
+              <Button variant="outline" size="sm" onclick={selectAll}>{m.btn_select_all()}</Button>
+              <Button variant="outline" size="sm" onclick={selectNone}>{m.btn_clear()}</Button>
             </div>
           </div>
         </Card.Header>
         {#if items.length === 0}
           <Card.Content>
-            <p class="text-sm text-muted-foreground text-center py-4">All items are reconciled.</p>
+            <EmptyState message={m.empty_all_reconciled()} />
           </Card.Content>
         {:else}
           <Table.Root>
             <Table.Header>
               <Table.Row>
                 <Table.Head class="w-10"></Table.Head>
-                <Table.Head>Date</Table.Head>
-                <Table.Head>Description</Table.Head>
-                <Table.Head class="text-right">Amount</Table.Head>
+                <Table.Head>{m.label_date()}</Table.Head>
+                <Table.Head>{m.label_description()}</Table.Head>
+                <Table.Head class="text-right">{m.label_amount()}</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -223,11 +235,9 @@
                 {@const checked = selectedIds.has(item.line_item_id)}
                 <Table.Row class={checked ? "bg-primary/5" : ""}>
                   <Table.Cell>
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={checked}
-                      onchange={() => toggleItem(item.line_item_id)}
-                      class="rounded border-input"
+                      onCheckedChange={() => toggleItem(item.line_item_id)}
                     />
                   </Table.Cell>
                   <Table.Cell class="text-muted-foreground">{item.entry_date}</Table.Cell>
@@ -249,11 +259,11 @@
             <div class="flex items-center justify-between">
               <div class="space-y-1">
                 <p class="text-sm">
-                  Selected: <span class="font-mono font-medium">{selectedIds.size}</span> items
+                  {m.label_selected()} <span class="font-mono font-medium">{selectedIds.size}</span> {m.label_items()}
                 </p>
                 {#if difference}
                   <p class="text-sm">
-                    Difference: <span class="font-mono font-medium {parseFloat(difference) === 0 ? 'text-positive' : 'text-orange-600 dark:text-orange-400'}">
+                    {m.label_difference()} <span class="font-mono font-medium {parseFloat(difference) === 0 ? 'text-positive' : 'text-orange-600 dark:text-orange-400'}">
                       {formatCurrency(difference, currency)}
                     </span>
                   </p>
@@ -263,7 +273,7 @@
                 disabled={!canReconcile || reconciling}
                 onclick={handleReconcile}
               >
-                {reconciling ? "Reconciling..." : "Mark Reconciled"}
+                {reconciling ? m.state_reconciling() : m.btn_mark_reconciled()}
               </Button>
             </div>
           </Card.Content>
@@ -275,16 +285,16 @@
     {#if reconciliations.length > 0}
       <Card.Root>
         <Card.Header>
-          <Card.Title>Reconciliation History</Card.Title>
+          <Card.Title>{m.section_reconciliation_history()}</Card.Title>
         </Card.Header>
         <Table.Root>
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortRec.key === "statementDate"} direction={sortRec.direction} onclick={() => sortRec.toggle("statementDate")}>Statement Date</SortableHeader>
-              <SortableHeader active={sortRec.key === "currency"} direction={sortRec.direction} onclick={() => sortRec.toggle("currency")}>Currency</SortableHeader>
-              <SortableHeader active={sortRec.key === "balance"} direction={sortRec.direction} onclick={() => sortRec.toggle("balance")} class="text-right">Balance</SortableHeader>
-              <SortableHeader active={sortRec.key === "items"} direction={sortRec.direction} onclick={() => sortRec.toggle("items")} class="text-right">Items</SortableHeader>
-              <SortableHeader active={sortRec.key === "reconciled"} direction={sortRec.direction} onclick={() => sortRec.toggle("reconciled")}>Reconciled</SortableHeader>
+              <SortableHeader active={sortRec.key === "statementDate"} direction={sortRec.direction} onclick={() => sortRec.toggle("statementDate")}>{m.label_statement_date()}</SortableHeader>
+              <SortableHeader active={sortRec.key === "currency"} direction={sortRec.direction} onclick={() => sortRec.toggle("currency")}>{m.label_currency()}</SortableHeader>
+              <SortableHeader active={sortRec.key === "balance"} direction={sortRec.direction} onclick={() => sortRec.toggle("balance")} class="text-right">{m.label_balance()}</SortableHeader>
+              <SortableHeader active={sortRec.key === "items"} direction={sortRec.direction} onclick={() => sortRec.toggle("items")} class="text-right">{m.label_items()}</SortableHeader>
+              <SortableHeader active={sortRec.key === "reconciled"} direction={sortRec.direction} onclick={() => sortRec.toggle("reconciled")}>{m.label_date()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>

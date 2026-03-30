@@ -2,6 +2,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import Search from "lucide-svelte/icons/search";
   import X from "lucide-svelte/icons/x";
+  import * as m from "$paraglide/messages.js";
 
   interface Props {
     value: string;
@@ -17,7 +18,7 @@
   <Input type="text" {placeholder} bind:value class="pl-9 pr-9" aria-label={placeholder}
     onkeydown={(e) => { if (e.key === 'Escape') value = ''; }} />
   {#if value}
-    <button type="button" onclick={() => (value = "")} aria-label="Clear filter"
+    <button type="button" onclick={() => (value = "")} aria-label={m.filter_clear()}
       class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground">
       <X class="size-4" />
     </button>

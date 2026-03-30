@@ -20,10 +20,16 @@
   } from "$lib/exchange-rate-historical.js";
   import { exportIncomeStatementCsv } from "$lib/utils/csv-export.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
+  import SortableHeader from "$lib/components/SortableHeader.svelte";
+  import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import Download from "lucide-svelte/icons/download";
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import type { ReportSection } from "$lib/types/index.js";
   import * as m from "$paraglide/messages.js";
+
+  type ISSortKey = "account" | "balance";
+  const isSort = createSortState<ISSortKey>();
 
   const store = new ReportStore();
   const settings = new SettingsStore();
@@ -137,8 +143,16 @@
     <Card.Root>
       <Card.Header><Card.Title>{m.report_revenue()}</Card.Title></Card.Header>
       <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <SortableHeader active={isSort.key === "account"} direction={isSort.direction} onclick={() => isSort.toggle("account")}>{m.label_account()}</SortableHeader>
+            <SortableHeader active={isSort.key === "balance"} direction={isSort.direction} onclick={() => isSort.toggle("balance")} class="text-right">{m.label_amount()}</SortableHeader>
+          </Table.Row>
+        </Table.Header>
         <Table.Body>
-          {#each filterHiddenTrialLines(report.revenue.lines, hidden) as line (line.account_id)}
+          {@const lines = filterHiddenTrialLines(report.revenue.lines, hidden)}
+          {@const sortedLines = isSort.key && isSort.direction ? sortItems(lines, isSort.key === "account" ? (l) => l.account_name : (l) => Math.abs(parseFloat(l.balances[0]?.amount ?? "0")), isSort.direction) : lines}
+          {#each sortedLines as line (line.account_id)}
             <Table.Row>
               <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
               <Table.Cell class="text-right font-mono">
@@ -167,8 +181,16 @@
     <Card.Root>
       <Card.Header><Card.Title>{m.report_expenses()}</Card.Title></Card.Header>
       <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <SortableHeader active={isSort.key === "account"} direction={isSort.direction} onclick={() => isSort.toggle("account")}>{m.label_account()}</SortableHeader>
+            <SortableHeader active={isSort.key === "balance"} direction={isSort.direction} onclick={() => isSort.toggle("balance")} class="text-right">{m.label_amount()}</SortableHeader>
+          </Table.Row>
+        </Table.Header>
         <Table.Body>
-          {#each filterHiddenTrialLines(report.expenses.lines, hidden) as line (line.account_id)}
+          {@const lines = filterHiddenTrialLines(report.expenses.lines, hidden)}
+          {@const sortedLines = isSort.key && isSort.direction ? sortItems(lines, isSort.key === "account" ? (l) => l.account_name : (l) => Math.abs(parseFloat(l.balances[0]?.amount ?? "0")), isSort.direction) : lines}
+          {#each sortedLines as line (line.account_id)}
             <Table.Row>
               <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
               <Table.Cell class="text-right font-mono">
@@ -211,12 +233,6 @@
       </Card.Header>
     </Card.Root>
   {:else}
-    <Card.Root>
-      <Card.Content class="py-8">
-        <p class="text-sm text-muted-foreground text-center">
-          {m.empty_no_income_statement_data()}
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState message={m.empty_no_income_statement_data()} />
   {/if}
 </div>

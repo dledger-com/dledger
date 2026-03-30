@@ -1060,5 +1060,53 @@
   "settings_plugins_delete_confirm": "Delete plugin \"{name}\"? This cannot be undone.",
   "settings_plugins_enabled": "Enabled",
   "settings_plugins_disabled": "Disabled",
-  "settings_plugins_loaded_at": "Loaded {date}"
+  "settings_plugins_loaded_at": "Loaded {date}",
+
+  "filter_n_selected": "{count} selected",
+  "filter_no_results": "No results.",
+  "filter_clear": "Clear filters",
+  "placeholder_search_facet": "Search {facet}...",
+
+  "error_account_not_found": "Account not found.",
+  "state_archived": "Archived",
+  "state_pass": "Pass",
+  "state_fail": "Fail",
+  "label_opened": "Opened:",
+  "label_current_balance": "Current Balance",
+  "label_expected_balance": "Expected Balance",
+  "label_counterparty_account": "Counterparty Account",
+  "label_running_balance": "Running Balance",
+  "label_selected": "Selected:",
+  "label_items": "items",
+  "label_difference": "Difference:",
+  "label_statement_date": "Statement Date",
+  "label_statement_balance": "Statement Balance",
+  "label_total_transactions": "{count} total {count, plural, one {transaction} other {transactions}}",
+
+  "section_balance_assertions": "Balance Assertions",
+  "section_transaction_history": "Transaction History",
+  "section_statement_details": "Statement Details",
+  "section_unreconciled_items": "Unreconciled Items ({count})",
+  "section_reconciliation_history": "Reconciliation History",
+
+  "desc_balance_assertions": "Verify expected balances at specific dates.",
+  "desc_unreconciled_items": "Check items that match your statement.",
+
+  "btn_add_assertion": "Add Assertion",
+  "btn_pad": "Pad",
+  "btn_create_pad": "Create Pad",
+  "btn_reconcile": "Reconcile",
+  "btn_load_items": "Load Items",
+  "btn_select_all": "Select All",
+  "btn_mark_reconciled": "Mark Reconciled",
+
+  "chart_balance_over_time": "Balance Over Time",
+
+  "empty_no_transactions": "No transactions for this account yet.",
+  "empty_no_assertions": "No balance assertions. Add one to verify expected balances.",
+  "empty_all_reconciled": "All items are reconciled.",
+
+  "toast_opened_date_updated": "Opened date updated",
+  "toast_assertion_created": "Assertion created",
+  "toast_pad_entry_created": "Pad entry created"
 }

@@ -6,6 +6,7 @@
 	import { Button } from "$lib/components/ui/button/index.js";
 	import Separator from "$lib/components/ui/separator/separator.svelte";
 	import CirclePlus from "lucide-svelte/icons/circle-plus";
+	import * as m from "$paraglide/messages.js";
 
 	interface Props {
 		title: string;
@@ -50,7 +51,7 @@
 				{#if selected.size > 0}
 					<Separator orientation="vertical" class="mx-1 h-4" />
 					<Badge variant="secondary" class="rounded-sm px-1 font-normal">
-						{selected.size} selected
+						{m.filter_n_selected({ count: String(selected.size) })}
 					</Badge>
 				{/if}
 			</Button>
@@ -59,11 +60,11 @@
 	<Popover.Content class="w-[220px] p-0" align="start">
 		<Command.Root shouldFilter={false}>
 			<Command.Input
-				placeholder="Search {title.toLowerCase()}..."
+				placeholder={m.placeholder_search_facet({ facet: title.toLowerCase() })}
 				bind:value={search}
 			/>
 			<Command.List class="max-h-[300px]">
-				<Command.Empty>No results.</Command.Empty>
+				<Command.Empty>{m.filter_no_results()}</Command.Empty>
 				<Command.Group>
 					{#each filtered as option (option.value)}
 						<Command.Item
@@ -85,7 +86,7 @@
 							class="justify-center text-center"
 							onSelect={clear}
 						>
-							Clear filters
+							{m.filter_clear()}
 						</Command.Item>
 					</Command.Group>
 				{/if}

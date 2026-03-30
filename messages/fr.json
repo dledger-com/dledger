@@ -1060,5 +1060,53 @@
   "settings_plugins_delete_confirm": "Supprimer le plugin « {name} » ? Cette action est irréversible.",
   "settings_plugins_enabled": "Activé",
   "settings_plugins_disabled": "Désactivé",
-  "settings_plugins_loaded_at": "Chargé le {date}"
+  "settings_plugins_loaded_at": "Chargé le {date}",
+
+  "filter_n_selected": "{count} sélectionné(s)",
+  "filter_no_results": "Aucun résultat.",
+  "filter_clear": "Effacer les filtres",
+  "placeholder_search_facet": "Rechercher {facet}...",
+
+  "error_account_not_found": "Compte introuvable.",
+  "state_archived": "Archivé",
+  "state_pass": "Réussi",
+  "state_fail": "Échoué",
+  "label_opened": "Ouvert :",
+  "label_current_balance": "Solde actuel",
+  "label_expected_balance": "Solde attendu",
+  "label_counterparty_account": "Compte de contrepartie",
+  "label_running_balance": "Solde cumulé",
+  "label_selected": "Sélectionné :",
+  "label_items": "éléments",
+  "label_difference": "Différence :",
+  "label_statement_date": "Date du relevé",
+  "label_statement_balance": "Solde du relevé",
+  "label_total_transactions": "{count} transaction(s) au total",
+
+  "section_balance_assertions": "Assertions de solde",
+  "section_transaction_history": "Historique des transactions",
+  "section_statement_details": "Détails du relevé",
+  "section_unreconciled_items": "Éléments non rapprochés ({count})",
+  "section_reconciliation_history": "Historique de rapprochement",
+
+  "desc_balance_assertions": "Vérifiez les soldes attendus à des dates spécifiques.",
+  "desc_unreconciled_items": "Cochez les éléments correspondant à votre relevé.",
+
+  "btn_add_assertion": "Ajouter une assertion",
+  "btn_pad": "Ajuster",
+  "btn_create_pad": "Créer l'ajustement",
+  "btn_reconcile": "Rapprocher",
+  "btn_load_items": "Charger les éléments",
+  "btn_select_all": "Tout sélectionner",
+  "btn_mark_reconciled": "Marquer comme rapproché",
+
+  "chart_balance_over_time": "Solde dans le temps",
+
+  "empty_no_transactions": "Aucune transaction pour ce compte.",
+  "empty_no_assertions": "Aucune assertion de solde. Ajoutez-en une pour vérifier les soldes attendus.",
+  "empty_all_reconciled": "Tous les éléments sont rapprochés.",
+
+  "toast_opened_date_updated": "Date d'ouverture mise à jour",
+  "toast_assertion_created": "Assertion créée",
+  "toast_pad_entry_created": "Écriture d'ajustement créée"
 }
