@@ -129,8 +129,6 @@
     $effect(() => {
         evmDerivedAddresses; // track
         evmActivityStatus = new Map();
-        evmScanAbort?.abort();
-        evmScanAbort = null;
     });
 
     // Auto-select first unknown index for EVM multi-index picker
@@ -177,10 +175,9 @@
         const pass = btcSeedPassphrase;
         const count = btcDeriveCount;
 
-        // Reset BTC activity status on derivation change
+        // Reset BTC activity status on derivation change (avoid reading btcScanAbort here
+        // as it would create a circular dependency that aborts scans immediately)
         btcActivityStatus = new Map();
-        btcScanAbort?.abort();
-        btcScanAbort = null;
 
         if (!input || det.type !== "seed" || !ack) {
             btcDerivedXpubs = [];
@@ -572,6 +569,8 @@
         if (activeIndexes.length > 0 && !abort.signal.aborted) {
             evmSelectedIndexes = new Set(activeIndexes);
         }
+        for (const [k, v] of newStatus) { if (v === "checking") newStatus.delete(k); }
+        evmActivityStatus = new Map(newStatus);
         evmScanAbort = null;
     }
 
@@ -584,15 +583,17 @@
         if (btcDerivedXpubs.length === 0) return;
         const abort = new AbortController();
         btcScanAbort = abort;
+        const bip = btcSeedBip;
+        const xpubs = [...btcDerivedXpubs];
         const newStatus = new Map<number, boolean | null | "checking">();
-        for (const xpub of btcDerivedXpubs) newStatus.set(xpub.index, "checking");
+        for (const xpub of xpubs) newStatus.set(xpub.index, "checking");
         btcActivityStatus = new Map(newStatus);
 
         const activeIndexes: number[] = [];
-        for (const xpub of btcDerivedXpubs) {
+        for (const xpub of xpubs) {
             if (abort.signal.aborted) break;
             try {
-                const addresses = await deriveBtcAddressesFromXpub(xpub.xpub, btcSeedBip, 0, 0, 1, "mainnet");
+                const addresses = await deriveBtcAddressesFromXpub(xpub.xpub, bip, 0, 0, 1, "mainnet");
                 if (addresses.length > 0) {
                     const result = await checkBtcActivity(addresses[0], abort.signal);
                     newStatus.set(xpub.index, result);
@@ -609,6 +610,9 @@
         if (activeIndexes.length > 0 && !abort.signal.aborted) {
             btcSelectedIndexes = new Set(activeIndexes);
         }
+        // Clear any leftover "checking" spinners
+        for (const [k, v] of newStatus) { if (v === "checking") newStatus.delete(k); }
+        btcActivityStatus = new Map(newStatus);
         btcScanAbort = null;
     }
 

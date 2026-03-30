@@ -188,6 +188,16 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/stacks/, ''),
       },
+      '/api/mempool': {
+        target: 'https://mempool.space',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/mempool/, ''),
+      },
+      '/api/etherscan': {
+        target: 'https://api.etherscan.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/etherscan/, ''),
+      },
       '/api/cardano': {
         target: 'https://cardano-mainnet.blockfrost.io',
         changeOrigin: true,

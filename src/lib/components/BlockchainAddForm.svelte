@@ -104,6 +104,9 @@
         if (activeIndexes.length > 0 && !abort.signal.aborted) {
             selectedIndexes = new Set(activeIndexes);
         }
+        // Clear any leftover "checking" spinners
+        for (const [k, v] of newStatus) { if (v === "checking") newStatus.delete(k); }
+        activityStatus = new Map(newStatus);
         scanAbort = null;
     }
 

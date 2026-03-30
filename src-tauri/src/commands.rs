@@ -935,6 +935,7 @@ pub fn repair_database(state: State<'_, AppState>) -> Result<Vec<String>, String
 // -- HTTP proxy command (bypasses CORS for APIs that don't support it) --
 
 const ALLOWED_DOMAINS: &[&str] = &[
+    // CEX APIs
     "api.kraken.com",
     "api.binance.com",
     "api.coinbase.com",
@@ -942,16 +943,37 @@ const ALLOWED_DOMAINS: &[&str] = &[
     "www.okx.com",
     "www.bitstamp.net",
     "api.crypto.com",
+    "api.volet.com",
+    // Rate / market data
     "api.coingecko.com",
     "pro-api.coingecko.com",
     "min-api.cryptocompare.com",
     "finnhub.io",
     "coins.llama.fi",
     "api.frankfurter.dev",
+    // EVM / Etherscan
     "api.etherscan.io",
     "api.routescan.io",
     "gateway.thegraph.com",
-    "api.volet.com",
+    // Blockchain APIs (activity checks + sync)
+    "mainnet-idx.algonode.cloud",
+    "api.mainnet.aptoslabs.com",
+    "lcd-cosmoshub.keplr.app",
+    "api.nearblocks.io",
+    "api.hiro.so",
+    "horizon.stellar.org",
+    "api.tzkt.io",
+    "tonapi.io",
+    "api.trongrid.io",
+    "xrplcluster.com",
+    "api.kaspa.org",
+    "polkadot.api.subscan.io",
+    "bittensor.api.subscan.io",
+    "graphql.mainnet.sui.io",
+    "api.blockchair.com",
+    "mempool.space",
+    "api.helius.xyz",
+    "cardano-mainnet.blockfrost.io",
 ];
 
 fn is_private_ip(host: &str) -> bool {

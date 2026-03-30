@@ -7,7 +7,6 @@
  */
 
 import { cexFetch, abortableDelay } from "./cex/fetch.js";
-import { fetchAddressInfo } from "./bitcoin/api.js";
 
 type ActivityChecker = (address: string, signal?: AbortSignal, apiKey?: string) => Promise<boolean | null>;
 
@@ -123,12 +122,11 @@ async function checkTezosActivity(address: string, signal?: AbortSignal): Promis
 
 async function checkTonActivity(address: string, signal?: AbortSignal): Promise<boolean | null> {
 	try {
-		const url = `https://toncenter.com/api/v2/getTransactions?address=${address}&limit=1`;
-		const res = await activityGet(url, "https://toncenter.com", "/api/ton", signal);
+		const url = `https://tonapi.io/v2/blockchain/accounts/${address}/transactions?limit=1`;
+		const res = await activityGet(url, "https://tonapi.io", "/api/ton", signal);
 		if (res.status !== 200) return null;
 		const data = JSON.parse(res.body);
-		if (!data.ok) return null;
-		return Array.isArray(data.result) && data.result.length > 0;
+		return Array.isArray(data.transactions) && data.transactions.length > 0;
 	} catch { return null; }
 }
 
@@ -186,17 +184,11 @@ async function checkBittensorActivity(address: string, signal?: AbortSignal): Pr
 
 async function checkSuiActivity(address: string, signal?: AbortSignal): Promise<boolean | null> {
 	try {
-		const url = "https://fullnode.mainnet.sui.io:443/";
-		const body = JSON.stringify({
-			jsonrpc: "2.0",
-			id: 1,
-			method: "suix_queryTransactionBlocks",
-			params: [{ filter: { ToAddress: address }, options: {} }, null, 1, true],
-		});
-		const res = await activityPost(url, "https://fullnode.mainnet.sui.io:443", "/api/sui", body, signal);
+		const query = `{ transactionBlocks(filter: { changedObject: "${address}" }, first: 1) { nodes { digest } } }`;
+		const res = await activityPost("https://graphql.mainnet.sui.io", "https://graphql.mainnet.sui.io", "/api/sui", JSON.stringify({ query }), signal);
 		if (res.status !== 200) return null;
 		const data = JSON.parse(res.body);
-		return Array.isArray(data.result?.data) && data.result.data.length > 0;
+		return Array.isArray(data.data?.transactionBlocks?.nodes) && data.data.transactionBlocks.nodes.length > 0;
 	} catch { return null; }
 }
 
@@ -261,8 +253,12 @@ async function checkCardanoActivity(address: string, signal?: AbortSignal, apiKe
 
 export async function checkBtcActivity(address: string, signal?: AbortSignal): Promise<boolean | null> {
 	try {
-		const info = await fetchAddressInfo(address, undefined, signal);
-		return info.tx_count > 0;
+		const url = `https://mempool.space/api/address/${address}`;
+		const res = await activityGet(url, "https://mempool.space", "/api/mempool", signal);
+		if (res.status !== 200) return null;
+		const data = JSON.parse(res.body);
+		const txCount = (data.chain_stats?.tx_count ?? 0) + (data.mempool_stats?.tx_count ?? 0);
+		return txCount > 0;
 	} catch { return null; }
 }
 
