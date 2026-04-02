@@ -19,7 +19,7 @@ function lovelaceToAda(lovelace: string): string {
 }
 
 function shortAddr(addr: string): string {
-	return addr.length > 12 ? `${addr.slice(0, 10)}...${addr.slice(-4)}` : addr;
+	return addr.length > 12 ? `${addr.slice(0, 10)}-${addr.slice(-4)}` : addr;
 }
 
 export async function syncCardanoAccount(

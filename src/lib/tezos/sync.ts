@@ -14,7 +14,7 @@ const CHAIN = "Tezos";
 const MUTEZ_DIVISOR = new Decimal("1000000"); // 10^6
 
 function shortAddr(addr: string): string {
-	return addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
 export async function syncTezosAccount(

@@ -65,30 +65,31 @@ async function getBalance(
 // hledger -f tmp/example.journal balance --flat --no-total
 const ALL_TIME_BALANCES: [string, string, string][] = [
   // [accountName, amount, currency]
-  ["assets:bank:saving", "1", "USD"],
-  ["assets:cash", "-2", "USD"],
-  ["expenses:food", "1", "USD"],
-  ["expenses:supplies", "1", "USD"],
-  ["income:gifts", "-1", "USD"],
-  ["income:salary", "-1", "USD"],
-  ["liabilities:debts", "1", "USD"],
+  // hledger uses lowercase; dledger normalizes to Beancount-compatible CamelCase
+  ["Assets:Bank:Saving", "1", "USD"],
+  ["Assets:Cash", "-2", "USD"],
+  ["Expenses:Food", "1", "USD"],
+  ["Expenses:Supplies", "1", "USD"],
+  ["Income:Gifts", "-1", "USD"],
+  ["Income:Salary", "-1", "USD"],
+  ["Liabilities:Debts", "1", "USD"],
 ];
 
 // hledger -f tmp/example.journal incomestatement --flat --no-total -b 2008-01-01 -e 2009-01-01
 const INCOME_STATEMENT_2008: [string, string, string][] = [
-  ["income:gifts", "-1", "USD"],
-  ["income:salary", "-1", "USD"],
-  ["expenses:food", "1", "USD"],
-  ["expenses:supplies", "1", "USD"],
+  ["Income:Gifts", "-1", "USD"],
+  ["Income:Salary", "-1", "USD"],
+  ["Expenses:Food", "1", "USD"],
+  ["Expenses:Supplies", "1", "USD"],
 ];
 
 // hledger -f tmp/example.journal incomestatement --flat --no-total -b 2008-01-01 -e 2008-07-01
 // Same values — all income/expense transactions occur Jan–Jun; Dec transaction is liabilities↔assets
 const INCOME_STATEMENT_H1_2008: [string, string, string][] = [
-  ["income:gifts", "-1", "USD"],
-  ["income:salary", "-1", "USD"],
-  ["expenses:food", "1", "USD"],
-  ["expenses:supplies", "1", "USD"],
+  ["Income:Gifts", "-1", "USD"],
+  ["Income:Salary", "-1", "USD"],
+  ["Expenses:Food", "1", "USD"],
+  ["Expenses:Supplies", "1", "USD"],
 ];
 
 describe("hledger comparison", () => {
@@ -99,10 +100,10 @@ describe("hledger comparison", () => {
 
     it("creates all 8 leaf accounts (13 total with parents)", () => {
       const leafAccounts = [
-        "assets:bank:checking", "assets:bank:saving", "assets:cash",
-        "expenses:food", "expenses:supplies",
-        "income:gifts", "income:salary",
-        "liabilities:debts",
+        "Assets:Bank:Checking", "Assets:Bank:Saving", "Assets:Cash",
+        "Expenses:Food", "Expenses:Supplies",
+        "Income:Gifts", "Income:Salary",
+        "Liabilities:Debts",
       ];
       for (const name of leafAccounts) {
         expect(accountsByName.has(name), `Account ${name} should exist`).toBe(true);

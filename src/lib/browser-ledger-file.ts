@@ -11,7 +11,7 @@ import type {
   LedgerImportResult,
 } from "./types/index.js";
 import { detectFormat, type LedgerFormat } from "./ledger-format.js";
-import { tradingAccount } from "./accounts/paths.js";
+import { tradingAccount, normalizeAccountSegment } from "./accounts/paths.js";
 
 import {
   computeEntryFingerprint,
@@ -163,10 +163,12 @@ export async function importLedger(
   }
 
   async function ensureAccount(
-    fullName: string,
+    rawFullName: string,
     allowedCurrencies: string[],
     date: string,
   ): Promise<string> {
+    // Normalize account name to Beancount-compatible format
+    const fullName = rawFullName.split(":").map(normalizeAccountSegment).join(":");
     const existing = existingAccounts.get(fullName);
     if (existing) {
       if (existing.is_archived) {

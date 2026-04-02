@@ -3,6 +3,7 @@ import Decimal from "decimal.js-light";
 import type { BtcApiTx } from "./types.js";
 import type { BtcClassification } from "./classify.js";
 import { buildBtcItems, satsToBtc, shortAddr } from "./entries.js";
+import { normalizeAccountSegment } from "../accounts/paths.js";
 
 const ADDR_A = "bc1qaddr_a_owned_by_wallet_main_aaaaaaaaaaaaa";
 const ADDR_B = "bc1qaddr_b_owned_by_wallet_main_bbbbbbbbbbbbb";
@@ -44,7 +45,7 @@ describe("satsToBtc", () => {
 
 describe("shortAddr", () => {
   it("truncates long addresses", () => {
-    expect(shortAddr("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")).toBe("bc1qw508...f3t4");
+    expect(shortAddr("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")).toBe("bc1qw508-f3t4");
   });
 
   it("returns short addresses unchanged", () => {
@@ -161,7 +162,7 @@ describe("buildBtcItems — send", () => {
     expect(feeItem!.account).toBe("Expenses:Crypto:Fees:Bitcoin");
 
     const extItem = items.find((i) => i.account.includes("External"));
-    expect(extItem!.account).toBe(`Equity:Crypto:Wallet:Bitcoin:External:${shortAddr(ADDR_EXT1)}`);
+    expect(extItem!.account).toBe(`Equity:Crypto:Wallet:Bitcoin:External:${normalizeAccountSegment(shortAddr(ADDR_EXT1))}`);
   });
 });
 

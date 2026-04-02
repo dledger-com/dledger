@@ -68,7 +68,7 @@ const ALL_TIME_BALANCES: [string, string, string][] = [
   ["Assets:Cash:Wallet", "100", "USD"],
   ["Assets:Crypto:BTC", "300", "USD"],
   ["Assets:Crypto:ETH", "200", "USD"],
-  ["Equity:Opening Balances", "-1000", "USD"],
+  ["Equity:OpeningBalances", "-1000", "USD"],
   ["Expenses:Books", "20", "USD"],
   ["Expenses:Food:Groceries", "667", "USD"],
   ["Expenses:Food:TakeOut", "40.92", "USD"],

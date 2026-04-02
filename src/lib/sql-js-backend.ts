@@ -2,6 +2,7 @@ import initSqlJs, { type Database, type SqlJsStatic } from "sql.js";
 import Decimal from "decimal.js-light";
 import { v7 as uuidv7 } from "uuid";
 import { renderDescription, DESCRIPTION_FORMAT_VERSION, type DescriptionData } from "./types/description-data.js";
+import { validateAccountPath, normalizeAccountSegment } from "./accounts/paths.js";
 import type {
   Account,
   AccountType,
@@ -1344,6 +1345,41 @@ PRAGMA foreign_keys = ON;
       backend.scheduleSave();
     }
 
+    // ── Account name normalization (one-time migration) ──
+    // Ensure all account names are Beancount-compatible (segments start with [A-Z0-9], only [A-Za-z0-9-]).
+    const ACCT_NAMES_MIGRATED_KEY = "dledger-account-names-migrated";
+    if (!localStorage.getItem(ACCT_NAMES_MIGRATED_KEY)) {
+      const accountRows = db.exec("SELECT id, full_name FROM account ORDER BY full_name");
+      if (accountRows.length > 0 && accountRows[0].values.length > 0) {
+        const renames: Array<[string, string, string]> = []; // [id, old, new]
+        for (const [id, fullName] of accountRows[0].values) {
+          const old = fullName as string;
+          const normalized = old
+            .split(":")
+            .map((seg) => normalizeAccountSegment(seg))
+            .join(":");
+          if (normalized !== old) {
+            renames.push([id as string, old, normalized]);
+          }
+        }
+        if (renames.length > 0) {
+          for (const [id, oldName, newName] of renames) {
+            // Update the account itself
+            const name = newName.split(":").pop()!;
+            db.run("UPDATE account SET full_name = ?, name = ? WHERE id = ?", [newName, name, id]);
+            // Update children that have this as a prefix
+            db.run(
+              "UPDATE account SET full_name = ? || SUBSTR(full_name, LENGTH(?) + 1) WHERE full_name LIKE ? || ':%'",
+              [newName, oldName, oldName],
+            );
+            console.log(`[dledger] Migrated account name: "${oldName}" → "${newName}"`);
+          }
+          backend.scheduleSave();
+        }
+      }
+      localStorage.setItem(ACCT_NAMES_MIGRATED_KEY, "1");
+    }
+
     // ── Description format auto-regeneration ──
     // When DESCRIPTION_FORMAT_VERSION bumps, re-render all descriptions from stored description_data.
     const DESC_VERSION_KEY = "dledger-description-format-version";
@@ -1881,6 +1917,9 @@ PRAGMA foreign_keys = ON;
   }
 
   async createAccount(account: Account): Promise<void> {
+    if (!validateAccountPath(account.full_name)) {
+      throw new Error(`Invalid account name "${account.full_name}": each segment must start with a capital letter or digit, followed by letters, digits, or dashes`);
+    }
     try {
       this.run(
         "INSERT INTO account (id, parent_id, account_type, name, full_name, allowed_currencies, is_postable, is_archived, created_at, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1938,6 +1977,9 @@ PRAGMA foreign_keys = ON;
       const newFullName = updates.full_name.trim();
       if (!newFullName || !newFullName.includes(":")) {
         throw new Error("full_name must contain at least two segments (e.g. Assets:Bank)");
+      }
+      if (!validateAccountPath(newFullName)) {
+        throw new Error(`Invalid account name "${newFullName}": each segment must start with a capital letter or digit, followed by letters, digits, or dashes`);
       }
 
       // Validate type constraint: new path must start with same type prefix

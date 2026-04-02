@@ -12,7 +12,7 @@ import { fetchTransactions } from "./api.js";
 import type { BtcForkAccount, BtcForkChainConfig, BtcForkSyncResult, NormalizedTx } from "./types.js";
 
 function shortAddr(addr: string): string {
-	return addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
 /** Convert satoshis to a decimal coin amount string (e.g., 100000000 → "1.00000000"). */

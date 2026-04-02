@@ -20,7 +20,7 @@ export function lamportsToSol(lamports: number): Decimal {
 /** Truncate an address for use in descriptions/account paths. */
 export function shortAddr(addr: string): string {
   if (addr.length <= 16) return addr;
-  return `${addr.slice(0, 8)}...${addr.slice(-4)}`;
+  return `${addr.slice(0, 8)}-${addr.slice(-4)}`;
 }
 
 /**

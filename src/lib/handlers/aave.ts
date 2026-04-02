@@ -314,7 +314,7 @@ async function buildProtocolItems(
   for (const out of aTokenOutFromUser) {
     items.push({ account: defiAssets("Aave", "Supply"), currency: out.underlying, amount: out.amount.neg() });
     if (hasViaAdapter) {
-      items.push({ account: `Equity:Trading:${out.underlying}`, currency: out.underlying, amount: out.amount });
+      items.push({ account: tradingAccount(out.underlying), currency: out.underlying, amount: out.amount });
     } else {
       items.push({ account: walletExternal(chain.name, shortAddr(out.to)), currency: out.underlying, amount: out.amount });
     }
@@ -323,7 +323,7 @@ async function buildProtocolItems(
   for (const burn of adapterATokenBurns) {
     if (hasViaAdapter) {
       items.push({ account: defiAssets("Aave", "Supply"), currency: burn.underlying, amount: burn.amount.neg() });
-      items.push({ account: `Equity:Trading:${burn.underlying}`, currency: burn.underlying, amount: burn.amount });
+      items.push({ account: tradingAccount(burn.underlying), currency: burn.underlying, amount: burn.amount });
     }
     // If no viaAdapter, ignore adapter burns (intermediate routing, not a user action)
   }

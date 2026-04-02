@@ -605,7 +605,7 @@ describe("computeFrenchTaxReport", () => {
     const equityId = (await backend.listAccounts()).find(a => a.full_name === "Equity")!.id;
     const tradingSPAM = await createPostable(backend, equityId, "equity", "Trading:SPAM1", "Equity:Trading:SPAM1");
     const tradingNONE = await createPostable(backend, equityId, "equity", "Trading:NONESRC", "Equity:Trading:NONESRC");
-    const tradingINV = await createPostable(backend, equityId, "equity", "Trading:EUR;", "Equity:Trading:EUR;");
+    const tradingINV = await createPostable(backend, equityId, "equity", "Trading:EUR-Invalid", "Equity:Trading:EUR-Invalid");
 
     // Give the crypto account positive balances of all three via opening balances
     const open1 = makeEntry({ date: "2024-01-01", description: "Open SPAM1" });

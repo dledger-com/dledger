@@ -100,8 +100,75 @@ export function validatePathConfig(overrides: Partial<AccountPathConfig>): PathC
 		if (v.endsWith(":")) {
 			errors.push({ key, error: "Must not end with \":\"" });
 		}
+		// Validate each segment is Beancount-compatible
+		const invalidSegments = v.split(":").filter((s) => s && !validateAccountSegment(s));
+		if (invalidSegments.length > 0) {
+			errors.push({ key, error: `Invalid segment(s): ${invalidSegments.join(", ")}. Segments must start with a capital letter or digit, followed by letters, digits, or dashes.` });
+		}
 	}
 	return errors;
+}
+
+// ── Account Segment Validation & Normalization ──────────
+// Beancount rule: each segment starts with [A-Z0-9], followed by [A-Za-z0-9-]
+
+const SEGMENT_RE = /^[A-Z0-9][A-Za-z0-9-]*$/;
+
+/** Check whether a single account path segment is Beancount-valid. */
+export function validateAccountSegment(segment: string): boolean {
+	return SEGMENT_RE.test(segment);
+}
+
+/** Check whether a full colon-separated account path is Beancount-valid. */
+export function validateAccountPath(path: string): boolean {
+	if (!path) return false;
+	const segments = path.split(":");
+	return segments.length >= 1 && segments.every(validateAccountSegment);
+}
+
+/**
+ * Normalize a single segment to Beancount-compatible form (CamelCase).
+ * - Splits on non-alphanumeric-non-dash chars (spaces, underscores, dots, etc.)
+ * - Capitalizes the first letter of each word, joins without separator
+ * - Strips remaining invalid characters
+ * - Returns "Unknown" if result is empty
+ */
+export function normalizeAccountSegment(segment: string): string {
+	const trimmed = segment.trim();
+	if (!trimmed) return "Unknown";
+
+	// Split on anything that isn't alphanumeric or dash
+	const words = trimmed.split(/[^A-Za-z0-9-]+/).filter(Boolean);
+	if (words.length === 0) return "Unknown";
+
+	// CamelCase: capitalize first letter of each word
+	const camel = words
+		.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+		.join("");
+
+	// Strip any remaining invalid chars (keep letters, digits, dashes)
+	const cleaned = camel.replace(/[^A-Za-z0-9-]/g, "");
+
+	// Collapse consecutive dashes, strip leading/trailing dashes
+	const collapsed = cleaned.replace(/-{2,}/g, "-").replace(/^-|-$/g, "");
+
+	if (!collapsed) return "Unknown";
+
+	// Ensure first char is uppercase letter or digit
+	if (/^[a-z]/.test(collapsed)) {
+		return collapsed.charAt(0).toUpperCase() + collapsed.slice(1);
+	}
+	return collapsed;
+}
+
+/**
+ * Normalize a segment that may contain colons (producing multiple path levels).
+ * Splits on ":", normalizes each part, rejoins.
+ */
+function n(s: string): string {
+	return s.includes(":")
+		? s.split(":").map(normalizeAccountSegment).join(":")
+		: normalizeAccountSegment(s);
 }
 
 // ── Shared Fallback Constants (NOT configurable) ───────
@@ -118,75 +185,75 @@ export const EQUITY_TRADING_PREFIX = "Equity:Trading:";
 export function bankAssets(name: string): string;
 export function bankAssets(name: string, suffix: string): string;
 export function bankAssets(name: string, suffix?: string): string {
-	return suffix ? `${_config.bankAssets}:${name}:${suffix}` : `${_config.bankAssets}:${name}`;
+	return suffix ? `${_config.bankAssets}:${n(name)}:${n(suffix)}` : `${_config.bankAssets}:${n(name)}`;
 }
 export function bankFees(name: string) {
-	return `${_config.bankFees}:${name}`;
+	return `${_config.bankFees}:${n(name)}`;
 }
 export function creditCard(last4: string) {
-	return `${_config.creditCards}:${last4}`;
+	return `${_config.creditCards}:${n(last4)}`;
 }
 
 // ── Crypto Exchange ──────────────────────────────────
 export function exchangeAssets(name: string) {
-	return `${_config.exchangeAssets}:${name}`;
+	return `${_config.exchangeAssets}:${n(name)}`;
 }
 export function exchangeAssetsCurrency(name: string, currency: string) {
-	return `${_config.exchangeAssets}:${name}:${currency}`;
+	return `${_config.exchangeAssets}:${n(name)}:${n(currency)}`;
 }
 export function exchangeFees(name: string) {
-	return `${_config.exchangeFees}:${name}`;
+	return `${_config.exchangeFees}:${n(name)}`;
 }
 export function exchangeExternal(name: string) {
-	return `${_config.exchangeEquity}:${name}:External`;
+	return `${_config.exchangeEquity}:${n(name)}:External`;
 }
 export function exchangeStaking(name: string) {
-	return `${_config.exchangeStaking}:${name}`;
+	return `${_config.exchangeStaking}:${n(name)}`;
 }
 export function exchangeRewards(name: string) {
-	return `${_config.exchangeIncome}:${name}:Rewards`;
+	return `${_config.exchangeIncome}:${n(name)}:Rewards`;
 }
 export function exchangeIncome(name: string, type: string) {
-	return `${_config.exchangeIncome}:${name}:${type}`;
+	return `${_config.exchangeIncome}:${n(name)}:${n(type)}`;
 }
 export function exchangeExpense(name: string, type: string) {
-	return `${_config.exchangeExpenses}:${name}:${type}`;
+	return `${_config.exchangeExpenses}:${n(name)}:${n(type)}`;
 }
 
 // ── Crypto Wallet / On-chain ─────────────────────────
 export function walletAssets(chain: string, label: string) {
-	return `${_config.walletAssets}:${chain}:${label}`;
+	return `${_config.walletAssets}:${n(chain)}:${n(label)}`;
 }
 export function walletExternal(chain: string, addr: string) {
-	return `${_config.walletEquity}:${chain}:External:${addr}`;
+	return `${_config.walletEquity}:${n(chain)}:External:${n(addr)}`;
 }
 export function chainFees(chain: string) {
-	return `${_config.chainFees}:${chain}`;
+	return `${_config.chainFees}:${n(chain)}`;
 }
 
 // ── DeFi Protocol ────────────────────────────────────
 export function defiAssets(protocol: string, type: string) {
-	return `${_config.defiAssets}:${protocol}:${type}`;
+	return `${_config.defiAssets}:${n(protocol)}:${n(type)}`;
 }
 export function defiLiabilities(protocol: string, type: string) {
-	return `${_config.defiLiabilities}:${protocol}:${type}`;
+	return `${_config.defiLiabilities}:${n(protocol)}:${n(type)}`;
 }
 export function defiIncome(protocol: string, type: string) {
-	return `${_config.defiIncome}:${protocol}:${type}`;
+	return `${_config.defiIncome}:${n(protocol)}:${n(type)}`;
 }
 export function defiExpense(protocol: string, type: string) {
-	return `${_config.defiExpenses}:${protocol}:${type}`;
+	return `${_config.defiExpenses}:${n(protocol)}:${n(type)}`;
 }
 export function defiIncomePrefix(protocol: string) {
-	return `${_config.defiIncome}:${protocol}:`;
+	return `${_config.defiIncome}:${n(protocol)}:`;
 }
 export function defiExpensePrefix(protocol: string) {
-	return `${_config.defiExpenses}:${protocol}:`;
+	return `${_config.defiExpenses}:${n(protocol)}:`;
 }
 
 // ── Trading / Cost-Basis ─────────────────────────────
 export function tradingAccount(commodity: string) {
-	return `Equity:Trading:${commodity}`;
+	return `Equity:Trading:${n(commodity)}`;
 }
 
 // ── Utilities ────────────────────────────────────────

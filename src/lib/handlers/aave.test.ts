@@ -1532,9 +1532,9 @@ describe("aaveHandler", () => {
       expect(currencies).not.toContain("aEthtBTC");
       expect(currencies).toContain("tBTC");
 
-      // Should have Equity:Trading:tBTC counterparty
+      // Should have Equity:Trading:TBTC counterparty (tBTC normalized to TBTC)
       const accounts = await backend.listAccounts();
-      const tradingAcct = accounts.find((a) => a.full_name === "Equity:Trading:tBTC");
+      const tradingAcct = accounts.find((a) => a.full_name === "Equity:Trading:TBTC");
       expect(tradingAcct).toBeDefined();
 
       // Items must balance to zero per currency
@@ -1702,8 +1702,8 @@ describe("aaveHandler", () => {
       const tradingUSDC = accounts.find((a) => a.full_name === "Equity:Trading:USDC");
       expect(tradingUSDC).toBeDefined();
 
-      // Collateral side should use Equity:Trading:tBTC (not External)
-      const tradingTBTC = accounts.find((a) => a.full_name === "Equity:Trading:tBTC");
+      // Collateral side should use Equity:Trading:TBTC (not External)
+      const tradingTBTC = accounts.find((a) => a.full_name === "Equity:Trading:TBTC");
       expect(tradingTBTC).toBeDefined();
 
       // Items must balance to zero per currency
@@ -1875,9 +1875,9 @@ describe("aaveHandler", () => {
       // Action metadata should contain REPAY
       expect(entry.metadata["handler:action"]).toContain("REPAY");
 
-      // Should have Equity:Trading:wstETH (collateral side uses Trading, not External)
+      // Should have Equity:Trading:WstETH (collateral side uses Trading, not External)
       const accounts = await backend.listAccounts();
-      const tradingWstETH = accounts.find((a) => a.full_name === "Equity:Trading:wstETH");
+      const tradingWstETH = accounts.find((a) => a.full_name === "Equity:Trading:WstETH");
       expect(tradingWstETH).toBeDefined();
 
       // Should have Equity:Trading:USDC (repay side uses Trading)
