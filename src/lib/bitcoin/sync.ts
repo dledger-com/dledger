@@ -202,7 +202,6 @@ export async function syncBitcoinAccount(
   });
 
   // 4. Build caches for account/currency ensurance
-  const newCurrencies: string[] = [];
   const currencySet = new Set(
     (await backend.listCurrencies()).map((c) => c.code),
   );
@@ -223,15 +222,15 @@ export async function syncBitcoinAccount(
   // Context helpers
   async function ensureCurrency(code: string, decimals: number): Promise<void> {
     if (currencySet.has(code)) return;
+    const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
     await backend.createCurrency({
       code,
-      asset_type: "",
+      asset_type: assetType,
       param: "",
       name: code,
       decimal_places: decimals,
       is_base: false,
     });
-    newCurrencies.push(code);
     currencySet.add(code);
   }
 
@@ -436,13 +435,6 @@ export async function syncBitcoinAccount(
       const msg = e instanceof Error ? e.message : String(e);
       result.warnings.push(`post tx ${tx.txid}: ${msg}`);
     }
-  }
-
-
-  // Reclassify newly created currencies as crypto
-  for (const code of newCurrencies) {
-    const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-    try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
   }
 
   return result;

@@ -105,7 +105,6 @@ export async function syncHyperliquidAccount(
 	}
 
 	// 2. Build caches
-	const newCurrencies: string[] = [];
 	const currencySet = new Set(
 		(await backend.listCurrencies()).map((c) => c.code),
 	);
@@ -124,15 +123,15 @@ export async function syncHyperliquidAccount(
 	// Context helpers (same pattern as Solana sync)
 	async function ensureCurrency(code: string): Promise<void> {
 		if (currencySet.has(code)) return;
+		const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
 		await backend.createCurrency({
 			code,
-			asset_type: "",
+			asset_type: assetType,
 			param: "",
 			name: code,
 			decimal_places: 8,
 			is_base: false,
 		});
-		newCurrencies.push(code);
 		currencySet.add(code);
 	}
 
@@ -530,13 +529,6 @@ export async function syncHyperliquidAccount(
 	onProgress?.(`Done: ${result.fills_imported} fills, ${result.funding_imported} funding, ${result.ledger_imported} ledger.`);
 
 	invalidate("journal", "accounts", "reports");
-
-
-	// Reclassify newly created currencies as crypto
-	for (const code of newCurrencies) {
-		const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-		try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
-	}
 
 	return result;
 }

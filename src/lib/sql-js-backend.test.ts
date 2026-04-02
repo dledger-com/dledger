@@ -27,11 +27,12 @@ describe("SqlJsBackend", () => {
       expect(currencies[1].code).toBe("USD");
     });
 
-    it("throws on duplicate currency", async () => {
+    it("silently skips duplicate currency", async () => {
       await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
-      await expect(
-        backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: false }),
-      ).rejects.toThrow("already exists");
+      // Second create with same code is silently skipped (no duplicate row)
+      await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: false });
+      const currencies = await backend.listCurrencies();
+      expect(currencies.filter(c => c.code === "USD")).toHaveLength(1);
     });
   });
 

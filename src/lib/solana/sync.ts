@@ -89,7 +89,6 @@ export async function syncSolanaAccount(
   transactions.sort((a, b) => a.timestamp - b.timestamp);
 
   // 2. Build caches for dedup and account/currency ensurance
-  const newCurrencies: string[] = [];
   const currencySet = new Set(
     (await backend.listCurrencies()).map(c => c.code),
   );
@@ -110,15 +109,15 @@ export async function syncSolanaAccount(
   // Context helpers
   async function ensureCurrency(code: string, decimals: number, mintAddress?: string): Promise<void> {
     if (currencySet.has(code)) return;
+    const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
     await backend.createCurrency({
       code,
-      asset_type: "",
+      asset_type: assetType,
       param: "",
       name: code,
       decimal_places: decimals,
       is_base: false,
     });
-    newCurrencies.push(code);
     currencySet.add(code);
 
     // Store token address mapping for rate lookups
@@ -308,13 +307,6 @@ export async function syncSolanaAccount(
   // 4. Update last_signature cursor
   if (latestSignature && latestSignature !== account.last_signature) {
     await backend.updateSolanaLastSignature(account.id, latestSignature);
-  }
-
-
-  // Reclassify newly created currencies as crypto
-  for (const code of newCurrencies) {
-    const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-    try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
   }
 
   return result;

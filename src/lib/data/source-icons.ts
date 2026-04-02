@@ -24,6 +24,7 @@ const CHAIN_SOURCE_PREFIXES: Record<string, string> = {
   "hedera": "hedera", "bittensor": "bittensor", "monero": "xmr",
   "doge": "doge", "ltc": "ltc", "bch": "bch",
   "dash": "dash", "bsv": "bsv", "xec": "xec", "grs": "grs",
+  "bitshares": "bitshares",
 };
 
 /** Task queue key prefixes (not used in journal entries, but in sync task keys) */
@@ -36,7 +37,7 @@ const CHAIN_SYNC_PREFIXES: Record<string, string> = {
   "stellar-sync": "stellar", "bittensor-sync": "bittensor", "hedera-sync": "hedera",
   "near-sync": "near", "algorand-sync": "algorand", "kaspa-sync": "kaspa",
   "zcash-sync": "zcash", "stacks-sync": "stacks", "cardano-sync": "cardano",
-  "xmr-sync": "xmr",
+  "xmr-sync": "xmr", "bitshares-sync": "bitshares",
 };
 
 /** DeFi protocol name → governance/native token symbol */

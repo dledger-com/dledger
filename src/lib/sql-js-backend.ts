@@ -1867,6 +1867,23 @@ PRAGMA foreign_keys = ON;
   }
 
   async createCurrency(currency: Currency): Promise<void> {
+    // Check if this code already exists (with any asset_type)
+    const existing = this.queryOne(
+      "SELECT asset_type, param FROM currency WHERE code = ? LIMIT 1",
+      [currency.code],
+      (row) => ({ asset_type: row.asset_type as string, param: row.param as string }),
+    );
+    if (existing) {
+      // If existing is unclassified ("") and new one has a real type, replace it
+      if (existing.asset_type === "" && currency.asset_type && currency.asset_type !== "") {
+        this.run("DELETE FROM currency WHERE code = ? AND asset_type = '' AND param = ?", [currency.code, existing.param]);
+        // Fall through to INSERT below
+      } else {
+        // Already classified or same type — skip
+        return;
+      }
+    }
+
     // Auto-hide spam currencies (garbage codes from DeFi imports)
     const hidden = currency.is_hidden || isSpamCurrency(currency.code);
     try {
@@ -2468,6 +2485,15 @@ PRAGMA foreign_keys = ON;
         entry.created_at,
       ],
     );
+    // Build currency type cache for FK resolution — resolves actual asset_type from DB
+    const currencyTypeCache = new Map<string, string>();
+    const allCurrencies = this.db.exec("SELECT code, asset_type FROM currency");
+    if (allCurrencies.length > 0) {
+      for (const row of allCurrencies[0].values) {
+        currencyTypeCache.set(row[0] as string, row[1] as string);
+      }
+    }
+
     for (const item of items) {
       this.run(
         "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2476,7 +2502,7 @@ PRAGMA foreign_keys = ON;
           item.journal_entry_id,
           item.account_id,
           item.currency,
-          item.currency_asset_type ?? "",
+          item.currency_asset_type || currencyTypeCache.get(item.currency) || "",
           item.currency_param ?? "",
           item.amount,
           item.lot_id,
@@ -3670,6 +3696,13 @@ PRAGMA foreign_keys = ON;
       return; // Don't overwrite higher-priority source
     }
 
+    // Resolve currency asset types from DB for FK consistency
+    const resolveType = (code: string, provided?: string) => {
+      if (provided) return provided;
+      const result = this.queryOne("SELECT asset_type FROM currency WHERE code = ? LIMIT 1", [code], (r) => r.asset_type as string);
+      return result ?? "";
+    };
+
     this.run(
       "DELETE FROM exchange_rate WHERE date = ? AND from_currency = ? AND to_currency = ?",
       [rate.date, rate.from_currency, rate.to_currency],
@@ -3680,10 +3713,10 @@ PRAGMA foreign_keys = ON;
         rate.id,
         rate.date,
         rate.from_currency,
-        rate.from_currency_asset_type ?? "",
+        resolveType(rate.from_currency, rate.from_currency_asset_type),
         rate.from_currency_param ?? "",
         rate.to_currency,
-        rate.to_currency_asset_type ?? "",
+        resolveType(rate.to_currency, rate.to_currency_asset_type),
         rate.to_currency_param ?? "",
         rate.rate,
         rate.source,
@@ -3722,6 +3755,15 @@ PRAGMA foreign_keys = ON;
       }
     }
 
+    // Build currency type cache for FK resolution
+    const allCurrencyCodes = new Set(rates.flatMap((r) => [r.from_currency, r.to_currency]));
+    const batchTypeCache = new Map<string, string>();
+    for (const code of allCurrencyCodes) {
+      const row = this.queryOne("SELECT asset_type FROM currency WHERE code = ? LIMIT 1", [code], (r) => r.asset_type as string);
+      if (row !== null) batchTypeCache.set(code, row);
+    }
+    const resolveTypeBatch = (code: string, provided?: string) => provided || batchTypeCache.get(code) || "";
+
     const wasInTransaction = this.inTransaction;
     if (!wasInTransaction) this.beginTransaction();
     try {
@@ -3738,7 +3780,7 @@ PRAGMA foreign_keys = ON;
         );
         this.run(
           "INSERT INTO exchange_rate (id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [rate.id, rate.date, rate.from_currency, rate.from_currency_asset_type ?? "", rate.from_currency_param ?? "", rate.to_currency, rate.to_currency_asset_type ?? "", rate.to_currency_param ?? "", rate.rate, rate.source],
+          [rate.id, rate.date, rate.from_currency, resolveTypeBatch(rate.from_currency, rate.from_currency_asset_type), rate.from_currency_param ?? "", rate.to_currency, resolveTypeBatch(rate.to_currency, rate.to_currency_asset_type), rate.to_currency_param ?? "", rate.rate, rate.source],
         );
       }
       if (!wasInTransaction) this.commitTransaction();
