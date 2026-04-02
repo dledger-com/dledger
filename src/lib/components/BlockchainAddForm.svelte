@@ -153,6 +153,7 @@
                 return;
             }
             const backend = getBackend();
+            const chainName = config.name;
             await (backend as any)[config.backendAdd]({
                 id: uuidv7(),
                 address: config.caseSensitive ? input : addr,
@@ -162,9 +163,9 @@
             address = ""; label = "";
             await onAccountAdded();
             onClose();
-            toast.success(`${config.name} account added`);
+            toast.success(`${chainName} account added`);
         } catch (err) {
-            toast.error(`Failed to add ${config.name} account: ${err}`);
+            toast.error(`Failed to add ${config?.name ?? "blockchain"} account: ${err}`);
         } finally {
             adding = false;
         }

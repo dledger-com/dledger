@@ -679,6 +679,7 @@
                 onSelectStacks={() => startAddChain("stacks")}
                 onSelectCardano={() => startAddChain("cardano")}
                 onSelectMonero={() => startAddChain("xmr")}
+                onSelectBitshares={() => startAddChain("bitshares")}
             />
             <button
               type="button"

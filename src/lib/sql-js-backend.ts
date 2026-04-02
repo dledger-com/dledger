@@ -5935,7 +5935,7 @@ PRAGMA foreign_keys = ON;
   async addBitsharesAccount(account: Omit<import("./bitshares/types.js").BitsharesAccount, "last_sync" | "last_operation_id">): Promise<void> {
     this.run(
       `INSERT INTO bitshares_account (id, address, account_object_id, label, last_operation_id, last_sync, created_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)`,
-      [account.id, account.address, account.account_object_id, account.label, account.created_at],
+      [account.id, account.address, account.account_object_id ?? "", account.label, account.created_at],
     );
     this.scheduleSave();
   }

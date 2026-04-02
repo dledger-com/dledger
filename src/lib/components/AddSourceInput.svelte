@@ -36,6 +36,7 @@
     onSelectStacks,
     onSelectCardano,
     onSelectMonero,
+    onSelectBitshares,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -64,6 +65,7 @@
     onSelectStacks?: (prefillAddress?: string) => void;
     onSelectCardano?: (prefillAddress?: string) => void;
     onSelectMonero?: (prefillAddress?: string) => void;
+    onSelectBitshares?: (prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -176,6 +178,11 @@
   const detectedMoneroAddress = $derived.by(() => {
     const s = search.trim();
     return /^4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}$/.test(s) ? s : null;
+  });
+
+  const detectedBitsharesAccount = $derived.by(() => {
+    const s = search.trim();
+    return /^[a-z][a-z0-9.-]{2,62}$/.test(s) ? s : null;
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -339,6 +346,12 @@
     open = false;
     search = "";
     onSelectMonero?.(prefillAddress);
+  }
+
+  function selectBitshares(prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectBitshares?.(prefillAddress);
   }
 </script>
 
@@ -536,6 +549,13 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#if detectedBitsharesAccount}
+          <Command.Group heading="Detected Bitshares Account">
+            <Command.Item value="detected-bitshares-{detectedBitsharesAccount}" keywords={["bitshares", "bts"]} onSelect={() => selectBitshares(detectedBitsharesAccount)} class="font-mono text-xs">
+              Add "{detectedBitsharesAccount}" as Bitshares account
+            </Command.Item>
+          </Command.Group>
+        {/if}
         <Command.Group heading="Blockchain">
           {#if onSelectAlgorand}
             <Command.Item value="Algorand" keywords={["algorand", "algo"]} onSelect={() => selectAlgorand()}>
@@ -560,6 +580,11 @@
           {#if onSelectBittensor}
             <Command.Item value="Bittensor" keywords={["bittensor", "tao", "substrate"]} onSelect={() => selectBittensor()}>
               <ChainIcon chainName="bittensor" size={16} />Bittensor
+            </Command.Item>
+          {/if}
+          {#if onSelectBitshares}
+            <Command.Item value="Bitshares" keywords={["bitshares", "bts", "dex", "graphene"]} onSelect={() => selectBitshares()}>
+              <ChainIcon chainName="bitshares" size={16} />Bitshares
             </Command.Item>
           {/if}
           {#if onSelectCardano}

@@ -3,8 +3,13 @@
 
 import type { BitsharesOperationEntry, BitsharesAssetInfo } from "./types.js";
 
-const DEFAULT_NODE = "wss://api.bitshares.ws/ws";
-const CONNECT_TIMEOUT = 15_000;
+const NODES = [
+  "wss://node.xbts.io/ws",
+  "wss://api.bts.mobi/ws",
+  "wss://dex.iobanker.com/ws",
+  "wss://api.bitshares.ws/ws",
+];
+const CONNECT_TIMEOUT = 10_000;
 const CALL_TIMEOUT = 30_000;
 
 type PendingCall = {
@@ -25,9 +30,32 @@ export class BitsharesClient {
   private dbApiId = -1;
   private assetCache = new Map<string, BitsharesAssetInfo>();
 
-  /** Connect to a Bitshares node and initialize API namespaces. */
-  async connect(nodeUrl: string = DEFAULT_NODE): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
+  /** Connect to a Bitshares node, trying multiple nodes in order. */
+  async connect(nodeUrl?: string): Promise<void> {
+    const nodesToTry = nodeUrl ? [nodeUrl] : NODES;
+    let lastError: Error | null = null;
+
+    for (const url of nodesToTry) {
+      try {
+        await this.connectToNode(url);
+        // Login (required before accessing API namespaces)
+        await this.rpcCall(1, "login", ["", ""]);
+        // Get API namespace IDs
+        this.dbApiId = (await this.rpcCall(1, "database", [])) as number;
+        this.historyApiId = (await this.rpcCall(1, "history", [])) as number;
+        return;
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e));
+        // Close failed connection before trying next
+        if (this.ws) { this.ws.close(); this.ws = null; }
+      }
+    }
+
+    throw lastError ?? new Error("Failed to connect to any Bitshares node");
+  }
+
+  private connectToNode(nodeUrl: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`WebSocket connection timeout (${nodeUrl})`));
       }, CONNECT_TIMEOUT);
@@ -46,7 +74,6 @@ export class BitsharesClient {
         this.handleMessage(event.data as string);
       };
       ws.onclose = () => {
-        // Reject all pending calls
         for (const [id, call] of this.pending) {
           clearTimeout(call.timer);
           call.reject(new Error("WebSocket closed"));
@@ -55,13 +82,6 @@ export class BitsharesClient {
         this.ws = null;
       };
     });
-
-    // Login (required before accessing API namespaces)
-    await this.rpcCall(1, "login", ["", ""]);
-
-    // Get API namespace IDs
-    this.dbApiId = (await this.rpcCall(1, "database", [])) as number;
-    this.historyApiId = (await this.rpcCall(1, "history", [])) as number;
   }
 
   /** Disconnect from the node. */

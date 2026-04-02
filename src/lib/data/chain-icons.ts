@@ -51,6 +51,7 @@ export const NAMED_CHAIN_ICONS: Record<string, string> = {
   aptos:     `${TW}/aptos/info/logo.png`,
   sui:       `${TW}/sui/info/logo.png`,
   hedera:    `${TW}/hedera/info/logo.png`,
+  bitshares: "https://coin-images.coingecko.com/coins/images/95/small/bts.png",
   bittensor: "https://coin-images.coingecko.com/coins/images/28452/small/ARUsPeNQ_400x400.jpeg",
   hl:        "https://coin-images.coingecko.com/coins/images/50882/small/hyperliquid.jpg?1729431300",
   doge:      `${TW}/doge/info/logo.png`,
