@@ -30,7 +30,7 @@
     import { mode, setMode } from "mode-watcher";
     import * as Select from "$lib/components/ui/select/index.js";
     import ListFilter from "$lib/components/ListFilter.svelte";
-    import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
+    import { getFiatFlagUrl, clearIconCache } from "$lib/data/coin-icons.svelte.js";
     import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
     import { invalidate } from "$lib/data/invalidation.js";
     import {
@@ -551,8 +551,10 @@
             label: msg.settings_clear_ledger_data(),
             async run() {
                 await getBackend().clearLedgerData();
+                await clearIconCache();
                 await reloadHiddenCurrencies(getBackend());
                 currencies = [];
+                invalidate("currencies");
                 toast.success(msg.toast_ledger_data_cleared());
                 return { summary: "Ledger data cleared" };
             },
@@ -569,6 +571,7 @@
             label: msg.settings_clear_all_data(),
             async run() {
                 await getBackend().clearAllData();
+                await clearIconCache();
                 settings.reset();
                 currencies = [];
                 invalidate("currencies");

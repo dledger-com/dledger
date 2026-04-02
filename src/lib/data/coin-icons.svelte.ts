@@ -24,7 +24,7 @@ const COINGECKO_IDS: Record<string, string> = {
   EIGEN: "eigenlayer", LIDO: "lido-dao", RPL: "rocket-pool",
   FTM: "fantom", CELO: "celo", GLMR: "moonbeam", MOVR: "moonriver",
   MNT: "mantle", APE: "apecoin", CHZ: "chiliz", VET: "vechain",
-  BERA: "berachain", HYPE: "hyperliquid",
+  BERA: "berachain", HYPE: "hyperliquid", BTS: "bitshares",
   JUP: "jupiter-exchange-solana", JTO: "jito-governance-token",
   RAY: "raydium", MNDE: "marinade",
   ETC: "ethereum-classic", FLR: "flare-networks", BCH: "bitcoin-cash",
@@ -213,6 +213,19 @@ export function getCoinIconUrl(symbol: string): string | null {
 export function onCoinIconsChanged(fn: () => void): () => void {
   _listeners.add(fn);
   return () => _listeners.delete(fn);
+}
+
+/** Clear all cached coin icons (localStorage + IndexedDB). */
+export async function clearIconCache(): Promise<void> {
+  _icons.clear();
+  _initialized = false;
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  try {
+    const db = await openIconDB();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).clear();
+  } catch { /* ignore */ }
+  notify();
 }
 
 /** Check if a cached value is a local data URI (not an external URL that needs re-fetching) */
