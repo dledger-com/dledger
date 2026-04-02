@@ -20,6 +20,10 @@ function coinSymbol(coinType: string): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -157,7 +161,7 @@ export async function syncSuiAccount(
 
 			// Counterparty equity line
 			lineItemData.push({
-				account: walletExternal(CHAIN, shortAddr(account.address)),
+				account: walletExternal(CHAIN, accountPathAddr(account.address)),
 				currency: symbol,
 				amount: amount.neg().toFixed(),
 			});

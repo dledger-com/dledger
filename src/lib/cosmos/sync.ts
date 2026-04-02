@@ -24,6 +24,10 @@ function parseDenom(denom: string): { symbol: string; exponent: number } {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 10)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 10)}-${addr.slice(-4)}` : addr;
 }
 
@@ -155,12 +159,12 @@ export async function syncCosmosAccount(
 
 					if (isSender) {
 						direction = "sent";
-						const counterparty = shortAddr(m.to_address);
+						const counterparty = accountPathAddr(m.to_address);
 						lineItemData.push({ account: walletAssets(CHAIN, account.label), currency: symbol, amount: rawAmount.neg().toFixed() });
 						lineItemData.push({ account: walletExternal(CHAIN, counterparty), currency: symbol, amount: rawAmount.toFixed() });
 					} else {
 						direction = "received";
-						const counterparty = shortAddr(m.from_address);
+						const counterparty = accountPathAddr(m.from_address);
 						lineItemData.push({ account: walletAssets(CHAIN, account.label), currency: symbol, amount: rawAmount.toFixed() });
 						lineItemData.push({ account: walletExternal(CHAIN, counterparty), currency: symbol, amount: rawAmount.neg().toFixed() });
 					}
@@ -212,12 +216,12 @@ export async function syncCosmosAccount(
 
 				if (isSender) {
 					direction = "sent";
-					const counterparty = shortAddr(m.receiver);
+					const counterparty = accountPathAddr(m.receiver);
 					lineItemData.push({ account: walletAssets(CHAIN, account.label), currency: symbol, amount: rawAmount.neg().toFixed() });
 					lineItemData.push({ account: walletExternal(CHAIN, counterparty), currency: symbol, amount: rawAmount.toFixed() });
 				} else {
 					direction = "received";
-					const counterparty = shortAddr(m.sender);
+					const counterparty = accountPathAddr(m.sender);
 					lineItemData.push({ account: walletAssets(CHAIN, account.label), currency: symbol, amount: rawAmount.toFixed() });
 					lineItemData.push({ account: walletExternal(CHAIN, counterparty), currency: symbol, amount: rawAmount.neg().toFixed() });
 				}

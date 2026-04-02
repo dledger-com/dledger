@@ -19,6 +19,10 @@ function tinybarToHbar(tinybar: number): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -154,12 +158,12 @@ export async function syncHederaAccount(
 		if (direction === "received") {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "HBAR", amount: hbarAmount },
-				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "HBAR", amount: new Decimal(hbarAmount).neg().toFixed() },
+				{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "HBAR", amount: new Decimal(hbarAmount).neg().toFixed() },
 			);
 		} else {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "HBAR", amount: new Decimal(hbarAmount).neg().toFixed() },
-				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "HBAR", amount: hbarAmount },
+				{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "HBAR", amount: hbarAmount },
 			);
 		}
 

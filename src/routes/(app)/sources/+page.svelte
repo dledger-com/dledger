@@ -1027,7 +1027,9 @@
                             {#each sortedBlockchainRows as row}
                                 {#if row.kind === "btc"}
                                     {@const account = row.data}
-                                    {@const isSyncing = taskQueue.isActive(`btc-sync:${account.id}`)}
+                                    {@const isSyncing = taskQueue.isRunning(`btc-sync:${account.id}`)}
+                                    {@const isQueued = taskQueue.isQueued(`btc-sync:${account.id}`)}
+                                    {@const thisAccountBusy = isSyncing || isQueued}
                                     <!-- BTC Mobile row -->
                                     <Table.Row class="sm:hidden">
                                         <Table.Cell colspan={99} class="py-2 px-3">
@@ -1055,9 +1057,9 @@
                                                             {/snippet}
                                                         </DropdownMenu.Trigger>
                                                         <DropdownMenu.Content align="end">
-                                                            <DropdownMenu.Item disabled={btcBusy} onclick={() => syncBtcAccount(account)}><RefreshCw class="mr-2 h-4 w-4" />{m.sources_sync()}</DropdownMenu.Item>
+                                                            <DropdownMenu.Item disabled={thisAccountBusy} onclick={() => syncBtcAccount(account)}><RefreshCw class="mr-2 h-4 w-4" />{isSyncing ? m.state_syncing() : isQueued ? m.state_queued() : m.sources_sync()}</DropdownMenu.Item>
                                                             <DropdownMenu.Item onclick={() => startEditLabel(account.id, account.label)}><Pencil class="mr-2 h-4 w-4" />{m.btn_rename()}</DropdownMenu.Item>
-                                                            <DropdownMenu.Item disabled={btcBusy} onclick={() => handleRemoveBtcAccount(account.id)}><Trash2 class="mr-2 h-4 w-4" />{m.btn_delete()}</DropdownMenu.Item>
+                                                            <DropdownMenu.Item disabled={thisAccountBusy} onclick={() => handleRemoveBtcAccount(account.id)}><Trash2 class="mr-2 h-4 w-4" />{m.btn_delete()}</DropdownMenu.Item>
                                                         </DropdownMenu.Content>
                                                     </DropdownMenu.Root>
                                                 </div>
@@ -1107,19 +1109,19 @@
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => syncBtcAccount(account)}
-                                                    disabled={btcBusy || editingRowId === account.id}
+                                                    disabled={thisAccountBusy || editingRowId === account.id}
                                                 >
-                                                    <RefreshCw class="mr-1 h-3 w-3" />
-                                                    {isSyncing ? m.state_syncing() : m.sources_sync()}
+                                                    <RefreshCw class="mr-1 h-3 w-3 {isSyncing ? 'animate-spin' : ''}" />
+                                                    {isSyncing ? m.state_syncing() : isQueued ? m.state_queued() : m.sources_sync()}
                                                 </Button>
-                                                <Button variant={editingRowId === account.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === account.id ? (editingRowId = null) : startEditLabel(account.id, account.label)} disabled={btcBusy}>
+                                                <Button variant={editingRowId === account.id ? "default" : "outline"} size="sm" onclick={() => editingRowId === account.id ? (editingRowId = null) : startEditLabel(account.id, account.label)} disabled={thisAccountBusy}>
                                                     <Pencil class="h-3 w-3" />
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onclick={() => handleRemoveBtcAccount(account.id)}
-                                                    disabled={btcBusy || editingRowId === account.id}
+                                                    disabled={thisAccountBusy || editingRowId === account.id}
                                                 >
                                                     <Trash2 class="h-3 w-3" />
                                                 </Button>
@@ -1246,7 +1248,9 @@
                                         </Table.Row>
                                     {:else}
                                         <!-- EVM Display mode -->
-                                        {@const isSyncingGroup = taskQueue.isActive(`etherscan-sync:${group.address}`)}
+                                        {@const isSyncingGroup = taskQueue.isRunning(`etherscan-sync:${group.address}`)}
+                                        {@const isQueuedGroup = taskQueue.isQueued(`etherscan-sync:${group.address}`)}
+                                        {@const thisGroupBusy = isSyncingGroup || isQueuedGroup}
                                         <!-- EVM Mobile row -->
                                         <Table.Row class="sm:hidden">
                                             <Table.Cell colspan={99} class="py-2 px-3">
@@ -1277,9 +1281,9 @@
                                                                 {/snippet}
                                                             </DropdownMenu.Trigger>
                                                             <DropdownMenu.Content align="end">
-                                                                <DropdownMenu.Item disabled={ethBusy || reprocessing || applyingReprocess} onclick={() => handleSyncGroup(group)}><RefreshCw class="mr-2 h-4 w-4" />{m.sources_sync()}</DropdownMenu.Item>
-                                                                <DropdownMenu.Item disabled={ethBusy || reprocessing || applyingReprocess} onclick={() => startEditAddress(group)}><Pencil class="mr-2 h-4 w-4" />{m.btn_rename()}</DropdownMenu.Item>
-                                                                <DropdownMenu.Item disabled={ethBusy || reprocessing || applyingReprocess} onclick={() => handleRemoveGroup(group)}><Trash2 class="mr-2 h-4 w-4" />{m.btn_delete()}</DropdownMenu.Item>
+                                                                <DropdownMenu.Item disabled={thisGroupBusy || reprocessing || applyingReprocess} onclick={() => handleSyncGroup(group)}><RefreshCw class="mr-2 h-4 w-4" />{isSyncingGroup ? m.state_syncing() : isQueuedGroup ? m.state_queued() : m.sources_sync()}</DropdownMenu.Item>
+                                                                <DropdownMenu.Item disabled={thisGroupBusy || reprocessing || applyingReprocess} onclick={() => startEditAddress(group)}><Pencil class="mr-2 h-4 w-4" />{m.btn_rename()}</DropdownMenu.Item>
+                                                                <DropdownMenu.Item disabled={thisGroupBusy || reprocessing || applyingReprocess} onclick={() => handleRemoveGroup(group)}><Trash2 class="mr-2 h-4 w-4" />{m.btn_delete()}</DropdownMenu.Item>
                                                             </DropdownMenu.Content>
                                                         </DropdownMenu.Root>
                                                     </div>
@@ -1317,16 +1321,16 @@
                                                         variant="outline"
                                                         size="sm"
                                                         onclick={() => handleSyncGroup(group)}
-                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                        disabled={thisGroupBusy || reprocessing || applyingReprocess}
                                                     >
-                                                        <RefreshCw class="mr-1 h-3 w-3" />
-                                                        {isSyncingGroup ? m.state_syncing() : m.sources_sync()}
+                                                        <RefreshCw class="mr-1 h-3 w-3 {isSyncingGroup ? 'animate-spin' : ''}" />
+                                                        {isSyncingGroup ? m.state_syncing() : isQueuedGroup ? m.state_queued() : m.sources_sync()}
                                                     </Button>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
                                                         onclick={() => startEditAddress(group)}
-                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                        disabled={thisGroupBusy || reprocessing || applyingReprocess}
                                                     >
                                                         <Pencil class="h-3 w-3" />
                                                     </Button>
@@ -1334,7 +1338,7 @@
                                                         variant="outline"
                                                         size="sm"
                                                         onclick={() => handleRemoveGroup(group)}
-                                                        disabled={ethBusy || reprocessing || applyingReprocess}
+                                                        disabled={thisGroupBusy || reprocessing || applyingReprocess}
                                                     >
                                                         <Trash2 class="h-3 w-3" />
                                                     </Button>

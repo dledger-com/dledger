@@ -20,6 +20,10 @@ function assetSymbol(op: StellarOperation): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -150,12 +154,12 @@ export async function syncStellarAccount(
 			if (isSender) {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: symbol, amount: amount.neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(op.to)), currency: symbol, amount: amount.toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(op.to)), currency: symbol, amount: amount.toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: symbol, amount: amount.toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(op.from)), currency: symbol, amount: amount.neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(op.from)), currency: symbol, amount: amount.neg().toFixed() },
 				);
 			}
 		} else if (op.type === "create_account") {
@@ -173,12 +177,12 @@ export async function syncStellarAccount(
 			if (isFunder) {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "XLM", amount: amount.neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(op.account)), currency: "XLM", amount: amount.toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(op.account)), currency: "XLM", amount: amount.toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "XLM", amount: amount.toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(op.funder)), currency: "XLM", amount: amount.neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(op.funder)), currency: "XLM", amount: amount.neg().toFixed() },
 				);
 			}
 		} else {

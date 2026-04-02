@@ -46,6 +46,11 @@ const SOURCE_PREFIX = "bitshares";
 
 function shortAddr(addr: string): string {
   if (addr.length <= 16) return addr;
+  return `${addr.slice(0, 8)}…${addr.slice(-4)}`;
+}
+
+function accountPathAddr(addr: string): string {
+  if (addr.length <= 16) return addr;
   return `${addr.slice(0, 8)}-${addr.slice(-4)}`;
 }
 
@@ -277,7 +282,7 @@ async function processOperation(
       });
 
       const wallet = walletAssets(CHAIN, label);
-      const ext = walletExternal(CHAIN, counterpartyShort);
+      const ext = walletExternal(CHAIN, accountPathAddr(counterparty));
 
       if (isSend) {
         items.push({ account: wallet, currency: amt.symbol, amount: new Decimal(amt.amount).neg().toFixed() });

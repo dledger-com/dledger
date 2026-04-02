@@ -44,7 +44,7 @@ describe("lamportsToSol", () => {
 
 describe("shortAddr", () => {
   it("truncates long addresses", () => {
-    expect(shortAddr("So11111111111111111111111111111111111111112")).toBe("So111111-1112");
+    expect(shortAddr("So11111111111111111111111111111111111111112")).toBe("So111111…1112");
   });
 
   it("keeps short addresses as-is", () => {

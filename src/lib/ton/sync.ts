@@ -15,6 +15,10 @@ const CHAIN = "TON";
 const TON_DECIMALS = 9;
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -148,7 +152,7 @@ export async function syncTonAccount(
 						amount: amountTon.toFixed(),
 					});
 					lineItemData.push({
-						account: walletExternal(CHAIN, shortAddr(transfer.sender.address)),
+						account: walletExternal(CHAIN, accountPathAddr(transfer.sender.address)),
 						currency: "TON",
 						amount: amountTon.neg().toFixed(),
 					});
@@ -160,7 +164,7 @@ export async function syncTonAccount(
 						amount: amountTon.neg().toFixed(),
 					});
 					lineItemData.push({
-						account: walletExternal(CHAIN, shortAddr(transfer.recipient.address)),
+						account: walletExternal(CHAIN, accountPathAddr(transfer.recipient.address)),
 						currency: "TON",
 						amount: amountTon.toFixed(),
 					});
@@ -187,7 +191,7 @@ export async function syncTonAccount(
 						amount: amountJetton.toFixed(),
 					});
 					lineItemData.push({
-						account: walletExternal(CHAIN, shortAddr(transfer.sender?.address ?? "unknown")),
+						account: walletExternal(CHAIN, accountPathAddr(transfer.sender?.address ?? "unknown")),
 						currency: symbol,
 						amount: amountJetton.neg().toFixed(),
 					});
@@ -199,7 +203,7 @@ export async function syncTonAccount(
 						amount: amountJetton.neg().toFixed(),
 					});
 					lineItemData.push({
-						account: walletExternal(CHAIN, shortAddr(transfer.recipient?.address ?? "unknown")),
+						account: walletExternal(CHAIN, accountPathAddr(transfer.recipient?.address ?? "unknown")),
 						currency: symbol,
 						amount: amountJetton.toFixed(),
 					});

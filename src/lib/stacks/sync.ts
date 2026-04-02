@@ -19,6 +19,10 @@ function microToStx(micro: string): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -145,17 +149,17 @@ export async function syncStacksAccount(
 			if (direction === "sent") {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "STX", amount: new Decimal(amount).neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "STX", amount: amount },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "STX", amount: amount },
 				);
 			} else if (direction === "received") {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "STX", amount: amount },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "STX", amount: new Decimal(amount).neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "STX", amount: new Decimal(amount).neg().toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "STX", amount: "0" },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "STX", amount: "0" },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "STX", amount: "0" },
 				);
 			}
 

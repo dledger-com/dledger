@@ -22,6 +22,14 @@ function shortAddr(addr: string): string {
 	// kaspa: prefix + bech32 — show prefix + first few + last few
 	if (addr.startsWith("kaspa:")) {
 		const body = addr.slice(6);
+		return body.length > 12 ? `kaspa:${body.slice(0, 6)}…${body.slice(-4)}` : addr;
+	}
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
+	if (addr.startsWith("kaspa:")) {
+		const body = addr.slice(6);
 		return body.length > 12 ? `kaspa:${body.slice(0, 6)}-${body.slice(-4)}` : addr;
 	}
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
@@ -164,12 +172,12 @@ export async function syncKaspaAccount(
 		if (direction === "sent") {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "KAS", amount: new Decimal(amount).neg().toFixed() },
-				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "KAS", amount: amount },
+				{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "KAS", amount: amount },
 			);
 		} else {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "KAS", amount: amount },
-				{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "KAS", amount: new Decimal(amount).neg().toFixed() },
+				{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "KAS", amount: new Decimal(amount).neg().toFixed() },
 			);
 		}
 

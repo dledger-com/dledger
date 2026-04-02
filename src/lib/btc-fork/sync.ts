@@ -13,6 +13,10 @@ import { fetchTransactions } from "./api.js";
 import type { BtcForkAccount, BtcForkChainConfig, BtcForkSyncResult, NormalizedTx } from "./types.js";
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -164,7 +168,7 @@ export async function syncBtcForkAccount(
 
 			lineItemData.push(
 				{ account: walletAssets(config.name, account.label), currency: config.symbol, amount: new Decimal(sentCoins).neg().toFixed() },
-				{ account: walletExternal(config.name, shortAddr(primaryRecipient)), currency: config.symbol, amount: sentCoins },
+				{ account: walletExternal(config.name, accountPathAddr(primaryRecipient)), currency: config.symbol, amount: sentCoins },
 			);
 
 			// Fee
@@ -186,7 +190,7 @@ export async function syncBtcForkAccount(
 
 			lineItemData.push(
 				{ account: walletAssets(config.name, account.label), currency: config.symbol, amount: receivedCoins },
-				{ account: walletExternal(config.name, shortAddr(senderAddr)), currency: config.symbol, amount: new Decimal(receivedCoins).neg().toFixed() },
+				{ account: walletExternal(config.name, accountPathAddr(senderAddr)), currency: config.symbol, amount: new Decimal(receivedCoins).neg().toFixed() },
 			);
 		} else {
 			// Address not in inputs or outputs — skip

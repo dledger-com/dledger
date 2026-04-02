@@ -20,6 +20,11 @@ function yoctoToNear(yocto: string): string {
 
 function shortAddr(addr: string): string {
 	if (addr.endsWith(".near")) return addr;
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
+	if (addr.endsWith(".near")) return addr;
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -150,17 +155,17 @@ export async function syncNearAccount(
 			if (direction === "sent") {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "NEAR", amount: new Decimal(amount).neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "NEAR", amount: amount },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "NEAR", amount: amount },
 				);
 			} else if (direction === "received") {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "NEAR", amount: amount },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "NEAR", amount: new Decimal(amount).neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "NEAR", amount: new Decimal(amount).neg().toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "NEAR", amount: "0" },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "NEAR", amount: "0" },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "NEAR", amount: "0" },
 				);
 			}
 

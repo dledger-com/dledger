@@ -14,6 +14,11 @@ export function satsToBtc(sats: number): Decimal {
 /** Truncate an address for use in descriptions/account paths (first 8 chars + last 4). */
 export function shortAddr(addr: string): string {
   if (addr.length <= 16) return addr;
+  return `${addr.slice(0, 8)}…${addr.slice(-4)}`;
+}
+
+export function accountPathAddr(addr: string): string {
+  if (addr.length <= 16) return addr;
   return `${addr.slice(0, 8)}-${addr.slice(-4)}`;
 }
 
@@ -21,7 +26,7 @@ export function shortAddr(addr: string): string {
  * Build journal line items from a classified Bitcoin transaction.
  *
  * Uses walletAssets("Bitcoin", label) for wallet accounts,
- * walletExternal("Bitcoin", shortAddr) for external counterparties,
+ * walletExternal("Bitcoin", accountPathAddr) for external counterparties,
  * and chainFees("Bitcoin") for fees.
  *
  * All items sum to zero per currency (double-entry invariant).
@@ -57,7 +62,7 @@ export function buildBtcItems(
       const counterparty = externalInputAddrs[0] ?? "unknown";
       const totalReceived = satsToBtc(classification.externalReceived);
       items.push({
-        account: walletExternal("Bitcoin", shortAddr(counterparty)),
+        account: walletExternal("Bitcoin", accountPathAddr(counterparty)),
         currency: "BTC",
         amount: totalReceived.negated(),
       });
@@ -78,7 +83,7 @@ export function buildBtcItems(
       // External recipients
       const recipient = classification.externalRecipients[0] ?? "unknown";
       items.push({
-        account: walletExternal("Bitcoin", shortAddr(recipient)),
+        account: walletExternal("Bitcoin", accountPathAddr(recipient)),
         currency: "BTC",
         amount: satsToBtc(classification.externalSent),
       });

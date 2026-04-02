@@ -15,6 +15,10 @@ const CHAIN = "Tezos";
 const MUTEZ_DIVISOR = new Decimal("1000000"); // 10^6
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -139,8 +143,8 @@ export async function syncTezosAccount(
 		if (!xtzAmount.isZero()) {
 			const signedAmount = direction === "received" ? xtzAmount : xtzAmount.neg();
 			const counterparty = direction === "sent"
-				? shortAddr(op.target?.address ?? "unknown")
-				: shortAddr(op.sender.address);
+				? accountPathAddr(op.target?.address ?? "unknown")
+				: accountPathAddr(op.sender.address);
 
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "XTZ", amount: signedAmount.toFixed() },
@@ -233,8 +237,8 @@ export async function syncTezosAccount(
 		const signedAmount = direction === "received" ? tokenAmount : tokenAmount.neg();
 
 		const counterparty = direction === "sent"
-			? shortAddr(tt.to?.address ?? "unknown")
-			: shortAddr(tt.from?.address ?? "unknown");
+			? accountPathAddr(tt.to?.address ?? "unknown")
+			: accountPathAddr(tt.from?.address ?? "unknown");
 
 		const lineItemData: Array<{ account: string; currency: string; amount: string }> = [
 			{ account: walletAssets(CHAIN, account.label), currency: symbol, amount: signedAmount.toFixed() },

@@ -22,6 +22,10 @@ function coinSymbol(assetType: string): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -157,7 +161,7 @@ export async function syncAptosAccount(
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: symbol, amount: signedAmount.toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(account.address)), currency: symbol, amount: signedAmount.neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(account.address)), currency: symbol, amount: signedAmount.neg().toFixed() },
 				);
 
 				if (signedAmount.gt(0)) netDirection = "received";

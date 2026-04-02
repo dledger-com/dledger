@@ -30,6 +30,10 @@ function parseAmount(amount: string | XrpIssuedAmount): { currency: string; valu
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -169,7 +173,7 @@ export async function syncXrpAccount(
 			// Outgoing payment: debit external, credit our wallet
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency, amount: amount.neg().toFixed() },
-				{ account: walletExternal(CHAIN, shortAddr(tx.Destination ?? "unknown")), currency, amount: amount.toFixed() },
+				{ account: walletExternal(CHAIN, accountPathAddr(tx.Destination ?? "unknown")), currency, amount: amount.toFixed() },
 			);
 			// Fee (always XRP, always paid by sender)
 			lineItemData.push(
@@ -180,7 +184,7 @@ export async function syncXrpAccount(
 			// Incoming payment: debit our wallet, credit external
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency, amount: amount.toFixed() },
-				{ account: walletExternal(CHAIN, shortAddr(tx.Account)), currency, amount: amount.neg().toFixed() },
+				{ account: walletExternal(CHAIN, accountPathAddr(tx.Account)), currency, amount: amount.neg().toFixed() },
 			);
 		}
 

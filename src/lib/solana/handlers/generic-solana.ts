@@ -20,6 +20,11 @@ export function lamportsToSol(lamports: number): Decimal {
 /** Truncate an address for use in descriptions/account paths. */
 export function shortAddr(addr: string): string {
   if (addr.length <= 16) return addr;
+  return `${addr.slice(0, 8)}…${addr.slice(-4)}`;
+}
+
+export function accountPathAddr(addr: string): string {
+  if (addr.length <= 16) return addr;
   return `${addr.slice(0, 8)}-${addr.slice(-4)}`;
 }
 
@@ -84,7 +89,7 @@ export const genericSolanaHandler: SolanaHandler = {
       // Counterparty
       const counterpartyAddr = Array.from(externalAddresses)[0] ?? "unknown";
       items.push({
-        account: walletExternal("Solana", shortAddr(counterpartyAddr)),
+        account: walletExternal("Solana", accountPathAddr(counterpartyAddr)),
         currency: "SOL",
         amount: lamportsToSol(-netSolLamports),
       });
@@ -107,7 +112,7 @@ export const genericSolanaHandler: SolanaHandler = {
 
       const counterpartyAddr = flow.counterparties[0] ?? "unknown";
       items.push({
-        account: walletExternal("Solana", shortAddr(counterpartyAddr)),
+        account: walletExternal("Solana", accountPathAddr(counterpartyAddr)),
         currency: symbol,
         amount: tokenAmount.negated(),
       });

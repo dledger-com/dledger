@@ -20,6 +20,10 @@ function lovelaceToAda(lovelace: string): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 10)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 10)}-${addr.slice(-4)}` : addr;
 }
 
@@ -194,7 +198,7 @@ export async function syncCardanoAccount(
 			if (sentAmount.gt(0) && counterparty) {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "ADA", amount: lovelaceToAda(sentAmount.neg().toFixed()) },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "ADA", amount: lovelaceToAda(sentAmount.toFixed()) },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "ADA", amount: lovelaceToAda(sentAmount.toFixed()) },
 				);
 			}
 			if (fee.gt(0)) {
@@ -206,7 +210,7 @@ export async function syncCardanoAccount(
 		} else if (direction === "received") {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "ADA", amount: lovelaceToAda(netChange.toFixed()) },
-				{ account: walletExternal(CHAIN, shortAddr(counterparty ?? "unknown")), currency: "ADA", amount: lovelaceToAda(netChange.neg().toFixed()) },
+				{ account: walletExternal(CHAIN, accountPathAddr(counterparty ?? "unknown")), currency: "ADA", amount: lovelaceToAda(netChange.neg().toFixed()) },
 			);
 		} else {
 			// Self-transfer: only fee matters

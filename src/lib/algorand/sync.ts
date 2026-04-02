@@ -19,6 +19,10 @@ function microToAlgo(micro: number): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -140,17 +144,17 @@ export async function syncAlgorandAccount(
 			if (direction === "sent") {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "ALGO", amount: new Decimal(amount).neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "ALGO", amount: amount },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "ALGO", amount: amount },
 				);
 			} else if (direction === "received") {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "ALGO", amount: amount },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "ALGO", amount: new Decimal(amount).neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "ALGO", amount: new Decimal(amount).neg().toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "ALGO", amount: "0" },
-					{ account: walletExternal(CHAIN, shortAddr(counterparty)), currency: "ALGO", amount: "0" },
+					{ account: walletExternal(CHAIN, accountPathAddr(counterparty)), currency: "ALGO", amount: "0" },
 				);
 			}
 

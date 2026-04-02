@@ -19,6 +19,10 @@ function satoshiToZec(satoshi: number): string {
 }
 
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -132,12 +136,12 @@ export async function syncZcashAccount(
 		if (direction === "received") {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "ZEC", amount: amount },
-				{ account: walletExternal(CHAIN, shortAddr(account.address)), currency: "ZEC", amount: new Decimal(amount).neg().toFixed() },
+				{ account: walletExternal(CHAIN, accountPathAddr(account.address)), currency: "ZEC", amount: new Decimal(amount).neg().toFixed() },
 			);
 		} else {
 			lineItemData.push(
 				{ account: walletAssets(CHAIN, account.label), currency: "ZEC", amount: new Decimal(amount).neg().toFixed() },
-				{ account: walletExternal(CHAIN, shortAddr(account.address)), currency: "ZEC", amount: amount },
+				{ account: walletExternal(CHAIN, accountPathAddr(account.address)), currency: "ZEC", amount: amount },
 			);
 		}
 

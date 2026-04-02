@@ -21,6 +21,10 @@ function sunToTrx(sun: number): string {
 
 /** Convert hex-encoded TRON address to Base58Check T-address for display */
 function shortAddr(addr: string): string {
+	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function accountPathAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}-${addr.slice(-4)}` : addr;
 }
 
@@ -164,12 +168,12 @@ export async function syncTronAccount(
 			if (isSender) {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "TRX", amount: decAmount.neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(value.to_address)), currency: "TRX", amount: decAmount.toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(value.to_address)), currency: "TRX", amount: decAmount.toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: "TRX", amount: decAmount.toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(value.owner_address)), currency: "TRX", amount: decAmount.neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(value.owner_address)), currency: "TRX", amount: decAmount.neg().toFixed() },
 				);
 			}
 		} else if (contract.type === "TriggerSmartContract") {
@@ -193,12 +197,12 @@ export async function syncTronAccount(
 			if (isSender) {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: tokenSymbol, amount: decAmount.neg().toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(transfer.to)), currency: tokenSymbol, amount: decAmount.toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(transfer.to)), currency: tokenSymbol, amount: decAmount.toFixed() },
 				);
 			} else {
 				lineItemData.push(
 					{ account: walletAssets(CHAIN, account.label), currency: tokenSymbol, amount: decAmount.toFixed() },
-					{ account: walletExternal(CHAIN, shortAddr(value.owner_address)), currency: tokenSymbol, amount: decAmount.neg().toFixed() },
+					{ account: walletExternal(CHAIN, accountPathAddr(value.owner_address)), currency: tokenSymbol, amount: decAmount.neg().toFixed() },
 				);
 			}
 		} else {
