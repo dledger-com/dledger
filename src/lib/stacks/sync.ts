@@ -7,6 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription, onchainTransferDescription } from "../types/description-data.js";
 import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
+import { FIAT_CURRENCIES } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
 import type { StacksAccount, StacksSyncResult, StacksTransaction } from "./types.js";
 
@@ -46,6 +47,7 @@ export async function syncStacksAccount(
 	onProgress?.(`Found ${transactions.length} transactions.`);
 
 	// 2. Build caches
+	const newCurrencies: string[] = [];
 	const currencySet = new Set((await backend.listCurrencies()).map(c => c.code));
 	const accountMap = new Map<string, Account>();
 	for (const acc of await backend.listAccounts()) accountMap.set(acc.full_name, acc);
@@ -57,6 +59,7 @@ export async function syncStacksAccount(
 	async function ensureCurrency(code: string, decimals?: number): Promise<void> {
 		if (currencySet.has(code)) return;
 		await backend.createCurrency({ code, asset_type: "", param: "", name: code, decimal_places: decimals ?? STX_DECIMALS, is_base: false });
+		newCurrencies.push(code);
 		currencySet.add(code);
 	}
 
@@ -201,5 +204,12 @@ export async function syncStacksAccount(
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);
 	invalidate("journal", "accounts", "reports");
+
+	// Reclassify newly created currencies as crypto
+	for (const code of newCurrencies) {
+		const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
+		try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
+	}
+
 	return result;
 }

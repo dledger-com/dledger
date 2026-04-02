@@ -3,6 +3,7 @@ import type { Backend } from "../backend.js";
 import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import type { AppSettings } from "../data/settings.svelte.js";
 import { renderDescription } from "../types/description-data.js";
+import { FIAT_CURRENCIES } from "../currency-type.js";
 import { fetchTransactionHistory } from "./api.js";
 import { SolanaHandlerRegistry } from "./handlers/registry.js";
 import { genericSolanaHandler } from "./handlers/generic-solana.js";
@@ -88,6 +89,7 @@ export async function syncSolanaAccount(
   transactions.sort((a, b) => a.timestamp - b.timestamp);
 
   // 2. Build caches for dedup and account/currency ensurance
+  const newCurrencies: string[] = [];
   const currencySet = new Set(
     (await backend.listCurrencies()).map(c => c.code),
   );
@@ -116,6 +118,7 @@ export async function syncSolanaAccount(
       decimal_places: decimals,
       is_base: false,
     });
+    newCurrencies.push(code);
     currencySet.add(code);
 
     // Store token address mapping for rate lookups
@@ -305,6 +308,13 @@ export async function syncSolanaAccount(
   // 4. Update last_signature cursor
   if (latestSignature && latestSignature !== account.last_signature) {
     await backend.updateSolanaLastSignature(account.id, latestSignature);
+  }
+
+
+  // Reclassify newly created currencies as crypto
+  for (const code of newCurrencies) {
+    const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
+    try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
   }
 
   return result;

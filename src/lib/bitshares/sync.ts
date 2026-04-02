@@ -13,6 +13,7 @@ import {
   operationDescription,
   type DescriptionData,
 } from "../types/description-data.js";
+import { FIAT_CURRENCIES } from "../currency-type.js";
 import {
   walletAssets,
   walletExternal,
@@ -79,6 +80,7 @@ export async function syncBitsharesAccount(
     warnings: [],
   };
 
+  const newCurrencies: string[] = [];
   const client = new BitsharesClient();
   try {
     onProgress?.("Connecting to Bitshares node...");
@@ -112,6 +114,7 @@ export async function syncBitsharesAccount(
         code: symbol, asset_type: "", param: "",
         name: symbol, decimal_places: precision, is_base: false,
       });
+      newCurrencies.push(symbol);
       currencySet.add(symbol);
     }
 
@@ -235,6 +238,13 @@ export async function syncBitsharesAccount(
     }
   } finally {
     client.disconnect();
+  }
+
+  // Reclassify newly created currencies (must happen after all line items are posted
+  // because the currency PK changes and line_item FK defaults to asset_type="")
+  for (const code of newCurrencies) {
+    const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
+    try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
   }
 
   return result;

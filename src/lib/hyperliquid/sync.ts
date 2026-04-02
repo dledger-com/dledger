@@ -7,6 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription, tradeDescription, transferDescription, perpTradeDescription, fundingDescription } from "../types/description-data.js";
 import { defiAssets, defiIncome, defiExpense, EQUITY_TRADING } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
+import { FIAT_CURRENCIES } from "../currency-type.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
 import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
 import type { HlSpotMeta } from "./api.js";
@@ -104,6 +105,7 @@ export async function syncHyperliquidAccount(
 	}
 
 	// 2. Build caches
+	const newCurrencies: string[] = [];
 	const currencySet = new Set(
 		(await backend.listCurrencies()).map((c) => c.code),
 	);
@@ -130,6 +132,7 @@ export async function syncHyperliquidAccount(
 			decimal_places: 8,
 			is_base: false,
 		});
+		newCurrencies.push(code);
 		currencySet.add(code);
 	}
 
@@ -527,6 +530,13 @@ export async function syncHyperliquidAccount(
 	onProgress?.(`Done: ${result.fills_imported} fills, ${result.funding_imported} funding, ${result.ledger_imported} ledger.`);
 
 	invalidate("journal", "accounts", "reports");
+
+
+	// Reclassify newly created currencies as crypto
+	for (const code of newCurrencies) {
+		const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
+		try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
+	}
 
 	return result;
 }

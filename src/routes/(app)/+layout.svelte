@@ -18,7 +18,7 @@
   import { untrack } from "svelte";
   import { onMount } from "svelte";
   import { getBackend } from "$lib/backend.js";
-  import { initCoinIcons, setAssetProxy, setCryptoGeckoIds } from "$lib/data/coin-icons.svelte.js";
+  import { initCoinIcons, setAssetProxy, setCryptoGeckoIds, setAsyncGeckoIdResolver } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
@@ -44,6 +44,12 @@
       dpriceUrl: settings.settings.dpriceUrl,
     });
     setAssetProxy((url) => dpriceClient.proxyAsset(url));
+    setAsyncGeckoIdResolver(async (symbol) => {
+      try {
+        const results = await dpriceClient.queryAssets({ symbol });
+        return results[0]?.coingecko_id ?? null;
+      } catch { return null; }
+    });
 
     const refreshIcons = () => {
       Promise.all([

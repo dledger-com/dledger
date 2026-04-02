@@ -163,6 +163,16 @@ function resolveGeckoId(symbol: string): string | undefined {
   return _dbGeckoIds.get(symbol) || COINGECKO_IDS[symbol] || undefined;
 }
 
+let _asyncResolveGeckoId: ((symbol: string) => Promise<string | null>) | null = null;
+
+/**
+ * Set an async resolver for CoinGecko IDs (queries dprice).
+ * Used as last resort for symbols not in the DB or hardcoded map.
+ */
+export function setAsyncGeckoIdResolver(fn: (symbol: string) => Promise<string | null>): void {
+  _asyncResolveGeckoId = fn;
+}
+
 // ---- Image fetching ----
 
 function blobToDataUri(blob: Blob): Promise<string | null> {
@@ -377,8 +387,51 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
         }
       }
 
-      // Batch 2: try unknown currencies by lowercase symbol as CoinGecko ID
-      if (unknownMissing.length > 0) {
+      // Batch 2: resolve unknown currencies via dprice, then guess remainder by lowercase symbol
+      if (unknownMissing.length > 0 && _asyncResolveGeckoId) {
+        const stillUnknown: string[] = [];
+        for (const symbol of unknownMissing) {
+          try {
+            const geckoId = await _asyncResolveGeckoId(symbol);
+            if (geckoId) {
+              _dbGeckoIds.set(symbol, geckoId); // cache for future use
+              // Fetch icon immediately
+              const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${geckoId}&per_page=1&sparkline=false`;
+              const data = await _fetchGeckoBatch(url);
+              for (const coin of data) {
+                if (coin.image && !coin.image.includes("missing")) {
+                  const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+                  _icons.set(symbol, icon);
+                  newIcons.set(symbol, icon);
+                  notify();
+                }
+              }
+            } else {
+              stillUnknown.push(symbol);
+            }
+          } catch {
+            stillUnknown.push(symbol);
+          }
+        }
+        // Fall through to guess for any still-unresolved
+        if (stillUnknown.length > 0) {
+          const guessIds = stillUnknown.map(s => s.toLowerCase());
+          for (let i = 0; i < guessIds.length; i += 250) {
+            const batch = guessIds.slice(i, i + 250);
+            const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
+            const data = await _fetchGeckoBatch(url);
+            for (const coin of data) {
+              const upper = coin.symbol.toUpperCase();
+              if (coin.image && !coin.image.includes("missing")) {
+                const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+                _icons.set(upper, icon);
+                newIcons.set(upper, icon);
+                notify();
+              }
+            }
+          }
+        }
+      } else if (unknownMissing.length > 0) {
         const guessIds = unknownMissing.map(s => s.toLowerCase());
 
         for (let i = 0; i < guessIds.length; i += 250) {

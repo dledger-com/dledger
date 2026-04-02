@@ -1894,10 +1894,34 @@ PRAGMA foreign_keys = ON;
   }
 
   async setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void> {
-    this.run(
-      "UPDATE currency SET asset_type = ? WHERE code = ? AND asset_type = ? AND param = ?",
-      [assetType, code, "", param ?? ""],
-    );
+    const oldParam = param ?? "";
+    // Temporarily disable FK checks — we need to update the currency PK and all referencing FK columns atomically
+    this.db.exec("PRAGMA foreign_keys=OFF");
+    try {
+      // Update the currency PK
+      this.run(
+        "UPDATE currency SET asset_type = ? WHERE code = ? AND asset_type = '' AND param = ?",
+        [assetType, code, oldParam],
+      );
+      // Update FK columns in all referencing tables
+      const fkUpdates = [
+        ["line_item", "currency", "currency_asset_type", "currency_param"],
+        ["lot", "currency", "currency_asset_type", "currency_param"],
+        ["lot", "cost_basis_currency", "cost_basis_currency_asset_type", "cost_basis_currency_param"],
+        ["lot_disposal", "proceeds_currency", "proceeds_currency_asset_type", "proceeds_currency_param"],
+        ["exchange_rate", "from_currency", "from_currency_asset_type", "from_currency_param"],
+        ["exchange_rate", "to_currency", "to_currency_asset_type", "to_currency_param"],
+        ["balance_assertion", "currency", "currency_asset_type", "currency_param"],
+      ];
+      for (const [table, codeCol, typeCol, paramCol] of fkUpdates) {
+        this.run(
+          `UPDATE ${table} SET ${typeCol} = ? WHERE ${codeCol} = ? AND ${typeCol} = '' AND ${paramCol} = ?`,
+          [assetType, code, oldParam],
+        );
+      }
+    } finally {
+      this.db.exec("PRAGMA foreign_keys=ON");
+    }
     this.scheduleSave();
   }
 

@@ -4,6 +4,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import type { AppSettings } from "../data/settings.svelte.js";
 import { mergeItemAccums } from "../handlers/item-builder.js";
 import { renderDescription, type DescriptionData } from "../types/description-data.js";
+import { FIAT_CURRENCIES } from "../currency-type.js";
 import { classifyBtcTx } from "./classify.js";
 import { buildBtcItems, shortAddr } from "./entries.js";
 import { fetchAddressTxs, fetchAddressInfo } from "./api.js";
@@ -201,6 +202,7 @@ export async function syncBitcoinAccount(
   });
 
   // 4. Build caches for account/currency ensurance
+  const newCurrencies: string[] = [];
   const currencySet = new Set(
     (await backend.listCurrencies()).map((c) => c.code),
   );
@@ -229,6 +231,7 @@ export async function syncBitcoinAccount(
       decimal_places: decimals,
       is_base: false,
     });
+    newCurrencies.push(code);
     currencySet.add(code);
   }
 
@@ -433,6 +436,13 @@ export async function syncBitcoinAccount(
       const msg = e instanceof Error ? e.message : String(e);
       result.warnings.push(`post tx ${tx.txid}: ${msg}`);
     }
+  }
+
+
+  // Reclassify newly created currencies as crypto
+  for (const code of newCurrencies) {
+    const type = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
+    try { await backend.setCurrencyAssetType(code, type); } catch { /* may already be classified */ }
   }
 
   return result;
