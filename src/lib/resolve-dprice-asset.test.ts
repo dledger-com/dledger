@@ -55,7 +55,7 @@ const DEPIN_NO_PRICES: DpriceAssetInfo = {
 describe("resolveDpriceAsset disambiguation", () => {
   it("returns the single result when only one asset matches", async () => {
     const result = await resolveDpriceAsset(mockClient([DEPIN_HL]), "DEPIN", "");
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 
   it("returns none when no assets match", async () => {
@@ -69,7 +69,7 @@ describe("resolveDpriceAsset disambiguation", () => {
       "DEPIN", "",
       { chain: "hyperliquid", contract_address: "0x934a7e00c1b047c2d27967663f58befe" },
     );
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 
   it("disambiguates by origin chain hint", async () => {
@@ -79,7 +79,7 @@ describe("resolveDpriceAsset disambiguation", () => {
       undefined,
       { originChain: "hyperliquid" },
     );
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 
   it("disambiguates by has-prices filter", async () => {
@@ -91,7 +91,7 @@ describe("resolveDpriceAsset disambiguation", () => {
       undefined,
     );
     // After has-prices filter, only DEPIN_HL remains
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 
   it("disambiguates by name match", async () => {
@@ -101,7 +101,7 @@ describe("resolveDpriceAsset disambiguation", () => {
       undefined,
       { name: "DEPIN" },
     );
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 
   it("picks best candidate when no heuristic resolves", async () => {
@@ -112,7 +112,7 @@ describe("resolveDpriceAsset disambiguation", () => {
       "DEPIN", "",
     );
     // DEPIN_HL has last_price_date "2026-03-17" vs DEPIN_BASE "2026-03-15"
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 
   it("backward compat: no hints still works", async () => {
@@ -120,6 +120,6 @@ describe("resolveDpriceAsset disambiguation", () => {
       mockClient([DEPIN_HL]),
       "DEPIN", "crypto",
     );
-    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto" });
+    expect(result).toEqual({ id: DEPIN_HL.id, type: "crypto", coingecko_id: "depin" });
   });
 });

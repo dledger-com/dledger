@@ -146,6 +146,23 @@ export function setAssetProxy(fn: (url: string) => Promise<Blob | null>): void {
   _proxyAsset = fn;
 }
 
+// ---- Dynamic CoinGecko ID mapping (from dprice / DB) ----
+
+let _dbGeckoIds: Map<string, string> = new Map();
+
+/**
+ * Inject CoinGecko ID mappings loaded from the crypto_asset_info table.
+ * These take priority over the hardcoded COINGECKO_IDS fallback.
+ */
+export function setCryptoGeckoIds(ids: Map<string, string>): void {
+  _dbGeckoIds = ids;
+}
+
+/** Resolve a currency symbol to its CoinGecko ID: DB first, then hardcoded fallback. */
+function resolveGeckoId(symbol: string): string | undefined {
+  return _dbGeckoIds.get(symbol) || COINGECKO_IDS[symbol] || undefined;
+}
+
 // ---- Image fetching ----
 
 function blobToDataUri(blob: Blob): Promise<string | null> {
@@ -314,7 +331,8 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
     const cached = _icons.get(upper);
     if (cached && isLocalCache(cached)) continue; // already have data URI
     if (COINGECKO_IDS[upper] === "" || FIAT_FLAGS[upper]) continue; // fiat — handled above
-    if (COINGECKO_IDS[upper]) {
+    const geckoId = resolveGeckoId(upper);
+    if (geckoId) {
       knownMissing.push(upper);
     } else {
       unknownMissing.push(upper);
@@ -338,8 +356,8 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
       // Batch 1: fetch well-known currencies by their CoinGecko ID
       if (knownMissing.length > 0) {
         const geckoIds = knownMissing
-          .map(s => COINGECKO_IDS[s])
-          .filter(Boolean);
+          .map(s => resolveGeckoId(s))
+          .filter(Boolean) as string[];
         const unique = [...new Set(geckoIds)];
 
         for (let i = 0; i < unique.length; i += 250) {
@@ -353,6 +371,7 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
               const icon = await fetchAsDataUri(coin.image) ?? coin.image;
               _icons.set(upper, icon);
               newIcons.set(upper, icon);
+              notify();
             }
           }
         }
@@ -373,6 +392,7 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
               const icon = await fetchAsDataUri(coin.image) ?? coin.image;
               _icons.set(upper, icon);
               newIcons.set(upper, icon);
+              notify();
             }
           }
         }

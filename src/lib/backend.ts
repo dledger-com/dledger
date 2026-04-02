@@ -428,6 +428,10 @@ export interface Backend {
   getRawTransaction(source: string): Promise<string | null>;
   queryRawTransactions(sourcePrefix: string): Promise<Array<{ source: string; data: string }>>;
 
+  // Crypto asset info
+  listCryptoAssetInfo(): Promise<Map<string, string>>;
+  setCryptoAssetCoingeckoId(code: string, geckoId: string): Promise<void>;
+
   // Currency origins
   getCurrencyOrigins(): Promise<CurrencyOrigin[]>;
 
@@ -1158,6 +1162,10 @@ class TauriBackend implements Backend {
   }
 
   // Currency origins
+  // Crypto asset info
+  async listCryptoAssetInfo(): Promise<Map<string, string>> { return this.invoke("list_crypto_asset_info"); }
+  async setCryptoAssetCoingeckoId(code: string, geckoId: string): Promise<void> { return this.invoke("set_crypto_asset_coingecko_id", { code, geckoId }); }
+
   async getCurrencyOrigins(): Promise<CurrencyOrigin[]> {
     return this.invoke("get_currency_origins");
   }

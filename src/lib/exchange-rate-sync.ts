@@ -132,16 +132,16 @@ export async function resolveDpriceAsset(
     name?: string;
     originChain?: string;
   },
-): Promise<{ id: string; type: string } | "none" | "ambiguous"> {
+): Promise<{ id: string; type: string; coingecko_id?: string } | "none" | "ambiguous"> {
   // Query with symbol only (no type/contract filter) to get ALL candidates,
   // then disambiguate locally with richer heuristics.
   const filter: DpriceAssetFilter = { symbol: code };
 
   const results = await client.queryAssets(filter, 10);
   if (results.length === 0) return "none";
-  if (results.length === 1) return { id: results[0].id, type: String(results[0].type) };
+  if (results.length === 1) return { id: results[0].id, type: String(results[0].type), coingecko_id: results[0].coingecko_id ?? undefined };
 
-  const pick = (r: typeof results[0]) => ({ id: r.id, type: String(r.type) });
+  const pick = (r: typeof results[0]) => ({ id: r.id, type: String(r.type), coingecko_id: r.coingecko_id ?? undefined });
   let candidates = results;
 
   // 1. Contract address match (strongest signal)
@@ -330,6 +330,9 @@ export async function syncExchangeRates(
           if (resolved !== "none" && resolved !== "ambiguous") {
             dpriceResolvedIds.set(code, resolved.id);
             if (resolved.type) dpriceResolvedTypes.set(code, resolved.type);
+            if (resolved.coingecko_id) {
+              try { await backend.setCryptoAssetCoingeckoId(code, resolved.coingecko_id); } catch { /* non-critical */ }
+            }
           }
         } catch {
           // Individual resolution failure — skip, will use symbol-based fallback
@@ -344,6 +347,9 @@ export async function syncExchangeRates(
           if (baseResolved !== "none" && baseResolved !== "ambiguous") {
             dpriceResolvedIds.set(baseCurrency, baseResolved.id);
             if (baseResolved.type) dpriceResolvedTypes.set(baseCurrency, baseResolved.type);
+            if (baseResolved.coingecko_id) {
+              try { await backend.setCryptoAssetCoingeckoId(baseCurrency, baseResolved.coingecko_id); } catch { /* non-critical */ }
+            }
           }
         } catch { /* ignore */ }
       }

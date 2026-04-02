@@ -702,7 +702,13 @@ export class SqlJsBackend implements Backend {
       last_operation_id TEXT, last_sync TEXT, created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bitshares_account_address ON bitshares_account(address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (32)");
+    // Crypto asset info (v33)
+    db.exec(`CREATE TABLE IF NOT EXISTS crypto_asset_info (
+      currency TEXT NOT NULL, currency_asset_type TEXT NOT NULL DEFAULT '', currency_param TEXT NOT NULL DEFAULT '',
+      coingecko_id TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (currency, currency_asset_type, currency_param)
+    )`);
+    db.exec("INSERT INTO schema_version (version) VALUES (33)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1348,6 +1354,15 @@ PRAGMA foreign_keys = ON;
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bitshares_account_address ON bitshares_account(address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (32)");
+        }
+        if (currentVersion < 33) {
+          db.exec(`CREATE TABLE IF NOT EXISTS crypto_asset_info (
+            currency TEXT NOT NULL, currency_asset_type TEXT NOT NULL DEFAULT '', currency_param TEXT NOT NULL DEFAULT '',
+            coingecko_id TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (currency, currency_asset_type, currency_param)
+          )`);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (33)");
         }
       }
     }
@@ -5977,6 +5992,27 @@ PRAGMA foreign_keys = ON;
     }
   }
 
+  // ---- Crypto asset info ----
+
+  async listCryptoAssetInfo(): Promise<Map<string, string>> {
+    const rows = this.db.exec("SELECT currency, coingecko_id FROM crypto_asset_info WHERE coingecko_id != ''");
+    const map = new Map<string, string>();
+    if (rows.length > 0) {
+      for (const row of rows[0].values) {
+        map.set(row[0] as string, row[1] as string);
+      }
+    }
+    return map;
+  }
+
+  async setCryptoAssetCoingeckoId(code: string, geckoId: string): Promise<void> {
+    this.run(
+      "INSERT OR REPLACE INTO crypto_asset_info (currency, currency_asset_type, currency_param, coingecko_id) VALUES (?, '', '', ?)",
+      [code, geckoId],
+    );
+    this.scheduleSave();
+  }
+
   // ---- Exchange accounts (CEX) ----
 
   async listExchangeAccounts(): Promise<import("./cex/types.js").ExchangeAccount[]> {
@@ -6362,7 +6398,8 @@ PRAGMA foreign_keys = ON;
       "journal_entry_metadata", "balance_assertion", "audit_log",
       "journal_entry", "raw_transaction", "currency_rate_source",
       "budget", "french_tax_report", "currency_token_address",
-      "account_metadata", "account_closure", "account", "currency",
+      "account_metadata", "account_closure", "account",
+      "crypto_asset_info", "currency",
     ]);
     try { this.db.exec("UPDATE exchange_account SET last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE bitcoin_account SET last_sync = NULL, last_receive_index = -1, last_change_index = -1"); } catch { /* may not exist */ }
