@@ -268,6 +268,7 @@
   "state_saving": "Saving...",
   "state_scanning": "Scanning...",
   "state_syncing": "Syncing...",
+  "state_queued": "Queued",
 
   "budget_on_track": "On track",
   "budget_near_limit": "Near limit",

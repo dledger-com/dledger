@@ -18,7 +18,7 @@
         config,
         account,
         syncing = false,
-        busy = false,
+        queued = false,
         editingRowId = null,
         editingRowLabel = "",
         onSync,
@@ -31,7 +31,7 @@
         config: BlockchainConfig;
         account: { id: string; address: string; label: string; last_sync?: string | null };
         syncing?: boolean;
-        busy?: boolean;
+        queued?: boolean;
         editingRowId?: string | null;
         editingRowLabel?: string;
         onSync: () => void;
@@ -41,6 +41,8 @@
         onSaveEdit: () => void;
         onEditLabelChange: (value: string) => void;
     } = $props();
+
+    const busy = $derived(syncing || queued);
 
     const isEditing = $derived(editingRowId === account.id);
 
@@ -141,8 +143,8 @@
                 onclick={onSync}
                 disabled={busy || isEditing}
             >
-                <RefreshCw class="mr-1 h-3 w-3" />
-                {syncing ? m.state_syncing() : m.sources_sync()}
+                <RefreshCw class="mr-1 h-3 w-3 {syncing ? 'animate-spin' : ''}" />
+                {syncing ? m.state_syncing() : queued ? m.state_queued() : m.sources_sync()}
             </Button>
             <Button
                 variant={isEditing ? "default" : "outline"}

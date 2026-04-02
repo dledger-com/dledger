@@ -79,6 +79,16 @@ class TaskQueueStore {
     );
   }
 
+  /** Check if a specific task (exact key) is currently running. */
+  isRunning(key: string): boolean {
+    return this.queue.some((t) => t.key === key && t.status === "running");
+  }
+
+  /** Check if a specific task (exact key) is queued but not yet running. */
+  isQueued(key: string): boolean {
+    return this.queue.some((t) => t.key === key && t.status === "pending");
+  }
+
   enqueue(def: TaskDefinition): string | null {
     // Reject duplicate keys
     if (this.queue.some((t) => t.key === def.key && (t.status === "pending" || t.status === "running"))) {

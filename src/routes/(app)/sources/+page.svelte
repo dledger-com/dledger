@@ -1132,8 +1132,8 @@
                                         <BlockchainAccountRow
                                             config={chainConfig}
                                             account={row.data}
-                                            syncing={taskQueue.isActive(`${chainConfig.syncTaskPrefix}:${row.data.id}`)}
-                                            busy={isChainBusy(row.kind)}
+                                            syncing={taskQueue.isRunning(`${chainConfig.syncTaskPrefix}:${row.data.id}`)}
+                                            queued={taskQueue.isQueued(`${chainConfig.syncTaskPrefix}:${row.data.id}`)}
                                             {editingRowId}
                                             {editingRowLabel}
                                             onSync={() => syncChainAccount(chainConfig, row.data)}
