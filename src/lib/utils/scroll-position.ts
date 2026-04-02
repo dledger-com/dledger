@@ -4,7 +4,7 @@
 import type { JournalEntry, LineItem } from "$lib/types/index.js";
 import type { SortDirection } from "./sort.js";
 
-export type JournalSortKey = "date" | "description" | "status" | "amount" | "account";
+export type JournalSortKey = "date" | "description" | "status" | "amount" | "account" | "fees";
 
 /**
  * Returns a compact label describing what's currently visible in the virtual scroll viewport.
@@ -50,7 +50,8 @@ export function derivePositionLabel(
 			return deriveAmountLabel(firstItems, lastItems, formatDebitTotal);
 		}
 		case "account":
-			// Account names are resolved outside this module; fall back to row range
+		case "fees":
+			// Account/fee names are resolved outside this module; fall back to row range
 			if (firstIndex === lastIndex) return String(firstIndex + 1);
 			return `${firstIndex + 1}–${lastIndex + 1}`;
 	}

@@ -47,6 +47,7 @@
 
   "label_account": "Compte",
   "label_amount": "Montant",
+  "label_fees": "Frais",
   "label_date": "Date",
   "label_currency": "Devise",
   "label_description": "Description",

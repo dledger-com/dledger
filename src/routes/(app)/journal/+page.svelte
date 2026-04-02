@@ -45,6 +45,7 @@
         mainCounterpartyShort as mainCounterpartyShortUtil,
         mainCounterpartyFull as mainCounterpartyFullUtil,
         entryAmountDisplay as entryAmountDisplayUtil,
+        entryFeeDisplay as entryFeeDisplayUtil,
         entryAmountParts as entryAmountPartsUtil,
         amountColorClass as amountColorClassUtil,
         type AmountDirection,
@@ -377,10 +378,11 @@
         { id: "description", header: m.label_description(), enableHiding: true },
         { id: "account", header: m.label_account(), enableHiding: true },
         { id: "amount", header: m.label_amount(), enableHiding: true },
+        { id: "fees", header: m.label_fees(), enableHiding: true },
     ];
 
     let rowSelection = $state<RowSelectionState>({});
-    let columnVisibility = $state<VisibilityState>(settings.settings.journalColumnVisibility ?? {});
+    let columnVisibility = $state<VisibilityState>({ fees: false, ...settings.settings.journalColumnVisibility });
 
     // Sync searchTerm back to URL so back button works
     $effect(() => {
@@ -484,7 +486,7 @@
     let initialLoad = true;
     $effect(() => {
         const { groups, backendText } = searchFilters;
-        const orderBy = sort.key !== "amount" && sort.key !== "account" ? sort.key : null;
+        const orderBy = sort.key !== "amount" && sort.key !== "account" && sort.key !== "fees" ? sort.key : null;
         const orderDir = sort.direction;
         const accountFilter = selectedAccounts;
         const tagFilter = selectedTags;
@@ -719,6 +721,10 @@
         return entryAmountDisplayUtil(items, accountIdToName);
     }
 
+    function entryFeeDisplay(items: LineItem[]): AmountPart | null {
+        return entryFeeDisplayUtil(items, accountIdToName);
+    }
+
     // Metadata state — declared before displayEntries to avoid TDZ
     let entryTags = $state<Map<string, string[]>>(new Map());
     let entryLinks = $state<Map<string, string[]>>(new Map());
@@ -797,6 +803,18 @@
             return sortItems(
                 displayEntries,
                 (entry: JournalEntry) => mainCounterparty(getItems(entry.id)),
+                sort.direction,
+            );
+        if (sort.key === "fees" && sort.direction)
+            return sortItems(
+                displayEntries,
+                (entry: JournalEntry) => {
+                    const fee = entryFeeDisplay(getItems(entry.id));
+                    if (!fee || fee.segments.length === 0) return null;
+                    // Group by currency, then sort by amount within each group
+                    const seg = fee.segments[0];
+                    return `${seg.currency}\t${parseFloat(seg.amount)}`;
+                },
                 sort.direction,
             );
         return displayEntries;
@@ -2343,6 +2361,15 @@
                                                     class="text-right"
                                                     >{m.label_amount()}</SortableHeader
                                                 >
+                                            {:else if header.column.id === "fees"}
+                                                <SortableHeader
+                                                    active={sort.key === "fees"}
+                                                    direction={sort.direction}
+                                                    onclick={() =>
+                                                        sort.toggle("fees")}
+                                                    class="text-right"
+                                                    >{m.label_fees()}</SortableHeader
+                                                >
                                             {/if}
                                         {/each}
                                     </Table.Row>
@@ -2449,6 +2476,15 @@
                                                                     <span class={amountColorClass(part.direction)}>{part.text}</span>
                                                                 {/if}
                                                             {/each}
+                                                            {#if columnVisibility.fees !== false}
+                                                                {@const fee = entryFeeDisplay(items)}
+                                                                {#if fee}
+                                                                    {" "}<span class="text-muted-foreground">+</span>{" "}
+                                                                    <span class="inline-flex items-center gap-0.5 text-negative"
+                                                                        >{#each fee.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">, </span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} showIcon={journalShowCurrencyIcons} />{/each}</span
+                                                                    >
+                                                                {/if}
+                                                            {/if}
                                                         </span>
                                                     {/if}
                                                 </div>
@@ -2617,6 +2653,19 @@
                                                                 <span class={amountColorClass(part.direction)}>{part.text}</span>
                                                             {/if}
                                                         {/each}
+                                                    </Table.Cell>
+                                                {:else if cell.column.id === "fees"}
+                                                    {@const fee = entryFeeDisplay(items)}
+                                                    <Table.Cell class="text-right font-mono p-2 text-negative">
+                                                        {#if fee}
+                                                            {#if fee.segments.length > 0}
+                                                                <span class="inline-flex items-center gap-0.5"
+                                                                    >{#each fee.segments as seg, j}{#if j > 0}<span class="text-muted-foreground">, </span>{/if}<AmountWithIcon amount={seg.amount} currency={seg.currency} showIcon={journalShowCurrencyIcons} />{/each}</span
+                                                                >
+                                                            {:else}
+                                                                {fee.text}
+                                                            {/if}
+                                                        {/if}
                                                     </Table.Cell>
                                                 {/if}
                                             {/each}

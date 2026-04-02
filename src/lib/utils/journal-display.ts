@@ -162,13 +162,50 @@ export function entryAmountParts(items: LineItem[], accountIdToName: Map<string,
 	return { isTrade: false, debits: debitsByCurrency(nonEquityItems) };
 }
 
-/** Format entry amounts with direction for display. */
+/** Collect expense/fee debits by currency from line items. */
+function collectExpenseDebits(items: LineItem[], accountIdToName: Map<string, string>): Map<string, number> {
+	const byCode = new Map<string, number>();
+	for (const item of items) {
+		const name = accountIdToName.get(item.account_id) ?? "";
+		if (name.startsWith("Expenses:") || name === "Expenses") {
+			const n = parseFloat(item.amount);
+			if (n > 0) byCode.set(item.currency, (byCode.get(item.currency) ?? 0) + n);
+		}
+	}
+	return byCode;
+}
+
+/** Format entry fee amounts for a dedicated fees column. */
+export function entryFeeDisplay(items: LineItem[], accountIdToName: Map<string, string>): AmountPart | null {
+	const expenseByCode = collectExpenseDebits(items, accountIdToName);
+	if (expenseByCode.size === 0) return null;
+
+	// For pure expense entries (no other account types), fees column stays empty
+	let hasNonExpense = false;
+	for (const item of items) {
+		const name = accountIdToName.get(item.account_id) ?? "";
+		if (!name.startsWith("Expenses:") && name !== "Expenses" && !isEquityTrading(name)) {
+			hasNonExpense = true;
+			break;
+		}
+	}
+	if (!hasNonExpense) return null;
+
+	return {
+		text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "),
+		direction: "expense",
+		currencies: [...expenseByCode.keys()],
+		segments: [...expenseByCode].map(([c, a]) => ({ amount: String(a), currency: c })),
+	};
+}
+
+/** Format entry amounts with direction for display (fees excluded — use entryFeeDisplay). */
 export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<string, string>): AmountPart[] {
 	const { isTrade, debits } = entryAmountParts(items, accountIdToName);
 
-	// Trade: arrow format, plus any fees
+	// Trade: arrow format
 	if (isTrade && debits.length === 2) {
-		const parts: AmountPart[] = [{
+		return [{
 			text: `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`,
 			direction: "default",
 			currencies: [debits[0].currency, debits[1].currency],
@@ -178,26 +215,6 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 			],
 			isTrade: true,
 		}];
-
-		// Collect expense/fee items from non-equity line items
-		const tradeExpenseByCode = new Map<string, number>();
-		for (const item of items) {
-			const name = accountIdToName.get(item.account_id) ?? "";
-			if (name.startsWith("Expenses:") || name === "Expenses") {
-				const n = parseFloat(item.amount);
-				if (n > 0) tradeExpenseByCode.set(item.currency, (tradeExpenseByCode.get(item.currency) ?? 0) + n);
-			}
-		}
-		if (tradeExpenseByCode.size > 0) {
-			parts.push({
-				text: [...tradeExpenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "),
-				direction: "expense",
-				currencies: [...tradeExpenseByCode.keys()],
-				segments: [...tradeExpenseByCode].map(([c, a]) => ({ amount: String(a), currency: c })),
-			});
-		}
-
-		return parts;
 	}
 
 	// Classify account types
@@ -207,7 +224,6 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 		if (name.startsWith("Equity:") || name === "Equity") hasEquity = true;
 		else if (name.startsWith("Income:") || name === "Income") hasIncome = true;
 		else if (name.startsWith("Expenses:") || name === "Expenses") hasExpense = true;
-		// Check for positive (debit) amounts on non-expense accounts (asset transfers)
 		if (parseFloat(item.amount) > 0 && !name.startsWith("Expenses:") && name !== "Expenses") {
 			hasNonExpenseDebit = true;
 		}
@@ -221,15 +237,8 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 		return [{ text, direction: dir, currencies: debits.map(b => b.currency), segments: debits.map(b => ({ amount: b.amount, currency: b.currency })) }];
 	}
 
-	// Mixed: split expense from rest
-	const expenseByCode = new Map<string, number>();
-	for (const item of items) {
-		const name = accountIdToName.get(item.account_id) ?? "";
-		if (name.startsWith("Expenses:") || name === "Expenses") {
-			const n = parseFloat(item.amount);
-			if (n > 0) expenseByCode.set(item.currency, (expenseByCode.get(item.currency) ?? 0) + n);
-		}
-	}
+	// Mixed: return only main amounts (fees go to separate column)
+	const expenseByCode = collectExpenseDebits(items, accountIdToName);
 
 	const mainByCode = new Map<string, number>();
 	for (const d of debits) {
@@ -239,18 +248,25 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 		if (remainder > 0.005) mainByCode.set(d.currency, remainder);
 	}
 
-	const parts: Array<{ text: string; direction: AmountDirection; total: number; currencies: string[]; segments: AmountSegment[] }> = [];
 	const mainDir: AmountDirection = hasIncome ? "income" : "default";
-
 	if (mainByCode.size > 0) {
-		const total = [...mainByCode.values()].reduce((s, a) => s + a, 0);
-		parts.push({ text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "), direction: mainDir, total, currencies: [...mainByCode.keys()], segments: [...mainByCode].map(([c, a]) => ({ amount: String(a), currency: c })) });
-	}
-	if (expenseByCode.size > 0) {
-		const total = [...expenseByCode.values()].reduce((s, a) => s + a, 0);
-		parts.push({ text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "), direction: "expense", total, currencies: [...expenseByCode.keys()], segments: [...expenseByCode].map(([c, a]) => ({ amount: String(a), currency: c })) });
+		return [{
+			text: [...mainByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "),
+			direction: mainDir,
+			currencies: [...mainByCode.keys()],
+			segments: [...mainByCode].map(([c, a]) => ({ amount: String(a), currency: c })),
+		}];
 	}
 
-	parts.sort((a, b) => b.total - a.total);
-	return parts.map(({ text, direction, currencies, segments }) => ({ text, direction, currencies, segments }));
+	// Fallback: if no main amounts remain, show expense as the main amount
+	if (expenseByCode.size > 0) {
+		return [{
+			text: [...expenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "),
+			direction: "expense",
+			currencies: [...expenseByCode.keys()],
+			segments: [...expenseByCode].map(([c, a]) => ({ amount: String(a), currency: c })),
+		}];
+	}
+
+	return [];
 }

@@ -47,6 +47,7 @@
 
   "label_account": "Account",
   "label_amount": "Amount",
+  "label_fees": "Fees",
   "label_date": "Date",
   "label_currency": "Currency",
   "label_description": "Description",
