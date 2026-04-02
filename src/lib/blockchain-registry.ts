@@ -71,6 +71,7 @@ import { detectZcashInputType, deriveZcashAddresses } from "./zcash/derive-js.js
 import { detectStacksInputType, deriveStacksAddresses } from "./stacks/derive-js.js";
 import { detectCardanoInputType, deriveCardanoAddresses } from "./cardano/derive-js.js";
 import { detectMoneroInputType, deriveMoneroAddresses } from "./monero/derive-js.js";
+import { detectBitsharesInputType } from "./bitshares/derive-js.js";
 
 export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 	// Algorand
@@ -153,6 +154,16 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateBittensorAccountLabel", backendSync: "syncBittensor", syncTaskPrefix: "bittensor-sync",
 		detectInput: detectBittensorInputType, deriveAddresses: deriveBittensorAddresses,
 		checkActivity: getActivityChecker("bittensor") ?? undefined,
+	},
+	// Bitshares
+	{
+		id: "bitshares", name: "Bitshares", symbol: "BTS",
+		addressRegex: /^[a-z][a-z0-9.-]{2,62}$/,
+		addressPlaceholder: "Account name, e.g. myaccount", addressSlicePrefix: 16, addressSliceSuffix: 0, caseSensitive: false,
+		backendList: "listBitsharesAccounts", backendAdd: "addBitsharesAccount", backendRemove: "removeBitsharesAccount",
+		backendUpdateLabel: "updateBitsharesAccountLabel", backendSync: "syncBitshares", syncTaskPrefix: "bitshares-sync",
+		detectInput: detectBitsharesInputType, deriveAddresses: null,
+		checkActivity: getActivityChecker("bitshares") ?? undefined,
 	},
 	// Cardano
 	{

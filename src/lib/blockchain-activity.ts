@@ -277,6 +277,19 @@ export async function checkEvmActivity(address: string, etherscanApiKey: string,
 	} catch { return null; }
 }
 
+async function checkBitsharesActivity(address: string, signal?: AbortSignal): Promise<boolean | null> {
+	// Bitshares uses named accounts — check if the account exists on-chain
+	// via a public Elasticsearch wrapper (cryptofresh API)
+	try {
+		const url = `https://api.bitshares.ws/openexplorer/account?account_name=${encodeURIComponent(address)}`;
+		const res = await activityGet(url, "https://api.bitshares.ws", "/api/bitshares", signal);
+		if (res.status !== 200) return null;
+		const data = JSON.parse(res.body);
+		// If the account object is returned with an id, it exists and is active
+		return data && typeof data.id === "string" && data.id.startsWith("1.2.");
+	} catch { return null; }
+}
+
 // ---------------------------------------------------------------------------
 // Factory / registry
 // ---------------------------------------------------------------------------
@@ -285,6 +298,7 @@ const CHECKERS: Record<string, ActivityChecker> = {
 	algorand: checkAlgorandActivity,
 	aptos: checkAptosActivity,
 	bittensor: checkBittensorActivity,
+	bitshares: checkBitsharesActivity,
 	cardano: checkCardanoActivity,
 	cosmos: checkCosmosActivity,
 	dash: checkDashActivity,

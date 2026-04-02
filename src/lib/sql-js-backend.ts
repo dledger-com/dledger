@@ -677,7 +677,32 @@ export class SqlJsBackend implements Backend {
       created_at TEXT NOT NULL
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_stacks_account_address ON stacks_account(address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (29)");
+    // Cardano + Monero (v30)
+    db.exec(`CREATE TABLE IF NOT EXISTS cardano_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      label TEXT NOT NULL, last_page INTEGER, last_sync TEXT, created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cardano_account_address ON cardano_account(address)");
+    db.exec(`CREATE TABLE IF NOT EXISTS monero_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      view_key TEXT NOT NULL, label TEXT NOT NULL,
+      last_sync_height INTEGER, last_sync TEXT, created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_monero_account_address ON monero_account(address)");
+    // Custom plugins (v31)
+    db.exec(`CREATE TABLE IF NOT EXISTS custom_plugin (
+      id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, version TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '', source_code TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`);
+    // Bitshares (v32)
+    db.exec(`CREATE TABLE IF NOT EXISTS bitshares_account (
+      id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+      account_object_id TEXT NOT NULL DEFAULT '', label TEXT NOT NULL,
+      last_operation_id TEXT, last_sync TEXT, created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bitshares_account_address ON bitshares_account(address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (32)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1313,6 +1338,16 @@ PRAGMA foreign_keys = ON;
           )`);
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (31)");
+        }
+        if (currentVersion < 32) {
+          db.exec(`CREATE TABLE IF NOT EXISTS bitshares_account (
+            id TEXT PRIMARY KEY NOT NULL, address TEXT NOT NULL,
+            account_object_id TEXT NOT NULL DEFAULT '', label TEXT NOT NULL,
+            last_operation_id TEXT, last_sync TEXT, created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bitshares_account_address ON bitshares_account(address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (32)");
         }
       }
     }
@@ -5874,6 +5909,66 @@ PRAGMA foreign_keys = ON;
     this.beginTransaction();
     try {
       const result = await syncMoneroAccount(this, account, loadSettings(), onProgress, signal);
+      this.commitTransaction();
+      return result;
+    } catch (e) {
+      this.rollbackTransaction();
+      throw e;
+    }
+  }
+
+  // ---- Bitshares ----
+
+  async listBitsharesAccounts(): Promise<import("./bitshares/types.js").BitsharesAccount[]> {
+    return this.query(
+      "SELECT id, address, account_object_id, label, last_operation_id, last_sync, created_at FROM bitshares_account ORDER BY created_at",
+      [],
+      (row) => ({
+        id: row.id as string, address: row.address as string,
+        account_object_id: row.account_object_id as string,
+        label: row.label as string, last_operation_id: (row.last_operation_id as string) ?? null,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addBitsharesAccount(account: Omit<import("./bitshares/types.js").BitsharesAccount, "last_sync" | "last_operation_id">): Promise<void> {
+    this.run(
+      `INSERT INTO bitshares_account (id, address, account_object_id, label, last_operation_id, last_sync, created_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)`,
+      [account.id, account.address, account.account_object_id, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async updateBitsharesAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE bitshares_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async removeBitsharesAccount(id: string): Promise<void> {
+    this.run("DELETE FROM bitshares_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateBitsharesAccountObjectId(id: string, objectId: string): Promise<void> {
+    this.run("UPDATE bitshares_account SET account_object_id = ? WHERE id = ?", [objectId, id]);
+    this.scheduleSave();
+  }
+
+  async updateBitsharesSyncCursor(id: string, operationId: string): Promise<void> {
+    this.run("UPDATE bitshares_account SET last_operation_id = ?, last_sync = ? WHERE id = ?", [operationId, new Date().toISOString(), id]);
+    this.scheduleSave();
+  }
+
+  async syncBitshares(
+    account: import("./bitshares/types.js").BitsharesAccount,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal,
+  ): Promise<import("./bitshares/types.js").BitsharesSyncResult> {
+    const { syncBitsharesAccount } = await import("./bitshares/sync.js");
+    this.beginTransaction();
+    try {
+      const result = await syncBitsharesAccount(this, account, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {

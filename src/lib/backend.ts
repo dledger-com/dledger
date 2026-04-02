@@ -41,6 +41,7 @@ import type { ZcashAccount, ZcashSyncResult } from "./zcash/types.js";
 import type { StacksAccount, StacksSyncResult } from "./stacks/types.js";
 import type { CardanoAccount, CardanoSyncResult } from "./cardano/types.js";
 import type { MoneroAccount, MoneroSyncResult } from "./monero/types.js";
+import type { BitsharesAccount, BitsharesSyncResult } from "./bitshares/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
 import type { LedgerFormat } from "./ledger-format.js";
 import type { LedgerImportOptions } from "./browser-ledger-file.js";
@@ -384,6 +385,15 @@ export interface Backend {
   updateMoneroAccountLabel(id: string, label: string): Promise<void>;
   updateMoneroSyncHeight(id: string, height: number): Promise<void>;
   syncMonero(account: MoneroAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<MoneroSyncResult>;
+
+  // Bitshares
+  listBitsharesAccounts(): Promise<BitsharesAccount[]>;
+  addBitsharesAccount(account: Omit<BitsharesAccount, "last_sync" | "last_operation_id">): Promise<void>;
+  removeBitsharesAccount(id: string): Promise<void>;
+  updateBitsharesAccountLabel(id: string, label: string): Promise<void>;
+  updateBitsharesAccountObjectId(id: string, objectId: string): Promise<void>;
+  updateBitsharesSyncCursor(id: string, operationId: string): Promise<void>;
+  syncBitshares(account: BitsharesAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitsharesSyncResult>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -1119,6 +1129,18 @@ class TauriBackend implements Backend {
     const { syncMoneroAccount } = await import("./monero/sync.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
     return syncMoneroAccount(this, account, loadSettings(), onProgress, signal);
+  }
+
+  // Bitshares
+  async listBitsharesAccounts(): Promise<BitsharesAccount[]> { return this.invoke("list_bitshares_accounts"); }
+  async addBitsharesAccount(account: Omit<BitsharesAccount, "last_sync" | "last_operation_id">): Promise<void> { return this.invoke("add_bitshares_account", { account }); }
+  async removeBitsharesAccount(id: string): Promise<void> { return this.invoke("remove_bitshares_account", { id }); }
+  async updateBitsharesAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_bitshares_account_label", { id, label }); }
+  async updateBitsharesAccountObjectId(id: string, objectId: string): Promise<void> { return this.invoke("update_bitshares_account_object_id", { id, objectId }); }
+  async updateBitsharesSyncCursor(id: string, operationId: string): Promise<void> { return this.invoke("update_bitshares_sync_cursor", { id, operationId }); }
+  async syncBitshares(account: BitsharesAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitsharesSyncResult> {
+    const { syncBitsharesAccount } = await import("./bitshares/sync.js");
+    return syncBitsharesAccount(this, account, onProgress, signal);
   }
 
   // Exchange accounts (CEX)
