@@ -15,27 +15,14 @@ export const FIAT_CURRENCIES = new Set([
   "RON", "SEK", "SGD", "THB", "TRY", "USD", "ZAR",
 ]);
 
-/** Common crypto ticker → CoinGecko ID mapping. */
-export const KNOWN_CRYPTO = new Set([
-  "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT",
-  "AVAX", "MATIC", "POL", "LINK", "UNI", "ATOM", "LTC", "NEAR",
-  "APT", "ARB", "OP", "FIL", "AAVE", "MKR", "SNX", "COMP",
-  "CRV", "SHIB", "PEPE", "SUI", "SEI", "TIA",
-  "USDT", "USDC", "DAI",
-  // Native currencies from SUPPORTED_CHAINS
-  "BNB", "POL", "AVAX", "MON", "S", "BTT", "HYPE", "GLMR",
-  "MOVR", "MNT", "APE", "CELO", "BERA", "XDC", "STABLE",
-  "MCORE", "PLASMA",
-]);
-
 /**
  * Infer the asset type for a currency code based on static heuristics.
  *
- * Returns `"fiat"` for known fiat codes, `"crypto"` for known crypto tickers,
- * or `""` (unclassified) for everything else.
+ * Returns `"fiat"` for known fiat codes, or `""` (unclassified) for everything
+ * else. Crypto/stock/commodity types are populated dynamically by the rate sync
+ * system after querying dprice or other currency sources.
  */
 export function inferAssetType(code: string): CurrencyAssetType {
   if (FIAT_CURRENCIES.has(code)) return "fiat";
-  if (KNOWN_CRYPTO.has(code)) return "crypto";
   return "";
 }

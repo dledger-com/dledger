@@ -220,14 +220,15 @@ function isLocalCache(value: string): boolean {
   return value.startsWith("data:");
 }
 
-let _fetching = false;
+let _fetchPromise: Promise<void> | null = null;
+let _pendingCodes: string[] | null = null;
 
 /**
  * Initialize coin icons: load from IndexedDB, then fetch missing icons from CoinGecko as data URIs.
  * Safe to call multiple times — IDB load runs once, CoinGecko fetch skips already-cached codes.
+ * If called while a fetch is in progress, queues the new codes for a follow-up fetch.
  */
 export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
-  if (_fetching) return; // avoid concurrent fetches
   if (!_initialized) {
     _initialized = true;
 
@@ -245,7 +246,7 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
     }
   }
 
-  // Cache fiat flag SVGs as data URIs
+  // Cache fiat flag SVGs as data URIs (fast, no rate limits — always runs)
   const fiatMissing: string[] = [];
   for (const code of currencyCodes) {
     const upper = code.toUpperCase();
@@ -271,7 +272,28 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
     }
   }
 
-  // Find crypto symbols that need fetching — split into known IDs and unknown (try by lowercase symbol)
+  // CoinGecko fetch with queue — if already fetching, queue codes for follow-up
+  if (_fetchPromise) {
+    _pendingCodes = [...new Set([...(_pendingCodes ?? []), ...currencyCodes])];
+    return;
+  }
+
+  await _fetchCoinGecko(currencyCodes);
+}
+
+/** Fetch a single CoinGecko batch with 429 retry. */
+async function _fetchGeckoBatch(url: string): Promise<Array<{ id: string; symbol: string; image: string }>> {
+  let resp = await fetch(url);
+  if (resp.status === 429) {
+    await new Promise((r) => setTimeout(r, 60_000));
+    resp = await fetch(url);
+  }
+  if (!resp.ok) return [];
+  return resp.json() as Promise<Array<{ id: string; symbol: string; image: string }>>;
+}
+
+/** Fetch missing crypto icons from CoinGecko, processing queued codes after completion. */
+async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
   const knownMissing: string[] = [];
   const unknownMissing: string[] = [];
   for (const code of currencyCodes) {
@@ -286,68 +308,81 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
     }
   }
 
-  if (knownMissing.length === 0 && unknownMissing.length === 0) return;
+  if (knownMissing.length === 0 && unknownMissing.length === 0) {
+    // Nothing to fetch — still check pending codes
+    if (_pendingCodes) {
+      const next = _pendingCodes;
+      _pendingCodes = null;
+      await _fetchCoinGecko(next);
+    }
+    return;
+  }
 
-  _fetching = true;
   const newIcons = new Map<string, string>();
 
-  try {
-    // Batch 1: fetch well-known currencies by their CoinGecko ID
-    if (knownMissing.length > 0) {
-      const geckoIds = knownMissing
-        .map(s => COINGECKO_IDS[s])
-        .filter(Boolean);
-      const unique = [...new Set(geckoIds)];
+  _fetchPromise = (async () => {
+    try {
+      // Batch 1: fetch well-known currencies by their CoinGecko ID
+      if (knownMissing.length > 0) {
+        const geckoIds = knownMissing
+          .map(s => COINGECKO_IDS[s])
+          .filter(Boolean);
+        const unique = [...new Set(geckoIds)];
 
-      for (let i = 0; i < unique.length; i += 250) {
-        const batch = unique.slice(i, i + 250);
-        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const data = await resp.json() as Array<{ id: string; symbol: string; image: string }>;
+        for (let i = 0; i < unique.length; i += 250) {
+          const batch = unique.slice(i, i + 250);
+          const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
+          const data = await _fetchGeckoBatch(url);
 
-        for (const coin of data) {
-          const upper = coin.symbol.toUpperCase();
-          if (coin.image && !coin.image.includes("missing")) {
-            const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-            _icons.set(upper, icon);
-            newIcons.set(upper, icon);
+          for (const coin of data) {
+            const upper = coin.symbol.toUpperCase();
+            if (coin.image && !coin.image.includes("missing")) {
+              const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+              _icons.set(upper, icon);
+              newIcons.set(upper, icon);
+            }
           }
         }
       }
-    }
 
-    // Batch 2: try unknown currencies by lowercase symbol as CoinGecko ID
-    if (unknownMissing.length > 0) {
-      const guessIds = unknownMissing.map(s => s.toLowerCase());
+      // Batch 2: try unknown currencies by lowercase symbol as CoinGecko ID
+      if (unknownMissing.length > 0) {
+        const guessIds = unknownMissing.map(s => s.toLowerCase());
 
-      for (let i = 0; i < guessIds.length; i += 250) {
-        const batch = guessIds.slice(i, i + 250);
-        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const data = await resp.json() as Array<{ id: string; symbol: string; image: string }>;
+        for (let i = 0; i < guessIds.length; i += 250) {
+          const batch = guessIds.slice(i, i + 250);
+          const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
+          const data = await _fetchGeckoBatch(url);
 
-        for (const coin of data) {
-          const upper = coin.symbol.toUpperCase();
-          if (coin.image && !coin.image.includes("missing")) {
-            const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-            _icons.set(upper, icon);
-            newIcons.set(upper, icon);
+          for (const coin of data) {
+            const upper = coin.symbol.toUpperCase();
+            if (coin.image && !coin.image.includes("missing")) {
+              const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+              _icons.set(upper, icon);
+              newIcons.set(upper, icon);
+            }
           }
         }
       }
-    }
 
-    if (newIcons.size > 0) {
-      saveToStorage(_icons);
-      await saveIconsToIDB(newIcons);
-      notify();
+      if (newIcons.size > 0) {
+        saveToStorage(_icons);
+        await saveIconsToIDB(newIcons);
+        notify();
+      }
+    } catch {
+      // Network error — use whatever we have cached
     }
-  } catch {
-    // Network error — use whatever we have cached
-  } finally {
-    _fetching = false;
+  })();
+
+  await _fetchPromise;
+  _fetchPromise = null;
+
+  // Process any codes that arrived while we were fetching
+  if (_pendingCodes) {
+    const next = _pendingCodes;
+    _pendingCodes = null;
+    await _fetchCoinGecko(next);
   }
 }
 

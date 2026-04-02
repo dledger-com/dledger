@@ -11,7 +11,6 @@
     import { reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
     import type { Currency } from "$lib/types/index.js";
     import type { CurrencyAssetType } from "$lib/types/account.js";
-    import { inferAssetType } from "$lib/currency-type.js";
     import { toast } from "svelte-sonner";
     import {
         exportDatabaseBackup,

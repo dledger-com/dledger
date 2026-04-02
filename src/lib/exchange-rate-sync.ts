@@ -275,6 +275,7 @@ export async function syncExchangeRates(
   // It also resolves dprice asset IDs for new currencies and stores them for future queries.
   let dpriceAssets: Set<string> | undefined;
   const dpriceResolvedIds = new Map<string, string>(); // code → dprice asset ID
+  const dpriceResolvedTypes = new Map<string, string>(); // code → dprice asset type
   const dpriceServed = new Set<string>(); // codes successfully served by dprice this run
   if (isDpriceActive(dpriceMode)) {
     try {
@@ -328,6 +329,7 @@ export async function syncExchangeRates(
           });
           if (resolved !== "none" && resolved !== "ambiguous") {
             dpriceResolvedIds.set(code, resolved.id);
+            if (resolved.type) dpriceResolvedTypes.set(code, resolved.type);
           }
         } catch {
           // Individual resolution failure — skip, will use symbol-based fallback
@@ -341,6 +343,7 @@ export async function syncExchangeRates(
           const baseResolved = await resolveDpriceAsset(client, baseCurrency, baseAssetType, baseToken);
           if (baseResolved !== "none" && baseResolved !== "ambiguous") {
             dpriceResolvedIds.set(baseCurrency, baseResolved.id);
+            if (baseResolved.type) dpriceResolvedTypes.set(baseCurrency, baseResolved.type);
           }
         } catch { /* ignore */ }
       }
@@ -820,6 +823,29 @@ export async function syncExchangeRates(
     const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets);
     await backend.setCurrencyRateSource(code, detected, "auto");
     result.newlyDetected.push(code);
+  }
+
+  // Auto-classify: set asset_type for unclassified currencies based on which source served them
+  for (const code of allSucceeded) {
+    if (currencyTypeMap.get(code)) continue; // already classified
+    const dpriceType = dpriceResolvedTypes.get(code);
+    if (dpriceType) {
+      await backend.setCurrencyAssetType(code, dpriceType);
+    } else if (dpriceServed.has(code)) {
+      // dprice served it but we don't have a resolved type — check rate_source_id prefix
+      const id = dpriceResolvedIds.get(code) ?? "";
+      if (id.startsWith("crypto:")) await backend.setCurrencyAssetType(code, "crypto");
+      else if (id.startsWith("fiat:")) await backend.setCurrencyAssetType(code, "fiat");
+    } else if (frankfurterCodes.includes(code)) {
+      await backend.setCurrencyAssetType(code, "fiat");
+    } else if (
+      coingeckoCodes.includes(code) || defillamaCodes.includes(code) ||
+      cryptocompareCodes.includes(code) || binanceCodes.includes(code)
+    ) {
+      await backend.setCurrencyAssetType(code, "crypto");
+    } else if (finnhubCodes.includes(code)) {
+      await backend.setCurrencyAssetType(code, "stock");
+    }
   }
 
   // Auto-hide: currencies that failed AND don't already have a working stored source.
