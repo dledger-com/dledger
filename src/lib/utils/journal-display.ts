@@ -39,54 +39,80 @@ function filterMeaningful(items: LineItem[], accountIdToName: Map<string, string
 	return items.filter(i => !isEquityTrading(accountIdToName.get(i.account_id) ?? ""));
 }
 
-function highestVolumeAccount(meaningful: LineItem[], accountIdToName: Map<string, string>): string {
-	const volumeByAccount = new Map<string, number>();
+function volumeByAccount(meaningful: LineItem[], accountIdToName: Map<string, string>): Map<string, number> {
+	const map = new Map<string, number>();
 	for (const item of meaningful) {
 		const name = accountIdToName.get(item.account_id) ?? "";
-		volumeByAccount.set(name, (volumeByAccount.get(name) ?? 0) + Math.abs(parseFloat(item.amount) || 0));
+		map.set(name, (map.get(name) ?? 0) + Math.abs(parseFloat(item.amount) || 0));
 	}
+	return map;
+}
+
+function highestVolumeAccount(meaningful: LineItem[], accountIdToName: Map<string, string>): string {
+	const volumes = volumeByAccount(meaningful, accountIdToName);
 	let best = accountIdToName.get(meaningful[0]?.account_id) ?? "";
 	let bestVol = 0;
-	for (const [name, vol] of volumeByAccount) {
+	for (const [name, vol] of volumes) {
 		if (vol > bestVol) { best = name; bestVol = vol; }
 	}
 	return best;
+}
+
+function isCategory(name: string): boolean {
+	return name.startsWith("Expenses:") || name.startsWith("Income:");
+}
+
+/**
+ * Pick the best counterparty account to display.
+ * When a single category exists alongside non-category accounts, only prefer the
+ * category if its volume is >= the highest non-category volume (so fees don't win
+ * over the main operation account).
+ */
+function pickCounterparty(
+	unique: string[],
+	meaningful: LineItem[],
+	accountIdToName: Map<string, string>,
+	formatter: (fullPath: string) => string,
+	multiCategoryFormatter: (categories: string[]) => string,
+): string {
+	if (unique.length === 0) return "";
+	if (unique.length === 1) return formatter(unique[0]);
+
+	const categories = unique.filter(isCategory);
+	if (categories.length === 1) {
+		const nonCategories = unique.filter(a => !isCategory(a));
+		if (nonCategories.length > 0) {
+			const volumes = volumeByAccount(meaningful, accountIdToName);
+			const catVol = volumes.get(categories[0]) ?? 0;
+			const maxNonCatVol = Math.max(...nonCategories.map(a => volumes.get(a) ?? 0));
+			if (maxNonCatVol > catVol) return formatter(highestVolumeAccount(meaningful, accountIdToName));
+		}
+		return formatter(categories[0]);
+	}
+	if (categories.length > 1) return multiCategoryFormatter(categories);
+	return formatter(highestVolumeAccount(meaningful, accountIdToName));
 }
 
 /** Short account name (leaf only) for mobile displays. */
 export function mainCounterpartyShort(items: LineItem[], accountIdToName: Map<string, string>): string {
 	const meaningful = filterMeaningful(items, accountIdToName);
 	const unique = [...new Set(meaningful.map(i => accountIdToName.get(i.account_id) ?? ""))];
-	if (unique.length === 0) return "";
-	if (unique.length === 1) return accountLeaf(unique[0]);
-	const categories = unique.filter(a => a.startsWith("Expenses:") || a.startsWith("Income:"));
-	if (categories.length === 1) return accountLeaf(categories[0]);
-	if (categories.length > 1) return "Split";
-	return accountLeaf(highestVolumeAccount(meaningful, accountIdToName));
+	return pickCounterparty(unique, meaningful, accountIdToName, accountLeaf, () => "Split");
 }
 
 /** Account name (last 2 segments) for normal displays. */
 export function mainCounterparty(items: LineItem[], accountIdToName: Map<string, string>): string {
 	const meaningful = filterMeaningful(items, accountIdToName);
 	const unique = [...new Set(meaningful.map(i => accountIdToName.get(i.account_id) ?? ""))];
-	if (unique.length === 0) return "";
-	if (unique.length === 1) return accountTail(unique[0]);
-	const categories = unique.filter(a => a.startsWith("Expenses:") || a.startsWith("Income:"));
-	if (categories.length === 1) return accountTail(categories[0]);
-	if (categories.length > 1) return categories.map(a => a.split(":").pop() ?? "").join(" | ");
-	return accountTail(highestVolumeAccount(meaningful, accountIdToName));
+	return pickCounterparty(unique, meaningful, accountIdToName, accountTail,
+		cats => cats.map(a => a.split(":").pop() ?? "").join(" | "));
 }
 
 /** Full account path for tooltips. */
 export function mainCounterpartyFull(items: LineItem[], accountIdToName: Map<string, string>): string {
 	const meaningful = filterMeaningful(items, accountIdToName);
 	const unique = [...new Set(meaningful.map(i => accountIdToName.get(i.account_id) ?? ""))];
-	if (unique.length === 0) return "";
-	if (unique.length === 1) return unique[0];
-	const categories = unique.filter(a => a.startsWith("Expenses:") || a.startsWith("Income:"));
-	if (categories.length === 1) return categories[0];
-	if (categories.length > 1) return categories.join(" | ");
-	return highestVolumeAccount(meaningful, accountIdToName);
+	return pickCounterparty(unique, meaningful, accountIdToName, a => a, cats => cats.join(" | "));
 }
 
 // ── Amount display ───────────────────────────────────────
@@ -140,9 +166,9 @@ export function entryAmountParts(items: LineItem[], accountIdToName: Map<string,
 export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<string, string>): AmountPart[] {
 	const { isTrade, debits } = entryAmountParts(items, accountIdToName);
 
-	// Trade: arrow format
+	// Trade: arrow format, plus any fees
 	if (isTrade && debits.length === 2) {
-		return [{
+		const parts: AmountPart[] = [{
 			text: `${formatCurrency(debits[0].amount, debits[0].currency)} → ${formatCurrency(debits[1].amount, debits[1].currency)}`,
 			direction: "default",
 			currencies: [debits[0].currency, debits[1].currency],
@@ -152,6 +178,26 @@ export function entryAmountDisplay(items: LineItem[], accountIdToName: Map<strin
 			],
 			isTrade: true,
 		}];
+
+		// Collect expense/fee items from non-equity line items
+		const tradeExpenseByCode = new Map<string, number>();
+		for (const item of items) {
+			const name = accountIdToName.get(item.account_id) ?? "";
+			if (name.startsWith("Expenses:") || name === "Expenses") {
+				const n = parseFloat(item.amount);
+				if (n > 0) tradeExpenseByCode.set(item.currency, (tradeExpenseByCode.get(item.currency) ?? 0) + n);
+			}
+		}
+		if (tradeExpenseByCode.size > 0) {
+			parts.push({
+				text: [...tradeExpenseByCode].map(([c, a]) => formatCurrency(String(a), c)).join(", "),
+				direction: "expense",
+				currencies: [...tradeExpenseByCode.keys()],
+				segments: [...tradeExpenseByCode].map(([c, a]) => ({ amount: String(a), currency: c })),
+			});
+		}
+
+		return parts;
 	}
 
 	// Classify account types
