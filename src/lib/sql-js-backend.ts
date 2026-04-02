@@ -6388,6 +6388,13 @@ PRAGMA foreign_keys = ON;
     try { this.db.exec("UPDATE kaspa_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE zcash_account SET last_cursor = NULL, last_sync = NULL"); } catch { /* may not exist */ }
     try { this.db.exec("UPDATE stacks_account SET last_offset = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE cardano_account SET last_page = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE monero_account SET last_sync_height = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE bitshares_account SET last_operation_id = NULL, last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE dash_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE bsv_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE xec_account SET last_sync = NULL"); } catch { /* may not exist */ }
+    try { this.db.exec("UPDATE grs_account SET last_sync = NULL"); } catch { /* may not exist */ }
     this.db.exec("PRAGMA foreign_keys=ON");
     this.scheduleSave();
   }
