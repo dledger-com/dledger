@@ -359,7 +359,7 @@ export async function fetchHistoricalRates(
       // Re-classify without dprice (dpriceAssets = undefined) and group by fallback source
       const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
       for (const req of failedDprice) {
-        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, config.disabledSources);
+        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined, config.disabledSources);
         if (!fallback || fallback === "dprice") continue;
         if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
         fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
@@ -1143,6 +1143,24 @@ async function fetchDpriceHistorical(
         });
         result.fetched++;
         onDateDone();
+      }
+    }
+
+    // Store baseCurrency→USD rates from dprice (e.g., EUR→USD) so the base
+    // currency detail page has rate data.  The basePriceMap is already fetched
+    // (line above: allSymbols.add(config.baseCurrency)) but only used as a
+    // cross-rate denominator — surface it directly as stored rates too.
+    if (basePriceMap && basePriceMap.size > 0) {
+      await ensureCurrency(backend, "USD");
+      for (const [date, priceUsd] of basePriceMap) {
+        rateBatch.push({
+          id: uuidv7(),
+          date,
+          from_currency: config.baseCurrency,
+          to_currency: "USD",
+          rate: priceUsd,
+          source: "dprice",
+        });
       }
     }
   } catch (err) {
