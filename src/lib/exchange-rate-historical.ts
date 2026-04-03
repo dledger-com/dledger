@@ -1306,8 +1306,10 @@ export async function autoBackfillRates(
       }
     }
 
-    // Clear auto-"none" markings for Frankfurter fiat currencies — transient API failures
-    // shouldn't permanently block currencies with a known-reliable source.
+    // Clear stale auto-set rate sources for Frankfurter fiat currencies.
+    // Auto-"none" from transient failures and auto-"dprice" from bad resolutions
+    // (e.g., "USD" matched to a crypto token) must be reset so classifySource
+    // re-evaluates them through proper type-filtered resolution.
     const fiatInCurrencyDates = new Set(
       currencyDates.filter((cd) => FRANKFURTER_FIAT.has(cd.currency)).map((cd) => cd.currency),
     );
@@ -1315,9 +1317,9 @@ export async function autoBackfillRates(
       const storedSources = await backend.getCurrencyRateSources();
       for (const src of storedSources) {
         if (
-          src.rate_source === "none" &&
           src.set_by === "auto" &&
-          fiatInCurrencyDates.has(src.currency)
+          fiatInCurrencyDates.has(src.currency) &&
+          (src.rate_source === "none" || src.rate_source === "dprice")
         ) {
           await backend.setCurrencyRateSource(src.currency, null, "auto");
         }
