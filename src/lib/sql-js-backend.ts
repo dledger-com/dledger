@@ -3692,8 +3692,8 @@ PRAGMA foreign_keys = ON;
       [rate.date, rate.from_currency, rate.to_currency],
       (row) => row.source as string,
     );
-    if (existing !== null && sourcePriority(existing) > sourcePriority(rate.source)) {
-      return; // Don't overwrite higher-priority source
+    if (existing !== null && sourcePriority(existing) >= sourcePriority(rate.source) && existing !== rate.source) {
+      return; // Don't overwrite same-or-higher-priority source from a different origin
     }
 
     // Resolve currency asset types from DB for FK consistency
@@ -3770,8 +3770,8 @@ PRAGMA foreign_keys = ON;
       for (const rate of rates) {
         const key = `${rate.date}|${rate.from_currency}|${rate.to_currency}`;
         const existing = existingSources.get(key);
-        if (existing !== undefined && sourcePriority(existing) > sourcePriority(rate.source)) {
-          continue;
+        if (existing !== undefined && sourcePriority(existing) >= sourcePriority(rate.source) && existing !== rate.source) {
+          continue; // Don't overwrite same-or-higher-priority source from a different origin
         }
 
         this.run(

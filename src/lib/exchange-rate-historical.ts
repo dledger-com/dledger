@@ -470,6 +470,9 @@ async function fetchFrankfurterHistorical(
 
       for (const [date, rates] of Object.entries(data.rates)) {
         for (const [code, rateValue] of Object.entries(rates)) {
+          const key = `${code}:${date}`;
+          if (!neededSet.has(key)) continue; // Skip unrequested dates
+          neededSet.delete(key);
           successCurrencies.add(code);
           await ensureCurrency(backend, code);
           await ensureCurrency(backend, config.baseCurrency);
@@ -483,11 +486,7 @@ async function fetchFrankfurterHistorical(
             source: "frankfurter",
           });
           result.fetched++;
-          const key = `${code}:${date}`;
-          if (neededSet.has(key)) {
-            neededSet.delete(key);
-            onDateDone();
-          }
+          onDateDone();
         }
       }
     } catch (err) {
@@ -1356,6 +1355,16 @@ export async function autoBackfillRates(
       // Add USD to dpriceAssets so classifySource routes it to dprice.
       if (config.baseCurrency !== "USD") {
         dpriceAssets.add("USD");
+      }
+      // Store dprice source preference for newly-discovered currencies so the
+      // fallback chain respects it on subsequent runs (avoids fiat heuristic
+      // re-classifying them to frankfurter when dpriceAssets is unavailable).
+      const existingSources = await backend.getCurrencyRateSources();
+      const hasStored = new Set(existingSources.map(s => s.currency));
+      for (const code of dpriceAssets) {
+        if (!hasStored.has(code)) {
+          await backend.setCurrencyRateSource(code, "dprice", "auto");
+        }
       }
     } catch {
       // dprice unavailable — proceed without it
