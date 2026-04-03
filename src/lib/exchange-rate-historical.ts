@@ -80,14 +80,22 @@ export interface HistoricalFetchResult {
  * Returns undefined if dprice is not active or unavailable.
  */
 export async function resolveDpriceAssets(
-  config: Pick<HistoricalFetchConfig, "dpriceMode" | "dpriceUrl">,
+  config: Pick<HistoricalFetchConfig, "dpriceMode" | "dpriceUrl" | "baseCurrency">,
   currencies: string[],
 ): Promise<Set<string> | undefined> {
   if (!isDpriceActive(config.dpriceMode)) return undefined;
   try {
     const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
-    const entries = await client.getRates(currencies);
-    return new Set(entries.map((e) => e.from));
+    // Exclude Frankfurter fiat from untyped getRates to avoid crypto token mismatches
+    // (e.g., "USD" matching "Unstable States Dollar" instead of fiat USD)
+    const nonFiat = currencies.filter((c) => !FRANKFURTER_FIAT.has(c));
+    const entries = await client.getRates(nonFiat);
+    const assets = new Set(entries.map((e) => e.from));
+    // USD is dprice's base unit (no fiat:USD asset exists) — derive via cross-rate
+    if (config.baseCurrency !== "USD") {
+      assets.add("USD");
+    }
+    return assets;
   } catch {
     return undefined;
   }
