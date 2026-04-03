@@ -4,6 +4,8 @@
  * in both localStorage (sync, for instant first render) and IndexedDB (persistent, larger capacity).
  */
 
+import { cexFetch } from "$lib/cex/fetch.js";
+
 // Well-known CoinGecko IDs for common currencies (uppercase symbol → coingecko id)
 const COINGECKO_IDS: Record<string, string> = {
   BTC: "bitcoin", ETH: "ethereum", SOL: "solana", BNB: "binancecoin",
@@ -321,15 +323,15 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
   await _fetchCoinGecko(currencyCodes);
 }
 
-/** Fetch a single CoinGecko batch with 429 retry. */
+/** Fetch a single CoinGecko batch with 429 retry, routed through proxy to avoid CORS. */
 async function _fetchGeckoBatch(url: string): Promise<Array<{ id: string; symbol: string; image: string }>> {
-  let resp = await fetch(url);
-  if (resp.status === 429) {
+  let result = await cexFetch(url, 'https://api.coingecko.com', '/api/coingecko');
+  if (result.status === 429) {
     await new Promise((r) => setTimeout(r, 60_000));
-    resp = await fetch(url);
+    result = await cexFetch(url, 'https://api.coingecko.com', '/api/coingecko');
   }
-  if (!resp.ok) return [];
-  return resp.json() as Promise<Array<{ id: string; symbol: string; image: string }>>;
+  if (result.status < 200 || result.status >= 300) return [];
+  try { return JSON.parse(result.body); } catch { return []; }
 }
 
 /** Fetch missing crypto icons from CoinGecko, processing queued codes after completion. */

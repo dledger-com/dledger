@@ -48,6 +48,11 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
     proxy: {
+      '/api/coingecko': {
+        target: 'https://api.coingecko.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/coingecko/, ''),
+      },
       '/api/kraken': {
         target: 'https://api.kraken.com',
         changeOrigin: true,
