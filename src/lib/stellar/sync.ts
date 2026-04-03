@@ -212,8 +212,20 @@ export async function syncStellarAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"stellar:op_id": op.id,
+			"stellar:op_type": op.type,
+			"stellar:direction": direction,
+			"stellar:asset": mainCurrency,
+			"stellar:tx_hash": op.transaction_hash,
+		};
+		if (op.amount) meta["stellar:amount"] = op.amount;
+		if (op.from) meta["stellar:from"] = op.from;
+		if (op.to) meta["stellar:to"] = op.to;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

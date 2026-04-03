@@ -187,8 +187,19 @@ export async function syncStacksAccount(
 				lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 			}
 
+			const meta: Record<string, string> = {
+				"stx:txid": tx.tx_id,
+				"stx:direction": direction,
+				"stx:amount": amount,
+				"stx:counterparty": counterparty,
+				"stx:fee": fee,
+				"stx:burn_block_time": String(tx.burn_block_time),
+				"stx:tx_type": tx.tx_type,
+			};
+
 			try {
 				await backend.postJournalEntry(entry, lineItems);
+				await backend.setMetadata(entryId, meta);
 				existingSources.add(source);
 				result.transactions_imported++;
 			} catch (e) {

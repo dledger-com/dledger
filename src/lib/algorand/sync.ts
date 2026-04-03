@@ -182,8 +182,19 @@ export async function syncAlgorandAccount(
 				lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 			}
 
+			const meta: Record<string, string> = {
+				"algo:txid": tx.id,
+				"algo:direction": direction,
+				"algo:amount": amount,
+				"algo:counterparty": counterparty,
+				"algo:fee": fee,
+				"algo:round_time": String(tx["round-time"]),
+				"algo:tx_type": tx["tx-type"],
+			};
+
 			try {
 				await backend.postJournalEntry(entry, lineItems);
+				await backend.setMetadata(entryId, meta);
 				existingSources.add(source);
 				result.transactions_imported++;
 			} catch (e) {

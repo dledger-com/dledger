@@ -194,8 +194,17 @@ export async function syncSuiAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"sui:digest": tx.digest,
+			"sui:direction": direction,
+			"sui:asset": mainSymbol,
+			"sui:status": tx.effects.status,
+		};
+		if (tx.effects.timestamp) meta["sui:timestamp"] = tx.effects.timestamp;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

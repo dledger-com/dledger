@@ -183,8 +183,19 @@ export async function syncPolkadotAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"dot:extrinsic_index": tx.extrinsic_index,
+			"dot:hash": tx.hash,
+			"dot:direction": direction,
+			"dot:amount": amount,
+			"dot:counterparty": counterparty,
+			"dot:fee": fee,
+			"dot:block_timestamp": String(tx.block_timestamp),
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {
@@ -245,8 +256,17 @@ export async function syncPolkadotAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"dot:event_index": reward.event_index,
+			"dot:event_id": reward.event_id,
+			"dot:amount": amount,
+			"dot:block_timestamp": String(reward.block_timestamp),
+			"dot:type": isReward ? "reward" : "slash",
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

@@ -182,8 +182,18 @@ export async function syncMoneroAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"xmr:hash": tx.hash,
+			"xmr:direction": direction,
+			"xmr:amount": amount,
+			"xmr:height": String(tx.height),
+		};
+		if (tx.total_received) meta["xmr:total_received"] = piconeroToXmr(tx.total_received);
+		if (tx.total_sent) meta["xmr:total_sent"] = piconeroToXmr(tx.total_sent);
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

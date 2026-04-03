@@ -182,8 +182,19 @@ export async function syncBittensorAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"tao:extrinsic_index": tx.extrinsic_index,
+			"tao:hash": tx.hash,
+			"tao:direction": direction,
+			"tao:amount": amount,
+			"tao:counterparty": counterparty,
+			"tao:fee": fee,
+			"tao:block_timestamp": String(tx.block_timestamp),
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {
@@ -242,8 +253,17 @@ export async function syncBittensorAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"tao:event_index": reward.event_index,
+			"tao:event_id": reward.event_id,
+			"tao:amount": amount,
+			"tao:block_timestamp": String(reward.block_timestamp),
+			"tao:type": isReward ? "reward" : "slash",
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

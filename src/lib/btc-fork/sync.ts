@@ -224,8 +224,18 @@ export async function syncBtcForkAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			[`${config.id}:txid`]: tx.txid,
+			[`${config.id}:direction`]: direction,
+			[`${config.id}:timestamp`]: String(tx.timestamp),
+			[`${config.id}:input_count`]: String(tx.inputs.length),
+			[`${config.id}:output_count`]: String(tx.outputs.length),
+		};
+		if (tx.fee > 0) meta[`${config.id}:fee`] = satsToCoins(tx.fee, config.decimals);
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

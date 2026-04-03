@@ -250,8 +250,19 @@ export async function syncTonAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"ton:event_id": event.event_id,
+			"ton:direction": direction,
+			"ton:asset": mainSymbol,
+			"ton:timestamp": String(event.timestamp),
+		};
+		if (!feeTon.isZero()) meta["ton:fee"] = feeTon.toFixed();
+		const actionTypes = event.actions.map((a) => a.type).join(",");
+		if (actionTypes) meta["ton:action_types"] = actionTypes;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

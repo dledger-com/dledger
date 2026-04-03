@@ -185,8 +185,19 @@ export async function syncTezosAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"xtz:op_id": String(op.id),
+			"xtz:hash": op.hash,
+			"xtz:direction": direction,
+			"xtz:sender": op.sender.address,
+		};
+		if (op.target?.address) meta["xtz:target"] = op.target.address;
+		const gasFee = new Decimal(op.bakerFee + op.storageFee).div(MUTEZ_DIVISOR);
+		if (!gasFee.isZero()) meta["xtz:fee"] = gasFee.toFixed();
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {
@@ -261,8 +272,19 @@ export async function syncTezosAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"xtz:token_id": String(tt.id),
+			"xtz:direction": direction,
+			"xtz:token_symbol": symbol,
+			"xtz:token_contract": tt.token.contract.address,
+		};
+		if (tt.from?.address) meta["xtz:from"] = tt.from.address;
+		if (tt.to?.address) meta["xtz:to"] = tt.to.address;
+		if (tt.transactionId) meta["xtz:transaction_id"] = String(tt.transactionId);
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

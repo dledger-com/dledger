@@ -185,8 +185,19 @@ export async function syncNearAccount(
 				lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 			}
 
+			const meta: Record<string, string> = {
+				"near:hash": tx.transaction_hash,
+				"near:direction": direction,
+				"near:amount": amount,
+				"near:counterparty": counterparty,
+				"near:block_timestamp": tx.block_timestamp,
+				"near:signer": tx.signer_account_id,
+				"near:receiver": tx.receiver_account_id,
+			};
+
 			try {
 				await backend.postJournalEntry(entry, lineItems);
+				await backend.setMetadata(entryId, meta);
 				existingSources.add(source);
 				result.transactions_imported++;
 			} catch (e) {

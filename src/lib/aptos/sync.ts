@@ -191,8 +191,19 @@ export async function syncAptosAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"aptos:version": String(version),
+			"aptos:direction": netDirection,
+			"aptos:asset": mainSymbol,
+		};
+		const actTypes = group.map((a) => a.type).join(",");
+		if (actTypes) meta["aptos:activity_types"] = actTypes;
+		const gasAct = group.find((a) => a.is_gas_fee);
+		if (gasAct?.amount) meta["aptos:gas_fee"] = String(gasAct.amount);
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

@@ -263,8 +263,19 @@ export async function syncCosmosAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"cosmos:txhash": tx.txhash,
+			"cosmos:direction": direction,
+			"cosmos:asset": mainSymbol,
+		};
+		const msgTypes = tx.tx.body.messages.map((m) => m["@type"]).join(",");
+		if (msgTypes) meta["cosmos:msg_types"] = msgTypes;
+		const feeStr = feeAmounts.map((f) => `${f.amount}${f.denom}`).join(",");
+		if (feeStr) meta["cosmos:fee"] = feeStr;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

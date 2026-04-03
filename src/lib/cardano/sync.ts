@@ -243,8 +243,19 @@ export async function syncCardanoAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"ada:hash": tx.tx_hash,
+			"ada:direction": direction,
+			"ada:block_time": String(tx.block_time),
+			"ada:fee": lovelaceToAda(fee.toFixed()),
+			"ada:input_count": String(utxos.inputs.length),
+			"ada:output_count": String(utxos.outputs.length),
+		};
+		if (counterparty) meta["ada:counterparty"] = counterparty;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

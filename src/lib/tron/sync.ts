@@ -232,8 +232,21 @@ export async function syncTronAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"tron:txid": tx.txID,
+			"tron:direction": direction,
+			"tron:asset": mainCurrency,
+			"tron:contract_type": contract.type,
+			"tron:block_timestamp": String(tx.block_timestamp),
+		};
+		const counterpartyAddr = direction === "sent"
+			? (contract.parameter.value as unknown as Record<string, string>).to_address
+			: (contract.parameter.value as unknown as Record<string, string>).owner_address;
+		if (counterpartyAddr) meta["tron:counterparty"] = counterpartyAddr;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

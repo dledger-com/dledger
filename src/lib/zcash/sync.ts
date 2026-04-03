@@ -161,8 +161,17 @@ export async function syncZcashAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"zec:hash": tx.hash,
+			"zec:direction": direction,
+			"zec:amount": amount,
+			"zec:balance_change": String(tx.balance_change),
+		};
+		if (tx.time) meta["zec:time"] = tx.time;
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

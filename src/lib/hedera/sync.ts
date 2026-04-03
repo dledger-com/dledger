@@ -192,8 +192,19 @@ export async function syncHederaAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"hedera:txid": tx.transaction_id,
+			"hedera:direction": direction,
+			"hedera:amount": hbarAmount,
+			"hedera:counterparty": counterparty,
+			"hedera:fee": fee,
+			"hedera:consensus_timestamp": tx.consensus_timestamp,
+			"hedera:tx_type": tx.name,
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

@@ -205,8 +205,19 @@ export async function syncXrpAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"xrp:hash": tx.hash,
+			"xrp:direction": direction,
+			"xrp:amount": amount.toFixed(),
+			"xrp:asset": currency,
+			"xrp:fee": fee,
+			"xrp:tx_type": tx.TransactionType,
+			"xrp:counterparty": isSender ? (tx.Destination ?? "unknown") : tx.Account,
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {

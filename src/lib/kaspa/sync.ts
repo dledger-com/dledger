@@ -210,8 +210,18 @@ export async function syncKaspaAccount(
 			lineItems.push({ id: uuidv7(), journal_entry_id: entryId, account_id: accountId, currency: item.currency, amount: item.amount, lot_id: null });
 		}
 
+		const meta: Record<string, string> = {
+			"kaspa:txid": tx.transaction_id,
+			"kaspa:direction": direction,
+			"kaspa:amount": amount,
+			"kaspa:counterparty": counterparty,
+			"kaspa:input_count": String(tx.inputs.length),
+			"kaspa:output_count": String(tx.outputs.length),
+		};
+
 		try {
 			await backend.postJournalEntry(entry, lineItems);
+			await backend.setMetadata(entryId, meta);
 			existingSources.add(source);
 			result.transactions_imported++;
 		} catch (e) {
