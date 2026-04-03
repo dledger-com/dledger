@@ -1103,7 +1103,9 @@ async function fetchDpriceHistorical(
       const dateMap = priceMaps.get(req.currency.toUpperCase());
 
       for (const date of sortedDates) {
-        const usdPrice = dateMap?.get(date);
+        // dprice prices everything in USD, so "USD's price in USD" is trivially 1.
+        // Synthesize it so the cross-rate computation (1 / EUR_USD) works.
+        const usdPrice = dateMap?.get(date) ?? (req.currency === "USD" ? "1" : null);
         if (usdPrice == null) {
           result.skipped++;
           onDateDone();
