@@ -173,6 +173,20 @@ export async function testTheGraph(apiKey: string): Promise<TestResult> {
   }
 }
 
+export async function testHelius(apiKey: string): Promise<TestResult> {
+  if (!apiKey) return { ok: false, error: "API key required" };
+  try {
+    const resp = await safeFetch(
+      `https://api.helius.xyz/v0/addresses/11111111111111111111111111111112/balances?api-key=${encodeURIComponent(apiKey)}`,
+    );
+    const data = await resp.json();
+    if (data?.nativeBalance != null) return { ok: true, detail: "Connected" };
+    return { ok: false, error: data?.error ?? "Unexpected response format" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function testDprice(
   healthFn: () => Promise<{ assets: number; prices: number }>,
 ): Promise<TestResult> {

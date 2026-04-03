@@ -43,6 +43,15 @@
 
     async function persistSettings() {
         settings.update({ currency });
+        // Create the base currency in the database
+        try {
+            const name = COMMON_CURRENCIES.find((c) => c.code === currency)?.name ?? currency;
+            await getBackend().createCurrency({
+                code: currency, asset_type: "fiat", param: "",
+                name, decimal_places: 2, is_base: false,
+            });
+            invalidate("currencies");
+        } catch { /* already exists */ }
         if (!accountsCreated) {
             try {
                 await createDefaultAccounts(getBackend(), preset);

@@ -54,6 +54,7 @@
         testEtherscan,
         testRoutescan,
         testTheGraph,
+        testHelius,
         testDprice,
         type TestResult,
     } from "$lib/service-test.js";
@@ -69,6 +70,7 @@
     import { saveCustomPlugin } from "$lib/plugins/custom-plugins.js";
     import Plus from "lucide-svelte/icons/plus";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import { AlertDialog } from "bits-ui";
     import ExportDialog from "$lib/components/ExportDialog.svelte";
     import DledgerImportDialog from "$lib/components/DledgerImportDialog.svelte";
     const settings = new SettingsStore();
@@ -465,23 +467,45 @@
         }
     }
 
-    async function handleCurrencyChange(val: string) {
+    let pendingCurrency = $state("");
+    let confirmCurrencyOpen = $state(false);
+    let currencySelectKey = $state(0);
+
+    function handleCurrencyChange(val: string) {
+        // If the currency already exists in the database, just switch — no confirmation needed
+        if (currencies.some((c) => c.code === val)) {
+            settings.update({ currency: val });
+            return;
+        }
+        pendingCurrency = val;
+        confirmCurrencyOpen = true;
+    }
+
+    function cancelCurrencyChange() {
+        confirmCurrencyOpen = false;
+        // Force Select to re-render with the original value
+        currencySelectKey++;
+    }
+
+    async function applyBaseCurrencyChange() {
+        confirmCurrencyOpen = false;
+        const val = pendingCurrency;
         settings.update({ currency: val });
-        // Ensure the base currency exists in the database (e.g., EUR may not exist yet)
         try {
             const name = COMMON_CURRENCIES.find((c) => c.code === val)?.name ?? val;
             await getBackend().createCurrency({
                 code: val,
-                asset_type: "",
+                asset_type: "fiat",
                 param: "",
                 name,
-                decimal_places: val.length <= 3 ? 2 : 8,
+                decimal_places: 2,
                 is_base: false,
             });
-            invalidate("currencies");
         } catch {
             // Already exists — expected
         }
+        await loadCurrencies();
+        invalidate("currencies");
     }
 
     function handleDateFormatChange(val: string) {
@@ -798,7 +822,7 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="space-y-2">
                     <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
-                    <Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
+                    {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
                         <Select.Trigger class="w-full">
                             {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
                             {@const flagUrl = getFiatFlagUrl(settings.currency)}
@@ -818,7 +842,7 @@
                                 </Select.Item>
                             {/each}
                         </Select.Content>
-                    </Select.Root>
+                    </Select.Root>{/key}
                 </div>
 
                 <div class="space-y-2">
@@ -1662,21 +1686,41 @@
                     <!-- Helius (Solana) -->
                     <div class="flex items-center justify-between">
                         <span class="text-sm font-medium">Helius (Solana)</span>
+                        <div class="flex items-center gap-2">
+                            <Switch checked={settings.settings.heliusEnabled !== false}
+                                onCheckedChange={(c) => settings.update({ heliusEnabled: c })} />
+                            <label class="text-sm text-muted-foreground">{msg.label_enabled()}</label>
+                        </div>
                     </div>
-                    <div class="space-y-2">
-                        <label for="helius-api-key"
-                            class="text-sm font-medium">Helius API Key</label
-                        >
-                        <Input
-                            id="helius-api-key"
-                            type="password"
-                            placeholder="Helius API key"
-                            value={settings.settings.heliusApiKey ?? ""}
-                            oninput={(e: Event) => settings.update({ heliusApiKey: (e.target as HTMLInputElement).value })}
-                        />
-                        <p class="text-xs text-muted-foreground">
-                            {@html msg.settings_helius_hint()}
-                        </p>
+                    <div class:opacity-50={settings.settings.heliusEnabled === false}
+                         class:pointer-events-none={settings.settings.heliusEnabled === false}>
+                        <div class="space-y-2">
+                            <label for="helius-api-key"
+                                class="text-sm font-medium">Helius API Key</label
+                            >
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    id="helius-api-key"
+                                    type="password"
+                                    placeholder="Helius API key"
+                                    value={settings.settings.heliusApiKey ?? ""}
+                                    oninput={(e: Event) => settings.update({ heliusApiKey: (e.target as HTMLInputElement).value })}
+                                />
+                                <Button variant="outline" size="sm"
+                                    disabled={testResults.helius?.status === 'testing'}
+                                    onclick={() => handleTest('helius', () => testHelius(settings.settings.heliusApiKey ?? ''))}>
+                                    {testResults.helius?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
+                                </Button>
+                            </div>
+                            {#if testResults.helius?.status === 'success'}
+                                <span class="text-xs text-positive">{testResults.helius.message ?? 'OK'}</span>
+                            {:else if testResults.helius?.status === 'error'}
+                                <span class="text-xs text-destructive">{testResults.helius.message}</span>
+                            {/if}
+                            <p class="text-xs text-muted-foreground">
+                                {@html msg.settings_helius_hint()}
+                            </p>
+                        </div>
                     </div>
                 </Tabs.Content>
             </Tabs.Root>
@@ -2110,3 +2154,31 @@
 
 <ExportDialog bind:open={exportDialogOpen} />
 <DledgerImportDialog bind:open={importDialogOpen} />
+
+{#if confirmCurrencyOpen}
+    <AlertDialog.Root open={confirmCurrencyOpen} onOpenChange={(v) => { if (!v && confirmCurrencyOpen) cancelCurrencyChange(); }}>
+        <AlertDialog.Portal>
+            <AlertDialog.Overlay class="fixed inset-0 z-[60] bg-black/50" />
+            <AlertDialog.Content class="fixed top-1/2 left-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 bg-background rounded-lg border p-6 shadow-lg max-w-sm w-full">
+                <AlertDialog.Title class="text-lg font-semibold">{msg.dialog_change_currency()}</AlertDialog.Title>
+                <AlertDialog.Description class="text-sm text-muted-foreground mt-2">
+                    {msg.dialog_change_currency_desc({ currency: pendingCurrency })}
+                </AlertDialog.Description>
+                <div class="flex justify-end gap-2 mt-4">
+                    <AlertDialog.Cancel
+                        class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                        onclick={cancelCurrencyChange}
+                    >
+                        {msg.btn_cancel()}
+                    </AlertDialog.Cancel>
+                    <AlertDialog.Action
+                        class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-primary text-primary-foreground hover:bg-primary/90"
+                        onclick={applyBaseCurrencyChange}
+                    >
+                        {msg.btn_confirm()}
+                    </AlertDialog.Action>
+                </div>
+            </AlertDialog.Content>
+        </AlertDialog.Portal>
+    </AlertDialog.Root>
+{/if}

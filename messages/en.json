@@ -154,6 +154,8 @@
   "report_delete": "Delete Report",
   "report_no_tax_due": "No tax due",
 
+  "dialog_change_currency": "Change base currency?",
+  "dialog_change_currency_desc": "This will add {currency} to your currencies and use it as the base for all reports and exchange rates.",
   "dialog_create_account": "Create Account",
   "dialog_create_account_desc": "Add a new account to your chart of accounts.",
   "dialog_merge_account": "Merge Account?",

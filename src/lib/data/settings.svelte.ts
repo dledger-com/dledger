@@ -60,6 +60,7 @@ export interface AppSettings {
   locale?: string;
   btcExplorerUrl?: string;  // default: "https://mempool.space"
   heliusApiKey?: string;    // Helius API key for Solana sync
+  heliusEnabled?: boolean;  // Enable/disable Helius (Solana) integration
   blockfrostApiKey?: string; // Blockfrost API key for Cardano sync
   moneroLwsUrl?: string;     // Monero Light Wallet Server URL (user-configured, no default)
   onboardingCompleted?: boolean;
@@ -82,6 +83,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   debugMode: false,
   holdingPeriodDays: 365,
   handlers: { "generic-etherscan": { enabled: true } },
+  dpriceMode: "http",
+  dpriceUrl: "https://dprice.dledger.com",
 };
 
 /**

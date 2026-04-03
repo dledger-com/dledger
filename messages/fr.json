@@ -154,6 +154,8 @@
   "report_delete": "Supprimer le rapport",
   "report_no_tax_due": "Aucun impôt dû",
 
+  "dialog_change_currency": "Changer la devise de base ?",
+  "dialog_change_currency_desc": "Cela ajoutera {currency} à vos devises et l'utilisera comme base pour tous les rapports et taux de change.",
   "dialog_create_account": "Créer un compte",
   "dialog_create_account_desc": "Ajouter un nouveau compte au plan comptable.",
   "dialog_merge_account": "Fusionner le compte ?",
