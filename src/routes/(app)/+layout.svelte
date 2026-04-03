@@ -45,11 +45,16 @@
       dpriceUrl: settings.settings.dpriceUrl,
     });
     setAssetProxy((url) => dpriceClient.proxyAsset(url));
-    setAsyncGeckoIdResolver(async (symbol) => {
+    setAsyncGeckoIdResolver(async (symbols) => {
       try {
-        const results = await dpriceClient.queryAssets({ symbol });
-        return results[0]?.coingecko_id ?? null;
-      } catch { return null; }
+        const grouped = await dpriceClient.queryAssetsBatch(symbols, 1);
+        const result = new Map<string, string | null>();
+        for (const sym of symbols) {
+          const assets = grouped.get(sym.toUpperCase()) ?? [];
+          result.set(sym, assets[0]?.coingecko_id ?? null);
+        }
+        return result;
+      } catch { return new Map(symbols.map(s => [s, null])); }
     });
 
     // Ensure the base currency exists in the database on startup

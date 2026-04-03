@@ -165,14 +165,15 @@ function resolveGeckoId(symbol: string): string | undefined {
   return _dbGeckoIds.get(symbol) || COINGECKO_IDS[symbol] || undefined;
 }
 
-let _asyncResolveGeckoId: ((symbol: string) => Promise<string | null>) | null = null;
+let _asyncResolveGeckoIdBatch: ((symbols: string[]) => Promise<Map<string, string | null>>) | null = null;
 
 /**
- * Set an async resolver for CoinGecko IDs (queries dprice).
+ * Set a batch async resolver for CoinGecko IDs (queries dprice).
  * Used as last resort for symbols not in the DB or hardcoded map.
+ * Single call resolves all symbols at once.
  */
-export function setAsyncGeckoIdResolver(fn: (symbol: string) => Promise<string | null>): void {
-  _asyncResolveGeckoId = fn;
+export function setAsyncGeckoIdResolver(fn: (symbols: string[]) => Promise<Map<string, string | null>>): void {
+  _asyncResolveGeckoIdBatch = fn;
 }
 
 // ---- Image fetching ----
@@ -389,31 +390,45 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
         }
       }
 
-      // Batch 2: resolve unknown currencies via dprice, then guess remainder by lowercase symbol
-      if (unknownMissing.length > 0 && _asyncResolveGeckoId) {
+      // Batch 2: resolve unknown currencies via dprice (single bulk query), then fetch icons
+      if (unknownMissing.length > 0 && _asyncResolveGeckoIdBatch) {
         const stillUnknown: string[] = [];
-        for (const symbol of unknownMissing) {
-          try {
-            const geckoId = await _asyncResolveGeckoId(symbol);
+        try {
+          const resolved = await _asyncResolveGeckoIdBatch(unknownMissing);
+          // Collect all resolved gecko IDs for a single batch CoinGecko fetch
+          const geckoIdToSymbols = new Map<string, string[]>();
+          for (const symbol of unknownMissing) {
+            const geckoId = resolved.get(symbol) ?? null;
             if (geckoId) {
-              _dbGeckoIds.set(symbol, geckoId); // cache for future use
-              // Fetch icon immediately
-              const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${geckoId}&per_page=1&sparkline=false`;
-              const data = await _fetchGeckoBatch(url);
-              for (const coin of data) {
-                if (coin.image && !coin.image.includes("missing")) {
-                  const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-                  _icons.set(symbol, icon);
-                  newIcons.set(symbol, icon);
-                  notify();
-                }
-              }
+              _dbGeckoIds.set(symbol, geckoId);
+              const list = geckoIdToSymbols.get(geckoId) ?? [];
+              list.push(symbol);
+              geckoIdToSymbols.set(geckoId, list);
             } else {
               stillUnknown.push(symbol);
             }
-          } catch {
-            stillUnknown.push(symbol);
           }
+          // Fetch icons for all resolved gecko IDs in batches of 250
+          const allGeckoIds = [...geckoIdToSymbols.keys()];
+          for (let i = 0; i < allGeckoIds.length; i += 250) {
+            const batch = allGeckoIds.slice(i, i + 250);
+            const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${batch.join(",")}&per_page=250&sparkline=false`;
+            const data = await _fetchGeckoBatch(url);
+            for (const coin of data) {
+              if (coin.image && !coin.image.includes("missing")) {
+                const icon = await fetchAsDataUri(coin.image) ?? coin.image;
+                const symbols = geckoIdToSymbols.get(coin.id) ?? [coin.symbol.toUpperCase()];
+                for (const sym of symbols) {
+                  _icons.set(sym, icon);
+                  newIcons.set(sym, icon);
+                }
+                notify();
+              }
+            }
+          }
+        } catch {
+          // Batch resolution failed — treat all as unknown
+          stillUnknown.push(...unknownMissing);
         }
         // Fall through to guess for any still-unresolved
         if (stillUnknown.length > 0) {
