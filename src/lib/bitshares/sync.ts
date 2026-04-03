@@ -14,6 +14,7 @@ import {
   type DescriptionData,
 } from "../types/description-data.js";
 import { FIAT_CURRENCIES } from "../currency-type.js";
+import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
 import {
   walletAssets,
   walletExternal,
@@ -217,6 +218,15 @@ export async function syncBitsharesAccount(
 
           await backend.storeRawTransaction(source, JSON.stringify(op));
           await backend.postJournalEntry(entry, lineItems);
+
+          // Derive and record exchange rate from trade line items
+          const rateItems: TradeRateItem[] = processed.lineItems.map((i) => ({
+            account_name: i.account,
+            currency: i.currency,
+            amount: i.amount,
+          }));
+          await deriveAndRecordTradeRate(backend, date, rateItems);
+
           existingSources.add(source);
           result.transactions_imported++;
         } catch (e) {
