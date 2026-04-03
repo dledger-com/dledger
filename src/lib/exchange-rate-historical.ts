@@ -164,6 +164,11 @@ export async function findMissingRates(
   options?: { exactDateMatch?: boolean },
   disabledSources?: Set<string>,
   unsourceableCurrencies?: Set<string>,
+  preloaded?: {
+    storedSources?: CurrencyRateSource[];
+    currencyTypeMap?: Map<string, string>;
+    tokenAddrCurrencies?: Set<string>;
+  },
 ): Promise<HistoricalRateRequest[]> {
   // Deduplicate
   const seen = new Set<string>();
@@ -176,23 +181,20 @@ export async function findMissingRates(
     unique.push(cd);
   }
 
-  // Load DB-stored rate sources
-  const storedSources = await backend.getCurrencyRateSources();
+  // Use pre-loaded data or load from DB
+  const storedSources = preloaded?.storedSources ?? await backend.getCurrencyRateSources();
   const rateSourceMap = new Map<string, CurrencyRateSource>();
   for (const src of storedSources) {
     rateSourceMap.set(src.currency, src);
   }
 
-  // Load token addresses for source classification
-  const tokenAddresses = await backend.getCurrencyTokenAddresses();
-  const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
+  const tokenAddrCurrencies = preloaded?.tokenAddrCurrencies ?? new Set(
+    (await backend.getCurrencyTokenAddresses()).map((t) => t.currency),
+  );
 
-  // Build code → asset_type lookup for source classification
-  const allCurrencies = await backend.listCurrencies();
-  const currencyTypeMap = new Map<string, string>();
-  for (const c of allCurrencies) {
-    currencyTypeMap.set(c.code, c.asset_type);
-  }
+  const currencyTypeMap = preloaded?.currencyTypeMap ?? new Map(
+    (await backend.listCurrencies()).map((c) => [c.code, c.asset_type]),
+  );
 
   // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
@@ -355,8 +357,8 @@ export async function fetchHistoricalRates(
 
   // Fallback: if dprice failed for some currencies, re-classify without dprice and retry
   if (failedAfterPrimary.size > 0 && !config.signal?.aborted) {
-    // Load data needed for re-classification
-    const storedSources = await backend.getCurrencyRateSources();
+    // Reuse config.storedSources when available (passed from autoBackfillRates) to avoid redundant DB queries
+    const storedSources = config.storedSources ?? await backend.getCurrencyRateSources();
     const rateSourceMap = new Map<string, CurrencyRateSource>();
     for (const src of storedSources) rateSourceMap.set(src.currency, src);
     const tokenAddresses = await backend.getCurrencyTokenAddresses();
@@ -1338,99 +1340,99 @@ export async function autoBackfillRates(
     }
   }
 
-  // Auto-resolve dpriceAssets when dprice is active but caller didn't provide the set.
-  // Placed after USD injection so the dprice query includes ALL currencies (ledger + transitive USD).
-  // Exclude Frankfurter fiat currencies from this untyped call — they'll be resolved via
-  // resolveDpriceAsset() below with proper type filtering to avoid mismatching fiat
-  // symbols (e.g., "USD") to wrong crypto tokens in dprice.
+  // ---- Load shared reference data once (used by dprice resolution, findMissingRates, fetchHistoricalRates) ----
+  const allCurrencies = await backend.listCurrencies();
+  const currencyTypeMap = new Map(allCurrencies.map((c) => [c.code, c.asset_type]));
+  const currencyNameMap = new Map(allCurrencies.map((c) => [c.code, c.name]));
+  const tokenAddresses = await backend.getCurrencyTokenAddresses();
+  const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+  const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
+
+  // ---- Build dpriceAssets from stored sources (avoids redundant getRates() calls) ----
+  // On first run for a currency, getRates() discovers it and we store the preference.
+  // On subsequent runs, we read the stored preference — no dprice call needed.
   if (!dpriceAssets && isDpriceActive(config.dpriceMode)) {
-    try {
-      const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
-      const codes = [...new Set(currencyDates.map((cd) => cd.currency))];
-      const nonFiatCodes = codes.filter((c) => !FRANKFURTER_FIAT.has(c));
-      const entries = await client.getRates(nonFiatCodes);
-      dpriceAssets = new Set(entries.map((e) => e.from));
-      // USD is dprice's internal base unit — no fiat:USD asset exists. But when
-      // baseCurrency != USD, we can derive USD rates via cross-rate (1 / base→USD).
-      // Add USD to dpriceAssets so classifySource routes it to dprice.
-      if (config.baseCurrency !== "USD") {
-        dpriceAssets.add("USD");
-      }
-      // Store dprice source preference for newly-discovered currencies so the
-      // fallback chain respects it on subsequent runs (avoids fiat heuristic
-      // re-classifying them to frankfurter when dpriceAssets is unavailable).
-      const existingSources = await backend.getCurrencyRateSources();
-      const hasStored = new Set(existingSources.map(s => s.currency));
-      for (const code of dpriceAssets) {
-        if (!hasStored.has(code)) {
+    const storedSources = await backend.getCurrencyRateSources();
+    // Reconstruct dpriceAssets from currencies already known to dprice
+    dpriceAssets = new Set(
+      storedSources.filter(s => s.rate_source === "dprice").map(s => s.currency),
+    );
+    // USD is dprice's internal base unit — no fiat:USD asset exists. But when
+    // baseCurrency != USD, we can derive USD rates via cross-rate (1 / base→USD).
+    if (config.baseCurrency !== "USD") {
+      dpriceAssets.add("USD");
+    }
+
+    // Only query dprice for currencies with NO stored source at all (newly imported).
+    // Currencies already classified (dprice, frankfurter, defillama, none, etc.) are skipped.
+    const hasStored = new Set(storedSources.map(s => s.currency));
+    const codes = [...new Set(currencyDates.map(cd => cd.currency))];
+    const newCodes = codes.filter(c => !hasStored.has(c) && !FRANKFURTER_FIAT.has(c));
+
+    if (newCodes.length > 0) {
+      try {
+        const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+        const entries = await client.getRates(newCodes);
+        const discoveredCodes = new Set(entries.map(e => e.from));
+        for (const code of discoveredCodes) {
+          dpriceAssets.add(code);
           await backend.setCurrencyRateSource(code, "dprice", "auto");
         }
-      }
-    } catch {
-      // dprice unavailable — proceed without it
-    }
-  }
 
-  // Re-evaluate auto-"none" currencies: if dprice now knows them, clear the stale marking
-  // so classifySource() can re-route them to dprice instead of silently skipping.
-  if (dpriceAssets && dpriceAssets.size > 0) {
-    const storedSources = await backend.getCurrencyRateSources();
+        // Try to resolve dprice asset IDs for discovered currencies (disambiguation)
+        const originChainMap = new Map<string, string>();
+        if (backend.getCurrencyOrigins) {
+          const origins = await backend.getCurrencyOrigins();
+          for (const o of origins) {
+            if (o.origin === "hyperliquid") originChainMap.set(o.currency, "hyperliquid");
+            else if (o.origin === "solana") originChainMap.set(o.currency, "solana");
+          }
+        }
+        for (const code of discoveredCodes) {
+          try {
+            const assetType = currencyTypeMap.get(code) ?? "";
+            const tokenInfo = tokenAddrMap.get(code);
+            const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
+            const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
+              name: currencyNameMap.get(code),
+              originChain,
+            });
+            if (resolved !== "none" && resolved !== "ambiguous") {
+              await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
+            }
+          } catch { /* individual resolution failure */ }
+        }
+
+        // Also try to resolve new currencies that getRates() missed
+        // (ambiguous symbols, no recent price, etc.)
+        const unresolvedCodes = newCodes.filter(c => !discoveredCodes.has(c) && c !== config.baseCurrency);
+        for (const code of unresolvedCodes) {
+          try {
+            const assetType = currencyTypeMap.get(code) ?? "";
+            const tokenInfo = tokenAddrMap.get(code);
+            const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
+            const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
+              name: currencyNameMap.get(code),
+              originChain,
+            });
+            if (resolved !== "none" && resolved !== "ambiguous") {
+              dpriceAssets.add(code);
+              await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
+
+            }
+          } catch { /* individual resolution failure */ }
+        }
+      } catch {
+        // dprice unavailable — proceed with DB-known dprice currencies only
+      }
+    }
+
+    // Re-evaluate auto-"none" currencies: if dprice now knows them, clear the stale marking
+    // so classifySource() can re-route them to dprice instead of silently skipping.
     for (const src of storedSources) {
       if (src.rate_source === "none" && src.set_by === "auto" && dpriceAssets.has(src.currency)) {
         await backend.setCurrencyRateSource(src.currency, null, "auto");
       }
-    }
-  }
-
-  // Try to resolve dprice assets for currencies that getRates() missed
-  // (ambiguous symbols, no recent price, etc.) — closes gap with syncExchangeRates()
-  if (isDpriceActive(config.dpriceMode) && currencyDates.length > 0) {
-    try {
-      const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
-      const allCurrencies = await backend.listCurrencies();
-      const currencyTypeMap = new Map(allCurrencies.map((c) => [c.code, c.asset_type]));
-      const currencyNameMap = new Map(allCurrencies.map((c) => [c.code, c.name]));
-      const tokenAddresses = await backend.getCurrencyTokenAddresses();
-      const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
-
-      // Build origin chain map from transaction sources
-      const originChainMap = new Map<string, string>();
-      if (backend.getCurrencyOrigins) {
-        const origins = await backend.getCurrencyOrigins();
-        for (const o of origins) {
-          if (o.origin === "hyperliquid") originChainMap.set(o.currency, "hyperliquid");
-          else if (o.origin === "solana") originChainMap.set(o.currency, "solana");
-          // etherscan currencies already have token addresses for chain matching
-        }
-      }
-
-      // Currencies that need rates but weren't returned by getRates()
-      const neededCodes = new Set(currencyDates.map((cd) => cd.currency));
-      const unresolvedCodes = [...neededCodes].filter(
-        (c) => c !== config.baseCurrency && !dpriceAssets?.has(c),
-      );
-
-      for (const code of unresolvedCodes) {
-        try {
-          const assetType = currencyTypeMap.get(code) ?? "";
-          const tokenInfo = tokenAddrMap.get(code);
-          const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
-          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
-            name: currencyNameMap.get(code),
-            originChain,
-          });
-          if (resolved !== "none" && resolved !== "ambiguous") {
-            if (!dpriceAssets) dpriceAssets = new Set();
-            dpriceAssets.add(code);
-            // Store the resolved ID so fetchDpriceHistorical uses ID-based lookup
-            await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
-          }
-        } catch {
-          // Individual resolution failure — skip
-        }
-      }
-    } catch {
-      // dprice client creation failed — skip resolution
     }
   }
 
@@ -1440,8 +1442,17 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [], missingDatesByCode: {}, currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
   }
 
+  // Single load of stored sources for findMissingRates and fetchHistoricalRates.
+  // This consolidates the multiple getCurrencyRateSources() calls those functions
+  // would otherwise make independently.
+  const freshStoredSources = await backend.getCurrencyRateSources();
+
   const unsourceable = new Set<string>();
-  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources, unsourceable);
+  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources, unsourceable, {
+    storedSources: freshStoredSources,
+    currencyTypeMap,
+    tokenAddrCurrencies,
+  });
 
   // Collect per-currency missing dates for unsourceable currencies
   const missingDatesByCode: Record<string, string[]> = {};
@@ -1454,10 +1465,10 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [...unsourceable], missingDatesByCode, currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
 
-  // Ensure storedSources is populated for dprice ID-based lookups
+  // Pass storedSources through config for dprice ID-based lookups in fetchDpriceHistorical
   const effectiveConfig = config.storedSources
     ? config
-    : { ...config, storedSources: await backend.getCurrencyRateSources() };
+    : { ...config, storedSources: freshStoredSources };
 
   const result = await fetchHistoricalRates(backend, missing, effectiveConfig, dpriceAssets);
 
