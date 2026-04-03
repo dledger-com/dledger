@@ -1073,7 +1073,8 @@ async function fetchDpriceHistorical(
     const filters = [...allSymbols].map(s => {
       const id = idMap.get(s);
       if (id) return { id };
-      const assetType = currencyTypeMap?.get(s);
+      // Use DB asset_type, or infer "fiat" for known Frankfurter currencies
+      const assetType = currencyTypeMap?.get(s) || (FRANKFURTER_FIAT.has(s) ? "fiat" : "");
       return assetType ? { symbol: s, type: assetType as import("./dprice-client.js").DpriceAssetType } : { symbol: s };
     });
 
@@ -1558,7 +1559,7 @@ async function ensureCurrency(backend: Backend, code: string): Promise<void> {
   try {
     await backend.createCurrency({
       code,
-      asset_type: "",
+      asset_type: FRANKFURTER_FIAT.has(code) ? "fiat" : "",
       param: "",
       name: code,
       decimal_places: code.length <= 3 ? 2 : 8,
