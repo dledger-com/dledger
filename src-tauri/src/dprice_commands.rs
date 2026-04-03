@@ -86,12 +86,14 @@ pub async fn dprice_get_rates(
     state: State<'_, DpriceState>,
     currencies: Vec<String>,
     date: Option<String>,
+    asset_type: Option<String>,
 ) -> Result<Vec<DpriceRateEntry>, String> {
     let db_path = state.active_db_path();
     let date = date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+    let parsed_type = asset_type.and_then(|s| s.parse::<dprice::db::models::AssetType>().ok());
     tokio::task::spawn_blocking(move || {
         let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
-        let matrix = cross_rate::get_rate_matrix(&db, &currencies, &date, None)
+        let matrix = cross_rate::get_rate_matrix(&db, &currencies, &date, parsed_type.as_ref())
             .map_err(|e| e.to_string())?;
         Ok(matrix
             .into_iter()

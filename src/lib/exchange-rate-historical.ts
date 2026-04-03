@@ -289,7 +289,10 @@ export async function fetchHistoricalRates(
 
   // ---- dprice: local price DB historical (FIRST — avoids redundant external API calls) ----
   if (dpriceReqs.length > 0 && isDpriceActive(config.dpriceMode) && !config.signal?.aborted) {
-    await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick);
+    // Load currency types for dprice filter disambiguation (fiat vs crypto)
+    const allCurrenciesList = await backend.listCurrencies();
+    const currencyTypeMap = new Map(allCurrenciesList.map((c) => [c.code, c.asset_type]));
+    await fetchDpriceHistorical(backend, dpriceReqs, config, result, successCurrencies, tick, currencyTypeMap);
   }
 
   // ---- Frankfurter: full timeseries, multi-symbol ----
@@ -1019,6 +1022,7 @@ async function fetchDpriceHistorical(
   result: HistoricalFetchResult,
   successCurrencies: Set<string>,
   onDateDone: () => void,
+  currencyTypeMap?: Map<string, string>,
 ): Promise<void> {
   const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
@@ -1060,7 +1064,9 @@ async function fetchDpriceHistorical(
     }
     const filters = [...allSymbols].map(s => {
       const id = idMap.get(s);
-      return id ? { id } : { symbol: s };
+      if (id) return { id };
+      const assetType = currencyTypeMap?.get(s);
+      return assetType ? { symbol: s, type: assetType as import("./dprice-client.js").DpriceAssetType } : { symbol: s };
     });
 
     // Single batch request for all symbols across the full date range
@@ -1111,6 +1117,7 @@ async function fetchDpriceHistorical(
           if (baseUsd == null || parseFloat(baseUsd) === 0) {
             // Cross-rate unavailable — fall back to storing as X→USD so
             // the transitive lookup path (X→USD→baseCurrency) can still work
+            if (req.currency === "USD") { onDateDone(); continue; } // Skip self-rate
             if (!currenciesToEnsure.has("USD")) { await ensureCurrency(backend, "USD"); currenciesToEnsure.add("USD"); }
             successCurrencies.add(req.currency);
             rateBatch.push({
@@ -1132,6 +1139,12 @@ async function fetchDpriceHistorical(
           toCurrency = "USD";
         }
 
+        // Never store self-rates (X→X)
+        if (req.currency === toCurrency) {
+          onDateDone();
+          continue;
+        }
+
         successCurrencies.add(req.currency);
         rateBatch.push({
           id: uuidv7(),
@@ -1143,24 +1156,6 @@ async function fetchDpriceHistorical(
         });
         result.fetched++;
         onDateDone();
-      }
-    }
-
-    // Store baseCurrency→USD rates from dprice (e.g., EUR→USD) so the base
-    // currency detail page has rate data.  The basePriceMap is already fetched
-    // (line above: allSymbols.add(config.baseCurrency)) but only used as a
-    // cross-rate denominator — surface it directly as stored rates too.
-    if (basePriceMap && basePriceMap.size > 0) {
-      await ensureCurrency(backend, "USD");
-      for (const [date, priceUsd] of basePriceMap) {
-        rateBatch.push({
-          id: uuidv7(),
-          date,
-          from_currency: config.baseCurrency,
-          to_currency: "USD",
-          rate: priceUsd,
-          source: "dprice",
-        });
       }
     }
   } catch (err) {
@@ -1332,11 +1327,15 @@ export async function autoBackfillRates(
 
   // Auto-resolve dpriceAssets when dprice is active but caller didn't provide the set.
   // Placed after USD injection so the dprice query includes ALL currencies (ledger + transitive USD).
+  // Exclude Frankfurter fiat currencies from this untyped call — they'll be resolved via
+  // resolveDpriceAsset() below with proper type filtering to avoid mismatching fiat
+  // symbols (e.g., "USD") to wrong crypto tokens in dprice.
   if (!dpriceAssets && isDpriceActive(config.dpriceMode)) {
     try {
       const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
       const codes = [...new Set(currencyDates.map((cd) => cd.currency))];
-      const entries = await client.getRates(codes);
+      const nonFiatCodes = codes.filter((c) => !FRANKFURTER_FIAT.has(c));
+      const entries = await client.getRates(nonFiatCodes);
       dpriceAssets = new Set(entries.map((e) => e.from));
     } catch {
       // dprice unavailable — proceed without it

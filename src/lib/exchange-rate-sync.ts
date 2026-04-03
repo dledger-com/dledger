@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource } from "./backend.js";
-import { createDpriceClient, type DpriceClient, type DpriceAssetFilter } from "./dprice-client.js";
+import { createDpriceClient, type DpriceClient, type DpriceAssetFilter, type DpriceAssetType } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 
 // ECB/Frankfurter supported fiat currency codes
@@ -133,9 +133,11 @@ export async function resolveDpriceAsset(
     originChain?: string;
   },
 ): Promise<{ id: string; type: string; coingecko_id?: string } | "none" | "ambiguous"> {
-  // Query with symbol only (no type/contract filter) to get ALL candidates,
+  // Query with symbol + type (when known) to get the best candidates,
   // then disambiguate locally with richer heuristics.
-  const filter: DpriceAssetFilter = { symbol: code };
+  const filter: DpriceAssetFilter = assetType
+    ? { symbol: code, type: assetType as DpriceAssetType }
+    : { symbol: code };
 
   const results = await client.queryAssets(filter, 10);
   if (results.length === 0) return "none";
