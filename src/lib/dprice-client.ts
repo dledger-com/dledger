@@ -226,10 +226,11 @@ class HttpDpriceClient implements DpriceClient {
   async getRates(
     currencies: string[],
     date?: string,
-    _opts?: { type?: DpriceAssetType },
+    opts?: { type?: DpriceAssetType },
   ): Promise<DpriceRateEntry[]> {
     const params = new URLSearchParams({ symbols: currencies.join(",") });
     if (date) params.set("date", date);
+    if (opts?.type) params.set("type", opts.type);
     // Fetch all prices in USD (default quote), then compute cross-rate matrix
     const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
     const usdPrices = new Map<string, number>();
@@ -255,32 +256,38 @@ class HttpDpriceClient implements DpriceClient {
     fromDate: string,
     toDate: string,
   ): Promise<DpriceBatchResult> {
-    // Separate ID-based and symbol-based filters for the REST API
-    const symbolEntries: string[] = [];
-    const idEntries: string[] = [];
+    // The REST API only supports a single global `type` filter.  When bases
+    // contain a mix of types (e.g., fiat EUR + crypto BTS), a single request
+    // would either pick wrong assets or filter out valid ones.  Split into
+    // groups by (type, hasId) and merge the results.
+    const groups = new Map<string, { ids: string[]; symbols: string[] }>();
     for (const b of bases) {
-      if (b.id) idEntries.push(b.id);
-      else if (b.symbol) symbolEntries.push(b.symbol);
+      const key = b.id ? "__id__" : (b.type ?? "");
+      let g = groups.get(key);
+      if (!g) { g = { ids: [], symbols: [] }; groups.set(key, g); }
+      if (b.id) g.ids.push(b.id);
+      else if (b.symbol) g.symbols.push(b.symbol);
     }
-    const params = new URLSearchParams({ date: fromDate, end_date: toDate });
-    if (symbolEntries.length > 0) params.set("symbols", symbolEntries.join(","));
-    if (idEntries.length > 0) params.set("ids", idEntries.join(","));
-    // If all filters share the same type/param, add them to the query
-    const types = new Set(bases.map((b) => b.type).filter(Boolean));
-    if (types.size === 1) params.set("type", [...types][0]!);
-    const paramVals = new Set(bases.map((b) => b.param).filter(Boolean));
-    if (paramVals.size === 1) params.set("param", [...paramVals][0]!);
 
-    const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
-    return {
-      from: resp.date,
-      to: resp.end_date ?? resp.date,
-      currencies: resp.currencies.map((c) => ({
-        id: c.id ?? "",
-        symbol: c.base,
-        prices: c.prices,
-      })),
-    };
+    const allCurrencies: DpriceBatchResult["currencies"] = [];
+    let resultFrom = fromDate;
+    let resultTo = toDate;
+
+    for (const [key, g] of groups) {
+      const params = new URLSearchParams({ date: fromDate, end_date: toDate });
+      if (g.symbols.length > 0) params.set("symbols", g.symbols.join(","));
+      if (g.ids.length > 0) params.set("ids", g.ids.join(","));
+      if (key !== "__id__" && key !== "") params.set("type", key);
+
+      const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+      resultFrom = resp.date;
+      resultTo = resp.end_date ?? resp.date;
+      for (const c of resp.currencies) {
+        allCurrencies.push({ id: c.id ?? "", symbol: c.base, prices: c.prices });
+      }
+    }
+
+    return { from: resultFrom, to: resultTo, currencies: allCurrencies };
   }
 
   async sync(): Promise<string> {
