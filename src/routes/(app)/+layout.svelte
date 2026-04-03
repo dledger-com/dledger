@@ -20,7 +20,8 @@
   import { getBackend } from "$lib/backend.js";
   import { initCoinIcons, setAssetProxy, setCryptoGeckoIds, setAsyncGeckoIdResolver } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
-  import { onInvalidate } from "$lib/data/invalidation.js";
+  import { onInvalidate, invalidate } from "$lib/data/invalidation.js";
+  import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
   import { createDpriceClient } from "$lib/dprice-client.js";
 
@@ -50,6 +51,20 @@
         return results[0]?.coingecko_id ?? null;
       } catch { return null; }
     });
+
+    // Ensure the base currency exists in the database on startup
+    const baseCurrency = settings.currency;
+    if (baseCurrency) {
+      const name = COMMON_CURRENCIES.find((c) => c.code === baseCurrency)?.name ?? baseCurrency;
+      backend.createCurrency({
+        code: baseCurrency,
+        asset_type: "",
+        param: "",
+        name,
+        decimal_places: baseCurrency.length <= 3 ? 2 : 8,
+        is_base: false,
+      }).then(() => invalidate("currencies")).catch(() => { /* already exists — expected */ });
+    }
 
     const refreshIcons = () => {
       Promise.all([

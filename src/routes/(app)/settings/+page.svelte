@@ -465,8 +465,23 @@
         }
     }
 
-    function handleCurrencyChange(val: string) {
+    async function handleCurrencyChange(val: string) {
         settings.update({ currency: val });
+        // Ensure the base currency exists in the database (e.g., EUR may not exist yet)
+        try {
+            const name = COMMON_CURRENCIES.find((c) => c.code === val)?.name ?? val;
+            await getBackend().createCurrency({
+                code: val,
+                asset_type: "",
+                param: "",
+                name,
+                decimal_places: val.length <= 3 ? 2 : 8,
+                is_base: false,
+            });
+            invalidate("currencies");
+        } catch {
+            // Already exists — expected
+        }
     }
 
     function handleDateFormatChange(val: string) {

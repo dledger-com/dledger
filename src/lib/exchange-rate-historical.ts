@@ -1265,12 +1265,48 @@ export async function autoBackfillRates(
           }
         }
       }
-      if (minDate <= maxDate) {
-        let current = new Date(minDate);
-        const end = new Date(maxDate);
-        while (current <= end) {
-          currencyDates.push({ currency: "USD", date: current.toISOString().slice(0, 10) });
-          current.setDate(current.getDate() + 1);
+      // Fallback: if no non-fiat requirements, use ALL requirements (fiat-only ledger)
+      if (minDate > maxDate) {
+        for (const req of filtered) {
+          if (req.mode === "range") {
+            if (req.firstDate < minDate) minDate = req.firstDate;
+            const endDate = req.hasBalance && today > req.lastDate ? today : req.lastDate;
+            if (endDate > maxDate) maxDate = endDate;
+          } else {
+            for (const d of req.dates) {
+              if (d < minDate) minDate = d;
+              if (d > maxDate) maxDate = d;
+            }
+          }
+        }
+      }
+      // Last resort: if ledger is empty, inject today for a current rate
+      if (minDate > maxDate) {
+        minDate = today;
+        maxDate = today;
+      }
+      let current = new Date(minDate);
+      const end = new Date(maxDate);
+      while (current <= end) {
+        currencyDates.push({ currency: "USD", date: current.toISOString().slice(0, 10) });
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
+    // Clear auto-"none" markings for Frankfurter fiat currencies — transient API failures
+    // shouldn't permanently block currencies with a known-reliable source.
+    const fiatInCurrencyDates = new Set(
+      currencyDates.filter((cd) => FRANKFURTER_FIAT.has(cd.currency)).map((cd) => cd.currency),
+    );
+    if (fiatInCurrencyDates.size > 0) {
+      const storedSources = await backend.getCurrencyRateSources();
+      for (const src of storedSources) {
+        if (
+          src.rate_source === "none" &&
+          src.set_by === "auto" &&
+          fiatInCurrencyDates.has(src.currency)
+        ) {
+          await backend.setCurrencyRateSource(src.currency, null, "auto");
         }
       }
     }

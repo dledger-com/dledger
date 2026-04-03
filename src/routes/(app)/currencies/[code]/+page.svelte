@@ -263,7 +263,7 @@
       await getBackend().recordExchangeRate(rate);
       toast.success("Exchange rate recorded");
       rateFrom = code;
-      rateTo = settings.currency !== code ? settings.currency : "";
+      rateTo = settings.currency !== code ? settings.currency : "USD";
       rateValue = "";
       rateDate = new Date().toISOString().slice(0, 10);
       await loadExchangeRates();
@@ -297,7 +297,8 @@
 
   onMount(async () => {
     rateFrom = code;
-    rateTo = settings.currency !== code ? settings.currency : "";
+    rateTo = settings.currency !== code ? settings.currency : "USD";
+    if (quoteCurrency === code) quoteCurrency = "USD";
     await Promise.all([
       loadCurrencyDetail(),
       loadRateSource(),
