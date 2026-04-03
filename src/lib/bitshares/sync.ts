@@ -219,6 +219,11 @@ export async function syncBitsharesAccount(
           await backend.storeRawTransaction(source, JSON.stringify(op));
           await backend.postJournalEntry(entry, lineItems);
 
+          // Store structured metadata
+          if (Object.keys(processed.metadata).length > 0) {
+            await backend.setMetadata(entryId, processed.metadata);
+          }
+
           // Derive and record exchange rate from trade line items
           const rateItems: TradeRateItem[] = processed.lineItems.map((i) => ({
             account_name: i.account,
@@ -262,6 +267,7 @@ export async function syncBitsharesAccount(
 interface ProcessedOp {
   descData: DescriptionData;
   lineItems: LineItemData[];
+  metadata: Record<string, string>;
 }
 
 async function processOperation(
@@ -275,6 +281,7 @@ async function processOperation(
   const opData = op.op[1];
   const items: LineItemData[] = [];
   let descData: DescriptionData;
+  const meta: Record<string, string> = { "bts:op_id": op.id };
 
   const feeData = opData.fee as BitsharesAmount | undefined;
   const txRef = op.id; // e.g. "1.11.108975045"
@@ -290,6 +297,12 @@ async function processOperation(
       descData = onchainTransferDescription(CHAIN, amt.symbol, isSend ? "sent" : "received", {
         counterparty: counterpartyShort, txHash: txRef,
       });
+
+      meta["bts:op_type"] = "transfer";
+      meta["bts:direction"] = isSend ? "sent" : "received";
+      meta["bts:counterparty"] = counterparty;
+      meta["bts:amount"] = amt.amount;
+      meta["bts:asset"] = amt.symbol;
 
       const wallet = walletAssets(CHAIN, label);
       const ext = walletExternal(CHAIN, accountPathAddr(counterparty));
@@ -307,8 +320,16 @@ async function processOperation(
     case 1: { // limit_order_create — lock funds into DEX order
       const data = opData as unknown as LimitOrderCreateOp;
       const sell = await resolveAmount(data.amount_to_sell);
+      const buy = await resolveAmount(data.min_to_receive);
 
       descData = operationDescription(CHAIN, "Limit order create", sell.symbol);
+
+      meta["bts:op_type"] = "limit_order_create";
+      meta["bts:sell_amount"] = sell.amount;
+      meta["bts:sell_asset"] = sell.symbol;
+      meta["bts:buy_amount"] = buy.amount;
+      meta["bts:buy_asset"] = buy.symbol;
+      meta["bts:expiration"] = data.expiration;
 
       items.push({ account: walletAssets(CHAIN, label), currency: sell.symbol, amount: new Decimal(sell.amount).neg().toFixed() });
       items.push({ account: tradingAccount(sell.symbol), currency: sell.symbol, amount: sell.amount });
@@ -325,6 +346,12 @@ async function processOperation(
       const debt = await resolveAmount(data.delta_debt);
 
       descData = defiActionDescription(CHAIN, "Collateral update", CHAIN, txRef);
+
+      meta["bts:op_type"] = "call_order_update";
+      meta["bts:collateral_delta"] = collateral.amount;
+      meta["bts:collateral_asset"] = collateral.symbol;
+      meta["bts:debt_delta"] = debt.amount;
+      meta["bts:debt_asset"] = debt.symbol;
 
       const wallet = walletAssets(CHAIN, label);
 
@@ -346,6 +373,17 @@ async function processOperation(
 
       descData = tradeDescription(CHAIN, pays.symbol, receives.symbol);
 
+      meta["bts:op_type"] = "fill_order";
+      meta["bts:pays_amount"] = pays.amount;
+      meta["bts:pays_asset"] = pays.symbol;
+      meta["bts:receives_amount"] = receives.amount;
+      meta["bts:receives_asset"] = receives.symbol;
+      meta["bts:order_id"] = data.order_id;
+      meta["bts:is_maker"] = String(data.is_maker);
+      // Compute price: receives per pays unit
+      const price = new Decimal(receives.amount).div(pays.amount);
+      meta["bts:price"] = price.toSignificantDigits(8).toFixed();
+
       const wallet = walletAssets(CHAIN, label);
       items.push({ account: wallet, currency: pays.symbol, amount: new Decimal(pays.amount).neg().toFixed() });
       items.push({ account: wallet, currency: receives.symbol, amount: receives.amount });
@@ -360,6 +398,10 @@ async function processOperation(
 
       descData = defiActionDescription(CHAIN, "Settlement", CHAIN, txRef);
 
+      meta["bts:op_type"] = "asset_settle";
+      meta["bts:settle_amount"] = amt.amount;
+      meta["bts:settle_asset"] = amt.symbol;
+
       items.push({ account: walletAssets(CHAIN, label), currency: amt.symbol, amount: new Decimal(amt.amount).neg().toFixed() });
       items.push({ account: defiLiabilities(CHAIN, "SmartCoin"), currency: amt.symbol, amount: amt.amount });
       break;
@@ -370,6 +412,11 @@ async function processOperation(
       const amt = await resolveAmount(data.amount);
 
       descData = rewardDescription(CHAIN, "Vesting withdrawal", amt.symbol);
+
+      meta["bts:op_type"] = "vesting_balance_withdraw";
+      meta["bts:vesting_amount"] = amt.amount;
+      meta["bts:vesting_asset"] = amt.symbol;
+      meta["bts:vesting_id"] = data.vesting_balance;
 
       items.push({ account: walletAssets(CHAIN, label), currency: amt.symbol, amount: amt.amount });
       items.push({ account: exchangeStaking(CHAIN), currency: amt.symbol, amount: new Decimal(amt.amount).neg().toFixed() });
@@ -382,6 +429,13 @@ async function processOperation(
       const amtB = await resolveAmount(data.amount_b);
 
       descData = defiActionDescription(CHAIN, "LP deposit", CHAIN, txRef);
+
+      meta["bts:op_type"] = "liquidity_pool_deposit";
+      meta["bts:pool_id"] = data.pool;
+      meta["bts:amount_a"] = amtA.amount;
+      meta["bts:asset_a"] = amtA.symbol;
+      meta["bts:amount_b"] = amtB.amount;
+      meta["bts:asset_b"] = amtB.symbol;
 
       const wallet = walletAssets(CHAIN, label);
       const lp = defiAssets(CHAIN, "LP");
@@ -398,6 +452,11 @@ async function processOperation(
 
       descData = defiActionDescription(CHAIN, "LP withdraw", CHAIN, txRef);
 
+      meta["bts:op_type"] = "liquidity_pool_withdraw";
+      meta["bts:pool_id"] = data.pool;
+      meta["bts:share_amount"] = shares.amount;
+      meta["bts:share_asset"] = shares.symbol;
+
       items.push({ account: defiAssets(CHAIN, "LP"), currency: shares.symbol, amount: new Decimal(shares.amount).neg().toFixed() });
       items.push({ account: walletAssets(CHAIN, label), currency: shares.symbol, amount: shares.amount });
       break;
@@ -409,6 +468,13 @@ async function processOperation(
       const receive = await resolveAmount(data.min_to_receive);
 
       descData = tradeDescription(CHAIN, sell.symbol, receive.symbol);
+
+      meta["bts:op_type"] = "liquidity_pool_exchange";
+      meta["bts:pool_id"] = data.pool;
+      meta["bts:sell_amount"] = sell.amount;
+      meta["bts:sell_asset"] = sell.symbol;
+      meta["bts:receive_amount"] = receive.amount;
+      meta["bts:receive_asset"] = receive.symbol;
 
       const wallet = walletAssets(CHAIN, label);
       items.push({ account: wallet, currency: sell.symbol, amount: new Decimal(sell.amount).neg().toFixed() });
@@ -422,14 +488,16 @@ async function processOperation(
       return null;
   }
 
-  // Add fee line items
+  // Add fee line items and metadata
   if (feeData && feeData.amount > 0) {
     const fee = await resolveAmount(feeData);
+    meta["bts:fee_amount"] = fee.amount;
+    meta["bts:fee_asset"] = fee.symbol;
     items.push({ account: walletAssets(CHAIN, label), currency: fee.symbol, amount: new Decimal(fee.amount).neg().toFixed() });
     items.push({ account: chainFees(CHAIN), currency: fee.symbol, amount: fee.amount });
   }
 
   if (items.length === 0) return null;
 
-  return { descData, lineItems: items };
+  return { descData, lineItems: items, metadata: meta };
 }
