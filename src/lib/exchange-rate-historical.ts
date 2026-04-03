@@ -1228,6 +1228,9 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: ["Backend does not support getCurrencyDateRequirements"], failedCurrencies: [], unsourceableCurrencies: [], missingDatesByCode: {}, currenciesAnalyzed: 0, totalDatesRequested: 0 };
   }
 
+  // Ensure the base currency exists in the database (may have been cleared by import/restore)
+  await ensureCurrency(backend, config.baseCurrency);
+
   const requirements = await backend.getCurrencyDateRequirements(config.baseCurrency);
 
   // Filter out hidden currencies
