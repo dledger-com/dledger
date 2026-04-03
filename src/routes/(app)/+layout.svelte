@@ -20,7 +20,7 @@
   import { getBackend } from "$lib/backend.js";
   import { initCoinIcons, setAssetProxy, setCryptoGeckoIds, setAsyncGeckoIdResolver } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
-  import { onInvalidate, invalidate } from "$lib/data/invalidation.js";
+  import { onInvalidate } from "$lib/data/invalidation.js";
   import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
   import { createDpriceClient } from "$lib/dprice-client.js";
@@ -63,7 +63,7 @@
         name,
         decimal_places: baseCurrency.length <= 3 ? 2 : 8,
         is_base: false,
-      }).then(() => invalidate("currencies")).catch(() => { /* already exists — expected */ });
+      }).catch(() => { /* already exists — expected */ });
     }
 
     const refreshIcons = () => {
