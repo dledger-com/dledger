@@ -1342,6 +1342,12 @@ export async function autoBackfillRates(
       const nonFiatCodes = codes.filter((c) => !FRANKFURTER_FIAT.has(c));
       const entries = await client.getRates(nonFiatCodes);
       dpriceAssets = new Set(entries.map((e) => e.from));
+      // USD is dprice's internal base unit — no fiat:USD asset exists. But when
+      // baseCurrency != USD, we can derive USD rates via cross-rate (1 / base→USD).
+      // Add USD to dpriceAssets so classifySource routes it to dprice.
+      if (config.baseCurrency !== "USD") {
+        dpriceAssets.add("USD");
+      }
     } catch {
       // dprice unavailable — proceed without it
     }

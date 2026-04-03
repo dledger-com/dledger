@@ -135,11 +135,15 @@ export async function resolveDpriceAsset(
 ): Promise<{ id: string; type: string; coingecko_id?: string } | "none" | "ambiguous"> {
   // Query with symbol + type (when known) to get the best candidates,
   // then disambiguate locally with richer heuristics.
-  const filter: DpriceAssetFilter = assetType
-    ? { symbol: code, type: assetType as DpriceAssetType }
-    : { symbol: code };
-
-  const results = await client.queryAssets(filter, 10);
+  // Fallback: if typed query returns nothing, retry with symbol-only so the
+  // disambiguation cascade (step 3: type filter) can still pick the right asset.
+  let results = await client.queryAssets(
+    assetType ? { symbol: code, type: assetType as DpriceAssetType } : { symbol: code },
+    10,
+  );
+  if (results.length === 0 && assetType) {
+    results = await client.queryAssets({ symbol: code }, 10);
+  }
   if (results.length === 0) return "none";
   if (results.length === 1) return { id: results[0].id, type: String(results[0].type), coingecko_id: results[0].coingecko_id ?? undefined };
 
