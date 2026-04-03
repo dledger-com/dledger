@@ -149,7 +149,7 @@ pub struct DpriceAssetInfo {
 fn to_asset_query_filter(f: DpriceAssetFilter) -> dprice::db::queries::AssetQueryFilter {
     dprice::db::queries::AssetQueryFilter {
         id: f.id,
-        symbol: f.symbol,
+        symbols: f.symbol.map(|s| vec![s]),
         asset_type: f.asset_type.and_then(|s| s.parse().ok()),
         param: f.param,
         coingecko_id: f.coingecko_id,
@@ -493,6 +493,45 @@ pub async fn dprice_query_assets(
                 coinpaprika_id: a.coinpaprika_id,
                 first_price_date: a.first_price_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 last_price_date: a.last_price_date.map(|d| d.format("%Y-%m-%d").to_string()),
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn dprice_query_assets_batch(
+    state: State<'_, DpriceState>,
+    symbols: Vec<String>,
+    limit: Option<usize>,
+) -> Result<std::collections::HashMap<String, Vec<DpriceAssetInfo>>, String> {
+    let db_path = state.active_db_path();
+    let limit = limit.unwrap_or(10);
+    tokio::task::spawn_blocking(move || {
+        let db = PriceDb::open_readonly(&db_path).map_err(|e| e.to_string())?;
+        let symbol_refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
+        let grouped = db.query_assets_grouped(&symbol_refs, limit).map_err(|e| e.to_string())?;
+        Ok(grouped
+            .into_iter()
+            .map(|(sym, assets)| {
+                let infos: Vec<DpriceAssetInfo> = assets
+                    .into_iter()
+                    .map(|a| DpriceAssetInfo {
+                        id: a.id,
+                        symbol: a.symbol,
+                        name: a.name,
+                        asset_type: a.asset_type.as_str().to_string(),
+                        param: a.param,
+                        coingecko_id: a.coingecko_id,
+                        contract_chain: a.contract_chain,
+                        contract_address: a.contract_address,
+                        coinpaprika_id: a.coinpaprika_id,
+                        first_price_date: a.first_price_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                        last_price_date: a.last_price_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                    })
+                    .collect();
+                (sym, infos)
             })
             .collect())
     })

@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateSource, CurrencyDateRequirement } from "./backend.js";
-import { type SourceName, resolveDpriceAsset } from "./exchange-rate-sync.js";
+import { type SourceName, resolveDpriceAssetsBatch } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 import { setRateHealthSyncing, updateRateHealth } from "./data/rate-health.svelte.js";
@@ -1379,48 +1379,30 @@ export async function autoBackfillRates(
           await backend.setCurrencyRateSource(code, "dprice", "auto");
         }
 
-        // Try to resolve dprice asset IDs for discovered currencies (disambiguation)
-        const originChainMap = new Map<string, string>();
-        if (backend.getCurrencyOrigins) {
-          const origins = await backend.getCurrencyOrigins();
-          for (const o of origins) {
-            if (o.origin === "hyperliquid") originChainMap.set(o.currency, "hyperliquid");
-            else if (o.origin === "solana") originChainMap.set(o.currency, "solana");
-          }
-        }
-        for (const code of discoveredCodes) {
-          try {
-            const assetType = currencyTypeMap.get(code) ?? "";
-            const tokenInfo = tokenAddrMap.get(code);
-            const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
-            const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
-              name: currencyNameMap.get(code),
-              originChain,
-            });
-            if (resolved !== "none" && resolved !== "ambiguous") {
-              await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
-            }
-          } catch { /* individual resolution failure */ }
-        }
-
-        // Also try to resolve new currencies that getRates() missed
-        // (ambiguous symbols, no recent price, etc.)
+        // Batch-resolve dprice asset IDs for all new currencies (discovered + unresolved)
         const unresolvedCodes = newCodes.filter(c => !discoveredCodes.has(c) && c !== config.baseCurrency);
-        for (const code of unresolvedCodes) {
-          try {
-            const assetType = currencyTypeMap.get(code) ?? "";
-            const tokenInfo = tokenAddrMap.get(code);
-            const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
-            const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
-              name: currencyNameMap.get(code),
-              originChain,
-            });
-            if (resolved !== "none" && resolved !== "ambiguous") {
-              dpriceAssets.add(code);
-              await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
-
+        const allCodesToResolve = [...discoveredCodes, ...unresolvedCodes];
+        if (allCodesToResolve.length > 0) {
+          const originChainMap = new Map<string, string>();
+          if (backend.getCurrencyOrigins) {
+            const origins = await backend.getCurrencyOrigins();
+            for (const o of origins) {
+              if (o.origin === "hyperliquid") originChainMap.set(o.currency, "hyperliquid");
+              else if (o.origin === "solana") originChainMap.set(o.currency, "solana");
             }
-          } catch { /* individual resolution failure */ }
+          }
+          const batchResults = await resolveDpriceAssetsBatch(client, allCodesToResolve.map(code => ({
+            code,
+            assetType: currencyTypeMap.get(code) ?? "",
+            tokenAddr: tokenAddrMap.get(code),
+            hints: { name: currencyNameMap.get(code), originChain: originChainMap.get(code) ?? tokenAddrMap.get(code)?.chain },
+          })));
+          for (const [code, resolved] of batchResults) {
+            if (resolved !== "none" && resolved !== "ambiguous") {
+              if (!discoveredCodes.has(code)) dpriceAssets.add(code);
+              await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
+            }
+          }
         }
       } catch {
         // dprice unavailable — proceed with DB-known dprice currencies only

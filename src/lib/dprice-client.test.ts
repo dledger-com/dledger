@@ -53,6 +53,7 @@ describe("dprice-client", () => {
       latestDate: async () => null,
       ensurePrices: async () => [],
       queryAssets: async () => [],
+      queryAssetsBatch: async () => new Map(),
       exportDb: async () => new Uint8Array(),
       importDb: async () => "ok",
       proxyAsset: async () => null,

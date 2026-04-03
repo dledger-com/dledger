@@ -72,6 +72,7 @@ export interface DpriceClient {
     opts?: { type?: DpriceAssetType; param?: string },
   ): Promise<string[]>;
   queryAssets(filter: DpriceAssetFilter, limit?: number): Promise<DpriceAssetInfo[]>;
+  queryAssetsBatch(symbols: string[], limit?: number): Promise<Map<string, DpriceAssetInfo[]>>;
   exportDb(): Promise<Uint8Array>;
   importDb(data: Uint8Array): Promise<string>;
   proxyAsset(url: string): Promise<Blob | null>;
@@ -154,6 +155,13 @@ class TauriDpriceClient implements DpriceClient {
 
   async queryAssets(filter: DpriceAssetFilter, limit?: number): Promise<DpriceAssetInfo[]> {
     return this.invoke("dprice_query_assets", { filter, limit });
+  }
+
+  async queryAssetsBatch(symbols: string[], limit?: number): Promise<Map<string, DpriceAssetInfo[]>> {
+    const raw = await this.invoke<Record<string, DpriceAssetInfo[]>>(
+      "dprice_query_assets_batch", { symbols, limit },
+    );
+    return new Map(Object.entries(raw));
   }
 
   async exportDb(): Promise<Uint8Array> {
@@ -348,8 +356,16 @@ class HttpDpriceClient implements DpriceClient {
     if (filter.contract_chain) params.set("contract_chain", filter.contract_chain);
     if (filter.contract_address) params.set("contract_address", filter.contract_address);
     if (limit) params.set("limit", limit.toString());
-    const resp = await this.fetchJson<{ results: DpriceAssetInfo[] }>(`/api/v1/assets?${params}`);
-    return resp.results;
+    const resp = await this.fetchJson<{ results: Record<string, DpriceAssetInfo[]> }>(`/api/v1/assets?${params}`);
+    // Flatten grouped response for single-filter callers
+    return Object.values(resp.results).flat();
+  }
+
+  async queryAssetsBatch(symbols: string[], limit?: number): Promise<Map<string, DpriceAssetInfo[]>> {
+    const params = new URLSearchParams({ symbol: symbols.join(",") });
+    if (limit) params.set("limit", limit.toString());
+    const resp = await this.fetchJson<{ results: Record<string, DpriceAssetInfo[]> }>(`/api/v1/assets?${params}`);
+    return new Map(Object.entries(resp.results));
   }
 
   async exportDb(): Promise<Uint8Array> {

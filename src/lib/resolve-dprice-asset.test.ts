@@ -6,6 +6,7 @@ import type { DpriceClient, DpriceAssetInfo } from "./dprice-client.js";
 function mockClient(assets: DpriceAssetInfo[]): DpriceClient {
   return {
     async queryAssets() { return assets; },
+    async queryAssetsBatch(symbols: string[]) { const m = new Map<string, typeof assets>(); for (const s of symbols) m.set(s.toUpperCase(), assets.filter(a => a.symbol.toUpperCase() === s.toUpperCase())); return m; },
     async health() { return { assets: 0, prices: 0 }; },
     async getRate() { return null; },
     async getRates() { return []; },

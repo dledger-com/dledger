@@ -172,6 +172,7 @@ pub fn run() {
             dprice_commands::dprice_vacuum,
             dprice_commands::dprice_export_parquet,
             dprice_commands::dprice_query_assets,
+            dprice_commands::dprice_query_assets_batch,
             dprice_commands::dprice_asset_proxy,
             bitcoin_commands::validate_btc_address,
             bitcoin_commands::validate_btc_xpub,

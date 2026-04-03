@@ -208,6 +208,97 @@ export async function resolveDpriceAsset(
   return "ambiguous";
 }
 
+type DpriceResolveResult = { id: string; type: string; coingecko_id?: string } | "none" | "ambiguous";
+
+/**
+ * Batch-resolve multiple currencies against dprice in a single query.
+ * Applies the same disambiguation cascade as resolveDpriceAsset() per symbol.
+ */
+export async function resolveDpriceAssetsBatch(
+  client: DpriceClient,
+  requests: Array<{
+    code: string;
+    assetType: string;
+    tokenAddr?: { chain: string; contract_address: string };
+    hints?: { name?: string; originChain?: string };
+  }>,
+): Promise<Map<string, DpriceResolveResult>> {
+  if (requests.length === 0) return new Map();
+
+  const uniqueSymbols = [...new Set(requests.map(r => r.code))];
+  const allCandidates = await client.queryAssetsBatch(uniqueSymbols, 10);
+
+  const results = new Map<string, DpriceResolveResult>();
+  for (const req of requests) {
+    if (results.has(req.code)) continue; // already resolved (dedup)
+    const candidates = allCandidates.get(req.code.toUpperCase()) ?? [];
+    if (candidates.length === 0) { results.set(req.code, "none"); continue; }
+    if (candidates.length === 1) {
+      results.set(req.code, { id: candidates[0].id, type: String(candidates[0].type), coingecko_id: candidates[0].coingecko_id ?? undefined });
+      continue;
+    }
+
+    // Disambiguation cascade (same as resolveDpriceAsset)
+    const pick = (r: typeof candidates[0]) => ({ id: r.id, type: String(r.type), coingecko_id: r.coingecko_id ?? undefined });
+    let pool = candidates;
+
+    // 1. Contract address match
+    if (req.tokenAddr) {
+      const byContract = pool.filter(
+        r => r.contract_address?.toLowerCase() === req.tokenAddr!.contract_address.toLowerCase()
+          && r.contract_chain?.toLowerCase() === req.tokenAddr!.chain.toLowerCase(),
+      );
+      if (byContract.length === 1) { results.set(req.code, pick(byContract[0])); continue; }
+      if (byContract.length > 1) pool = byContract;
+    }
+
+    // 2. Chain match via origin hint
+    if (req.hints?.originChain && pool.length > 1) {
+      const byChain = pool.filter(r => r.contract_chain?.toLowerCase() === req.hints!.originChain!.toLowerCase());
+      if (byChain.length === 1) { results.set(req.code, pick(byChain[0])); continue; }
+      if (byChain.length > 1) pool = byChain;
+    }
+
+    // 3. Asset type filter
+    if (req.assetType && pool.length > 1) {
+      const byType = pool.filter(r => r.type === req.assetType);
+      if (byType.length === 1) { results.set(req.code, pick(byType[0])); continue; }
+      if (byType.length > 1) pool = byType;
+    }
+
+    // 4. Has prices
+    if (pool.length > 1) {
+      const withPrices = pool.filter(r => r.first_price_date != null);
+      if (withPrices.length === 1) { results.set(req.code, pick(withPrices[0])); continue; }
+      if (withPrices.length > 1) pool = withPrices;
+    }
+
+    // 5. Name match
+    if (req.hints?.name && pool.length > 1) {
+      const nameLower = req.hints.name.toLowerCase();
+      const byName = pool.filter(r => r.name.toLowerCase() === nameLower);
+      if (byName.length === 1) { results.set(req.code, pick(byName[0])); continue; }
+    }
+
+    // 6. Best candidate by recency
+    if (pool.length > 1) {
+      const sorted = [...pool].sort((a, b) => {
+        const aDate = a.last_price_date ?? "";
+        const bDate = b.last_price_date ?? "";
+        if (aDate !== bDate) return bDate.localeCompare(aDate);
+        const aFirst = a.first_price_date ?? "9999";
+        const bFirst = b.first_price_date ?? "9999";
+        return aFirst.localeCompare(bFirst);
+      });
+      results.set(req.code, pick(sorted[0]));
+      continue;
+    }
+
+    results.set(req.code, "ambiguous");
+  }
+  return results;
+}
+
 /** Map base currency to Binance quote currency and construct trading pair */
 function toBinancePair(currency: string, baseCurrency: string): string | null {
   const quoteMap: Record<string, string> = { USD: "USDT", EUR: "EUR" };
@@ -324,15 +415,18 @@ export async function syncExchangeRates(
       const codesToResolve = codes.filter(
         (c) => dpriceAssets!.has(c) && !existingIds.has(c),
       );
-      for (const code of codesToResolve) {
-        try {
-          const assetType = currencyTypeMap.get(code) ?? "";
-          const tokenInfo = tokenAddrMap.get(code);
-          const originChain = originChainMap.get(code) ?? tokenInfo?.chain;
-          const resolved = await resolveDpriceAsset(client, code, assetType, tokenInfo, {
-            name: currencyNameMap.get(code),
-            originChain,
-          });
+      // Also resolve baseCurrency if needed
+      if (dpriceAssets.has(baseCurrency) && !existingIds.has(baseCurrency)) {
+        codesToResolve.push(baseCurrency);
+      }
+      if (codesToResolve.length > 0) {
+        const batchResults = await resolveDpriceAssetsBatch(client, codesToResolve.map(code => ({
+          code,
+          assetType: currencyTypeMap.get(code) ?? "",
+          tokenAddr: tokenAddrMap.get(code),
+          hints: { name: currencyNameMap.get(code), originChain: originChainMap.get(code) ?? tokenAddrMap.get(code)?.chain },
+        })));
+        for (const [code, resolved] of batchResults) {
           if (resolved !== "none" && resolved !== "ambiguous") {
             dpriceResolvedIds.set(code, resolved.id);
             if (resolved.type) dpriceResolvedTypes.set(code, resolved.type);
@@ -340,24 +434,7 @@ export async function syncExchangeRates(
               try { await backend.setCryptoAssetCoingeckoId(code, resolved.coingecko_id); } catch { /* non-critical */ }
             }
           }
-        } catch {
-          // Individual resolution failure — skip, will use symbol-based fallback
         }
-      }
-      // Also resolve baseCurrency if needed
-      if (dpriceAssets.has(baseCurrency) && !existingIds.has(baseCurrency)) {
-        try {
-          const baseAssetType = currencyTypeMap.get(baseCurrency) ?? "";
-          const baseToken = tokenAddrMap.get(baseCurrency);
-          const baseResolved = await resolveDpriceAsset(client, baseCurrency, baseAssetType, baseToken);
-          if (baseResolved !== "none" && baseResolved !== "ambiguous") {
-            dpriceResolvedIds.set(baseCurrency, baseResolved.id);
-            if (baseResolved.type) dpriceResolvedTypes.set(baseCurrency, baseResolved.type);
-            if (baseResolved.coingecko_id) {
-              try { await backend.setCryptoAssetCoingeckoId(baseCurrency, baseResolved.coingecko_id); } catch { /* non-critical */ }
-            }
-          }
-        } catch { /* ignore */ }
       }
 
       // Filter entries that give us a direct rate to baseCurrency
