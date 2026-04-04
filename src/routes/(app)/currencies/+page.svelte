@@ -512,7 +512,9 @@
                       <div class="flex items-center gap-1.5">
                         <CoinIcon code={c.code} />
                         {c.name}
-                        {#if c.is_hidden}
+                        {#if c.code === settings.currency}
+                          <span class="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">{m.label_base()}</span>
+                        {:else if c.is_hidden}
                           <span class="ml-1 text-xs text-muted-foreground">{m.label_hidden()}</span>
                         {/if}
                       </div>
