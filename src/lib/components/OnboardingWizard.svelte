@@ -206,9 +206,16 @@
         {:else if step === 1}
             <!-- Step 2: Add Source -->
             <div class="space-y-6">
+                {#if sourceAdded}
+                    <div class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20 px-4 py-3">
+                        <Check class="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                        <p class="text-sm text-green-800 dark:text-green-300">{m.onboarding_source_added()}</p>
+                    </div>
+                {/if}
+
                 <div class="text-center space-y-2">
-                    <h2 class="text-xl font-semibold">{m.onboarding_add_source()}</h2>
-                    <p class="text-sm text-muted-foreground">{m.onboarding_add_source_desc()}</p>
+                    <h2 class="text-xl font-semibold">{sourceAdded ? m.onboarding_add_another() : m.onboarding_add_source()}</h2>
+                    <p class="text-sm text-muted-foreground">{sourceAdded ? m.onboarding_source_added_desc() : m.onboarding_add_source_desc()}</p>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -243,10 +250,17 @@
                         <ChevronLeft class="mr-1 h-4 w-4" />
                         {m.onboarding_step_welcome()}
                     </Button>
-                    <Button variant="ghost" onclick={handleSkipSource}>
-                        {m.onboarding_skip_source()}
-                        <ChevronRight class="ml-1 h-4 w-4" />
-                    </Button>
+                    {#if sourceAdded}
+                        <Button onclick={handleNext}>
+                            {m.onboarding_next()}
+                            <ChevronRight class="ml-1 h-4 w-4" />
+                        </Button>
+                    {:else}
+                        <Button variant="ghost" onclick={handleSkipSource}>
+                            {m.onboarding_skip_source()}
+                            <ChevronRight class="ml-1 h-4 w-4" />
+                        </Button>
+                    {/if}
                 </div>
             </div>
 
