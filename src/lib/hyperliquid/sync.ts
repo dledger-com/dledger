@@ -7,7 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription, tradeDescription, transferDescription, perpTradeDescription, fundingDescription } from "../types/description-data.js";
 import { defiAssets, defiIncome, defiExpense, EQUITY_TRADING } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
 import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
 import type { HlSpotMeta } from "./api.js";
@@ -122,17 +122,7 @@ export async function syncHyperliquidAccount(
 
 	// Context helpers (same pattern as Solana sync)
 	async function ensureCurrency(code: string): Promise<void> {
-		if (currencySet.has(code)) return;
-		const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-		await backend.createCurrency({
-			code,
-			asset_type: assetType,
-			param: "",
-			name: code,
-			decimal_places: 8,
-			is_base: false,
-		});
-		currencySet.add(code);
+		await ensureCurrencyExists(backend, code, currencySet, { context: "crypto-chain", decimals: 8 });
 	}
 
 	function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {

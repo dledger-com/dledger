@@ -4,6 +4,7 @@ import type { Backend } from "../backend.js";
 import type { Account, JournalEntry, LineItem, EtherscanAccount } from "../types/index.js";
 import { SUPPORTED_CHAINS } from "../types/index.js";
 import type { HandlerContext, HandlerResult, TxHashGroup } from "../handlers/types.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 
 /** Structural type for handler registry — accepts both HandlerRegistry and IndexedHandlerRegistry */
 interface HandlerRegistryLike {
@@ -413,9 +414,7 @@ async function consolidateViaHandlers(
       return ensureAccountHelper(backend, accountMap, fullName, date);
     },
     async ensureCurrency(code: string, decimals: number): Promise<void> {
-      if (currencySet.has(code)) return;
-      await backend.createCurrency({ code, asset_type: "", param: "", name: code, decimal_places: decimals, is_base: false });
-      currencySet.add(code);
+      await ensureCurrencyExists(backend, code, currencySet, { context: "exchange", decimals });
     },
   };
 
@@ -530,10 +529,7 @@ async function consolidateDirectRemap(
 
   // Ensure accounts and currencies
   for (const item of newItems) {
-    if (!currencySet.has(item.currency)) {
-      await backend.createCurrency({ code: item.currency, asset_type: "", param: "", name: item.currency, decimal_places: 8, is_base: false });
-      currencySet.add(item.currency);
-    }
+    await ensureCurrencyExists(backend, item.currency, currencySet, { context: "exchange", decimals: 8 });
     await ensureAccountHelper(backend, accountMap, item.account, etherscanEntry.date);
   }
 

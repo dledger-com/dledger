@@ -28,7 +28,7 @@ import type {
   BalanceAssertion,
   BalanceAssertionResult,
 } from "./types/index.js";
-import type { Backend, CurrencyRateSource, Reconciliation, UnreconciledLineItem } from "./backend.js";
+import type { Backend, CurrencyRateOverride, CurrencyRateSource, RateFetchFailure, Reconciliation, UnreconciledLineItem } from "./backend.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
 import type { CustomPluginRecord } from "./plugins/custom-plugins.js";
 import { parseTags } from "./utils/tags.js";
@@ -100,14 +100,15 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 CREATE TABLE IF NOT EXISTS currency (
-    code TEXT NOT NULL,
+    code TEXT PRIMARY KEY NOT NULL,
     asset_type TEXT NOT NULL DEFAULT '',
-    param TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     decimal_places INTEGER NOT NULL DEFAULT 2,
     is_base INTEGER NOT NULL DEFAULT 0,
     is_hidden INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (code, asset_type, param)
+    tracks_currency TEXT REFERENCES currency(code),
+    sync_full_range INTEGER NOT NULL DEFAULT 0,
+    is_stale INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS account (
@@ -150,13 +151,10 @@ CREATE TABLE IF NOT EXISTS line_item (
     id TEXT PRIMARY KEY NOT NULL,
     journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
     account_id TEXT NOT NULL REFERENCES account(id),
-    currency TEXT NOT NULL,
-    currency_asset_type TEXT NOT NULL DEFAULT '',
-    currency_param TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL REFERENCES currency(code),
     amount TEXT NOT NULL,
     lot_id TEXT REFERENCES lot(id),
-    is_reconciled INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
+    is_reconciled INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_line_item_entry ON line_item(journal_entry_id);
 CREATE INDEX IF NOT EXISTS idx_line_item_account ON line_item(account_id);
@@ -165,20 +163,14 @@ CREATE INDEX IF NOT EXISTS idx_line_item_currency ON line_item(currency);
 CREATE TABLE IF NOT EXISTS lot (
     id TEXT PRIMARY KEY NOT NULL,
     account_id TEXT NOT NULL REFERENCES account(id),
-    currency TEXT NOT NULL,
-    currency_asset_type TEXT NOT NULL DEFAULT '',
-    currency_param TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL REFERENCES currency(code),
     acquired_date TEXT NOT NULL,
     original_quantity TEXT NOT NULL,
     remaining_quantity TEXT NOT NULL,
     cost_basis_per_unit TEXT NOT NULL,
-    cost_basis_currency TEXT NOT NULL,
-    cost_basis_currency_asset_type TEXT NOT NULL DEFAULT '',
-    cost_basis_currency_param TEXT NOT NULL DEFAULT '',
+    cost_basis_currency TEXT NOT NULL REFERENCES currency(code),
     journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
-    is_closed INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param),
-    FOREIGN KEY (cost_basis_currency, cost_basis_currency_asset_type, cost_basis_currency_param) REFERENCES currency(code, asset_type, param)
+    is_closed INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_lot_account_currency ON lot(account_id, currency);
 CREATE INDEX IF NOT EXISTS idx_lot_open ON lot(account_id, currency, is_closed, acquired_date);
@@ -189,12 +181,9 @@ CREATE TABLE IF NOT EXISTS lot_disposal (
     journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
     quantity TEXT NOT NULL,
     proceeds_per_unit TEXT NOT NULL,
-    proceeds_currency TEXT NOT NULL,
-    proceeds_currency_asset_type TEXT NOT NULL DEFAULT '',
-    proceeds_currency_param TEXT NOT NULL DEFAULT '',
+    proceeds_currency TEXT NOT NULL REFERENCES currency(code),
     realized_gain_loss TEXT NOT NULL,
-    disposal_date TEXT NOT NULL,
-    FOREIGN KEY (proceeds_currency, proceeds_currency_asset_type, proceeds_currency_param) REFERENCES currency(code, asset_type, param)
+    disposal_date TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_lot_disposal_lot ON lot_disposal(lot_id);
 CREATE INDEX IF NOT EXISTS idx_lot_disposal_date ON lot_disposal(disposal_date);
@@ -202,16 +191,10 @@ CREATE INDEX IF NOT EXISTS idx_lot_disposal_date ON lot_disposal(disposal_date);
 CREATE TABLE IF NOT EXISTS exchange_rate (
     id TEXT PRIMARY KEY NOT NULL,
     date TEXT NOT NULL,
-    from_currency TEXT NOT NULL,
-    from_currency_asset_type TEXT NOT NULL DEFAULT '',
-    from_currency_param TEXT NOT NULL DEFAULT '',
-    to_currency TEXT NOT NULL,
-    to_currency_asset_type TEXT NOT NULL DEFAULT '',
-    to_currency_param TEXT NOT NULL DEFAULT '',
+    from_currency TEXT NOT NULL REFERENCES currency(code),
+    to_currency TEXT NOT NULL REFERENCES currency(code),
     rate TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'manual',
-    FOREIGN KEY (from_currency, from_currency_asset_type, from_currency_param) REFERENCES currency(code, asset_type, param),
-    FOREIGN KEY (to_currency, to_currency_asset_type, to_currency_param) REFERENCES currency(code, asset_type, param)
+    source TEXT NOT NULL DEFAULT 'manual'
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_rate_pair_date ON exchange_rate(from_currency, to_currency, date);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency);
@@ -220,15 +203,12 @@ CREATE TABLE IF NOT EXISTS balance_assertion (
     id TEXT PRIMARY KEY NOT NULL,
     account_id TEXT NOT NULL REFERENCES account(id),
     date TEXT NOT NULL,
-    currency TEXT NOT NULL,
-    currency_asset_type TEXT NOT NULL DEFAULT '',
-    currency_param TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL REFERENCES currency(code),
     expected_balance TEXT NOT NULL,
     is_passing INTEGER NOT NULL DEFAULT 1,
     actual_balance TEXT,
     is_strict INTEGER NOT NULL DEFAULT 0,
-    include_subaccounts INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (currency, currency_asset_type, currency_param) REFERENCES currency(code, asset_type, param)
+    include_subaccounts INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_balance_assertion_account ON balance_assertion(account_id);
 
@@ -262,15 +242,19 @@ CREATE TABLE IF NOT EXISTS raw_transaction (
     data TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS currency_rate_source (
-    currency TEXT NOT NULL,
-    asset_type TEXT NOT NULL DEFAULT '',
-    param TEXT NOT NULL DEFAULT '',
+CREATE TABLE IF NOT EXISTS currency_rate_override (
+    currency TEXT PRIMARY KEY NOT NULL REFERENCES currency(code),
     rate_source TEXT NOT NULL,
-    rate_source_id TEXT NOT NULL DEFAULT '',
-    set_by TEXT NOT NULL DEFAULT 'auto',
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (currency, asset_type, param)
+    set_by TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS rate_fetch_failure (
+    currency TEXT NOT NULL REFERENCES currency(code),
+    source TEXT NOT NULL,
+    last_attempted_at TEXT NOT NULL,
+    consecutive_failures INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (currency, source)
 );
 
 CREATE TABLE IF NOT EXISTS budget (
@@ -278,9 +262,7 @@ CREATE TABLE IF NOT EXISTS budget (
     account_pattern TEXT NOT NULL,
     period_type TEXT NOT NULL DEFAULT 'monthly',
     amount TEXT NOT NULL,
-    currency TEXT NOT NULL,
-    currency_asset_type TEXT NOT NULL DEFAULT '',
-    currency_param TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL REFERENCES currency(code),
     start_date TEXT,
     end_date TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -324,11 +306,13 @@ function mapCurrency(row: Row): Currency {
   return {
     code: row.code,
     asset_type: row.asset_type ?? "",
-    param: row.param ?? "",
     name: row.name,
     decimal_places: row.decimal_places,
     is_base: row.is_base !== 0,
     is_hidden: row.is_hidden !== 0,
+    tracks_currency: row.tracks_currency ?? null,
+    sync_full_range: row.sync_full_range !== 0,
+    is_stale: row.is_stale !== 0,
   };
 }
 
@@ -378,8 +362,6 @@ function mapLineItem(row: Row): LineItem {
     journal_entry_id: row.journal_entry_id,
     account_id: row.account_id,
     currency: row.currency,
-    currency_asset_type: row.currency_asset_type ?? "",
-    currency_param: row.currency_param ?? "",
     amount: row.amount,
     lot_id: row.lot_id ?? null,
   };
@@ -390,11 +372,7 @@ function mapExchangeRate(row: Row): ExchangeRate {
     id: row.id,
     date: row.date,
     from_currency: row.from_currency,
-    from_currency_asset_type: row.from_currency_asset_type ?? "",
-    from_currency_param: row.from_currency_param ?? "",
     to_currency: row.to_currency,
-    to_currency_asset_type: row.to_currency_asset_type ?? "",
-    to_currency_param: row.to_currency_param ?? "",
     rate: row.rate,
     source: row.source,
   };
@@ -414,12 +392,12 @@ function sourcePriority(source: string): number {
   }
 }
 
-// ---- set_by priority for currency_rate_source ----
+// ---- set_by priority for currency_rate_override ----
 
 function setByPriority(setBy: string): number {
-  if (setBy === "user") return 3;
-  if (setBy.startsWith("handler:")) return 2;
-  return 1; // "auto"
+  if (setBy === "user") return 2;
+  if (setBy.startsWith("handler:")) return 1;
+  return 0;
 }
 
 // ---- Free helpers ----
@@ -482,9 +460,9 @@ export class SqlJsBackend implements Backend {
     )`);
     // Token address mapping (v12, updated v17)
     db.exec(`CREATE TABLE IF NOT EXISTS currency_token_address (
-      currency TEXT NOT NULL, asset_type TEXT NOT NULL DEFAULT '', param TEXT NOT NULL DEFAULT '',
+      currency TEXT NOT NULL REFERENCES currency(code),
       chain TEXT NOT NULL, contract_address TEXT NOT NULL,
-      PRIMARY KEY (currency, asset_type, param, chain)
+      PRIMARY KEY (currency, chain)
     )`);
     // Account metadata (v14)
     db.exec(`CREATE TABLE IF NOT EXISTS account_metadata (
@@ -704,11 +682,11 @@ export class SqlJsBackend implements Backend {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bitshares_account_address ON bitshares_account(address)");
     // Crypto asset info (v33)
     db.exec(`CREATE TABLE IF NOT EXISTS crypto_asset_info (
-      currency TEXT NOT NULL, currency_asset_type TEXT NOT NULL DEFAULT '', currency_param TEXT NOT NULL DEFAULT '',
+      currency TEXT PRIMARY KEY NOT NULL REFERENCES currency(code),
       coingecko_id TEXT NOT NULL DEFAULT '',
-      PRIMARY KEY (currency, currency_asset_type, currency_param)
+      dprice_asset_id TEXT NOT NULL DEFAULT ''
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (33)");
+    db.exec("INSERT INTO schema_version (version) VALUES (34)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1364,6 +1342,201 @@ PRAGMA foreign_keys = ON;
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (33)");
         }
+        if (currentVersion < 34) {
+          // Migrate v33 → v34: simplify currency PK to code only, drop asset_type/param FK columns,
+          // add tracks_currency/sync_full_range/is_stale, rename currency_rate_source → currency_rate_override,
+          // add rate_fetch_failure table, move dprice_asset_id to crypto_asset_info
+          db.exec(`
+PRAGMA foreign_keys = OFF;
+
+-- 1. Recreate currency with simple PK + new columns
+CREATE TABLE currency_new (
+    code TEXT PRIMARY KEY NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    decimal_places INTEGER NOT NULL DEFAULT 2,
+    is_base INTEGER NOT NULL DEFAULT 0,
+    is_hidden INTEGER NOT NULL DEFAULT 0,
+    tracks_currency TEXT,
+    sync_full_range INTEGER NOT NULL DEFAULT 0,
+    is_stale INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO currency_new (code, asset_type, name, decimal_places, is_base, is_hidden)
+    SELECT code, asset_type, name, decimal_places, is_base, is_hidden
+    FROM currency ORDER BY CASE WHEN asset_type != '' THEN 0 ELSE 1 END;
+DROP TABLE currency;
+ALTER TABLE currency_new RENAME TO currency;
+
+-- 2. Recreate line_item without currency_asset_type/currency_param
+CREATE TABLE line_item_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    account_id TEXT NOT NULL REFERENCES account(id),
+    currency TEXT NOT NULL REFERENCES currency(code),
+    amount TEXT NOT NULL,
+    lot_id TEXT REFERENCES lot(id),
+    is_reconciled INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO line_item_new (id, journal_entry_id, account_id, currency, amount, lot_id, is_reconciled)
+    SELECT id, journal_entry_id, account_id, currency, amount, lot_id, is_reconciled FROM line_item;
+DROP TABLE line_item;
+ALTER TABLE line_item_new RENAME TO line_item;
+CREATE INDEX idx_line_item_entry ON line_item(journal_entry_id);
+CREATE INDEX idx_line_item_account ON line_item(account_id);
+CREATE INDEX idx_line_item_currency ON line_item(currency);
+
+-- 3. Recreate lot without currency type/param columns
+CREATE TABLE lot_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    account_id TEXT NOT NULL REFERENCES account(id),
+    currency TEXT NOT NULL REFERENCES currency(code),
+    acquired_date TEXT NOT NULL,
+    original_quantity TEXT NOT NULL,
+    remaining_quantity TEXT NOT NULL,
+    cost_basis_per_unit TEXT NOT NULL,
+    cost_basis_currency TEXT NOT NULL REFERENCES currency(code),
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    is_closed INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO lot_new (id, account_id, currency, acquired_date, original_quantity, remaining_quantity,
+                     cost_basis_per_unit, cost_basis_currency, journal_entry_id, is_closed)
+    SELECT id, account_id, currency, acquired_date, original_quantity, remaining_quantity,
+           cost_basis_per_unit, cost_basis_currency, journal_entry_id, is_closed FROM lot;
+DROP TABLE lot;
+ALTER TABLE lot_new RENAME TO lot;
+CREATE INDEX idx_lot_account_currency ON lot(account_id, currency);
+CREATE INDEX idx_lot_open ON lot(account_id, currency, is_closed, acquired_date);
+
+-- 4. Recreate lot_disposal without proceeds_currency type/param
+CREATE TABLE lot_disposal_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    lot_id TEXT NOT NULL REFERENCES lot(id),
+    journal_entry_id TEXT NOT NULL REFERENCES journal_entry(id),
+    quantity TEXT NOT NULL,
+    proceeds_per_unit TEXT NOT NULL,
+    proceeds_currency TEXT NOT NULL REFERENCES currency(code),
+    realized_gain_loss TEXT NOT NULL,
+    disposal_date TEXT NOT NULL
+);
+INSERT INTO lot_disposal_new (id, lot_id, journal_entry_id, quantity, proceeds_per_unit,
+                               proceeds_currency, realized_gain_loss, disposal_date)
+    SELECT id, lot_id, journal_entry_id, quantity, proceeds_per_unit,
+           proceeds_currency, realized_gain_loss, disposal_date FROM lot_disposal;
+DROP TABLE lot_disposal;
+ALTER TABLE lot_disposal_new RENAME TO lot_disposal;
+CREATE INDEX idx_lot_disposal_lot ON lot_disposal(lot_id);
+CREATE INDEX idx_lot_disposal_date ON lot_disposal(disposal_date);
+
+-- 5. Recreate exchange_rate without from/to currency type/param
+CREATE TABLE exchange_rate_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    date TEXT NOT NULL,
+    from_currency TEXT NOT NULL REFERENCES currency(code),
+    to_currency TEXT NOT NULL REFERENCES currency(code),
+    rate TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual'
+);
+INSERT INTO exchange_rate_new (id, date, from_currency, to_currency, rate, source)
+    SELECT id, date, from_currency, to_currency, rate, source FROM exchange_rate;
+DROP TABLE exchange_rate;
+ALTER TABLE exchange_rate_new RENAME TO exchange_rate;
+CREATE INDEX idx_exchange_rate_pair_date ON exchange_rate(from_currency, to_currency, date);
+CREATE UNIQUE INDEX idx_exchange_rate_unique_pair_date ON exchange_rate(date, from_currency, to_currency);
+
+-- 6. Recreate balance_assertion without currency type/param
+CREATE TABLE balance_assertion_new (
+    id TEXT PRIMARY KEY NOT NULL,
+    account_id TEXT NOT NULL REFERENCES account(id),
+    date TEXT NOT NULL,
+    currency TEXT NOT NULL REFERENCES currency(code),
+    expected_balance TEXT NOT NULL,
+    is_passing INTEGER NOT NULL DEFAULT 1,
+    actual_balance TEXT,
+    is_strict INTEGER NOT NULL DEFAULT 0,
+    include_subaccounts INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO balance_assertion_new (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts)
+    SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion;
+DROP TABLE balance_assertion;
+ALTER TABLE balance_assertion_new RENAME TO balance_assertion;
+CREATE INDEX idx_balance_assertion_account ON balance_assertion(account_id);
+
+-- 7. Recreate budget without currency type/param
+CREATE TABLE budget_new (
+    id TEXT PRIMARY KEY,
+    account_pattern TEXT NOT NULL,
+    period_type TEXT NOT NULL DEFAULT 'monthly',
+    amount TEXT NOT NULL,
+    currency TEXT NOT NULL REFERENCES currency(code),
+    start_date TEXT,
+    end_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT INTO budget_new (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
+    SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget;
+DROP TABLE budget;
+ALTER TABLE budget_new RENAME TO budget;
+
+-- 8. Recreate currency_token_address with simple PK
+CREATE TABLE currency_token_address_new (
+    currency TEXT NOT NULL REFERENCES currency(code),
+    chain TEXT NOT NULL, contract_address TEXT NOT NULL,
+    PRIMARY KEY (currency, chain)
+);
+INSERT OR IGNORE INTO currency_token_address_new (currency, chain, contract_address)
+    SELECT currency, chain, contract_address FROM currency_token_address;
+DROP TABLE currency_token_address;
+ALTER TABLE currency_token_address_new RENAME TO currency_token_address;
+
+-- 9. Recreate crypto_asset_info with simple PK + dprice_asset_id (before dropping currency_rate_source)
+CREATE TABLE crypto_asset_info_new (
+    currency TEXT PRIMARY KEY NOT NULL REFERENCES currency(code),
+    coingecko_id TEXT NOT NULL DEFAULT '',
+    dprice_asset_id TEXT NOT NULL DEFAULT ''
+);
+INSERT OR IGNORE INTO crypto_asset_info_new (currency, coingecko_id, dprice_asset_id)
+    SELECT cai.currency, cai.coingecko_id,
+           COALESCE(crs.rate_source_id, '')
+    FROM crypto_asset_info cai
+    LEFT JOIN currency_rate_source crs ON crs.currency = cai.currency AND crs.rate_source = 'dprice'
+    WHERE cai.currency IN (SELECT code FROM currency);
+INSERT OR IGNORE INTO crypto_asset_info_new (currency, coingecko_id, dprice_asset_id)
+    SELECT currency, '', rate_source_id
+    FROM currency_rate_source
+    WHERE rate_source = 'dprice' AND rate_source_id != ''
+      AND currency IN (SELECT code FROM currency)
+      AND currency NOT IN (SELECT currency FROM crypto_asset_info_new);
+DROP TABLE crypto_asset_info;
+ALTER TABLE crypto_asset_info_new RENAME TO crypto_asset_info;
+
+-- 10. Create currency_rate_override from currency_rate_source (keep only user/handler rows)
+CREATE TABLE currency_rate_override (
+    currency TEXT PRIMARY KEY NOT NULL REFERENCES currency(code),
+    rate_source TEXT NOT NULL,
+    set_by TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO currency_rate_override (currency, rate_source, set_by, updated_at)
+    SELECT currency, rate_source, set_by, updated_at
+    FROM currency_rate_source
+    WHERE set_by != 'auto'
+      AND currency IN (SELECT code FROM currency);
+DROP TABLE currency_rate_source;
+
+-- 11. Create rate_fetch_failure table
+CREATE TABLE rate_fetch_failure (
+    currency TEXT NOT NULL REFERENCES currency(code),
+    source TEXT NOT NULL,
+    last_attempted_at TEXT NOT NULL,
+    consecutive_failures INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (currency, source)
+);
+
+PRAGMA foreign_keys = ON;
+          `);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (34)");
+        }
       }
     }
     // Idempotent cleanup: ensure is_reconciled exists on line_item
@@ -1623,7 +1796,7 @@ PRAGMA foreign_keys = ON;
 
   private getCurrencyByCode(code: string): Currency | null {
     return this.queryOne(
-      "SELECT code, asset_type, param, name, decimal_places, is_base, is_hidden FROM currency WHERE code = ?",
+      "SELECT code, asset_type, name, decimal_places, is_base, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency WHERE code = ?",
       [code],
       mapCurrency,
     );
@@ -1671,7 +1844,7 @@ PRAGMA foreign_keys = ON;
 
   private fetchLineItemsForEntry(entryId: string): LineItem[] {
     return this.query(
-      "SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id FROM line_item WHERE journal_entry_id = ?",
+      "SELECT id, journal_entry_id, account_id, currency, amount, lot_id FROM line_item WHERE journal_entry_id = ?",
       [entryId],
       mapLineItem,
     );
@@ -1860,7 +2033,7 @@ PRAGMA foreign_keys = ON;
 
   async listCurrencies(): Promise<Currency[]> {
     return this.query(
-      "SELECT code, asset_type, param, name, decimal_places, is_base, is_hidden FROM currency ORDER BY code",
+      "SELECT code, asset_type, name, decimal_places, is_base, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency ORDER BY code",
       [],
       mapCurrency,
     );
@@ -1869,14 +2042,14 @@ PRAGMA foreign_keys = ON;
   async createCurrency(currency: Currency): Promise<void> {
     // Check if this code already exists (with any asset_type)
     const existing = this.queryOne(
-      "SELECT asset_type, param FROM currency WHERE code = ? LIMIT 1",
+      "SELECT asset_type FROM currency WHERE code = ? LIMIT 1",
       [currency.code],
-      (row) => ({ asset_type: row.asset_type as string, param: row.param as string }),
+      (row) => ({ asset_type: row.asset_type as string }),
     );
     if (existing) {
       // If existing is unclassified ("") and new one has a real type, replace it
       if (existing.asset_type === "" && currency.asset_type && currency.asset_type !== "") {
-        this.run("DELETE FROM currency WHERE code = ? AND asset_type = '' AND param = ?", [currency.code, existing.param]);
+        this.run("DELETE FROM currency WHERE code = ? AND asset_type = ''", [currency.code]);
         // Fall through to INSERT below
       } else {
         // Already classified or same type — skip
@@ -1888,11 +2061,10 @@ PRAGMA foreign_keys = ON;
     const hidden = currency.is_hidden || isSpamCurrency(currency.code);
     try {
       this.run(
-        "INSERT INTO currency (code, asset_type, param, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO currency (code, asset_type, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?, ?)",
         [
           currency.code,
           currency.asset_type ?? "",
-          currency.param ?? "",
           currency.name,
           currency.decimal_places,
           currency.is_base ? 1 : 0,
@@ -1910,35 +2082,8 @@ PRAGMA foreign_keys = ON;
     this.scheduleSave();
   }
 
-  async setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void> {
-    const oldParam = param ?? "";
-    // Temporarily disable FK checks — we need to update the currency PK and all referencing FK columns atomically
-    this.db.exec("PRAGMA foreign_keys=OFF");
-    try {
-      // Update the currency PK
-      this.run(
-        "UPDATE currency SET asset_type = ? WHERE code = ? AND asset_type = '' AND param = ?",
-        [assetType, code, oldParam],
-      );
-      // Update FK columns in all referencing tables
-      const fkUpdates = [
-        ["line_item", "currency", "currency_asset_type", "currency_param"],
-        ["lot", "currency", "currency_asset_type", "currency_param"],
-        ["lot", "cost_basis_currency", "cost_basis_currency_asset_type", "cost_basis_currency_param"],
-        ["lot_disposal", "proceeds_currency", "proceeds_currency_asset_type", "proceeds_currency_param"],
-        ["exchange_rate", "from_currency", "from_currency_asset_type", "from_currency_param"],
-        ["exchange_rate", "to_currency", "to_currency_asset_type", "to_currency_param"],
-        ["balance_assertion", "currency", "currency_asset_type", "currency_param"],
-      ];
-      for (const [table, codeCol, typeCol, paramCol] of fkUpdates) {
-        this.run(
-          `UPDATE ${table} SET ${typeCol} = ? WHERE ${codeCol} = ? AND ${typeCol} = '' AND ${paramCol} = ?`,
-          [assetType, code, oldParam],
-        );
-      }
-    } finally {
-      this.db.exec("PRAGMA foreign_keys=ON");
-    }
+  async setCurrencyAssetType(code: string, assetType: string): Promise<void> {
+    this.run("UPDATE currency SET asset_type = ? WHERE code = ?", [assetType, code]);
     this.scheduleSave();
   }
 
@@ -1964,8 +2109,8 @@ PRAGMA foreign_keys = ON;
 
   async setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void> {
     this.run(
-      "INSERT OR IGNORE INTO currency_token_address (currency, asset_type, param, chain, contract_address) VALUES (?, ?, ?, ?, ?)",
-      [currency, "", "", chain, contractAddress],
+      "INSERT OR IGNORE INTO currency_token_address (currency, chain, contract_address) VALUES (?, ?, ?)",
+      [currency, chain, contractAddress],
     );
     this.scheduleSave();
   }
@@ -2486,24 +2631,14 @@ PRAGMA foreign_keys = ON;
       ],
     );
     // Build currency type cache for FK resolution — resolves actual asset_type from DB
-    const currencyTypeCache = new Map<string, string>();
-    const allCurrencies = this.db.exec("SELECT code, asset_type FROM currency");
-    if (allCurrencies.length > 0) {
-      for (const row of allCurrencies[0].values) {
-        currencyTypeCache.set(row[0] as string, row[1] as string);
-      }
-    }
-
     for (const item of items) {
       this.run(
-        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?)",
         [
           item.id,
           item.journal_entry_id,
           item.account_id,
           item.currency,
-          item.currency_asset_type || currencyTypeCache.get(item.currency) || "",
-          item.currency_param ?? "",
           item.amount,
           item.lot_id,
         ],
@@ -2555,8 +2690,8 @@ PRAGMA foreign_keys = ON;
     for (const item of items) {
       const negAmount = new Decimal(item.amount).neg().toString();
       this.run(
-        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [uuidv7(), reversalId, item.account_id, item.currency, item.currency_asset_type ?? "", item.currency_param ?? "", negAmount, null],
+        "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?)",
+        [uuidv7(), reversalId, item.account_id, item.currency, negAmount, null],
       );
     }
 
@@ -2633,8 +2768,8 @@ PRAGMA foreign_keys = ON;
       for (const item of originalItems) {
         const negAmount = new Decimal(item.amount).neg().toString();
         this.run(
-          "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [uuidv7(), reversalId, item.account_id, item.currency, item.currency_asset_type ?? "", item.currency_param ?? "", negAmount, null],
+          "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?)",
+          [uuidv7(), reversalId, item.account_id, item.currency, negAmount, null],
         );
       }
 
@@ -2651,8 +2786,8 @@ PRAGMA foreign_keys = ON;
 
       for (const item of newItems) {
         this.run(
-          "INSERT INTO line_item (id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [item.id, item.journal_entry_id, item.account_id, item.currency, item.currency_asset_type ?? "", item.currency_param ?? "", item.amount, item.lot_id],
+          "INSERT INTO line_item (id, journal_entry_id, account_id, currency, amount, lot_id) VALUES (?, ?, ?, ?, ?, ?)",
+          [item.id, item.journal_entry_id, item.account_id, item.currency, item.amount, item.lot_id],
         );
       }
 
@@ -2818,7 +2953,7 @@ PRAGMA foreign_keys = ON;
     const entryIds = entries.map((e) => e.id);
     const allItems = this.queryChunked(
       entryIds,
-      (ph) => `SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
+      (ph) => `SELECT id, journal_entry_id, account_id, currency, amount, lot_id
        FROM line_item WHERE journal_entry_id IN (${ph})`,
       [],
       mapLineItem,
@@ -2957,7 +3092,7 @@ PRAGMA foreign_keys = ON;
     if (entryIds.length === 0) return result;
     const allItems = this.queryChunked(
       entryIds,
-      (ph) => `SELECT id, journal_entry_id, account_id, currency, currency_asset_type, currency_param, amount, lot_id
+      (ph) => `SELECT id, journal_entry_id, account_id, currency, amount, lot_id
        FROM line_item WHERE journal_entry_id IN (${ph})`,
       [],
       mapLineItem,
@@ -3644,16 +3779,16 @@ PRAGMA foreign_keys = ON;
 
   async createBudget(budget: Budget): Promise<void> {
     this.run(
-      `INSERT INTO budget (id, account_pattern, period_type, amount, currency, currency_asset_type, currency_param, start_date, end_date, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [budget.id, budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.currency_asset_type ?? "", budget.currency_param ?? "", budget.start_date, budget.end_date],
+      `INSERT INTO budget (id, account_pattern, period_type, amount, currency, start_date, end_date, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [budget.id, budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.start_date, budget.end_date],
     );
     this.scheduleSave();
   }
 
   async listBudgets(): Promise<Budget[]> {
     return this.query(
-      "SELECT id, account_pattern, period_type, amount, currency, currency_asset_type, currency_param, start_date, end_date, created_at FROM budget ORDER BY account_pattern",
+      "SELECT id, account_pattern, period_type, amount, currency, start_date, end_date, created_at FROM budget ORDER BY account_pattern",
       [],
       (row) => ({
         id: row.id as string,
@@ -3661,8 +3796,6 @@ PRAGMA foreign_keys = ON;
         period_type: row.period_type as "monthly" | "yearly",
         amount: row.amount as string,
         currency: row.currency as string,
-        currency_asset_type: (row.currency_asset_type as string) ?? "",
-        currency_param: (row.currency_param as string) ?? "",
         start_date: (row.start_date as string) || null,
         end_date: (row.end_date as string) || null,
         created_at: row.created_at as string,
@@ -3672,8 +3805,8 @@ PRAGMA foreign_keys = ON;
 
   async updateBudget(budget: Budget): Promise<void> {
     this.run(
-      `UPDATE budget SET account_pattern = ?, period_type = ?, amount = ?, currency = ?, currency_asset_type = ?, currency_param = ?, start_date = ?, end_date = ? WHERE id = ?`,
-      [budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.currency_asset_type ?? "", budget.currency_param ?? "", budget.start_date, budget.end_date, budget.id],
+      `UPDATE budget SET account_pattern = ?, period_type = ?, amount = ?, currency = ?, start_date = ?, end_date = ? WHERE id = ?`,
+      [budget.account_pattern, budget.period_type, budget.amount, budget.currency, budget.start_date, budget.end_date, budget.id],
     );
     this.scheduleSave();
   }
@@ -3696,28 +3829,17 @@ PRAGMA foreign_keys = ON;
       return; // Don't overwrite same-or-higher-priority source from a different origin
     }
 
-    // Resolve currency asset types from DB for FK consistency
-    const resolveType = (code: string, provided?: string) => {
-      if (provided) return provided;
-      const result = this.queryOne("SELECT asset_type FROM currency WHERE code = ? LIMIT 1", [code], (r) => r.asset_type as string);
-      return result ?? "";
-    };
-
     this.run(
       "DELETE FROM exchange_rate WHERE date = ? AND from_currency = ? AND to_currency = ?",
       [rate.date, rate.from_currency, rate.to_currency],
     );
     this.run(
-      "INSERT INTO exchange_rate (id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source) VALUES (?, ?, ?, ?, ?, ?)",
       [
         rate.id,
         rate.date,
         rate.from_currency,
-        resolveType(rate.from_currency, rate.from_currency_asset_type),
-        rate.from_currency_param ?? "",
         rate.to_currency,
-        resolveType(rate.to_currency, rate.to_currency_asset_type),
-        rate.to_currency_param ?? "",
         rate.rate,
         rate.source,
       ],
@@ -3755,15 +3877,6 @@ PRAGMA foreign_keys = ON;
       }
     }
 
-    // Build currency type cache for FK resolution
-    const allCurrencyCodes = new Set(rates.flatMap((r) => [r.from_currency, r.to_currency]));
-    const batchTypeCache = new Map<string, string>();
-    for (const code of allCurrencyCodes) {
-      const row = this.queryOne("SELECT asset_type FROM currency WHERE code = ? LIMIT 1", [code], (r) => r.asset_type as string);
-      if (row !== null) batchTypeCache.set(code, row);
-    }
-    const resolveTypeBatch = (code: string, provided?: string) => provided || batchTypeCache.get(code) || "";
-
     const wasInTransaction = this.inTransaction;
     if (!wasInTransaction) this.beginTransaction();
     try {
@@ -3779,8 +3892,8 @@ PRAGMA foreign_keys = ON;
           [rate.date, rate.from_currency, rate.to_currency],
         );
         this.run(
-          "INSERT INTO exchange_rate (id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [rate.id, rate.date, rate.from_currency, resolveTypeBatch(rate.from_currency, rate.from_currency_asset_type), rate.from_currency_param ?? "", rate.to_currency, resolveTypeBatch(rate.to_currency, rate.to_currency_asset_type), rate.to_currency_param ?? "", rate.rate, rate.source],
+          "INSERT INTO exchange_rate (id, date, from_currency, to_currency, rate, source) VALUES (?, ?, ?, ?, ?, ?)",
+          [rate.id, rate.date, rate.from_currency, rate.to_currency, rate.rate, rate.source],
         );
       }
       if (!wasInTransaction) this.commitTransaction();
@@ -4102,7 +4215,7 @@ PRAGMA foreign_keys = ON;
     to?: string,
   ): Promise<ExchangeRate[]> {
     let sql =
-      "SELECT id, date, from_currency, from_currency_asset_type, from_currency_param, to_currency, to_currency_asset_type, to_currency_param, rate, source FROM exchange_rate";
+      "SELECT id, date, from_currency, to_currency, rate, source FROM exchange_rate";
     const conditions: string[] = [];
     const params: unknown[] = [];
 
@@ -6073,7 +6186,7 @@ PRAGMA foreign_keys = ON;
 
   async setCryptoAssetCoingeckoId(code: string, geckoId: string): Promise<void> {
     this.run(
-      "INSERT OR REPLACE INTO crypto_asset_info (currency, currency_asset_type, currency_param, coingecko_id) VALUES (?, '', '', ?)",
+      "INSERT OR REPLACE INTO crypto_asset_info (currency, coingecko_id) VALUES (?, ?)",
       [code, geckoId],
     );
     this.scheduleSave();
@@ -6151,68 +6264,153 @@ PRAGMA foreign_keys = ON;
     );
   }
 
-  // ---- Currency rate source management ----
+  // ---- Currency rate override management ----
 
-  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
+  async getCurrencyRateOverrides(): Promise<CurrencyRateOverride[]> {
     return this.query(
-      "SELECT currency, asset_type, param, rate_source, rate_source_id, set_by, updated_at FROM currency_rate_source ORDER BY currency",
+      "SELECT currency, rate_source, set_by, updated_at FROM currency_rate_override ORDER BY currency",
       [],
       (row) => ({
         currency: row.currency as string,
-        asset_type: (row.asset_type as string) ?? "",
-        param: (row.param as string) ?? "",
-        rate_source: (row.rate_source as string | null) ?? null,
-        rate_source_id: (row.rate_source_id as string) ?? "",
+        rate_source: row.rate_source as string,
         set_by: row.set_by as string,
         updated_at: row.updated_at as string,
       }),
     );
   }
 
-  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, rateSourceId?: string): Promise<boolean> {
+  async setCurrencyRateOverride(currency: string, rateSource: string, setBy: string): Promise<boolean> {
     const today = new Date().toISOString().slice(0, 10);
-    const sourceId = rateSourceId ?? "";
 
-    // Check existing row for priority (composite PK: currency, asset_type, param)
     const existing = this.queryOne(
-      "SELECT set_by FROM currency_rate_source WHERE currency = ? AND asset_type = '' AND param = ''",
+      "SELECT set_by FROM currency_rate_override WHERE currency = ?",
       [currency],
       (row) => row.set_by as string,
     );
 
-    if (rateSource === null) {
-      // null means "clear" — delete the row
-      this.run(
-        "DELETE FROM currency_rate_source WHERE currency = ? AND asset_type = '' AND param = ''",
-        [currency],
-      );
-    } else if (existing !== null) {
+    if (existing !== null) {
       const existingPriority = setByPriority(existing);
       const newPriority = setByPriority(setBy);
       if (newPriority < existingPriority) {
         return false; // Skip: existing has higher priority
       }
       this.run(
-        "UPDATE currency_rate_source SET rate_source = ?, rate_source_id = ?, set_by = ?, updated_at = ? WHERE currency = ? AND asset_type = '' AND param = ''",
-        [rateSource, sourceId, setBy, today, currency],
+        "UPDATE currency_rate_override SET rate_source = ?, set_by = ?, updated_at = ? WHERE currency = ?",
+        [rateSource, setBy, today, currency],
       );
     } else {
       this.run(
-        "INSERT INTO currency_rate_source (currency, asset_type, param, rate_source, rate_source_id, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [currency, "", "", rateSource, sourceId, setBy, today],
+        "INSERT INTO currency_rate_override (currency, rate_source, set_by, updated_at) VALUES (?, ?, ?, ?)",
+        [currency, rateSource, setBy, today],
       );
     }
     this.scheduleSave();
     return true;
   }
 
-  async clearAutoRateSources(): Promise<void> {
-    this.db.exec("DELETE FROM currency_rate_source WHERE set_by = 'auto'");
+  async removeCurrencyRateOverride(currency: string): Promise<void> {
+    this.run("DELETE FROM currency_rate_override WHERE currency = ?", [currency]);
     this.scheduleSave();
   }
 
+  // ---- Rate fetch failure tracking ----
+
+  async getRateFetchFailures(): Promise<RateFetchFailure[]> {
+    return this.query(
+      "SELECT currency, source, last_attempted_at, consecutive_failures FROM rate_fetch_failure ORDER BY currency, source",
+      [],
+      (row) => ({
+        currency: row.currency as string,
+        source: row.source as string,
+        last_attempted_at: row.last_attempted_at as string,
+        consecutive_failures: row.consecutive_failures as number,
+      }),
+    );
+  }
+
+  async recordRateFetchFailure(currency: string, source: string): Promise<void> {
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = this.queryOne(
+      "SELECT consecutive_failures FROM rate_fetch_failure WHERE currency = ? AND source = ?",
+      [currency, source],
+      (row) => row.consecutive_failures as number,
+    );
+    if (existing !== null) {
+      this.run(
+        "UPDATE rate_fetch_failure SET last_attempted_at = ?, consecutive_failures = ? WHERE currency = ? AND source = ?",
+        [today, existing + 1, currency, source],
+      );
+    } else {
+      this.run(
+        "INSERT INTO rate_fetch_failure (currency, source, last_attempted_at, consecutive_failures) VALUES (?, ?, ?, 1)",
+        [currency, source, today],
+      );
+    }
+    this.scheduleSave();
+  }
+
+  async clearRateFetchFailure(currency: string, source: string): Promise<void> {
+    this.run("DELETE FROM rate_fetch_failure WHERE currency = ? AND source = ?", [currency, source]);
+    this.scheduleSave();
+  }
+
+  async clearAllRateFetchFailures(): Promise<void> {
+    this.db.exec("DELETE FROM rate_fetch_failure");
+    this.scheduleSave();
+  }
+
+  // ---- Currency tracking + stale management ----
+
+  async setTracksCurrency(code: string, tracksCode: string | null): Promise<void> {
+    this.run("UPDATE currency SET tracks_currency = ? WHERE code = ?", [tracksCode, code]);
+    this.scheduleSave();
+  }
+
+  async setSyncFullRange(code: string, enabled: boolean): Promise<void> {
+    this.run("UPDATE currency SET sync_full_range = ? WHERE code = ?", [enabled ? 1 : 0, code]);
+    this.scheduleSave();
+  }
+
+  async setCurrencyStale(code: string, isStale: boolean): Promise<void> {
+    this.run("UPDATE currency SET is_stale = ? WHERE code = ?", [isStale ? 1 : 0, code]);
+    this.scheduleSave();
+  }
+
+  // ---- Deprecated compatibility shims (will be removed with cascade implementation) ----
+
+  /** @deprecated */
+  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
+    const overrides = await this.getCurrencyRateOverrides();
+    return overrides.map((o) => ({
+      currency: o.currency,
+      rate_source: o.rate_source,
+      rate_source_id: "",
+      set_by: o.set_by,
+      updated_at: o.updated_at,
+    }));
+  }
+
+  /** @deprecated */
+  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, _rateSourceId?: string): Promise<boolean> {
+    if (rateSource === null) {
+      await this.removeCurrencyRateOverride(currency);
+      return true;
+    }
+    if (setBy === "auto") {
+      // Auto entries no longer stored — skip silently
+      return true;
+    }
+    return this.setCurrencyRateOverride(currency, rateSource, setBy);
+  }
+
+  /** @deprecated */
+  async clearAutoRateSources(): Promise<void> {
+    // No-op: auto sources no longer exist
+  }
+
+  /** @deprecated */
   async clearNonUserRateSources(): Promise<void> {
-    this.db.exec("DELETE FROM currency_rate_source WHERE set_by != 'user'");
+    this.db.exec("DELETE FROM currency_rate_override WHERE set_by != 'user'");
     this.scheduleSave();
   }
 
@@ -6230,14 +6428,14 @@ PRAGMA foreign_keys = ON;
       new Decimal(actualAmount).eq(new Decimal(assertion.expected_balance));
 
     this.run(
-      "INSERT INTO balance_assertion (id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.currency_asset_type ?? "", assertion.currency_param ?? "", assertion.expected_balance, isPassing ? 1 : 0, actualAmount, assertion.is_strict ? 1 : 0, assertion.include_subaccounts ? 1 : 0],
+      "INSERT INTO balance_assertion (id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [assertion.id, assertion.account_id, assertion.date, assertion.currency, assertion.expected_balance, isPassing ? 1 : 0, actualAmount, assertion.is_strict ? 1 : 0, assertion.include_subaccounts ? 1 : 0],
     );
     this.scheduleSave();
   }
 
   async listBalanceAssertions(accountId?: string): Promise<BalanceAssertion[]> {
-    let sql = "SELECT id, account_id, date, currency, currency_asset_type, currency_param, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion";
+    let sql = "SELECT id, account_id, date, currency, expected_balance, is_passing, actual_balance, is_strict, include_subaccounts FROM balance_assertion";
     const params: unknown[] = [];
     if (accountId) {
       sql += " WHERE account_id = ?";
@@ -6249,8 +6447,6 @@ PRAGMA foreign_keys = ON;
       account_id: row.account_id as string,
       date: row.date as string,
       currency: row.currency as string,
-      currency_asset_type: (row.currency_asset_type as string) ?? "",
-      currency_param: (row.currency_param as string) ?? "",
       expected_balance: row.expected_balance as string,
       is_passing: (row.is_passing as number) !== 0,
       actual_balance: row.actual_balance as string | null,

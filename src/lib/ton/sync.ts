@@ -7,7 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription, onchainTransferDescription } from "../types/description-data.js";
 import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchEvents } from "./api.js";
 import type { TonAccount, TonSyncResult, TonEvent, TonAction } from "./types.js";
 
@@ -57,10 +57,7 @@ export async function syncTonAccount(
 
 	// Helpers (same pattern as Sui/Solana/Hyperliquid)
 	async function ensureCurrency(code: string, decimals?: number): Promise<void> {
-		if (currencySet.has(code)) return;
-		const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-		await backend.createCurrency({ code, asset_type: assetType, param: "", name: code, decimal_places: decimals ?? TON_DECIMALS, is_base: false });
-		currencySet.add(code);
+		await ensureCurrencyExists(backend, code, currencySet, { context: "crypto-chain", decimals: decimals ?? TON_DECIMALS });
 	}
 
 	function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {

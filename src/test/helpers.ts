@@ -20,8 +20,8 @@ export interface SeededLedger {
 export async function seedBasicLedger(): Promise<SeededLedger> {
   const backend = await createTestBackend();
 
-  const USD: Currency = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true };
-  const EUR: Currency = { code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false };
+  const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true };
+  const EUR: Currency = { code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false };
   await backend.createCurrency(USD);
   await backend.createCurrency(EUR);
 

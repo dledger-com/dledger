@@ -161,7 +161,6 @@
       await getBackend().createCurrency({
         code: currCode.trim().toUpperCase(),
         asset_type: "",
-        param: "",
         name: currName.trim(),
         decimal_places: parseInt(currDecimals, 10) || 2,
         is_base: currIsBase,

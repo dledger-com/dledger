@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
-import type { Backend, CurrencyRateSource, CurrencyDateRequirement } from "./backend.js";
+import type { Backend, CurrencyRateSource, CurrencyRateOverride, RateFetchFailure, CurrencyDateRequirement } from "./backend.js";
 import { type SourceName, resolveDpriceAssetsBatch } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
@@ -64,6 +64,8 @@ export interface HistoricalFetchConfig {
   onProgress?: (fetched: number, total: number) => void;
   signal?: AbortSignal;
   disabledSources?: Set<string>;
+  /** When true, skip internal fallback chains — used by cascade runner */
+  skipFallbacks?: boolean;
 }
 
 export interface HistoricalFetchResult {
@@ -347,64 +349,62 @@ export async function fetchHistoricalRates(
     await fetchBinanceHistorical(backend, binanceReqs, config, result, successCurrencies, tick);
   }
 
-  // Fallback chain: if DefiLlama failed for some currencies, try CoinGecko → CryptoCompare
-  const failedAfterPrimary = new Set<string>();
-  for (const currency of allCurrencies) {
-    if (!successCurrencies.has(currency)) {
-      failedAfterPrimary.add(currency);
-    }
-  }
-
-  // Fallback: if dprice failed for some currencies, re-classify without dprice and retry
-  if (failedAfterPrimary.size > 0 && !config.signal?.aborted) {
-    // Reuse config.storedSources when available (passed from autoBackfillRates) to avoid redundant DB queries
-    const storedSources = config.storedSources ?? await backend.getCurrencyRateSources();
-    const rateSourceMap = new Map<string, CurrencyRateSource>();
-    for (const src of storedSources) rateSourceMap.set(src.currency, src);
-    const tokenAddresses = await backend.getCurrencyTokenAddresses();
-    const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
-    const allCurrenciesList = await backend.listCurrencies();
-    const currencyTypeMap = new Map<string, string>();
-    for (const c of allCurrenciesList) currencyTypeMap.set(c.code, c.asset_type);
-
-    const failedDprice = requests.filter((r) => failedAfterPrimary.has(r.currency) && r.source === "dprice");
-    if (failedDprice.length > 0) {
-      // Re-classify without dprice (dpriceAssets = undefined) and group by fallback source
-      const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
-      for (const req of failedDprice) {
-        const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined, config.disabledSources);
-        if (!fallback || fallback === "dprice") continue;
-        if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
-        fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
-      }
-
-      // Dispatch in priority order: coingecko before defillama
-      const sourceOrder: SourceName[] = ["frankfurter", "coingecko", "defillama", "finnhub", "cryptocompare", "binance"];
-      for (const source of sourceOrder) {
-        if (config.signal?.aborted) break;
-        const reqs = fallbackBySource.get(source);
-        if (!reqs) continue;
-        if (source === "frankfurter") await fetchFrankfurterHistorical(backend, reqs, config, result, successCurrencies, tick);
-        else if (source === "coingecko" && config.coingeckoApiKey) await fetchCoinGeckoHistorical(backend, reqs, config, result, successCurrencies, tick);
-        else if (source === "defillama") await fetchDefiLlamaHistorical(backend, reqs, config, result, successCurrencies, tick);
-        else if (source === "finnhub" && config.finnhubApiKey) await fetchFinnhubHistorical(backend, reqs, config, result, successCurrencies, tick);
-        else if (source === "cryptocompare" && config.cryptoCompareApiKey) await fetchCryptoCompareHistorical(backend, reqs, config, result, successCurrencies, tick);
-        else if (source === "binance") await fetchBinanceHistorical(backend, reqs, config, result, successCurrencies, tick);
+  // Fallback chain: if primary source failed, try alternatives (unless cascade runner manages this)
+  if (!config.skipFallbacks) {
+    const failedAfterPrimary = new Set<string>();
+    for (const currency of allCurrencies) {
+      if (!successCurrencies.has(currency)) {
+        failedAfterPrimary.add(currency);
       }
     }
-  }
 
-  if (failedAfterPrimary.size > 0 && config.coingeckoApiKey && !config.signal?.aborted) {
-    // Recompute failedAfterPrimary since dprice fallback may have resolved some
-    const stillFailed = new Set<string>();
-    for (const currency of failedAfterPrimary) {
-      if (!successCurrencies.has(currency)) stillFailed.add(currency);
+    // Fallback: if dprice failed for some currencies, re-classify without dprice and retry
+    if (failedAfterPrimary.size > 0 && !config.signal?.aborted) {
+      const storedSources = config.storedSources ?? await backend.getCurrencyRateSources();
+      const rateSourceMap = new Map<string, CurrencyRateSource>();
+      for (const src of storedSources) rateSourceMap.set(src.currency, src);
+      const tokenAddresses = await backend.getCurrencyTokenAddresses();
+      const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
+      const allCurrenciesList = await backend.listCurrencies();
+      const currencyTypeMap = new Map<string, string>();
+      for (const c of allCurrenciesList) currencyTypeMap.set(c.code, c.asset_type);
+
+      const failedDprice = requests.filter((r) => failedAfterPrimary.has(r.currency) && r.source === "dprice");
+      if (failedDprice.length > 0) {
+        const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
+        for (const req of failedDprice) {
+          const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined, config.disabledSources);
+          if (!fallback || fallback === "dprice") continue;
+          if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
+          fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
+        }
+
+        const sourceOrder: SourceName[] = ["frankfurter", "coingecko", "defillama", "finnhub", "cryptocompare", "binance"];
+        for (const source of sourceOrder) {
+          if (config.signal?.aborted) break;
+          const reqs = fallbackBySource.get(source);
+          if (!reqs) continue;
+          if (source === "frankfurter") await fetchFrankfurterHistorical(backend, reqs, config, result, successCurrencies, tick);
+          else if (source === "coingecko" && config.coingeckoApiKey) await fetchCoinGeckoHistorical(backend, reqs, config, result, successCurrencies, tick);
+          else if (source === "defillama") await fetchDefiLlamaHistorical(backend, reqs, config, result, successCurrencies, tick);
+          else if (source === "finnhub" && config.finnhubApiKey) await fetchFinnhubHistorical(backend, reqs, config, result, successCurrencies, tick);
+          else if (source === "cryptocompare" && config.cryptoCompareApiKey) await fetchCryptoCompareHistorical(backend, reqs, config, result, successCurrencies, tick);
+          else if (source === "binance") await fetchBinanceHistorical(backend, reqs, config, result, successCurrencies, tick);
+        }
+      }
     }
-    const fallbackReqs = requests
-      .filter((r) => stillFailed.has(r.currency) && r.source === "defillama")
-      .map((r) => ({ ...r, source: "coingecko" as SourceName }));
-    if (fallbackReqs.length > 0) {
-      await fetchCoinGeckoHistorical(backend, fallbackReqs, config, result, successCurrencies, tick);
+
+    if (failedAfterPrimary.size > 0 && config.coingeckoApiKey && !config.signal?.aborted) {
+      const stillFailed = new Set<string>();
+      for (const currency of failedAfterPrimary) {
+        if (!successCurrencies.has(currency)) stillFailed.add(currency);
+      }
+      const fallbackReqs = requests
+        .filter((r) => stillFailed.has(r.currency) && r.source === "defillama")
+        .map((r) => ({ ...r, source: "coingecko" as SourceName }));
+      if (fallbackReqs.length > 0) {
+        await fetchCoinGeckoHistorical(backend, fallbackReqs, config, result, successCurrencies, tick);
+      }
     }
   }
 
@@ -1226,6 +1226,157 @@ export interface AutoBackfillResult extends HistoricalFetchResult {
   missingDatesByCode: Record<string, string[]>;
 }
 
+// ---- Rate source cascade ----
+
+/** Returns the ordered list of sources to try for a given asset type. */
+export function cascadeForType(assetType: string, config?: { disabledSources?: Set<string>; finnhubApiKey?: string; coingeckoApiKey?: string; cryptoCompareApiKey?: string }): SourceName[] {
+  const disabled = config?.disabledSources ?? new Set();
+  const filter = (sources: SourceName[]) => sources.filter((s) => {
+    if (disabled.has(s)) return false;
+    if (s === "finnhub" && !config?.finnhubApiKey) return false;
+    if (s === "coingecko" && !config?.coingeckoApiKey) return false;
+    if (s === "cryptocompare" && !config?.cryptoCompareApiKey) return false;
+    return true;
+  });
+  switch (assetType) {
+    case "fiat": return filter(["dprice", "frankfurter"]);
+    case "crypto": return filter(["dprice", "binance", "defillama", "coingecko", "cryptocompare"]);
+    case "stock": return filter(["dprice", "finnhub"]);
+    case "commodity": case "index": case "bond": return filter(["dprice"]);
+    default: return filter(["dprice", "defillama", "binance", "coingecko"]); // unclassified
+  }
+}
+
+/** Check if a source should be skipped due to recent failure (exponential backoff). */
+function isFailureCached(currency: string, source: string, failureMap: Map<string, Map<string, RateFetchFailure>>): boolean {
+  const bySource = failureMap.get(currency);
+  if (!bySource) return false;
+  const failure = bySource.get(source);
+  if (!failure) return false;
+  const backoffDays = Math.min(7 * Math.pow(2, failure.consecutive_failures - 1), 30);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - backoffDays);
+  return new Date(failure.last_attempted_at) > cutoff;
+}
+
+function buildFailureMap(failures: RateFetchFailure[]): Map<string, Map<string, RateFetchFailure>> {
+  const map = new Map<string, Map<string, RateFetchFailure>>();
+  for (const f of failures) {
+    let bySource = map.get(f.currency);
+    if (!bySource) { bySource = new Map(); map.set(f.currency, bySource); }
+    bySource.set(f.source, f);
+  }
+  return map;
+}
+
+export interface CascadeFetchResult extends HistoricalFetchResult {
+  staleCurrencies: string[];
+}
+
+/**
+ * Cascade rate fetcher: tries sources in priority order per asset type.
+ * For each currency, tries sources in cascade order until all needed dates are filled
+ * or all sources are exhausted.
+ */
+export async function cascadeFetchRates(
+  backend: Backend,
+  neededByCode: Map<string, string[]>,
+  currencyTypes: Map<string, string>,
+  config: HistoricalFetchConfig,
+  overrides?: CurrencyRateOverride[],
+  failures?: RateFetchFailure[],
+): Promise<CascadeFetchResult> {
+  const result: CascadeFetchResult = { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], staleCurrencies: [] };
+  if (neededByCode.size === 0) return result;
+
+  const overrideMap = new Map<string, CurrencyRateOverride>();
+  for (const o of overrides ?? []) overrideMap.set(o.currency, o);
+  const failureMap = buildFailureMap(failures ?? []);
+
+  // Track remaining currencies (those not yet fully served)
+  const remainingCodes = new Set(neededByCode.keys());
+
+  // Filter out overridden-to-none currencies upfront
+  for (const code of [...remainingCodes]) {
+    if (overrideMap.get(code)?.rate_source === "none") {
+      remainingCodes.delete(code);
+    }
+  }
+
+  // Group currencies by type for cascade ordering
+  const typeGroups = new Map<string, string[]>();
+  for (const code of remainingCodes) {
+    const type = currencyTypes.get(code) ?? "";
+    let group = typeGroups.get(type);
+    if (!group) { group = []; typeGroups.set(type, group); }
+    group.push(code);
+  }
+
+  // Process each type group through its cascade
+  for (const [type, codes] of typeGroups) {
+    const cascade = cascadeForType(type, config);
+    if (cascade.length === 0) continue;
+
+    // Track which currencies in this group still need rates
+    const groupRemaining = new Set(codes);
+
+    for (const source of cascade) {
+      if (config.signal?.aborted) break;
+      if (groupRemaining.size === 0) break;
+
+      // Filter: skip failure-cached currencies for this source
+      const candidates = [...groupRemaining].filter(
+        (c) => !isFailureCached(c, source, failureMap),
+      );
+      if (candidates.length === 0) continue;
+
+      // Build requests for this source
+      const requests: HistoricalRateRequest[] = candidates
+        .map((c) => ({ currency: c, dates: neededByCode.get(c)!, source }))
+        .filter((r) => r.dates.length > 0);
+      if (requests.length === 0) continue;
+
+      // Dispatch to single source (skip internal fallbacks — we manage cascade externally)
+      const sourceResult = await fetchHistoricalRates(backend, requests, { ...config, skipFallbacks: true });
+      result.fetched += sourceResult.fetched;
+      result.errors.push(...sourceResult.errors);
+
+      // Track success/failure per currency
+      const failedSet = new Set(sourceResult.failedCurrencies);
+      for (const c of candidates) {
+        if (failedSet.has(c)) {
+          // Source returned nothing for this currency — record failure
+          try { await backend.recordRateFetchFailure(c, source); } catch { /* ignore */ }
+        } else {
+          // Source succeeded — clear failure cache, mark as served
+          try { await backend.clearRateFetchFailure(c, source); } catch { /* ignore */ }
+          groupRemaining.delete(c);
+          remainingCodes.delete(c);
+        }
+      }
+    }
+  }
+
+  // Remaining currencies = unfilled after full cascade
+  result.failedCurrencies = [...remainingCodes];
+
+  // Mark stale: currencies where all cascade sources exhausted and no rates for recent 30 days
+  const today = new Date();
+  for (const code of remainingCodes) {
+    const dates = neededByCode.get(code) ?? [];
+    const hasRecent = dates.some((d) => {
+      const diff = (today.getTime() - new Date(d).getTime()) / 86400000;
+      return diff <= 30;
+    });
+    if (hasRecent) {
+      result.staleCurrencies.push(code);
+      try { await backend.setCurrencyStale(code, true); } catch { /* ignore */ }
+    }
+  }
+
+  return result;
+}
+
 /**
  * Automatically determine which exchange rates are missing across the entire ledger
  * and fetch them. Uses exact-date matching to find true gaps.
@@ -1527,16 +1678,7 @@ export function enqueueRateBackfill(
           onProgress: (fetched, total) => ctx.reportProgress({ current: fetched, total }),
         }, hiddenCurrencies, dpriceAssets);
 
-        // Mark failed currencies as unfetchable — but only if they don't already have a working source
-        if (result.failedCurrencies.length > 0) {
-          const storedSources = await backend.getCurrencyRateSources();
-          const failSourceMap = new Map(storedSources.map(s => [s.currency, s]));
-          for (const code of result.failedCurrencies) {
-            const stored = failSourceMap.get(code);
-            if (stored && stored.rate_source && stored.rate_source !== "none") continue;
-            await backend.setCurrencyRateSource(code, "none", "auto");
-          }
-        }
+        // Failures are now handled by rate_fetch_failure TTL cache (no more auto-"none" marking)
 
         // Update rate health store — report both failed and unsourceable (non-hidden) currencies
         const allMissing = [...new Set([...result.failedCurrencies, ...result.unsourceableCurrencies])];
@@ -1567,7 +1709,6 @@ async function ensureCurrency(backend: Backend, code: string): Promise<void> {
     await backend.createCurrency({
       code,
       asset_type: FRANKFURTER_FIAT.has(code) ? "fiat" : "",
-      param: "",
       name: code,
       decimal_places: code.length <= 3 ? 2 : 8,
       is_base: false,

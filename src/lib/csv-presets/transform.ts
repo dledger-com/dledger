@@ -1,12 +1,12 @@
 import { v7 as uuidv7 } from "uuid";
 import type { Backend } from "$lib/backend.js";
-import type { Account, AccountType, Currency, JournalEntry, LineItem } from "$lib/types/index.js";
+import type { Account, AccountType, JournalEntry, LineItem } from "$lib/types/index.js";
 import type { CsvImportResult } from "$lib/utils/csv-import.js";
 import type { CsvRecord } from "./types.js";
 
 import { parseDate, type DateFormatId } from "./parse-date.js";
 import { parseAmount } from "./parse-amount.js";
-import { buildDedupIndex, markDuplicates } from "./dedup.js";
+import { buildDedupIndex, markDuplicates, computeRecordFingerprint, computeAmountFingerprint } from "./dedup.js";
 import { ASSETS_IMPORT, EXPENSES_UNCATEGORIZED, INCOME_UNCATEGORIZED } from "$lib/accounts/paths.js";
 import { getBackend } from "$lib/backend.js";
 import { taskQueue } from "$lib/task-queue.svelte.js";
@@ -17,6 +17,7 @@ import type { HistoricalFetchConfig } from "$lib/exchange-rate-historical.js";
 import * as m from "$paraglide/messages.js";
 import { yieldToUI } from "$lib/utils/yield.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "$lib/utils/derive-trade-rate.js";
+import { ensureCurrencyExists } from "$lib/currency-type.js";
 
 
 export interface ImportOptions {
@@ -180,22 +181,11 @@ async function ensureCurrency(
   currencyCache: Set<string>,
   counters: { currencies: number },
 ): Promise<void> {
-  if (currencyCache.has(code)) return;
-  const currency: Currency = {
-    code,
-    asset_type: "",
-    param: "",
-    name: code,
-    decimal_places: code.length <= 3 ? 2 : 8,
-    is_base: false,
-  };
-  try {
-    await backend.createCurrency(currency);
+  const alreadyCached = currencyCache.has(code);
+  await ensureCurrencyExists(backend, code, currencyCache);
+  if (!alreadyCached && currencyCache.has(code)) {
     counters.currencies++;
-  } catch {
-    // duplicate
   }
-  currencyCache.add(code);
 }
 
 /** Rank descriptionData types for group merge priority: defi > transfer > fee/other */
@@ -283,11 +273,15 @@ export async function importRecords(
   let processed = 0;
   options?.onProgress?.({ current: 0, total: totalCount, message: "Importing records..." });
 
+  // Track fingerprints of records imported in this batch for intra-batch dedup
+  const batchFingerprints = new Set<string>();
+
   // Process ungrouped records individually
   for (let i = 0; i < ungrouped.length; i++) {
     if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
     const rec = ungrouped[i];
-    if (ungroupedDupFlags[i]) {
+    const fp = computeRecordFingerprint(rec);
+    if (ungroupedDupFlags[i] || batchFingerprints.has(fp)) {
       result.duplicates_skipped++;
       processed++;
       options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
@@ -299,7 +293,8 @@ export async function importRecords(
     );
     if (entryResult) {
       result.entries_created++;
-      // Only add source keys for intra-batch dedup (unique identifiers, safe)
+      batchFingerprints.add(fp);
+      // Also add source keys for intra-batch dedup (unique identifiers, safe)
       if (rec.sourceKey && presetId) {
         dedupIndex.sources.add(`csv-import:${presetId}:${rec.sourceKey}`);
       }
@@ -315,7 +310,8 @@ export async function importRecords(
   for (let i = 0; i < mergedGroups.length; i++) {
     if (options?.signal?.aborted) throw new DOMException("Import cancelled", "AbortError");
     const merged = mergedGroups[i];
-    if (groupedDupFlags[i]) {
+    const fp = computeRecordFingerprint(merged);
+    if (groupedDupFlags[i] || batchFingerprints.has(fp)) {
       result.duplicates_skipped++;
       processed++;
       options?.onProgress?.({ current: processed, total: totalCount, message: "Importing records..." });
@@ -327,6 +323,7 @@ export async function importRecords(
     );
     if (entryResult) {
       result.entries_created++;
+      batchFingerprints.add(fp);
       if (merged.sourceKey && presetId) {
         dedupIndex.sources.add(`csv-import:${presetId}:${merged.sourceKey}`);
       }

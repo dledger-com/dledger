@@ -13,7 +13,7 @@ import {
   operationDescription,
   type DescriptionData,
 } from "../types/description-data.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
 import {
   walletAssets,
@@ -114,13 +114,7 @@ export async function syncBitsharesAccount(
     }
 
     async function ensureCurrency(symbol: string, precision: number): Promise<void> {
-      if (currencySet.has(symbol)) return;
-      const assetType = FIAT_CURRENCIES.has(symbol) ? "fiat" : "crypto";
-      await backend.createCurrency({
-        code: symbol, asset_type: assetType, param: "",
-        name: symbol, decimal_places: precision, is_base: false,
-      });
-      currencySet.add(symbol);
+      await ensureCurrencyExists(backend, symbol, currencySet, { context: "crypto-chain", decimals: precision });
     }
 
     async function ensureAccount(fullName: string, date: string): Promise<string> {

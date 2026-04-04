@@ -18,6 +18,7 @@ import { normalizeTxid } from "../cex/pipeline.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
 import { chainIdToDefiLlamaChain } from "../exchange-rate-historical.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { buildTxGroupMetadata } from "./pipeline.js";
 import {
   fetchGraphTransfers,
@@ -89,27 +90,19 @@ export async function syncTheGraphWithHandlers(
   }
 
   // Context helpers
+  const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
+
   async function ensureCurrency(
     code: string,
     decimals: number,
     contractAddress?: string,
   ): Promise<void> {
-    if (currencySet.has(code)) return;
-    await backend.createCurrency({
-      code,
-      asset_type: "",
-      param: "",
-      name: code,
-      decimal_places: decimals,
-      is_base: false,
+    await ensureCurrencyExists(backend, code, currencySet, {
+      context: "crypto-chain",
+      decimals,
+      contractAddress,
+      chain: llamaChain ?? undefined,
     });
-    currencySet.add(code);
-    if (contractAddress && chain) {
-      const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
-      if (llamaChain) {
-        await backend.setCurrencyTokenAddress(code, llamaChain, contractAddress.toLowerCase());
-      }
-    }
   }
 
   async function ensureAccount(

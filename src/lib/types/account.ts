@@ -18,9 +18,11 @@ export type CurrencyAssetType = "crypto" | "fiat" | "stock" | "commodity" | "ind
 export interface Currency {
   code: string;
   asset_type: string;
-  param: string;
   name: string;
   decimal_places: number;
   is_base: boolean;
   is_hidden?: boolean;
+  tracks_currency?: string | null;
+  sync_full_range?: boolean;
+  is_stale?: boolean;
 }

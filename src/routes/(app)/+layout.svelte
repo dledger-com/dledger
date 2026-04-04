@@ -67,7 +67,6 @@
       backend.createCurrency({
         code: baseCurrency,
         asset_type: "",
-        param: "",
         name,
         decimal_places: baseCurrency.length <= 3 ? 2 : 8,
         is_base: false,

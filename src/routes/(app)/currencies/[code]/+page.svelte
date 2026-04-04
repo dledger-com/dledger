@@ -11,7 +11,7 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
-  import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
+  // fetchSingleRate removed — cascade handles source selection automatically
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
   import type { Currency, ExchangeRate } from "$lib/types/index.js";
@@ -210,40 +210,17 @@
 
   async function handleSourceChange(newSource: string) {
     if (!code) return;
-    await getBackend().setCurrencyRateSource(code, newSource === "auto" ? null : newSource, "user");
-
-    if (newSource === "auto" || newSource === "none") {
+    if (newSource === "auto") {
+      // Remove override — cascade will handle source selection
+      await getBackend().removeCurrencyRateOverride(code);
       await loadRateSource();
-      toast.success(`Updated ${code} rate source to ${newSource}`);
-      return;
+      toast.success(`${code} rate source set to auto (cascade)`);
+    } else {
+      // Set override (e.g., "none" to suppress fetching)
+      await getBackend().setCurrencyRateOverride(code, newSource, "user");
+      await loadRateSource();
+      toast.success(`${code} rate source set to ${newSource}`);
     }
-
-    taskQueue.enqueue({
-      key: `rate-refetch:${code}`,
-      label: `Fetch ${code} rate from ${newSource}`,
-      async run() {
-        const res = await fetchSingleRate(
-          getBackend(),
-          code,
-          newSource as SourceName,
-          settings.currency,
-          settings.coingeckoApiKey,
-          settings.finnhubApiKey,
-          settings.cryptoCompareApiKey,
-          settings.settings.dpriceMode,
-          settings.settings.dpriceUrl,
-          settings.settings.coingeckoPro,
-        );
-        await loadRateSource();
-        await loadExchangeRates();
-        if (res.success) {
-          toast.success(`Fetched ${code} rate from ${newSource}`);
-        } else {
-          toast.error(res.error ?? `Failed to fetch ${code} rate`);
-        }
-        return { summary: res.success ? `${code} rate fetched` : "Failed" };
-      },
-    });
   }
 
   async function addExchangeRate() {
@@ -375,28 +352,91 @@
             {:else}
               <Select.Root type="single" value={rateSource?.rate_source ?? "auto"} onValueChange={handleSourceChange} disabled={taskQueue.isActive(`rate-refetch:${code}`)}>
                 <Select.Trigger>
-                  {rateSource?.rate_source ?? "auto-detect"}
+                  {rateSource?.rate_source === "none" ? "suppressed" : rateSource?.rate_source ?? "auto (cascade)"}
                 </Select.Trigger>
                 <Select.Content>
-                  <Select.Item value="auto">auto-detect</Select.Item>
-                  <Select.Item value="frankfurter">frankfurter</Select.Item>
-                  <Select.Item value="defillama">defillama</Select.Item>
-                  <Select.Item value="coingecko">coingecko</Select.Item>
-                  <Select.Item value="cryptocompare">cryptocompare</Select.Item>
-                  <Select.Item value="binance">binance</Select.Item>
-                  <Select.Item value="finnhub">finnhub</Select.Item>
-                  <Select.Item value="dprice">dprice</Select.Item>
-                  <Select.Item value="none">none</Select.Item>
+                  <Select.Item value="auto">auto (cascade)</Select.Item>
+                  <Select.Item value="none">suppressed</Select.Item>
                 </Select.Content>
               </Select.Root>
               {#if rateSource?.set_by}
-                <span class="text-xs text-muted-foreground ml-2">{rateSource.set_by}</span>
+                <span class="text-xs text-muted-foreground ml-2">set by {rateSource.set_by}</span>
               {/if}
             {/if}
           </Card.Title>
         </Card.Header>
       </Card.Root>
     </div>
+
+    <!-- Tracking & Sync Settings -->
+    {#if !currency.is_base}
+    <div class="grid gap-4 sm:grid-cols-3">
+      <Card.Root>
+        <Card.Header>
+          <Card.Description>Tracks Currency</Card.Description>
+          <Card.Title>
+            <Select.Root type="single" value={currency.tracks_currency ?? "__none__"} onValueChange={async (val) => {
+              await getBackend().setTracksCurrency(code, val === "__none__" ? null : val);
+              await loadCurrencyDetail();
+              toast.success(val === "__none__" ? `Cleared tracking for ${code}` : `${code} now tracks ${val}`);
+            }}>
+              <Select.Trigger>
+                {currency.tracks_currency ?? "None"}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="__none__">None</Select.Item>
+                {#each currencies.filter((c) => c.code !== code) as c (c.code)}
+                  <Select.Item value={c.code}>{c.code} — {c.name}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </Card.Title>
+          <Card.Description class="text-xs">When set, uses tracked currency's rates as fallback</Card.Description>
+        </Card.Header>
+      </Card.Root>
+      <Card.Root>
+        <Card.Header>
+          <Card.Description>Full Range Sync</Card.Description>
+          <Card.Title>
+            <button
+              class="flex items-center gap-2 text-sm"
+              onclick={async () => {
+                const newVal = !currency!.sync_full_range;
+                await getBackend().setSyncFullRange(code, newVal);
+                await loadCurrencyDetail();
+                toast.success(newVal ? "Full range sync enabled" : "Full range sync disabled");
+              }}
+            >
+              <span class={currency.sync_full_range ? "text-green-500" : "text-muted-foreground"}>
+                {currency.sync_full_range ? "Enabled" : "Disabled"}
+              </span>
+            </button>
+          </Card.Title>
+          <Card.Description class="text-xs">Fetch daily rates even when not holding a balance</Card.Description>
+        </Card.Header>
+      </Card.Root>
+      <Card.Root>
+        <Card.Header>
+          <Card.Description>Status</Card.Description>
+          <Card.Title>
+            {#if currency.is_stale}
+              <Badge variant="destructive">Stale</Badge>
+              <button class="text-xs text-muted-foreground underline ml-2" onclick={async () => {
+                await getBackend().setCurrencyStale(code, false);
+                await getBackend().clearAllRateFetchFailures();
+                await loadCurrencyDetail();
+                toast.success("Stale status cleared — will retry rate sources");
+              }}>Clear</button>
+            {:else if currency.is_hidden}
+              <Badge variant="secondary">Hidden</Badge>
+            {:else}
+              <Badge variant="outline">Active</Badge>
+            {/if}
+          </Card.Title>
+        </Card.Header>
+      </Card.Root>
+    </div>
+    {/if}
 
     <!-- Price History Chart -->
     <Card.Root>

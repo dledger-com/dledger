@@ -24,7 +24,6 @@ describe("runIntegrityChecks", () => {
     await backend.createCurrency({
       code: "tBTC",
       asset_type: "",
-      param: "",
       name: "tBTC",
       decimal_places: 8,
       is_base: false,

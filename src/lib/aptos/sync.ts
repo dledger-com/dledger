@@ -7,7 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription, onchainTransferDescription } from "../types/description-data.js";
 import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchActivities } from "./api.js";
 import type { AptosAccount, AptosSyncResult, AptosActivity } from "./types.js";
 
@@ -63,10 +63,7 @@ export async function syncAptosAccount(
 	}
 
 	async function ensureCurrency(code: string): Promise<void> {
-		if (currencySet.has(code)) return;
-		const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-		await backend.createCurrency({ code, asset_type: assetType, param: "", name: code, decimal_places: 8, is_base: false });
-		currencySet.add(code);
+		await ensureCurrencyExists(backend, code, currencySet, { context: "crypto-chain", decimals: 8 });
 	}
 
 	function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {

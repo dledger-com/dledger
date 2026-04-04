@@ -122,7 +122,7 @@ export async function importData(
 
 	if (mode === "merge-skip") {
 		onProgress?.({ phase: "importing", current: 0, total: totalEntities, entity: "building dedup index" });
-		existingCurrencyKeys = new Set((await backend.listCurrencies()).map(c => `${c.code}\0${c.asset_type}\0${c.param}`));
+		existingCurrencyKeys = new Set((await backend.listCurrencies()).map(c => c.code));
 		existingAccountPaths = new Set((await backend.listAccounts()).map(a => a.full_name));
 		const allEntries = await backend.queryJournalEntries({});
 		existingEntryIds = new Set(allEntries.map(([e]) => e.id));
@@ -132,7 +132,7 @@ export async function importData(
 	// Currencies first (other entities reference them)
 	onProgress?.({ phase: "importing", current: processed, total: totalEntities, entity: "currencies" });
 	for (const currency of currencies) {
-		const key = `${currency.code}\0${currency.asset_type}\0${currency.param}`;
+		const key = currency.code;
 		if (existingCurrencyKeys?.has(key)) { result.skipped++; processed++; continue; }
 		try {
 			await backend.createCurrency(currency);

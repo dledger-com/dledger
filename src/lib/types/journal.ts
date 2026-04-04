@@ -5,8 +5,6 @@ export interface LineItem {
   journal_entry_id: string;
   account_id: string;
   currency: string;
-  currency_asset_type?: string;
-  currency_param?: string;
   /** Positive = debit, negative = credit */
   amount: string;
   lot_id: string | null;

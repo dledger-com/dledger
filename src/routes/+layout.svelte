@@ -3,7 +3,7 @@
   import { ModeWatcher } from "mode-watcher";
   import { Toaster } from "$lib/components/ui/sonner/index.js";
   import { initBackend, getBackend, disposeBackend } from "$lib/backend.js";
-  import { SettingsStore, computeRateConfigHash } from "$lib/data/settings.svelte.js";
+  import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { preWarmAccountCache } from "$lib/data/accounts.svelte.js";
   import { loadHiddenCurrencies, getHiddenCurrencySet, markCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import { initInvalidationChannel, disposeInvalidationChannel } from "$lib/data/invalidation.js";
@@ -66,13 +66,8 @@
           }
         }
 
-        // --- Config change detection: reset auto "none" entries ---
-        const currentHash = computeRateConfigHash(settings.settings);
-        if (settings.settings.rateConfigHash && settings.settings.rateConfigHash !== currentHash) {
-          await backend.clearAutoRateSources();
-          console.log("Rate config changed — cleared auto-detected rate sources for retry");
-        }
-        settings.update({ rateConfigHash: currentHash });
+        // Rate config changes are now handled by failure TTL cache (auto-heals after 7 days)
+        // No need for rateConfigHash — the old clearAutoRateSources mechanism is obsolete
 
         // --- dprice: startup sync (latest only — fast) ---
         const dpriceMode = settings.settings.dpriceMode;

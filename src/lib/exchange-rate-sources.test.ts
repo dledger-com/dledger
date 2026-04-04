@@ -41,11 +41,11 @@ describe("findMissingRates source classification", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
   });
 
   it("classifies fiat currencies as frankfurter", async () => {
-    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "EUR", date: "2024-01-15" },
@@ -58,7 +58,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("classifies known crypto (with COINGECKO_IDS entry) as defillama", async () => {
-    await backend.createCurrency({ code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "BTC", date: "2024-01-15" },
@@ -69,7 +69,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("classifies currencies with token addresses as defillama", async () => {
-    await backend.createCurrency({ code: "OBSCURE", asset_type: "", param: "", name: "Obscure Token", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "OBSCURE", asset_type: "", name: "Obscure Token", decimal_places: 18, is_base: false });
     await backend.setCurrencyTokenAddress("OBSCURE", "ethereum", "0xdeadbeef");
 
     const requests = await findMissingRates(backend, "USD", [
@@ -81,7 +81,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("routes unknown unclassified currency to defillama as last resort", async () => {
-    await backend.createCurrency({ code: "RANDOMTOKEN", asset_type: "", param: "", name: "Random", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "RANDOMTOKEN", asset_type: "", name: "Random", decimal_places: 18, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "RANDOMTOKEN", date: "2024-03-01" },
@@ -92,7 +92,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("skips unclassified currency when all sources are disabled", async () => {
-    await backend.createCurrency({ code: "RANDOMTOKEN", asset_type: "", param: "", name: "Random", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "RANDOMTOKEN", asset_type: "", name: "Random", decimal_places: 18, is_base: false });
 
     const disabled = new Set(["frankfurter", "coingecko", "defillama", "binance", "cryptocompare", "finnhub"]);
     const requests = await findMissingRates(backend, "USD", [
@@ -103,7 +103,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("respects DB-stored rate source override", async () => {
-    await backend.createCurrency({ code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
     await backend.setCurrencyRateSource("BTC", "binance", "user");
 
     const requests = await findMissingRates(backend, "USD", [
@@ -115,8 +115,8 @@ describe("findMissingRates source classification", () => {
   });
 
   it("respects rate_source=none to skip currency", async () => {
-    await backend.createCurrency({ code: "SPAM", asset_type: "", param: "", name: "Spam Token", decimal_places: 18, is_base: false });
-    await backend.setCurrencyRateSource("SPAM", "none", "auto");
+    await backend.createCurrency({ code: "SPAM", asset_type: "", name: "Spam Token", decimal_places: 18, is_base: false });
+    await backend.setCurrencyRateSource("SPAM", "none", "user");
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "SPAM", date: "2024-01-15" },
@@ -126,7 +126,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("deduplicates currency-date pairs", async () => {
-    await backend.createCurrency({ code: "ETH", asset_type: "", param: "", name: "Ethereum", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "ETH", date: "2024-01-15" },
@@ -147,7 +147,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("skips dates that already have rates", async () => {
-    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
     await backend.recordExchangeRate({
       id: uuidv7(), date: "2024-06-15",
       from_currency: "EUR", to_currency: "USD",
@@ -166,9 +166,9 @@ describe("findMissingRates source classification", () => {
   });
 
   it("groups multiple currencies by source", async () => {
-    await backend.createCurrency({ code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: false });
-    await backend.createCurrency({ code: "GBP", asset_type: "", param: "", name: "Pound", decimal_places: 2, is_base: false });
-    await backend.createCurrency({ code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "GBP", asset_type: "", name: "Pound", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "EUR", date: "2024-01-15" },
@@ -185,7 +185,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("handles DB-stored source for cryptocompare", async () => {
-    await backend.createCurrency({ code: "SOL", asset_type: "", param: "", name: "Solana", decimal_places: 9, is_base: false });
+    await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
     await backend.setCurrencyRateSource("SOL", "cryptocompare", "user");
 
     const requests = await findMissingRates(backend, "USD", [
@@ -197,7 +197,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("collects unsourceable currencies when all sources disabled", async () => {
-    await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN Token", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", name: "DePIN Token", decimal_places: 8, is_base: false });
 
     const unsourceable = new Set<string>();
     const disabled = new Set(["frankfurter", "coingecko", "defillama", "binance", "cryptocompare", "finnhub"]);
@@ -213,7 +213,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("routes unclassified DEPIN to defillama by default", async () => {
-    await backend.createCurrency({ code: "DEPIN", asset_type: "", param: "", name: "DePIN Token", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", name: "DePIN Token", decimal_places: 8, is_base: false });
 
     const requests = await findMissingRates(
       backend, "USD",
@@ -225,7 +225,7 @@ describe("findMissingRates source classification", () => {
   });
 
   it("does not collect user-set none currencies as unsourceable", async () => {
-    await backend.createCurrency({ code: "SKIP", asset_type: "", param: "", name: "Skip Token", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "SKIP", asset_type: "", name: "Skip Token", decimal_places: 8, is_base: false });
     await backend.setCurrencyRateSource("SKIP", "none", "user");
 
     const unsourceable = new Set<string>();
@@ -240,9 +240,9 @@ describe("findMissingRates source classification", () => {
     expect(unsourceable.has("SKIP")).toBe(false);
   });
 
-  it("collects auto-set none currencies as unsourceable", async () => {
-    await backend.createCurrency({ code: "STALE", asset_type: "", param: "", name: "Stale Token", decimal_places: 8, is_base: false });
-    await backend.setCurrencyRateSource("STALE", "none", "auto");
+  it("user-set none currencies are intentionally skipped, not unsourceable", async () => {
+    await backend.createCurrency({ code: "STALE", asset_type: "", name: "Stale Token", decimal_places: 8, is_base: false });
+    await backend.setCurrencyRateSource("STALE", "none", "user");
 
     const unsourceable = new Set<string>();
     const requests = await findMissingRates(
@@ -253,6 +253,7 @@ describe("findMissingRates source classification", () => {
     );
 
     expect(requests).toHaveLength(0);
-    expect(unsourceable.has("STALE")).toBe(true);
+    // User-set "none" is an intentional skip, not truly unsourceable
+    expect(unsourceable.has("STALE")).toBe(false);
   });
 });

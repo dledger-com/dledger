@@ -496,7 +496,6 @@
             await getBackend().createCurrency({
                 code: val,
                 asset_type: "fiat",
-                param: "",
                 name,
                 decimal_places: 2,
                 is_base: false,
@@ -571,7 +570,7 @@
             label: msg.settings_clear_exchange_rates(),
             async run() {
                 await getBackend().clearExchangeRates();
-                await getBackend().clearAutoRateSources();
+                await getBackend().clearAllRateFetchFailures();
                 invalidate("currencies");
                 toast.success(msg.toast_exchange_rates_cleared());
                 return { summary: "Exchange rates cleared" };

@@ -2,11 +2,7 @@ export interface ExchangeRate {
   id: string;
   date: string;
   from_currency: string;
-  from_currency_asset_type?: string;
-  from_currency_param?: string;
   to_currency: string;
-  to_currency_asset_type?: string;
-  to_currency_param?: string;
   rate: string;
   source: string;
 }
@@ -110,8 +106,6 @@ export interface BalanceAssertion {
   account_id: string;
   date: string;
   currency: string;
-  currency_asset_type?: string;
-  currency_param?: string;
   expected_balance: string;
   is_passing: boolean;
   actual_balance: string | null;
@@ -183,8 +177,6 @@ export interface Budget {
   period_type: "monthly" | "yearly";
   amount: string;
   currency: string;
-  currency_asset_type?: string;
-  currency_param?: string;
   start_date: string | null;
   end_date: string | null;
   created_at: string;

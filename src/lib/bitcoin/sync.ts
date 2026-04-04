@@ -4,7 +4,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import type { AppSettings } from "../data/settings.svelte.js";
 import { mergeItemAccums } from "../handlers/item-builder.js";
 import { renderDescription, type DescriptionData } from "../types/description-data.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { classifyBtcTx } from "./classify.js";
 import { buildBtcItems, shortAddr } from "./entries.js";
 import { fetchAddressTxs, fetchAddressInfo } from "./api.js";
@@ -221,17 +221,7 @@ export async function syncBitcoinAccount(
 
   // Context helpers
   async function ensureCurrency(code: string, decimals: number): Promise<void> {
-    if (currencySet.has(code)) return;
-    const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-    await backend.createCurrency({
-      code,
-      asset_type: assetType,
-      param: "",
-      name: code,
-      decimal_places: decimals,
-      is_base: false,
-    });
-    currencySet.add(code);
+    await ensureCurrencyExists(backend, code, currencySet, { context: "crypto-chain", decimals });
   }
 
   function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {

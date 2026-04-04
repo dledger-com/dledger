@@ -18,11 +18,11 @@ async function createCryptoTaxBackend() {
   const backend = await createTestBackend();
 
   // Currencies
-  const EUR: Currency = { code: "EUR", asset_type: "", param: "", name: "Euro", decimal_places: 2, is_base: true };
-  const USD: Currency = { code: "USD", asset_type: "", param: "", name: "US Dollar", decimal_places: 2, is_base: false };
-  const BTC: Currency = { code: "BTC", asset_type: "", param: "", name: "Bitcoin", decimal_places: 8, is_base: false };
-  const ETH: Currency = { code: "ETH", asset_type: "", param: "", name: "Ethereum", decimal_places: 18, is_base: false };
-  const USDT: Currency = { code: "USDT", asset_type: "", param: "", name: "Tether", decimal_places: 6, is_base: false };
+  const EUR: Currency = { code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: true };
+  const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: false };
+  const BTC: Currency = { code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false };
+  const ETH: Currency = { code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false };
+  const USDT: Currency = { code: "USDT", asset_type: "", name: "Tether", decimal_places: 6, is_base: false };
   await backend.createCurrency(EUR);
   await backend.createCurrency(USD);
   await backend.createCurrency(BTC);
@@ -593,9 +593,9 @@ describe("computeFrenchTaxReport", () => {
     const { backend, accounts } = await createCryptoTaxBackend();
 
     // Create spam/hidden/none-source currencies
-    await backend.createCurrency({ code: "SPAM1", asset_type: "", param: "", name: "Spam", decimal_places: 18, is_base: false });
-    await backend.createCurrency({ code: "NONESRC", asset_type: "", param: "", name: "NoneSource", decimal_places: 18, is_base: false });
-    await backend.createCurrency({ code: "EUR;", asset_type: "", param: "", name: "Invalid", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "SPAM1", asset_type: "", name: "Spam", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "NONESRC", asset_type: "", name: "NoneSource", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "EUR;", asset_type: "", name: "Invalid", decimal_places: 2, is_base: false });
 
     // Mark SPAM1 as hidden, NONESRC as rate_source="none"
     await backend.setCurrencyHidden("SPAM1", true);
@@ -668,7 +668,7 @@ describe("computeFrenchTaxReport", () => {
     const { backend, accounts } = await createCryptoTaxBackend();
 
     // Create a currency that will have no rate (to trigger missing warnings)
-    await backend.createCurrency({ code: "DOGE", asset_type: "", param: "", name: "Dogecoin", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "DOGE", asset_type: "", name: "Dogecoin", decimal_places: 8, is_base: false });
     const equityId = (await backend.listAccounts()).find(a => a.full_name === "Equity")!.id;
     const tradingDOGE = await createPostable(backend, equityId, "equity", "Trading:DOGE", "Equity:Trading:DOGE");
 

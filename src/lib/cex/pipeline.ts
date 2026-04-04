@@ -5,6 +5,7 @@ import { SUPPORTED_CHAINS } from "../types/index.js";
 import type { Backend } from "../backend.js";
 import type { CexAdapter, CexLedgerRecord, CexSyncResult, ExchangeAccount } from "./types.js";
 import { inferAccountType } from "../browser-etherscan.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { remapCounterpartyAccounts, mergeItemAccums, resolveToLineItems } from "../handlers/item-builder.js";
 import type { ItemAccum } from "../handlers/item-builder.js";
 import type { HandlerContext, HandlerResult, TxHashGroup } from "../handlers/types.js";
@@ -118,16 +119,7 @@ export async function syncCexAccount(
 
   // Helper: ensure currency exists
   async function ensureCurrency(code: string): Promise<void> {
-    if (currencySet.has(code)) return;
-    await backend.createCurrency({
-      code,
-      asset_type: "",
-      param: "",
-      name: code,
-      decimal_places: 8,
-      is_base: false,
-    });
-    currencySet.add(code);
+    await ensureCurrencyExists(backend, code, currencySet, { context: "exchange", decimals: 8 });
   }
 
   // Helper: ensure account exists (with parents)
@@ -642,16 +634,7 @@ async function consolidateWithEtherscan(
       return id;
     },
     async ensureCurrency(code: string, decimals: number): Promise<void> {
-      if (currencySet.has(code)) return;
-      await backend.createCurrency({
-        code,
-        asset_type: "",
-        param: "",
-        name: code,
-        decimal_places: decimals,
-        is_base: false,
-      });
-      currencySet.add(code);
+      await ensureCurrencyExists(backend, code, currencySet, { context: "exchange", decimals });
     },
   };
 
@@ -788,7 +771,7 @@ async function consolidateWithCex(
     // Ensure accounts and currencies
     for (const item of newItems) {
       if (!currencySet.has(item.currency)) {
-        await backend.createCurrency({ code: item.currency, asset_type: "", param: "", name: item.currency, decimal_places: 8, is_base: false });
+        await backend.createCurrency({ code: item.currency, asset_type: "", name: item.currency, decimal_places: 8, is_base: false });
         currencySet.add(item.currency);
       }
       if (!accountMap.has(item.account)) {

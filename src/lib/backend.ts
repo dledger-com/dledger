@@ -69,14 +69,27 @@ export interface UnreconciledLineItem {
   is_reconciled: boolean;
 }
 
+export interface CurrencyRateOverride {
+  currency: string;
+  rate_source: string;        // "none" = suppress fetching
+  set_by: string;             // "user" | "handler:<id>"
+  updated_at: string;
+}
+
+/** @deprecated Use CurrencyRateOverride — will be removed when cascade is implemented */
 export interface CurrencyRateSource {
   currency: string;
-  asset_type?: string;
-  param?: string;
-  rate_source: string | null; // null = auto-detect needed
-  rate_source_id: string;     // dprice asset ID (or empty)
-  set_by: string;             // "user" | "handler:<id>" | "auto"
+  rate_source: string | null;
+  rate_source_id: string;
+  set_by: string;
   updated_at: string;
+}
+
+export interface RateFetchFailure {
+  currency: string;
+  source: string;
+  last_attempted_at: string;
+  consecutive_failures: number;
 }
 
 export interface CurrencyDateRequirement {
@@ -92,7 +105,7 @@ export interface Backend {
   // Currencies
   listCurrencies(): Promise<Currency[]>;
   createCurrency(currency: Currency): Promise<void>;
-  setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void>;
+  setCurrencyAssetType(code: string, assetType: string): Promise<void>;
 
   // Accounts
   listAccounts(): Promise<Account[]>;
@@ -435,10 +448,29 @@ export interface Backend {
   // Currency origins
   getCurrencyOrigins(): Promise<CurrencyOrigin[]>;
 
-  // Currency rate source management
+  // Currency rate override management
+  getCurrencyRateOverrides(): Promise<CurrencyRateOverride[]>;
+  setCurrencyRateOverride(currency: string, rateSource: string, setBy: string): Promise<boolean>;
+  removeCurrencyRateOverride(currency: string): Promise<void>;
+
+  // Rate fetch failure tracking
+  getRateFetchFailures(): Promise<RateFetchFailure[]>;
+  recordRateFetchFailure(currency: string, source: string): Promise<void>;
+  clearRateFetchFailure(currency: string, source: string): Promise<void>;
+  clearAllRateFetchFailures(): Promise<void>;
+
+  // Currency tracking + stale management
+  setTracksCurrency(code: string, tracksCode: string | null): Promise<void>;
+  setSyncFullRange(code: string, enabled: boolean): Promise<void>;
+  setCurrencyStale(code: string, isStale: boolean): Promise<void>;
+
+  /** @deprecated Compatibility shim — use getCurrencyRateOverrides() */
   getCurrencyRateSources(): Promise<CurrencyRateSource[]>;
+  /** @deprecated Compatibility shim — use setCurrencyRateOverride() */
   setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, rateSourceId?: string): Promise<boolean>;
+  /** @deprecated No-op — auto sources no longer exist */
   clearAutoRateSources(): Promise<void>;
+  /** @deprecated No-op — use removeCurrencyRateOverride() */
   clearNonUserRateSources(): Promise<void>;
 
   // Currency token addresses (for DeFi pricing via DefiLlama)
@@ -534,8 +566,8 @@ class TauriBackend implements Backend {
   async createCurrency(currency: Currency): Promise<void> {
     return this.invoke("create_currency", { currency });
   }
-  async setCurrencyAssetType(code: string, assetType: string, param?: string): Promise<void> {
-    return this.invoke("set_currency_asset_type", { code, assetType, param: param ?? "" });
+  async setCurrencyAssetType(code: string, assetType: string): Promise<void> {
+    return this.invoke("set_currency_asset_type", { code, assetType });
   }
 
   // Accounts
@@ -1170,20 +1202,56 @@ class TauriBackend implements Backend {
     return this.invoke("get_currency_origins");
   }
 
-  // Currency rate source management
-  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
-    return this.invoke("get_currency_rate_sources");
+  // Currency rate override management
+  async getCurrencyRateOverrides(): Promise<CurrencyRateOverride[]> {
+    return this.invoke("get_currency_rate_overrides");
   }
-  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, _rateSourceId?: string): Promise<boolean> {
-    // Tauri backend doesn't store rate_source_id (frontend-only field)
-    await this.invoke("set_currency_rate_source", { currency, rateSource: rateSource ?? "", setBy });
+  async setCurrencyRateOverride(currency: string, rateSource: string, setBy: string): Promise<boolean> {
+    await this.invoke("set_currency_rate_override", { currency, rateSource, setBy });
     return true;
   }
-  async clearAutoRateSources(): Promise<void> {
-    return this.invoke("clear_auto_rate_sources");
+  async removeCurrencyRateOverride(currency: string): Promise<void> {
+    return this.invoke("remove_currency_rate_override", { currency });
   }
+
+  // Rate fetch failure tracking
+  async getRateFetchFailures(): Promise<RateFetchFailure[]> {
+    return this.invoke("get_rate_fetch_failures");
+  }
+  async recordRateFetchFailure(currency: string, source: string): Promise<void> {
+    return this.invoke("record_rate_fetch_failure", { currency, source });
+  }
+  async clearRateFetchFailure(currency: string, source: string): Promise<void> {
+    return this.invoke("clear_rate_fetch_failure", { currency, source });
+  }
+  async clearAllRateFetchFailures(): Promise<void> {
+    return this.invoke("clear_all_rate_fetch_failures");
+  }
+
+  // Currency tracking + stale management
+  async setTracksCurrency(code: string, tracksCode: string | null): Promise<void> {
+    return this.invoke("set_tracks_currency", { code, tracksCode });
+  }
+  async setSyncFullRange(code: string, enabled: boolean): Promise<void> {
+    return this.invoke("set_sync_full_range", { code, enabled });
+  }
+  async setCurrencyStale(code: string, isStale: boolean): Promise<void> {
+    return this.invoke("set_currency_stale", { code, isStale });
+  }
+
+  // Deprecated compatibility shims
+  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
+    const overrides = await this.getCurrencyRateOverrides();
+    return overrides.map((o) => ({ currency: o.currency, rate_source: o.rate_source, rate_source_id: "", set_by: o.set_by, updated_at: o.updated_at }));
+  }
+  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, _rateSourceId?: string): Promise<boolean> {
+    if (rateSource === null) { await this.removeCurrencyRateOverride(currency); return true; }
+    if (setBy === "auto") return true;
+    return this.setCurrencyRateOverride(currency, rateSource, setBy);
+  }
+  async clearAutoRateSources(): Promise<void> { /* no-op */ }
   async clearNonUserRateSources(): Promise<void> {
-    return this.invoke("clear_non_user_rate_sources");
+    // Clear handler overrides via Tauri — will be replaced when cascade is implemented
   }
 
   // Currency token addresses

@@ -38,6 +38,7 @@ import { normalizeTxid } from "../cex/pipeline.js";
 import { deriveAndRecordTradeRate } from "../utils/derive-trade-rate.js";
 import type { TradeRateItem } from "../utils/derive-trade-rate.js";
 import { chainIdToDefiLlamaChain } from "../exchange-rate-historical.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 
 // --- Reprocess types ---
 
@@ -202,28 +203,19 @@ export async function syncEtherscanWithHandlers(
   }
 
   // Context helpers
+  const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
+
   async function ensureCurrency(
     code: string,
     decimals: number,
     contractAddress?: string,
   ): Promise<void> {
-    if (currencySet.has(code)) return;
-    await backend.createCurrency({
-      code,
-      asset_type: "",
-      param: "",
-      name: code,
-      decimal_places: decimals,
-      is_base: false,
+    await ensureCurrencyExists(backend, code, currencySet, {
+      context: "crypto-chain",
+      decimals,
+      contractAddress,
+      chain: llamaChain ?? undefined,
     });
-    currencySet.add(code);
-    // Record token address for DeFi pricing (first-seen wins via INSERT OR IGNORE)
-    if (contractAddress && chain) {
-      const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
-      if (llamaChain) {
-        await backend.setCurrencyTokenAddress(code, llamaChain, contractAddress.toLowerCase());
-      }
-    }
   }
 
   async function ensureAccount(
@@ -567,23 +559,15 @@ function buildHandlerContext(
   const chain = SUPPORTED_CHAINS.find((c) => c.chain_id === chainId);
   if (!chain) throw new Error(`unsupported chain_id: ${chainId}`);
 
+  const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
+
   async function ensureCurrency(code: string, decimals: number, contractAddress?: string): Promise<void> {
-    if (currencySet.has(code)) return;
-    await backend.createCurrency({
-      code,
-      asset_type: "",
-      param: "",
-      name: code,
-      decimal_places: decimals,
-      is_base: false,
+    await ensureCurrencyExists(backend, code, currencySet, {
+      context: "crypto-chain",
+      decimals,
+      contractAddress,
+      chain: llamaChain ?? undefined,
     });
-    currencySet.add(code);
-    if (contractAddress && chain) {
-      const llamaChain = chainIdToDefiLlamaChain(chain.chain_id);
-      if (llamaChain) {
-        await backend.setCurrencyTokenAddress(code, llamaChain, contractAddress.toLowerCase());
-      }
-    }
   }
 
   async function ensureAccount(fullName: string, date: string): Promise<string> {

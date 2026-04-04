@@ -8,7 +8,7 @@ import type { AppSettings } from "../data/settings.svelte.js";
 import { renderDescription, onchainTransferDescription } from "../types/description-data.js";
 import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchAddressTransactions, fetchTxUtxos, fetchTxInfo } from "./api.js";
 import type { CardanoAccount, CardanoSyncResult, BlockfrostAddressTx } from "./types.js";
 
@@ -69,10 +69,7 @@ export async function syncCardanoAccount(
 	}
 
 	async function ensureCurrency(code: string, decimals?: number): Promise<void> {
-		if (currencySet.has(code)) return;
-		const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-		await backend.createCurrency({ code, asset_type: assetType, param: "", name: code, decimal_places: decimals ?? ADA_DECIMALS, is_base: false });
-		currencySet.add(code);
+		await ensureCurrencyExists(backend, code, currencySet, { context: "crypto-chain", decimals: decimals ?? ADA_DECIMALS });
 	}
 
 	function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {

@@ -145,7 +145,6 @@ describe("cross-source dedup integration", () => {
     await backend.createCurrency({
       code: "BTC",
       asset_type: "",
-      param: "",
       name: "Bitcoin",
       decimal_places: 8,
       is_base: false,
@@ -153,7 +152,6 @@ describe("cross-source dedup integration", () => {
     await backend.createCurrency({
       code: "USD",
       asset_type: "",
-      param: "",
       name: "US Dollar",
       decimal_places: 2,
       is_base: false,

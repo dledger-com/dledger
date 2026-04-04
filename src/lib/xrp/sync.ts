@@ -7,7 +7,7 @@ import type { Account, JournalEntry, LineItem } from "../types/index.js";
 import { renderDescription, onchainTransferDescription } from "../types/description-data.js";
 import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
-import { FIAT_CURRENCIES } from "../currency-type.js";
+import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
 import type { XrpAccount, XrpSyncResult, XrpTransaction, XrpIssuedAmount } from "./types.js";
 
@@ -74,10 +74,7 @@ export async function syncXrpAccount(
 
 	// Helpers
 	async function ensureCurrency(code: string): Promise<void> {
-		if (currencySet.has(code)) return;
-		const assetType = FIAT_CURRENCIES.has(code) ? "fiat" : "crypto";
-		await backend.createCurrency({ code, asset_type: assetType, param: "", name: code, decimal_places: 6, is_base: false });
-		currencySet.add(code);
+		await ensureCurrencyExists(backend, code, currencySet, { context: "crypto-chain", decimals: 6 });
 	}
 
 	function inferAccountType(fullName: string): "asset" | "liability" | "equity" | "revenue" | "expense" {

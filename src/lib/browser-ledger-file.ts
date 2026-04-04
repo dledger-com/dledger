@@ -18,6 +18,7 @@ import {
   computeEntryAmountFingerprint,
 } from "./csv-presets/dedup.js";
 import { parseLinks, serializeLinksForExport } from "./utils/links.js";
+import { ensureCurrencyExists } from "./currency-type.js";
 import { parseTags, serializeTags } from "./utils/tags.js";
 import { yieldToUI } from "./utils/yield.js";
 
@@ -149,17 +150,11 @@ export async function importLedger(
   }
 
   async function ensureCurrency(code: string): Promise<void> {
-    if (existingCurrencies.has(code)) return;
-    await backend.createCurrency({
-      code,
-      asset_type: "",
-      param: "",
-      name: code,
-      decimal_places: code.length <= 3 ? 2 : 8,
-      is_base: false,
-    });
-    existingCurrencies.add(code);
-    result.currencies_created++;
+    const alreadyCached = existingCurrencies.has(code);
+    await ensureCurrencyExists(backend, code, existingCurrencies, { context: "ledger" });
+    if (!alreadyCached && existingCurrencies.has(code)) {
+      result.currencies_created++;
+    }
   }
 
   async function ensureAccount(
