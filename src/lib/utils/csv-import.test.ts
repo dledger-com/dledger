@@ -44,7 +44,7 @@ describe("importCsv", () => {
 
   it("imports basic two-line CSV entries", async () => {
     // Pre-create currencies
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const csv = `date,description,debit_account,credit_account,amount
 2024-01-15,Groceries,Expenses:Food,Assets:Bank:Checking,50.00
@@ -65,7 +65,7 @@ describe("importCsv", () => {
   });
 
   it("handles fixed account mapping", async () => {
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const csv = `date,description,amount
 2024-03-01,Coffee,5.00`;
@@ -83,7 +83,7 @@ describe("importCsv", () => {
   });
 
   it("handles MM/DD/YYYY date format", async () => {
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const csv = `date,amount
 01/15/2024,100.00`;
@@ -104,7 +104,7 @@ describe("importCsv", () => {
   });
 
   it("warns on invalid dates", async () => {
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const csv = `date,amount
 bad-date,100.00`;
@@ -150,7 +150,7 @@ bad-date,100.00`;
   });
 
   it("warns on unbalanced entries", async () => {
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const csv = `date,amount
 2024-01-01,100.00`;
@@ -168,7 +168,7 @@ bad-date,100.00`;
   });
 
   it("handles amount with currency symbols and commas", async () => {
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const csv = `date,amount
 2024-01-01,"$1,234.56"`;

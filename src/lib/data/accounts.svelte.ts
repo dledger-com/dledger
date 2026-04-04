@@ -41,9 +41,8 @@ export class AccountStore {
 
   readonly postable = $derived(this.active.filter((a) => a.is_postable));
 
-  readonly baseCurrency = $derived(
-    this.currencies.find((c) => c.is_base) ?? null,
-  );
+  /** @deprecated Use settings.currency instead — baseCurrency from AccountStore is no longer reliable. */
+  readonly baseCurrency: Currency | null = null;
 
   async load() {
     if (!_cacheLoaded) this.loading = true;

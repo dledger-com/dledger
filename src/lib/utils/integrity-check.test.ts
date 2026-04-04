@@ -26,7 +26,6 @@ describe("runIntegrityChecks", () => {
       asset_type: "",
       name: "tBTC",
       decimal_places: 8,
-      is_base: false,
     });
 
     // Insert a journal entry via raw SQL that has a tiny residual (2.5e-17)

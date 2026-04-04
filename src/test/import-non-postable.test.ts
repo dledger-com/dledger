@@ -18,7 +18,7 @@ describe("import into non-postable accounts", () => {
 
     await backend.createCurrency({
       code: "USD", asset_type: "",
-      name: "US Dollar", decimal_places: 2, is_base: true,
+      name: "US Dollar", decimal_places: 2,
     });
 
     const assetsId = uuidv7();
@@ -83,7 +83,7 @@ option "operating_currency" "USD"
 
     await backend.createCurrency({
       code: "USD", asset_type: "",
-      name: "US Dollar", decimal_places: 2, is_base: true,
+      name: "US Dollar", decimal_places: 2,
     });
 
     const assetsId = uuidv7();

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
+
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import { Switch } from "$lib/components/ui/switch/index.js";
+
 
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { getBackend, type CurrencyRateOverride } from "$lib/backend.js";
+  import { getBackend } from "$lib/backend.js";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
@@ -16,7 +16,7 @@
   import { getHiddenCurrencySet, markCurrencyHidden, unmarkCurrencyHidden } from "$lib/data/hidden-currencies.svelte.js";
   import type { Currency } from "$lib/types/index.js";
   import { toast } from "svelte-sonner";
-  import { fetchSingleRate, type SourceName } from "$lib/exchange-rate-sync.js";
+
   import { enqueueRateBackfill } from "$lib/exchange-rate-historical.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
@@ -56,7 +56,7 @@
   let renameValue = $state("");
 
   let currencies = $state<Currency[]>([]);
-  let rateSources = $state<Map<string, CurrencyRateOverride>>(new Map());
+
   let currencySearchTerm = $state("");
   let selectedAssetTypes = $state(new Set<string>());
   let holdings = $state(new Map<string, number>());
@@ -85,11 +85,11 @@
   let currCode = $state("");
   let currName = $state("");
   let currDecimals = $state("2");
-  let currIsBase = $state(false);
+
   const hiddenCurrencies = $derived(currencies.filter((c) => c.is_hidden));
 
   // Sort state
-  type CurrencySortKey = "code" | "name" | "type" | "lastPrice" | "holdings" | "value" | "decimals" | "base" | "rateSource";
+  type CurrencySortKey = "code" | "name" | "type" | "lastPrice" | "holdings" | "value" | "decimals";
   const sortCurr = createSortState<CurrencySortKey>();
   const currencyAccessors: Record<CurrencySortKey, SortAccessor<Currency>> = {
     code: (c) => c.code,
@@ -97,10 +97,8 @@
     type: (c) => effectiveAssetType(c),
     lastPrice: (c) => lastPrices.get(c.code) ?? 0,
     holdings: (c) => holdings.get(c.code) ?? 0,
-    value: (c) => (holdings.get(c.code) ?? 0) * (c.is_base ? 1 : (lastPrices.get(c.code) ?? 0)),
+    value: (c) => (holdings.get(c.code) ?? 0) * (c.code === settings.currency ? 1 : (lastPrices.get(c.code) ?? 0)),
     decimals: (c) => c.decimal_places,
-    base: (c) => c.is_base ? 1 : 0,
-    rateSource: (c) => rateSources.get(c.code)?.rate_source ?? "auto",
   };
 
   async function loadCurrencies() {
@@ -108,15 +106,6 @@
       currencies = await getBackend().listCurrencies();
     } catch {
       currencies = [];
-    }
-  }
-
-  async function loadRateSources() {
-    try {
-      const rows = await getBackend().getCurrencyRateOverrides();
-      rateSources = new Map(rows.map((r) => [r.currency, r]));
-    } catch {
-      rateSources = new Map();
     }
   }
 
@@ -160,64 +149,17 @@
         asset_type: "",
         name: currName.trim(),
         decimal_places: parseInt(currDecimals, 10) || 2,
-        is_base: currIsBase,
       });
       toast.success(m.toast_currency_created({ code: currCode.trim().toUpperCase() }));
       currCode = "";
       currName = "";
       currDecimals = "2";
-      currIsBase = false;
+
       addDialogOpen = false;
       await loadCurrencies();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
-  }
-
-  async function handleSourceChange(currencyCode: string, newSource: string) {
-    if (newSource === "auto") {
-      await getBackend().removeCurrencyRateOverride(currencyCode);
-    } else {
-      await getBackend().setCurrencyRateOverride(currencyCode, newSource, "user");
-    }
-
-    if (newSource === "auto" || newSource === "none") {
-      await loadRateSources();
-      toast.success(m.toast_rate_source_updated({ code: currencyCode, source: newSource }));
-      return;
-    }
-
-    taskQueue.enqueue({
-      key: `rate-refetch:${currencyCode}`,
-      label: `Fetch ${currencyCode} rate from ${newSource}`,
-      async run() {
-        const res = await fetchSingleRate(
-          getBackend(),
-          currencyCode,
-          newSource as SourceName,
-          settings.currency,
-          settings.coingeckoApiKey,
-          settings.finnhubApiKey,
-          settings.cryptoCompareApiKey,
-          settings.settings.dpriceMode,
-          settings.settings.dpriceUrl,
-          settings.settings.coingeckoPro,
-        );
-        await loadRateSources();
-        if (res.success) {
-          toast.success(m.toast_rate_fetched({ code: currencyCode, source: newSource }));
-        } else {
-          toast.error(res.error ?? `Failed to fetch ${currencyCode} rate`);
-        }
-        return { summary: res.success ? `${currencyCode} rate fetched` : "Failed" };
-      },
-    });
-  }
-
-  async function handleDontConvert(code: string) {
-    await getBackend().setCurrencyRateOverride(code, "none", "user");
-    await loadRateSources();
-    toast.success(m.toast_rate_source_updated({ code, source: "none" }));
   }
 
   function startRename(code: string, currentName: string) {
@@ -242,7 +184,6 @@
 
   const unsubCurrencies = onInvalidate("currencies", () => {
     loadCurrencies();
-    loadRateSources();
   });
   onDestroy(() => { unsubCurrencies(); clearTopBarActions(); });
 
@@ -254,7 +195,6 @@
 
   onMount(() => {
     loadCurrencies();
-    loadRateSources();
     loadMarketData();
   });
 </script>
@@ -298,11 +238,6 @@
                   >{m.btn_hide()}</button>
                   <span class="text-amber-400 dark:text-amber-600">|</span>
                   <a href="/currencies/{code}" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200">{m.btn_enter_rate()}</a>
-                  <span class="text-amber-400 dark:text-amber-600">|</span>
-                  <button
-                    onclick={() => handleDontConvert(code)}
-                    class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
-                  >{m.btn_dont_convert()}</button>
                   {#if dpriceEnabled}
                     <span class="text-amber-400 dark:text-amber-600">|</span>
                     <button
@@ -427,14 +362,8 @@
             checked={colVis.decimals !== false}
             onCheckedChange={(v) => { colVis = { ...colVis, decimals: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
           >{m.label_decimals()}</DropdownMenu.CheckboxItem>
-          <DropdownMenu.CheckboxItem
-            checked={colVis.base !== false}
-            onCheckedChange={(v) => { colVis = { ...colVis, base: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
-          >{m.label_base()}</DropdownMenu.CheckboxItem>
-          <DropdownMenu.CheckboxItem
-            checked={colVis.rateSource === true}
-            onCheckedChange={(v) => { colVis = { ...colVis, rateSource: !!v }; settings.update({ currencyColumnVisibility: colVis }); }}
-          >{m.label_rate_source()}</DropdownMenu.CheckboxItem>
+
+
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </div>
@@ -460,10 +389,6 @@
           <div class="space-y-1">
             <label for="curr-decimals" class="text-xs text-muted-foreground">{m.label_decimals()}</label>
             <Input id="curr-decimals" type="number" bind:value={currDecimals} />
-          </div>
-          <div class="flex items-center gap-2 pt-5">
-            <Switch id="curr-base" bind:checked={currIsBase} />
-            <label for="curr-base" class="text-xs text-muted-foreground">{m.label_base()}</label>
           </div>
         </div>
         <Dialog.Footer>
@@ -492,8 +417,7 @@
               {#if colVis.holdings === true}<SortableHeader active={sortCurr.key === "holdings"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("holdings")} class="text-right hidden md:table-cell">{m.label_holdings()}</SortableHeader>{/if}
               {#if colVis.value !== false}<SortableHeader active={sortCurr.key === "value"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("value")} class="text-right hidden md:table-cell">{m.label_value()}</SortableHeader>{/if}
               {#if colVis.decimals !== false}<SortableHeader active={sortCurr.key === "decimals"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("decimals")} class="text-right hidden lg:table-cell">{m.label_decimals()}</SortableHeader>{/if}
-              {#if colVis.base !== false}<SortableHeader active={sortCurr.key === "base"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("base")} class="hidden lg:table-cell">{m.label_base()}</SortableHeader>{/if}
-              {#if colVis.rateSource === true}<SortableHeader active={sortCurr.key === "rateSource"} direction={sortCurr.direction} onclick={() => sortCurr.toggle("rateSource")} class="hidden xl:table-cell">{m.label_rate_source()}</SortableHeader>{/if}
+
               <Table.Head class="text-right">{m.label_actions()}</Table.Head>
             </Table.Row>
           </Table.Header>
@@ -501,10 +425,9 @@
             {@const filteredCurrencies = currencies.filter((c) => (!c.is_hidden || settings.showHidden) && matchesFilter(c, currencySearchTerm.trim(), ["code", "name"]) && (selectedAssetTypes.size === 0 || selectedAssetTypes.has(effectiveAssetType(c))))}
             {@const sortedCurrencies = sortCurr.key && sortCurr.direction ? sortItems(filteredCurrencies, currencyAccessors[sortCurr.key], sortCurr.direction) : filteredCurrencies}
             {#each sortedCurrencies as c}
-              {@const rs = rateSources.get(c.code)}
               {@const assetType = effectiveAssetType(c)}
               {@const h = holdings.get(c.code) ?? 0}
-              {@const p = c.is_base ? 1 : (lastPrices.get(c.code) ?? 0)}
+              {@const p = c.code === settings.currency ? 1 : (lastPrices.get(c.code) ?? 0)}
               {@const val = h * p}
               <!-- Mobile row -->
               <Table.Row class="sm:hidden cursor-pointer" onclick={() => goto(`/currencies/${c.code}`)}>
@@ -534,13 +457,13 @@
                         {#if colVis.type !== false && assetType}
                           <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">{assetType}</span>
                         {/if}
-                        {#if colVis.lastPrice !== false && !c.is_base && lastPrices.has(c.code)}
+                        {#if colVis.lastPrice !== false && c.code !== settings.currency && lastPrices.has(c.code)}
                           <span class="font-mono">{lastPrices.get(c.code)!.toLocaleString(undefined, { maximumSignificantDigits: 6 })} {settings.currency}</span>
                         {/if}
                         {#if colVis.holdings === true && holdings.has(c.code)}
                           <span class="font-mono">{holdings.get(c.code)!.toLocaleString(undefined, { maximumFractionDigits: c.decimal_places })} {c.code}</span>
                         {/if}
-                        {#if c.is_base}
+                        {#if c.code === settings.currency}
                           <span class="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">{m.label_base()}</span>
                         {/if}
                       </div>
@@ -558,7 +481,7 @@
                         </DropdownMenu.Trigger>
                         <DropdownMenu.Content align="end">
                           <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
-                          {#if !c.is_base}
+                          {#if c.code !== settings.currency}
                             {#if c.is_hidden}
                               <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
                             {:else}
@@ -608,7 +531,7 @@
                 {/if}
                 {#if colVis.lastPrice !== false}
                   <Table.Cell class="text-right hidden md:table-cell font-mono text-xs">
-                    {#if c.is_base}
+                    {#if c.code === settings.currency}
                       —
                     {:else if lastPrices.has(c.code)}
                       {lastPrices.get(c.code)!.toLocaleString(undefined, { maximumSignificantDigits: 6 })}
@@ -638,40 +561,7 @@
                 {#if colVis.decimals !== false}
                   <Table.Cell class="text-right hidden lg:table-cell">{c.decimal_places}</Table.Cell>
                 {/if}
-                {#if colVis.base !== false}
-                  <Table.Cell class="hidden lg:table-cell">
-                    {#if c.is_base}
-                      <span class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{m.label_base()}</span>
-                    {/if}
-                  </Table.Cell>
-                {/if}
-                {#if colVis.rateSource === true}
-                  <Table.Cell class="hidden xl:table-cell" onclick={(e: MouseEvent) => e.stopPropagation()}>
-                    {#if !c.is_base}
-                      <div class="flex items-center gap-2">
-                        <Select.Root type="single" value={rs?.rate_source ?? "auto"} onValueChange={(val) => handleSourceChange(c.code, val)} disabled={taskQueue.isActive(`rate-refetch:${c.code}`)}>
-                          <Select.Trigger class="h-7" size="sm">
-                            {rs?.rate_source ?? m.label_auto_detect()}
-                          </Select.Trigger>
-                          <Select.Content>
-                            <Select.Item value="auto">auto-detect</Select.Item>
-                            <Select.Item value="frankfurter">frankfurter</Select.Item>
-                            <Select.Item value="defillama">defillama</Select.Item>
-                            <Select.Item value="coingecko">coingecko</Select.Item>
-                            <Select.Item value="cryptocompare">cryptocompare</Select.Item>
-                            <Select.Item value="binance">binance</Select.Item>
-                            <Select.Item value="finnhub">finnhub</Select.Item>
-                            <Select.Item value="dprice">dprice</Select.Item>
-                            <Select.Item value="none">none</Select.Item>
-                          </Select.Content>
-                        </Select.Root>
-                        {#if rs?.set_by}
-                          <span class="text-xs text-muted-foreground">{rs.set_by}</span>
-                        {/if}
-                      </div>
-                    {/if}
-                  </Table.Cell>
-                {/if}
+
                 <Table.Cell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
@@ -684,7 +574,7 @@
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content align="end">
                       <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
-                      {#if !c.is_base}
+                      {#if c.code !== settings.currency}
                         {#if c.is_hidden}
                           <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
                         {:else}

@@ -104,7 +104,6 @@ CREATE TABLE IF NOT EXISTS currency (
     asset_type TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     decimal_places INTEGER NOT NULL DEFAULT 2,
-    is_base INTEGER NOT NULL DEFAULT 0,
     is_hidden INTEGER NOT NULL DEFAULT 0,
     tracks_currency TEXT REFERENCES currency(code),
     sync_full_range INTEGER NOT NULL DEFAULT 0,
@@ -308,7 +307,6 @@ function mapCurrency(row: Row): Currency {
     asset_type: row.asset_type ?? "",
     name: row.name,
     decimal_places: row.decimal_places,
-    is_base: row.is_base !== 0,
     is_hidden: row.is_hidden !== 0,
     tracks_currency: row.tracks_currency ?? null,
     sync_full_range: row.sync_full_range !== 0,
@@ -686,7 +684,7 @@ export class SqlJsBackend implements Backend {
       coingecko_id TEXT NOT NULL DEFAULT '',
       dprice_asset_id TEXT NOT NULL DEFAULT ''
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (34)");
+    db.exec("INSERT INTO schema_version (version) VALUES (35)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1355,14 +1353,13 @@ CREATE TABLE currency_new (
     asset_type TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     decimal_places INTEGER NOT NULL DEFAULT 2,
-    is_base INTEGER NOT NULL DEFAULT 0,
     is_hidden INTEGER NOT NULL DEFAULT 0,
     tracks_currency TEXT,
     sync_full_range INTEGER NOT NULL DEFAULT 0,
     is_stale INTEGER NOT NULL DEFAULT 0
 );
-INSERT OR IGNORE INTO currency_new (code, asset_type, name, decimal_places, is_base, is_hidden)
-    SELECT code, asset_type, name, decimal_places, is_base, is_hidden
+INSERT OR IGNORE INTO currency_new (code, asset_type, name, decimal_places, is_hidden)
+    SELECT code, asset_type, name, decimal_places, is_hidden
     FROM currency ORDER BY CASE WHEN asset_type != '' THEN 0 ELSE 1 END;
 DROP TABLE currency;
 ALTER TABLE currency_new RENAME TO currency;
@@ -1536,6 +1533,31 @@ PRAGMA foreign_keys = ON;
           `);
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (34)");
+        }
+        if (currentVersion < 35) {
+          // Migrate v34 → v35: remove is_base column from currency (base currency is in AppSettings)
+          db.exec(`
+PRAGMA foreign_keys = OFF;
+
+CREATE TABLE currency_new (
+    code TEXT PRIMARY KEY NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    decimal_places INTEGER NOT NULL DEFAULT 2,
+    is_hidden INTEGER NOT NULL DEFAULT 0,
+    tracks_currency TEXT REFERENCES currency(code),
+    sync_full_range INTEGER NOT NULL DEFAULT 0,
+    is_stale INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO currency_new (code, asset_type, name, decimal_places, is_hidden, tracks_currency, sync_full_range, is_stale)
+    SELECT code, asset_type, name, decimal_places, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency;
+DROP TABLE currency;
+ALTER TABLE currency_new RENAME TO currency;
+
+PRAGMA foreign_keys = ON;
+          `);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (35)");
         }
       }
     }
@@ -1796,7 +1818,7 @@ PRAGMA foreign_keys = ON;
 
   private getCurrencyByCode(code: string): Currency | null {
     return this.queryOne(
-      "SELECT code, asset_type, name, decimal_places, is_base, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency WHERE code = ?",
+      "SELECT code, asset_type, name, decimal_places, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency WHERE code = ?",
       [code],
       mapCurrency,
     );
@@ -2033,7 +2055,7 @@ PRAGMA foreign_keys = ON;
 
   async listCurrencies(): Promise<Currency[]> {
     return this.query(
-      "SELECT code, asset_type, name, decimal_places, is_base, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency ORDER BY code",
+      "SELECT code, asset_type, name, decimal_places, is_hidden, tracks_currency, sync_full_range, is_stale FROM currency ORDER BY code",
       [],
       mapCurrency,
     );
@@ -2061,13 +2083,12 @@ PRAGMA foreign_keys = ON;
     const hidden = currency.is_hidden || isSpamCurrency(currency.code);
     try {
       this.run(
-        "INSERT INTO currency (code, asset_type, name, decimal_places, is_base, is_hidden) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO currency (code, asset_type, name, decimal_places, is_hidden) VALUES (?, ?, ?, ?, ?)",
         [
           currency.code,
           currency.asset_type ?? "",
           currency.name,
           currency.decimal_places,
-          currency.is_base ? 1 : 0,
           hidden ? 1 : 0,
         ],
       );

@@ -10,7 +10,7 @@ async function setupBackend() {
   const backend = await createTestBackend();
 
   // Create currencies
-  await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+  await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
   // Create account hierarchy
   const assetsId = uuidv7();

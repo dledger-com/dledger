@@ -48,8 +48,8 @@ describe("Retroactive Consolidation", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ether", decimal_places: 18, is_base: false });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
+    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ether", decimal_places: 18 });
   });
 
   /**

@@ -69,7 +69,6 @@
         asset_type: "",
         name,
         decimal_places: baseCurrency.length <= 3 ? 2 : 8,
-        is_base: false,
       }).catch(() => { /* already exists — expected */ });
     }
 

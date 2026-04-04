@@ -147,14 +147,14 @@ describe("cross-source dedup integration", () => {
       asset_type: "",
       name: "Bitcoin",
       decimal_places: 8,
-      is_base: false,
+
     });
     await backend.createCurrency({
       code: "USD",
       asset_type: "",
       name: "US Dollar",
       decimal_places: 2,
-      is_base: false,
+
     });
     await backend.createAccount({
       id: uuidv7(),

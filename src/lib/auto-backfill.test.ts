@@ -10,10 +10,10 @@ describe("getCurrencyDateRequirements", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
-    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
+    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8 });
+    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 8 });
 
     // Create accounts
     const assetsId = uuidv7();
@@ -230,8 +230,8 @@ describe("getExchangeRatesBatchExact", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
   });
 
   it("returns true only for exact date matches", async () => {
@@ -272,12 +272,12 @@ describe("findMissingRates unsourceable tracking with exactDateMatch", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
   });
 
   it("reports unsourceable currencies alongside sourceable ones", async () => {
-    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
-    await backend.createCurrency({ code: "DEPIN", asset_type: "stock", name: "DePIN", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
+    await backend.createCurrency({ code: "DEPIN", asset_type: "stock", name: "DePIN", decimal_places: 8 });
 
     const unsourceable = new Set<string>();
     const requests = await findMissingRates(
@@ -297,7 +297,7 @@ describe("findMissingRates unsourceable tracking with exactDateMatch", () => {
   });
 
   it("dprice-known currencies are not unsourceable", async () => {
-    await backend.createCurrency({ code: "DEPIN", asset_type: "", name: "DePIN", decimal_places: 8, is_base: false });
+    await backend.createCurrency({ code: "DEPIN", asset_type: "", name: "DePIN", decimal_places: 8 });
 
     const dpriceAssets = new Set(["DEPIN"]);
     const unsourceable = new Set<string>();
@@ -319,8 +319,8 @@ describe("findMissingRates with exactDateMatch", () => {
 
   beforeEach(async () => {
     backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
   });
 
   it("detects gaps that on-or-before matching would miss", async () => {

@@ -100,7 +100,6 @@ export function createMockHandlerContext(
         asset_type: "",
         name: code,
         decimal_places: decimals,
-        is_base: false,
       });
     },
     ...restOverrides,

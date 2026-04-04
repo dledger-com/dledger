@@ -334,7 +334,7 @@
         <Card.Header>
           <Card.Description>Type</Card.Description>
           <Card.Title class="text-2xl">
-            {#if currency.is_base}
+            {#if code === settings.currency}
               <Badge variant="default">Base</Badge>
             {:else if currency.is_hidden}
               <Badge variant="secondary">Hidden</Badge>
@@ -348,7 +348,7 @@
         <Card.Header>
           <Card.Description>Rate Source</Card.Description>
           <Card.Title>
-            {#if currency.is_base}
+            {#if code === settings.currency}
               <span class="text-muted-foreground text-sm">N/A (base currency)</span>
             {:else}
               <Select.Root type="single" value={rateSource?.rate_source ?? "auto"} onValueChange={handleSourceChange} disabled={taskQueue.isActive(`rate-refetch:${code}`)}>
@@ -370,7 +370,7 @@
     </div>
 
     <!-- Tracking & Sync Settings -->
-    {#if !currency.is_base}
+    {#if code !== settings.currency}
     <div class="grid gap-4 sm:grid-cols-3">
       <Card.Root>
         <Card.Header>

@@ -115,8 +115,8 @@ describe("deriveTradeRate", () => {
 describe("deriveAndRecordTradeRate integration", () => {
   it("records rate from ledger import with @ PRICE", async () => {
     const backend = await createTestBackend();
-    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8 });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const items: TradeRateItem[] = [
       { account_name: "Assets:Exchange:BTC", currency: "BTC", amount: "1" },
@@ -135,8 +135,8 @@ describe("deriveAndRecordTradeRate integration", () => {
 
   it("transaction rate overwrites API rate but not manual rate", async () => {
     const backend = await createTestBackend();
-    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false });
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18 });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     // First: record an API rate
     await backend.recordExchangeRate({
@@ -179,7 +179,7 @@ describe("deriveAndRecordTradeRate integration", () => {
 
   it("returns null and records nothing for non-trade entries", async () => {
     const backend = await createTestBackend();
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
 
     const items: TradeRateItem[] = [
       { account_name: "Assets:Bank", currency: "USD", amount: "100" },

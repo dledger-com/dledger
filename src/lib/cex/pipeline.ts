@@ -771,7 +771,7 @@ async function consolidateWithCex(
     // Ensure accounts and currencies
     for (const item of newItems) {
       if (!currencySet.has(item.currency)) {
-        await backend.createCurrency({ code: item.currency, asset_type: "", name: item.currency, decimal_places: 8, is_base: false });
+        await backend.createCurrency({ code: item.currency, asset_type: "", name: item.currency, decimal_places: 8 });
         currencySet.add(item.currency);
       }
       if (!accountMap.has(item.account)) {

@@ -222,7 +222,7 @@ describe("mergeAccounts", () => {
   describe("children handling", () => {
     it("moves children under target when no conflict", async () => {
       const backend = await createTestBackend();
-      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true };
+      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 };
       await backend.createCurrency(USD);
 
       const assets = await createAccount(backend, { parent_id: null, account_type: "asset", name: "Assets", full_name: "Assets", is_postable: false });
@@ -257,7 +257,7 @@ describe("mergeAccounts", () => {
 
     it("merges children into existing target children on conflict", async () => {
       const backend = await createTestBackend();
-      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true };
+      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 };
       await backend.createCurrency(USD);
 
       const assets = await createAccount(backend, { parent_id: null, account_type: "asset", name: "Assets", full_name: "Assets", is_postable: false });
@@ -297,7 +297,7 @@ describe("mergeAccounts", () => {
 
     it("handles deep hierarchy (grandchildren)", async () => {
       const backend = await createTestBackend();
-      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true };
+      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 };
       await backend.createCurrency(USD);
 
       const assets = await createAccount(backend, { parent_id: null, account_type: "asset", name: "Assets", full_name: "Assets", is_postable: false });
@@ -377,7 +377,7 @@ describe("mergeAccounts", () => {
 
     it("cleans up orphaned intermediate parents", async () => {
       const backend = await createTestBackend();
-      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true };
+      const USD: Currency = { code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 };
       await backend.createCurrency(USD);
 
       const assets = await createAccount(backend, { parent_id: null, account_type: "asset", name: "Assets", full_name: "Assets", is_postable: false });

@@ -72,7 +72,6 @@ export async function ensureCurrencyExists(
     asset_type: assetType,
     name: code,
     decimal_places: decimals,
-    is_base: false,
   });
   cache.add(code);
   if (opts?.contractAddress && opts?.chain) {

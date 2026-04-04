@@ -48,7 +48,7 @@
             const name = COMMON_CURRENCIES.find((c) => c.code === currency)?.name ?? currency;
             await getBackend().createCurrency({
                 code: currency, asset_type: "fiat",
-                name, decimal_places: 2, is_base: false,
+                name, decimal_places: 2,
             });
             invalidate("currencies");
         } catch { /* already exists */ }

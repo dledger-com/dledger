@@ -19,8 +19,8 @@ describe("SqlJsBackend", () => {
     });
 
     it("creates and lists currencies", async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-      await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+      await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
       const currencies = await backend.listCurrencies();
       expect(currencies).toHaveLength(2);
       expect(currencies[0].code).toBe("EUR");
@@ -28,9 +28,9 @@ describe("SqlJsBackend", () => {
     });
 
     it("silently skips duplicate currency", async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
       // Second create with same code is silently skipped (no duplicate row)
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: false });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
       const currencies = await backend.listCurrencies();
       expect(currencies.filter(c => c.code === "USD")).toHaveLength(1);
     });
@@ -40,9 +40,9 @@ describe("SqlJsBackend", () => {
 
   describe("currency hidden", () => {
     it("marks and lists hidden currencies", async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-      await backend.createCurrency({ code: "SPAM1", asset_type: "", name: "Spam Token", decimal_places: 18, is_base: false });
-      await backend.createCurrency({ code: "SPAM2", asset_type: "", name: "Another Spam", decimal_places: 18, is_base: false });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+      await backend.createCurrency({ code: "SPAM1", asset_type: "", name: "Spam Token", decimal_places: 18 });
+      await backend.createCurrency({ code: "SPAM2", asset_type: "", name: "Another Spam", decimal_places: 18 });
 
       // Initially none hidden
       let hidden = await backend.listHiddenCurrencies();
@@ -68,8 +68,8 @@ describe("SqlJsBackend", () => {
     });
 
     it("clearLedgerData clears hidden currencies", async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-      await backend.createCurrency({ code: "JUNK", asset_type: "", name: "Junk Token", decimal_places: 18, is_base: false });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+      await backend.createCurrency({ code: "JUNK", asset_type: "", name: "Junk Token", decimal_places: 18 });
       await backend.setCurrencyHidden("JUNK", true);
 
       await backend.clearLedgerData();
@@ -85,7 +85,7 @@ describe("SqlJsBackend", () => {
 
   describe("accounts", () => {
     beforeEach(async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
     });
 
     it("creates and lists accounts", async () => {
@@ -207,7 +207,7 @@ describe("SqlJsBackend", () => {
     let equityId: string;
 
     beforeEach(async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
       bankId = uuidv7();
       await backend.createAccount({
         id: bankId, parent_id: null, account_type: "asset",
@@ -732,8 +732,8 @@ describe("SqlJsBackend", () => {
 
   describe("exchange rates", () => {
     beforeEach(async () => {
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true });
-      await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: false });
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
+      await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
     });
 
     it("records and retrieves exchange rate", async () => {
@@ -758,7 +758,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("derives transitive rate via shared base currency", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // EUR→USD and GLD→USD on same date
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
@@ -777,7 +777,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("derives transitive rate with inverse second leg", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // EUR→USD and USD→GLD on same date
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
@@ -796,7 +796,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("prefers direct rate over transitive", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // Direct EUR→GLD rate
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
@@ -820,7 +820,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("derives transitive rate when legs are on different dates within 7-day window", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // EUR→USD on 2024-01-15, GLD→USD on 2024-01-12 (3-day gap, within window)
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
@@ -838,7 +838,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("does not derive transitive rate when legs are beyond 7-day window", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // EUR→USD on 2024-01-15, GLD→USD on 2024-01-01 (14-day gap, beyond window)
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
@@ -855,7 +855,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("derives transitive rate using latest available rates for both legs", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // Multiple EUR→USD rates — should pick latest (Jan 14)
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-10",
@@ -885,7 +885,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("derives transitive rate when second leg is before first leg", async () => {
-      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4, is_base: false });
+      await backend.createCurrency({ code: "GLD", asset_type: "", name: "Gold", decimal_places: 4 });
       // EUR→USD on 2024-01-13, GLD→USD on 2024-01-14 (second leg after first, both within window)
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-13",
@@ -903,8 +903,8 @@ describe("SqlJsBackend", () => {
     });
 
     it("does not derive transitive rate when no path exists", async () => {
-      await backend.createCurrency({ code: "GBP", asset_type: "", name: "British Pound", decimal_places: 2, is_base: false });
-      await backend.createCurrency({ code: "JPY", asset_type: "", name: "Yen", decimal_places: 0, is_base: false });
+      await backend.createCurrency({ code: "GBP", asset_type: "", name: "British Pound", decimal_places: 2 });
+      await backend.createCurrency({ code: "JPY", asset_type: "", name: "Yen", decimal_places: 0 });
       // EUR→USD exists, JPY→GBP exists — no path from EUR to GBP
       await backend.recordExchangeRate({
         id: uuidv7(), date: "2024-01-15",
@@ -986,7 +986,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("inserts and retrieves an override", async () => {
-      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8 });
       const inserted = await backend.setCurrencyRateOverride("BTC", "coingecko", "handler:test");
       expect(inserted).toBe(true);
       const rows = await backend.getCurrencyRateOverrides();
@@ -997,7 +997,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("handler does not overwrite user", async () => {
-      await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
+      await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9 });
       await backend.setCurrencyRateOverride("SOL", "coingecko", "user");
       const skipped = await backend.setCurrencyRateOverride("SOL", "finnhub", "handler:test");
       expect(skipped).toBe(false);
@@ -1008,7 +1008,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("user overwrites handler", async () => {
-      await backend.createCurrency({ code: "DOT", asset_type: "", name: "Polkadot", decimal_places: 10, is_base: false });
+      await backend.createCurrency({ code: "DOT", asset_type: "", name: "Polkadot", decimal_places: 10 });
       await backend.setCurrencyRateOverride("DOT", "none", "handler:test");
       const updated = await backend.setCurrencyRateOverride("DOT", "coingecko", "user");
       expect(updated).toBe(true);
@@ -1019,9 +1019,9 @@ describe("SqlJsBackend", () => {
     });
 
     it("removing handler overrides manually keeps user entries", async () => {
-      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-      await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false });
-      await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
+      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8 });
+      await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18 });
+      await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9 });
       await backend.setCurrencyRateOverride("ETH", "none", "handler:pendle");
       await backend.setCurrencyRateOverride("SOL", "coingecko", "user");
 
@@ -1039,7 +1039,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("removeCurrencyRateOverride removes the entry", async () => {
-      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
+      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8 });
       await backend.setCurrencyRateOverride("BTC", "coingecko", "user");
       await backend.removeCurrencyRateOverride("BTC");
       const rows = await backend.getCurrencyRateOverrides();
@@ -1089,8 +1089,8 @@ describe("SqlJsBackend", () => {
 
   describe("currency token addresses", () => {
     it("stores and retrieves token addresses", async () => {
-      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6, is_base: false });
-      await backend.createCurrency({ code: "WETH", asset_type: "", name: "Wrapped Ether", decimal_places: 18, is_base: false });
+      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6 });
+      await backend.createCurrency({ code: "WETH", asset_type: "", name: "Wrapped Ether", decimal_places: 18 });
       await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
       await backend.setCurrencyTokenAddress("WETH", "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
 
@@ -1110,7 +1110,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("INSERT OR IGNORE keeps first-seen address (same currency, different chain)", async () => {
-      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6, is_base: false });
+      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6 });
       await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xeth_address");
       await backend.setCurrencyTokenAddress("USDC", "arbitrum", "0xarb_address");
 
@@ -1123,7 +1123,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("INSERT OR IGNORE ignores duplicate (same currency + chain)", async () => {
-      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6, is_base: false });
+      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6 });
       await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xoriginal");
       await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xduplicate");
 
@@ -1134,7 +1134,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("clearLedgerData clears token addresses", async () => {
-      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6, is_base: false });
+      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6 });
       await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xaddress");
       await backend.clearLedgerData();
       const all = await backend.getCurrencyTokenAddresses();
@@ -1142,7 +1142,7 @@ describe("SqlJsBackend", () => {
     });
 
     it("clearAllData clears token addresses", async () => {
-      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6, is_base: false });
+      await backend.createCurrency({ code: "USDC", asset_type: "", name: "USD Coin", decimal_places: 6 });
       await backend.setCurrencyTokenAddress("USDC", "ethereum", "0xaddress");
       await backend.clearAllData();
       const all = await backend.getCurrencyTokenAddresses();
@@ -1155,7 +1155,7 @@ describe("SqlJsBackend", () => {
   describe("entry links", () => {
     async function seedEntry(desc = "Test entry"): Promise<string> {
       // Ensure currency + accounts exist (idempotent: catch dups)
-      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: true }).catch(() => {});
+      await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 }).catch(() => {});
       const accounts = await backend.listAccounts();
       let assetId: string, expenseId: string;
       const existingAsset = accounts.find(a => a.full_name === "Assets");

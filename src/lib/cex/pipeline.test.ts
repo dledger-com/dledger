@@ -41,8 +41,8 @@ describe("CEX Pipeline", () => {
   beforeEach(async () => {
     backend = await createTestBackend();
     // Create base currencies
-    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2, is_base: true });
-    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2, is_base: false });
+    await backend.createCurrency({ code: "EUR", asset_type: "", name: "Euro", decimal_places: 2 });
+    await backend.createCurrency({ code: "USD", asset_type: "", name: "US Dollar", decimal_places: 2 });
   });
 
   describe("Trade processing", () => {

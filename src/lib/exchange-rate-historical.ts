@@ -1760,7 +1760,6 @@ async function ensureCurrency(backend: Backend, code: string): Promise<void> {
       asset_type: FRANKFURTER_FIAT.has(code) ? "fiat" : "",
       name: code,
       decimal_places: code.length <= 3 ? 2 : 8,
-      is_base: false,
     });
   } catch {
     // Already exists — expected

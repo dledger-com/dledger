@@ -20,7 +20,6 @@ export interface Currency {
   asset_type: string;
   name: string;
   decimal_places: number;
-  is_base: boolean;
   is_hidden?: boolean;
   tracks_currency?: string | null;
   sync_full_range?: boolean;

@@ -498,7 +498,6 @@
                 asset_type: "fiat",
                 name,
                 decimal_places: 2,
-                is_base: false,
             });
         } catch {
             // Already exists — expected
