@@ -387,10 +387,12 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
           for (const coin of data) {
             const upper = coin.symbol.toUpperCase();
             if (coin.image && !coin.image.includes("missing")) {
-              const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-              _icons.set(upper, icon);
-              newIcons.set(upper, icon);
-              notify();
+              const icon = await fetchAsDataUri(coin.image);
+              if (icon) {
+                _icons.set(upper, icon);
+                newIcons.set(upper, icon);
+                notify();
+              }
             }
           }
         }
@@ -424,11 +426,13 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
             const data = await _fetchGeckoBatch(url);
             for (const coin of data) {
               if (coin.image && !coin.image.includes("missing")) {
-                const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-                const symbols = geckoIdToSymbols.get(coin.id) ?? [coin.symbol.toUpperCase()];
-                for (const sym of symbols) {
-                  _icons.set(sym, icon);
-                  newIcons.set(sym, icon);
+                const icon = await fetchAsDataUri(coin.image);
+                if (icon) {
+                  const symbols = geckoIdToSymbols.get(coin.id) ?? [coin.symbol.toUpperCase()];
+                  for (const sym of symbols) {
+                    _icons.set(sym, icon);
+                    newIcons.set(sym, icon);
+                  }
                 }
                 notify();
               }
@@ -448,10 +452,12 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
             for (const coin of data) {
               const upper = coin.symbol.toUpperCase();
               if (coin.image && !coin.image.includes("missing")) {
-                const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-                _icons.set(upper, icon);
-                newIcons.set(upper, icon);
-                notify();
+                const icon = await fetchAsDataUri(coin.image);
+                if (icon) {
+                  _icons.set(upper, icon);
+                  newIcons.set(upper, icon);
+                  notify();
+                }
               }
             }
           }
@@ -467,10 +473,12 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
           for (const coin of data) {
             const upper = coin.symbol.toUpperCase();
             if (coin.image && !coin.image.includes("missing")) {
-              const icon = await fetchAsDataUri(coin.image) ?? coin.image;
-              _icons.set(upper, icon);
-              newIcons.set(upper, icon);
-              notify();
+              const icon = await fetchAsDataUri(coin.image);
+              if (icon) {
+                _icons.set(upper, icon);
+                newIcons.set(upper, icon);
+                notify();
+              }
             }
           }
         }
