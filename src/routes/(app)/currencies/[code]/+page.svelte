@@ -9,6 +9,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { getBackend, type CurrencyRateOverride } from "$lib/backend.js";
   // fetchSingleRate removed — cascade handles source selection automatically
@@ -398,19 +399,14 @@
         <Card.Header>
           <Card.Description>Full Range Sync</Card.Description>
           <Card.Title>
-            <button
-              class="flex items-center gap-2 text-sm"
-              onclick={async () => {
-                const newVal = !currency!.sync_full_range;
-                await getBackend().setSyncFullRange(code, newVal);
+            <Switch
+              checked={currency.sync_full_range}
+              onCheckedChange={async (checked) => {
+                await getBackend().setSyncFullRange(code, checked);
                 await loadCurrencyDetail();
-                toast.success(newVal ? "Full range sync enabled" : "Full range sync disabled");
+                toast.success(checked ? "Full range sync enabled" : "Full range sync disabled");
               }}
-            >
-              <span class={currency.sync_full_range ? "text-green-500" : "text-muted-foreground"}>
-                {currency.sync_full_range ? "Enabled" : "Disabled"}
-              </span>
-            </button>
+            />
           </Card.Title>
           <Card.Description class="text-xs">Fetch daily rates even when not holding a balance</Card.Description>
         </Card.Header>
