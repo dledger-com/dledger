@@ -6061,7 +6061,7 @@ PRAGMA foreign_keys = ON;
   // ---- Crypto asset info ----
 
   async listCryptoAssetInfo(): Promise<Map<string, string>> {
-    const rows = this.db.exec("SELECT currency, coingecko_id FROM crypto_asset_info WHERE coingecko_id != ''");
+    const rows = this.db.exec("SELECT currency, coingecko_id FROM crypto_asset_info");
     const map = new Map<string, string>();
     if (rows.length > 0) {
       for (const row of rows[0].values) {

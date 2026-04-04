@@ -51,7 +51,10 @@
         const result = new Map<string, string | null>();
         for (const sym of symbols) {
           const assets = grouped.get(sym.toUpperCase()) ?? [];
-          result.set(sym, assets[0]?.coingecko_id ?? null);
+          const geckoId = assets[0]?.coingecko_id ?? null;
+          result.set(sym, geckoId);
+          // Persist both positive and negative results so we don't re-query on next refresh
+          try { await backend.setCryptoAssetCoingeckoId(sym, geckoId ?? ""); } catch { /* non-critical */ }
         }
         return result;
       } catch { return new Map(symbols.map(s => [s, null])); }

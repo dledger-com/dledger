@@ -165,6 +165,11 @@ function resolveGeckoId(symbol: string): string | undefined {
   return _dbGeckoIds.get(symbol) || COINGECKO_IDS[symbol] || undefined;
 }
 
+/** Check if a symbol has already been looked up (positive or negative result cached). */
+function isGeckoIdKnown(symbol: string): boolean {
+  return _dbGeckoIds.has(symbol) || COINGECKO_IDS[symbol] !== undefined;
+}
+
 let _asyncResolveGeckoIdBatch: ((symbols: string[]) => Promise<Map<string, string | null>>) | null = null;
 
 /**
@@ -347,7 +352,8 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
     const geckoId = resolveGeckoId(upper);
     if (geckoId) {
       knownMissing.push(upper);
-    } else {
+    } else if (!isGeckoIdKnown(upper)) {
+      // Only query dprice for currencies we haven't looked up yet
       unknownMissing.push(upper);
     }
   }
@@ -405,6 +411,8 @@ async function _fetchCoinGecko(currencyCodes: string[]): Promise<void> {
               list.push(symbol);
               geckoIdToSymbols.set(geckoId, list);
             } else {
+              // Cache negative result so we don't re-query dprice for this symbol
+              _dbGeckoIds.set(symbol, "");
               stillUnknown.push(symbol);
             }
           }

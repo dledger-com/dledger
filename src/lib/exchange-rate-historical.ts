@@ -1404,6 +1404,14 @@ export async function autoBackfillRates(
             }
           }
         }
+
+        // For new codes that dprice doesn't know, auto-detect their fallback source
+        // and store it so they're not re-queried from dprice on every refresh.
+        for (const code of newCodes) {
+          if (dpriceAssets!.has(code)) continue; // successfully resolved to dprice
+          const fallback = classifySource(code, currencyTypeMap.get(code) ?? "", config.baseCurrency, new Map(), tokenAddrCurrencies, undefined, config.disabledSources);
+          await backend.setCurrencyRateSource(code, fallback ?? "none", "auto");
+        }
       } catch {
         // dprice unavailable — proceed with DB-known dprice currencies only
       }
