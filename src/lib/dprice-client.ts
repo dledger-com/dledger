@@ -200,7 +200,10 @@ interface PricesApiResponse {
 }
 
 class HttpDpriceClient implements DpriceClient {
-  constructor(private baseUrl: string) {}
+  constructor(private baseUrl: string) {
+    // Normalize: strip trailing slash to avoid double-slash in URL construction
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
 
   private async fetchJson<T>(path: string): Promise<T> {
     const resp = await fetch(`${this.baseUrl}${path}`);

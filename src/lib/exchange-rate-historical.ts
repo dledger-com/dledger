@@ -1244,7 +1244,8 @@ export interface AutoBackfillResult extends HistoricalFetchResult {
  * since their prices are already denominated in USD.
  */
 const USD_DENOMINATED_SOURCES: Set<SourceName> = new Set([
-  "dprice", "defillama", "coingecko", "cryptocompare", "binance", "finnhub",
+  "defillama", "coingecko", "cryptocompare", "binance", "finnhub",
+  // dprice excluded: it ingests ECB/Frankfurter data and CAN provide fiat cross-rates
 ]);
 
 /** Returns the ordered list of sources to try for a given asset type and currency. */
@@ -1363,17 +1364,35 @@ export async function cascadeFetchRates(
       result.fetched += sourceResult.fetched;
       result.errors.push(...sourceResult.errors);
 
-      // Track success/failure per currency
+      // Per-date gap tracking: check which dates are now filled, keep only remaining gaps
       const failedSet = new Set(sourceResult.failedCurrencies);
       for (const c of candidates) {
         if (failedSet.has(c)) {
           // Source returned nothing for this currency — record failure
           try { await backend.recordRateFetchFailure(c, source); } catch { /* ignore */ }
         } else {
-          // Source succeeded — clear failure cache, mark as served
+          // Source succeeded for at least some dates — check which are still missing
           try { await backend.clearRateFetchFailure(c, source); } catch { /* ignore */ }
-          groupRemaining.delete(c);
-          remainingCodes.delete(c);
+          const dates = neededByCode.get(c);
+          if (dates && dates.length > 0 && backend.getExchangeRatesBatchExact) {
+            const pairs = dates.map((d) => ({ currency: c, date: d }));
+            const filled = await backend.getExchangeRatesBatchExact(pairs, config.baseCurrency);
+            const stillMissing = dates.filter((d) => !filled.get(`${c}:${d}`));
+            if (stillMissing.length === 0) {
+              // All dates filled — currency fully served
+              neededByCode.delete(c);
+              groupRemaining.delete(c);
+              remainingCodes.delete(c);
+            } else {
+              // Partial success — update remaining dates for next source in cascade
+              neededByCode.set(c, stillMissing);
+            }
+          } else {
+            // No batch check available — assume fully served
+            neededByCode.delete(c);
+            groupRemaining.delete(c);
+            remainingCodes.delete(c);
+          }
         }
       }
     }
