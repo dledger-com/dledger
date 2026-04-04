@@ -1363,11 +1363,15 @@ export async function autoBackfillRates(
       dpriceAssets.add("USD");
     }
 
-    // Only query dprice for currencies with NO stored source at all (newly imported).
-    // Currencies already classified (dprice, frankfurter, defillama, none, etc.) are skipped.
+    // Query dprice for currencies with NO stored source, or with auto-"none" (re-evaluable).
+    // Auto-"none" currencies are re-checked because dprice data may have become available
+    // since they were last classified.
     const hasStored = new Set(storedSources.map(s => s.currency));
+    const noneStored = new Set(
+      storedSources.filter(s => s.rate_source === "none" && s.set_by === "auto").map(s => s.currency),
+    );
     const codes = [...new Set(currencyDates.map(cd => cd.currency))];
-    const newCodes = codes.filter(c => !hasStored.has(c) && !FRANKFURTER_FIAT.has(c));
+    const newCodes = codes.filter(c => (!hasStored.has(c) || noneStored.has(c)) && !FRANKFURTER_FIAT.has(c));
 
     if (newCodes.length > 0) {
       try {
@@ -1417,13 +1421,6 @@ export async function autoBackfillRates(
       }
     }
 
-    // Re-evaluate auto-"none" currencies: if dprice now knows them, clear the stale marking
-    // so classifySource() can re-route them to dprice instead of silently skipping.
-    for (const src of storedSources) {
-      if (src.rate_source === "none" && src.set_by === "auto" && dpriceAssets.has(src.currency)) {
-        await backend.setCurrencyRateSource(src.currency, null, "auto");
-      }
-    }
   }
 
   const totalDatesRequested = currencyDates.length;
