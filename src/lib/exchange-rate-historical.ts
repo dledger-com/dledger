@@ -1317,6 +1317,8 @@ export async function cascadeFetchRates(
 
   // Track remaining currencies (those not yet fully served)
   const remainingCodes = new Set(neededByCode.keys());
+  // Track currencies that got at least some rates (partial success = not stale, just weekend/holiday gaps)
+  const partialSuccess = new Set<string>();
 
   // Filter out overridden-to-none currencies upfront
   for (const code of [...remainingCodes]) {
@@ -1386,6 +1388,7 @@ export async function cascadeFetchRates(
             } else {
               // Partial success — update remaining dates for next source in cascade
               neededByCode.set(c, stillMissing);
+              partialSuccess.add(c);
             }
           } else {
             // No batch check available — assume fully served
@@ -1443,9 +1446,11 @@ export async function cascadeFetchRates(
   // Remaining currencies = unfilled after full cascade + tracking fallback
   result.failedCurrencies = [...remainingCodes];
 
-  // Mark stale: currencies where all cascade sources exhausted and no rates for recent 30 days
+  // Mark stale: only currencies that got ZERO rates from all sources (truly failed).
+  // Currencies with partial success (some dates filled, some weekend/holiday gaps) are NOT stale.
   const today = new Date();
   for (const code of remainingCodes) {
+    if (partialSuccess.has(code)) continue; // got some rates — not stale, just weekend/holiday gaps
     const dates = neededByCode.get(code) ?? [];
     const hasRecent = dates.some((d) => {
       const diff = (today.getTime() - new Date(d).getTime()) / 86400000;
