@@ -472,9 +472,26 @@ async function fetchFrankfurterHistorical(
 
       for (const [date, rates] of Object.entries(data.rates)) {
         for (const [code, rateValue] of Object.entries(rates)) {
-          const key = `${code}:${date}`;
-          if (!neededSet.has(key)) continue; // Skip unrequested dates
-          neededSet.delete(key);
+          const exactKey = `${code}:${date}`;
+          if (neededSet.has(exactKey)) {
+            neededSet.delete(exactKey);
+          } else {
+            // Frankfurter returns rates for business days only — weekend/holiday dates
+            // shift to the nearest prior business day. Accept if within 5 days of a needed date.
+            const returnedDate = new Date(date + "T00:00:00");
+            let matched = false;
+            for (const needed of neededSet) {
+              if (!needed.startsWith(code + ":")) continue;
+              const neededDate = new Date(needed.split(":")[1] + "T00:00:00");
+              const diffDays = Math.abs((neededDate.getTime() - returnedDate.getTime()) / 86400000);
+              if (diffDays <= 5) {
+                neededSet.delete(needed);
+                matched = true;
+                break;
+              }
+            }
+            if (!matched) continue; // Not near any needed date — skip
+          }
           successCurrencies.add(code);
           await ensureCurrency(backend, code);
           await ensureCurrency(backend, config.baseCurrency);
@@ -1222,14 +1239,24 @@ export interface AutoBackfillResult extends HistoricalFetchResult {
 
 // ---- Rate source cascade ----
 
-/** Returns the ordered list of sources to try for a given asset type. */
-export function cascadeForType(assetType: string, config?: { disabledSources?: Set<string>; finnhubApiKey?: string; coingeckoApiKey?: string; cryptoCompareApiKey?: string }): SourceName[] {
+/**
+ * Sources that price in USD internally — querying them for "USD" is meaningless
+ * since their prices are already denominated in USD.
+ */
+const USD_DENOMINATED_SOURCES: Set<SourceName> = new Set([
+  "dprice", "defillama", "coingecko", "cryptocompare", "binance", "finnhub",
+]);
+
+/** Returns the ordered list of sources to try for a given asset type and currency. */
+export function cascadeForType(assetType: string, config?: { disabledSources?: Set<string>; finnhubApiKey?: string; coingeckoApiKey?: string; cryptoCompareApiKey?: string }, currencyCode?: string): SourceName[] {
   const disabled = config?.disabledSources ?? new Set();
   const filter = (sources: SourceName[]) => sources.filter((s) => {
     if (disabled.has(s)) return false;
     if (s === "finnhub" && !config?.finnhubApiKey) return false;
     if (s === "coingecko" && !config?.coingeckoApiKey) return false;
     if (s === "cryptocompare" && !config?.cryptoCompareApiKey) return false;
+    // Skip USD-denominated sources when the currency IS USD (can't price USD in USD)
+    if (currencyCode === "USD" && USD_DENOMINATED_SOURCES.has(s)) return false;
     return true;
   });
   switch (assetType) {
@@ -1318,9 +1345,10 @@ export async function cascadeFetchRates(
       if (config.signal?.aborted) break;
       if (groupRemaining.size === 0) break;
 
-      // Filter: skip failure-cached currencies for this source
+      // Filter: skip failure-cached currencies and USD for USD-denominated sources
       const candidates = [...groupRemaining].filter(
-        (c) => !isFailureCached(c, source, failureMap),
+        (c) => !isFailureCached(c, source, failureMap) &&
+               !(c === "USD" && USD_DENOMINATED_SOURCES.has(source)),
       );
       if (candidates.length === 0) continue;
 
