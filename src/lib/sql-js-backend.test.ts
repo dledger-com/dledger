@@ -979,37 +979,29 @@ describe("SqlJsBackend", () => {
 
   // ---- Data management ----
 
-  describe("currency rate sources", () => {
-    it("starts with no rate sources", async () => {
-      const rows = await backend.getCurrencyRateSources();
+  describe("currency rate overrides", () => {
+    it("starts with no overrides", async () => {
+      const rows = await backend.getCurrencyRateOverrides();
       expect(rows).toHaveLength(0);
     });
 
-    it("inserts and retrieves a rate source", async () => {
+    it("inserts and retrieves an override", async () => {
       await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-      const inserted = await backend.setCurrencyRateSource("BTC", "coingecko", "handler:test");
+      const inserted = await backend.setCurrencyRateOverride("BTC", "coingecko", "handler:test");
       expect(inserted).toBe(true);
-      const rows = await backend.getCurrencyRateSources();
+      const rows = await backend.getCurrencyRateOverrides();
       expect(rows).toHaveLength(1);
       expect(rows[0].currency).toBe("BTC");
       expect(rows[0].rate_source).toBe("coingecko");
       expect(rows[0].set_by).toBe("handler:test");
     });
 
-    it("auto is a no-op (does not persist)", async () => {
-      await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false });
-      const result = await backend.setCurrencyRateSource("ETH", "coingecko", "auto");
-      expect(result).toBe(true); // returns true but doesn't persist
-      const rows = await backend.getCurrencyRateSources();
-      expect(rows.find((r) => r.currency === "ETH")).toBeUndefined();
-    });
-
     it("handler does not overwrite user", async () => {
       await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
-      await backend.setCurrencyRateSource("SOL", "coingecko", "user");
-      const skipped = await backend.setCurrencyRateSource("SOL", "finnhub", "handler:test");
+      await backend.setCurrencyRateOverride("SOL", "coingecko", "user");
+      const skipped = await backend.setCurrencyRateOverride("SOL", "finnhub", "handler:test");
       expect(skipped).toBe(false);
-      const rows = await backend.getCurrencyRateSources();
+      const rows = await backend.getCurrencyRateOverrides();
       const sol = rows.find((r) => r.currency === "SOL");
       expect(sol?.rate_source).toBe("coingecko");
       expect(sol?.set_by).toBe("user");
@@ -1017,71 +1009,40 @@ describe("SqlJsBackend", () => {
 
     it("user overwrites handler", async () => {
       await backend.createCurrency({ code: "DOT", asset_type: "", name: "Polkadot", decimal_places: 10, is_base: false });
-      await backend.setCurrencyRateSource("DOT", "none", "handler:test");
-      const updated = await backend.setCurrencyRateSource("DOT", "coingecko", "user");
+      await backend.setCurrencyRateOverride("DOT", "none", "handler:test");
+      const updated = await backend.setCurrencyRateOverride("DOT", "coingecko", "user");
       expect(updated).toBe(true);
-      const rows = await backend.getCurrencyRateSources();
+      const rows = await backend.getCurrencyRateOverrides();
       const dot = rows.find((r) => r.currency === "DOT");
       expect(dot?.rate_source).toBe("coingecko");
       expect(dot?.set_by).toBe("user");
     });
 
-    it("user overwrites auto", async () => {
-      await backend.createCurrency({ code: "ADA", asset_type: "", name: "Cardano", decimal_places: 6, is_base: false });
-      await backend.setCurrencyRateSource("ADA", "coingecko", "auto");
-      const updated = await backend.setCurrencyRateSource("ADA", "finnhub", "user");
-      expect(updated).toBe(true);
-      const rows = await backend.getCurrencyRateSources();
-      const ada = rows.find((r) => r.currency === "ADA");
-      expect(ada?.rate_source).toBe("finnhub");
-      expect(ada?.set_by).toBe("user");
-    });
-
-    it("handler overwrites auto", async () => {
-      await backend.createCurrency({ code: "LINK", asset_type: "", name: "Chainlink", decimal_places: 18, is_base: false });
-      await backend.setCurrencyRateSource("LINK", "coingecko", "auto");
-      const updated = await backend.setCurrencyRateSource("LINK", "none", "handler:test");
-      expect(updated).toBe(true);
-      const rows = await backend.getCurrencyRateSources();
-      const link = rows.find((r) => r.currency === "LINK");
-      expect(link?.rate_source).toBe("none");
-      expect(link?.set_by).toBe("handler:test");
-    });
-
-    it("clearAutoRateSources removes only auto entries", async () => {
+    it("removing handler overrides manually keeps user entries", async () => {
       await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
       await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false });
       await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
-      await backend.setCurrencyRateSource("BTC", "coingecko", "auto");
-      await backend.setCurrencyRateSource("ETH", "none", "handler:pendle");
-      await backend.setCurrencyRateSource("SOL", "coingecko", "user");
+      await backend.setCurrencyRateOverride("ETH", "none", "handler:pendle");
+      await backend.setCurrencyRateOverride("SOL", "coingecko", "user");
 
-      await backend.clearAutoRateSources();
-      const rows = await backend.getCurrencyRateSources();
-      expect(rows).toHaveLength(2);
-      expect(rows.map((r) => r.currency).sort()).toEqual(["ETH", "SOL"]);
-    });
-
-    it("clearNonUserRateSources keeps only user entries", async () => {
-      await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-      await backend.createCurrency({ code: "ETH", asset_type: "", name: "Ethereum", decimal_places: 18, is_base: false });
-      await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
-      await backend.setCurrencyRateSource("BTC", "coingecko", "auto");
-      await backend.setCurrencyRateSource("ETH", "none", "handler:pendle");
-      await backend.setCurrencyRateSource("SOL", "coingecko", "user");
-
-      await backend.clearNonUserRateSources();
-      const rows = await backend.getCurrencyRateSources();
+      // Remove handler entries manually
+      const overrides = await backend.getCurrencyRateOverrides();
+      for (const o of overrides) {
+        if (o.set_by.startsWith("handler:")) {
+          await backend.removeCurrencyRateOverride(o.currency);
+        }
+      }
+      const rows = await backend.getCurrencyRateOverrides();
       expect(rows).toHaveLength(1);
       expect(rows[0].currency).toBe("SOL");
       expect(rows[0].set_by).toBe("user");
     });
 
-    it("setCurrencyRateSource with null clears rate_source", async () => {
+    it("removeCurrencyRateOverride removes the entry", async () => {
       await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-      await backend.setCurrencyRateSource("BTC", "coingecko", "user");
-      await backend.setCurrencyRateSource("BTC", null, "user");
-      const rows = await backend.getCurrencyRateSources();
+      await backend.setCurrencyRateOverride("BTC", "coingecko", "user");
+      await backend.removeCurrencyRateOverride("BTC");
+      const rows = await backend.getCurrencyRateOverrides();
       const btc = rows.find((r) => r.currency === "BTC");
       expect(btc).toBeUndefined();
     });

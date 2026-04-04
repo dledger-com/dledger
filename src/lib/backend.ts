@@ -76,15 +76,6 @@ export interface CurrencyRateOverride {
   updated_at: string;
 }
 
-/** @deprecated Use CurrencyRateOverride — will be removed when cascade is implemented */
-export interface CurrencyRateSource {
-  currency: string;
-  rate_source: string | null;
-  rate_source_id: string;
-  set_by: string;
-  updated_at: string;
-}
-
 export interface RateFetchFailure {
   currency: string;
   source: string;
@@ -463,15 +454,6 @@ export interface Backend {
   setTracksCurrency(code: string, tracksCode: string | null): Promise<void>;
   setSyncFullRange(code: string, enabled: boolean): Promise<void>;
   setCurrencyStale(code: string, isStale: boolean): Promise<void>;
-
-  /** @deprecated Compatibility shim — use getCurrencyRateOverrides() */
-  getCurrencyRateSources(): Promise<CurrencyRateSource[]>;
-  /** @deprecated Compatibility shim — use setCurrencyRateOverride() */
-  setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, rateSourceId?: string): Promise<boolean>;
-  /** @deprecated No-op — auto sources no longer exist */
-  clearAutoRateSources(): Promise<void>;
-  /** @deprecated No-op — use removeCurrencyRateOverride() */
-  clearNonUserRateSources(): Promise<void>;
 
   // Currency token addresses (for DeFi pricing via DefiLlama)
   setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void>;
@@ -1239,20 +1221,6 @@ class TauriBackend implements Backend {
     return this.invoke("set_currency_stale", { code, isStale });
   }
 
-  // Deprecated compatibility shims
-  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
-    const overrides = await this.getCurrencyRateOverrides();
-    return overrides.map((o) => ({ currency: o.currency, rate_source: o.rate_source, rate_source_id: "", set_by: o.set_by, updated_at: o.updated_at }));
-  }
-  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, _rateSourceId?: string): Promise<boolean> {
-    if (rateSource === null) { await this.removeCurrencyRateOverride(currency); return true; }
-    if (setBy === "auto") return true;
-    return this.setCurrencyRateOverride(currency, rateSource, setBy);
-  }
-  async clearAutoRateSources(): Promise<void> { /* no-op */ }
-  async clearNonUserRateSources(): Promise<void> {
-    // Clear handler overrides via Tauri — will be replaced when cascade is implemented
-  }
 
   // Currency token addresses
   async setCurrencyTokenAddress(currency: string, chain: string, contractAddress: string): Promise<void> {

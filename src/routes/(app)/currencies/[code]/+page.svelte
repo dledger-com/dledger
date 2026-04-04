@@ -10,7 +10,7 @@
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
+  import { getBackend, type CurrencyRateOverride } from "$lib/backend.js";
   // fetchSingleRate removed — cascade handles source selection automatically
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
@@ -27,7 +27,7 @@
   const code = $derived(page.params.code ?? "");
 
   let currency = $state<Currency | null>(null);
-  let rateSource = $state<CurrencyRateSource | null>(null);
+  let rateSource = $state<CurrencyRateOverride | null>(null);
   let exchangeRates = $state<ExchangeRate[]>([]);
   let loading = $state(true);
 
@@ -88,7 +88,7 @@
 
   async function loadRateSource() {
     try {
-      const rows = await getBackend().getCurrencyRateSources();
+      const rows = await getBackend().getCurrencyRateOverrides();
       rateSource = rows.find((r) => r.currency === code) ?? null;
     } catch {
       rateSource = null;

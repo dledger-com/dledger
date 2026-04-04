@@ -599,7 +599,7 @@ describe("computeFrenchTaxReport", () => {
 
     // Mark SPAM1 as hidden, NONESRC as rate_source="none"
     await backend.setCurrencyHidden("SPAM1", true);
-    await backend.setCurrencyRateSource("NONESRC", "none", "user");
+    await backend.setCurrencyRateOverride("NONESRC", "none", "user");
 
     // Create equity accounts for these currencies
     const equityId = (await backend.listAccounts()).find(a => a.full_name === "Equity")!.id;

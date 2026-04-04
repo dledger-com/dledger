@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
-import type { Backend, CurrencyRateSource } from "./backend.js";
+import type { Backend, CurrencyRateOverride } from "./backend.js";
 import { createDpriceClient, type DpriceClient, type DpriceAssetFilter, type DpriceAssetType } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 
@@ -350,10 +350,10 @@ export async function syncExchangeRates(
       : [],
   );
 
-  // Load stored rate source config
-  const storedSources = await backend.getCurrencyRateSources();
-  const sourceMap = new Map<string, CurrencyRateSource>();
-  for (const src of storedSources) {
+  // Load stored rate overrides (user/handler only — no auto entries)
+  const overrides = await backend.getCurrencyRateOverrides();
+  const sourceMap = new Map<string, CurrencyRateOverride>();
+  for (const src of overrides) {
     sourceMap.set(src.currency, src);
   }
 
@@ -381,13 +381,9 @@ export async function syncExchangeRates(
       const entries = await client.getRates([...codes, baseCurrency]);
       dpriceAssets = new Set(entries.map((e) => e.from));
 
-      // Load existing rate_source_id mappings from stored sources
+      // Load existing dprice asset IDs from crypto_asset_info
       const existingIds = new Map<string, string>();
-      for (const src of storedSources) {
-        if (src.rate_source === "dprice" && src.rate_source_id) {
-          existingIds.set(src.currency, src.rate_source_id);
-        }
-      }
+      // dprice IDs are now stored in crypto_asset_info, not rate overrides
 
       // Currencies with stored dprice IDs — use directly
       for (const code of codes) {
@@ -893,24 +889,14 @@ export async function syncExchangeRates(
     allFailed.add(code);
   }
 
-  // Post-process: Write auto-detection results to DB
-  // Include dprice-served codes that had no prior stored source, and store resolved IDs
+  // Post-process: track newly detected currencies (no longer storing auto source assignments)
   for (const code of dpriceServed) {
-    const stored = sourceMap.get(code);
-    const resolvedId = dpriceResolvedIds.get(code) ?? "";
-    if (!stored || stored.rate_source === null) {
-      await backend.setCurrencyRateSource(code, "dprice", "auto", resolvedId);
-      result.newlyDetected.push(code);
-    } else if (resolvedId && stored.rate_source_id !== resolvedId) {
-      // Update existing source with newly resolved ID
-      await backend.setCurrencyRateSource(code, "dprice", stored.set_by, resolvedId);
-    }
     allSucceeded.add(code);
+    const stored = sourceMap.get(code);
+    if (!stored) result.newlyDetected.push(code);
   }
   for (const code of autoDetectSuccess) {
-    if (dpriceServed.has(code)) continue; // already handled above
-    const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets);
-    await backend.setCurrencyRateSource(code, detected, "auto");
+    if (dpriceServed.has(code)) continue;
     result.newlyDetected.push(code);
   }
 
@@ -937,16 +923,13 @@ export async function syncExchangeRates(
     }
   }
 
-  // Auto-hide: currencies that failed AND don't already have a working stored source.
-  // Don't downgrade existing sources to "none" just because one sync run didn't serve them.
+  // Record failures for currencies that no source could serve (replaces old auto-"none" marking)
   for (const code of allFailed) {
-    if (allSucceeded.has(code)) continue; // succeeded on another source
+    if (allSucceeded.has(code)) continue;
     const stored = sourceMap.get(code);
-    if (stored && stored.rate_source && stored.rate_source !== "none") continue; // preserve existing working source
-    const changed = await backend.setCurrencyRateSource(code, "none", "auto");
-    if (changed) {
-      result.autoHidden.push(code);
-    }
+    if (stored && stored.rate_source === "none") continue; // user/handler already suppressed
+    try { await backend.recordRateFetchFailure(code, "sync"); } catch { /* ignore */ }
+    result.autoHidden.push(code);
   }
 
   return result;

@@ -104,7 +104,7 @@ describe("findMissingRates source classification", () => {
 
   it("respects DB-stored rate source override", async () => {
     await backend.createCurrency({ code: "BTC", asset_type: "", name: "Bitcoin", decimal_places: 8, is_base: false });
-    await backend.setCurrencyRateSource("BTC", "binance", "user");
+    await backend.setCurrencyRateOverride("BTC", "binance", "user");
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "BTC", date: "2024-01-15" },
@@ -116,7 +116,7 @@ describe("findMissingRates source classification", () => {
 
   it("respects rate_source=none to skip currency", async () => {
     await backend.createCurrency({ code: "SPAM", asset_type: "", name: "Spam Token", decimal_places: 18, is_base: false });
-    await backend.setCurrencyRateSource("SPAM", "none", "user");
+    await backend.setCurrencyRateOverride("SPAM", "none", "user");
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "SPAM", date: "2024-01-15" },
@@ -186,7 +186,7 @@ describe("findMissingRates source classification", () => {
 
   it("handles DB-stored source for cryptocompare", async () => {
     await backend.createCurrency({ code: "SOL", asset_type: "", name: "Solana", decimal_places: 9, is_base: false });
-    await backend.setCurrencyRateSource("SOL", "cryptocompare", "user");
+    await backend.setCurrencyRateOverride("SOL", "cryptocompare", "user");
 
     const requests = await findMissingRates(backend, "USD", [
       { currency: "SOL", date: "2024-05-01" },
@@ -226,7 +226,7 @@ describe("findMissingRates source classification", () => {
 
   it("does not collect user-set none currencies as unsourceable", async () => {
     await backend.createCurrency({ code: "SKIP", asset_type: "", name: "Skip Token", decimal_places: 8, is_base: false });
-    await backend.setCurrencyRateSource("SKIP", "none", "user");
+    await backend.setCurrencyRateOverride("SKIP", "none", "user");
 
     const unsourceable = new Set<string>();
     const requests = await findMissingRates(
@@ -242,7 +242,7 @@ describe("findMissingRates source classification", () => {
 
   it("user-set none currencies are intentionally skipped, not unsourceable", async () => {
     await backend.createCurrency({ code: "STALE", asset_type: "", name: "Stale Token", decimal_places: 8, is_base: false });
-    await backend.setCurrencyRateSource("STALE", "none", "user");
+    await backend.setCurrencyRateOverride("STALE", "none", "user");
 
     const unsourceable = new Set<string>();
     const requests = await findMissingRates(

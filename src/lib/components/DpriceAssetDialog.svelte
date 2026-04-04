@@ -44,11 +44,10 @@
 
     async function select(asset: DpriceAssetInfo) {
         const backend = getBackend();
-        await backend.setCurrencyRateSource(
+        await backend.setCurrencyRateOverride(
             currencyCode,
             "dprice",
             "user",
-            asset.id,
         );
         toast.success(
             m.toast_rate_source_updated({

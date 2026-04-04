@@ -28,7 +28,7 @@ import type {
   BalanceAssertion,
   BalanceAssertionResult,
 } from "./types/index.js";
-import type { Backend, CurrencyRateOverride, CurrencyRateSource, RateFetchFailure, Reconciliation, UnreconciledLineItem } from "./backend.js";
+import type { Backend, CurrencyRateOverride, RateFetchFailure, Reconciliation, UnreconciledLineItem } from "./backend.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
 import type { CustomPluginRecord } from "./plugins/custom-plugins.js";
 import { parseTags } from "./utils/tags.js";
@@ -6373,44 +6373,6 @@ PRAGMA foreign_keys = ON;
 
   async setCurrencyStale(code: string, isStale: boolean): Promise<void> {
     this.run("UPDATE currency SET is_stale = ? WHERE code = ?", [isStale ? 1 : 0, code]);
-    this.scheduleSave();
-  }
-
-  // ---- Deprecated compatibility shims (will be removed with cascade implementation) ----
-
-  /** @deprecated */
-  async getCurrencyRateSources(): Promise<CurrencyRateSource[]> {
-    const overrides = await this.getCurrencyRateOverrides();
-    return overrides.map((o) => ({
-      currency: o.currency,
-      rate_source: o.rate_source,
-      rate_source_id: "",
-      set_by: o.set_by,
-      updated_at: o.updated_at,
-    }));
-  }
-
-  /** @deprecated */
-  async setCurrencyRateSource(currency: string, rateSource: string | null, setBy: string, _rateSourceId?: string): Promise<boolean> {
-    if (rateSource === null) {
-      await this.removeCurrencyRateOverride(currency);
-      return true;
-    }
-    if (setBy === "auto") {
-      // Auto entries no longer stored — skip silently
-      return true;
-    }
-    return this.setCurrencyRateOverride(currency, rateSource, setBy);
-  }
-
-  /** @deprecated */
-  async clearAutoRateSources(): Promise<void> {
-    // No-op: auto sources no longer exist
-  }
-
-  /** @deprecated */
-  async clearNonUserRateSources(): Promise<void> {
-    this.db.exec("DELETE FROM currency_rate_override WHERE set_by != 'user'");
     this.scheduleSave();
   }
 

@@ -8,7 +8,7 @@
   import { Switch } from "$lib/components/ui/switch/index.js";
 
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { getBackend, type CurrencyRateSource } from "$lib/backend.js";
+  import { getBackend, type CurrencyRateOverride } from "$lib/backend.js";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import { matchesFilter } from "$lib/utils/list-filter.js";
   import SortableHeader from "$lib/components/SortableHeader.svelte";
@@ -56,7 +56,7 @@
   let renameValue = $state("");
 
   let currencies = $state<Currency[]>([]);
-  let rateSources = $state<Map<string, CurrencyRateSource>>(new Map());
+  let rateSources = $state<Map<string, CurrencyRateOverride>>(new Map());
   let currencySearchTerm = $state("");
   let selectedAssetTypes = $state(new Set<string>());
   let holdings = $state(new Map<string, number>());
@@ -78,9 +78,6 @@
     if (c.asset_type) return c.asset_type;
     const inferred = inferAssetType(c.code);
     if (inferred) return inferred;
-    const rs = rateSources.get(c.code);
-    if (rs?.rate_source_id?.startsWith("crypto:")) return "crypto";
-    if (rs?.rate_source_id?.startsWith("fiat:")) return "fiat";
     return "";
   }
 
@@ -116,7 +113,7 @@
 
   async function loadRateSources() {
     try {
-      const rows = await getBackend().getCurrencyRateSources();
+      const rows = await getBackend().getCurrencyRateOverrides();
       rateSources = new Map(rows.map((r) => [r.currency, r]));
     } catch {
       rateSources = new Map();
@@ -178,7 +175,11 @@
   }
 
   async function handleSourceChange(currencyCode: string, newSource: string) {
-    await getBackend().setCurrencyRateSource(currencyCode, newSource === "auto" ? null : newSource, "user");
+    if (newSource === "auto") {
+      await getBackend().removeCurrencyRateOverride(currencyCode);
+    } else {
+      await getBackend().setCurrencyRateOverride(currencyCode, newSource, "user");
+    }
 
     if (newSource === "auto" || newSource === "none") {
       await loadRateSources();
@@ -214,7 +215,7 @@
   }
 
   async function handleDontConvert(code: string) {
-    await getBackend().setCurrencyRateSource(code, "none", "user");
+    await getBackend().setCurrencyRateOverride(code, "none", "user");
     await loadRateSources();
     toast.success(m.toast_rate_source_updated({ code, source: "none" }));
   }

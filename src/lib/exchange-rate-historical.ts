@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
-import type { Backend, CurrencyRateSource, CurrencyRateOverride, RateFetchFailure, CurrencyDateRequirement } from "./backend.js";
+import type { Backend, CurrencyRateOverride, RateFetchFailure, CurrencyDateRequirement } from "./backend.js";
 import { type SourceName, resolveDpriceAssetsBatch } from "./exchange-rate-sync.js";
 import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
@@ -60,7 +60,7 @@ export interface HistoricalFetchConfig {
   cryptoCompareApiKey?: string;
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
-  storedSources?: CurrencyRateSource[];
+  storedSources?: CurrencyRateOverride[];
   onProgress?: (fetched: number, total: number) => void;
   signal?: AbortSignal;
   disabledSources?: Set<string>;
@@ -109,7 +109,7 @@ function classifySource(
   currency: string,
   assetType: string,
   baseCurrency: string,
-  rateSourceMap: Map<string, CurrencyRateSource>,
+  rateSourceMap: Map<string, CurrencyRateOverride>,
   tokenAddressCurrencies?: Set<string>,
   dpriceAssets?: Set<string>,
   disabledSources?: Set<string>,
@@ -121,7 +121,7 @@ function classifySource(
       return "dprice";
     }
   }
-  // 2. DB-stored source (respect disabled flag for explicitly stored sources)
+  // 2. User/handler override (respect disabled flag)
   const stored = rateSourceMap.get(currency);
   if (stored?.rate_source === "none") return null;
   if (stored?.rate_source) {
@@ -167,7 +167,7 @@ export async function findMissingRates(
   disabledSources?: Set<string>,
   unsourceableCurrencies?: Set<string>,
   preloaded?: {
-    storedSources?: CurrencyRateSource[];
+    storedSources?: CurrencyRateOverride[];
     currencyTypeMap?: Map<string, string>;
     tokenAddrCurrencies?: Set<string>;
   },
@@ -184,8 +184,8 @@ export async function findMissingRates(
   }
 
   // Use pre-loaded data or load from DB
-  const storedSources = preloaded?.storedSources ?? await backend.getCurrencyRateSources();
-  const rateSourceMap = new Map<string, CurrencyRateSource>();
+  const storedSources = preloaded?.storedSources ?? await backend.getCurrencyRateOverrides();
+  const rateSourceMap = new Map<string, CurrencyRateOverride>();
   for (const src of storedSources) {
     rateSourceMap.set(src.currency, src);
   }
@@ -360,8 +360,8 @@ export async function fetchHistoricalRates(
 
     // Fallback: if dprice failed for some currencies, re-classify without dprice and retry
     if (failedAfterPrimary.size > 0 && !config.signal?.aborted) {
-      const storedSources = config.storedSources ?? await backend.getCurrencyRateSources();
-      const rateSourceMap = new Map<string, CurrencyRateSource>();
+      const storedSources = config.storedSources ?? await backend.getCurrencyRateOverrides();
+      const rateSourceMap = new Map<string, CurrencyRateOverride>();
       for (const src of storedSources) rateSourceMap.set(src.currency, src);
       const tokenAddresses = await backend.getCurrencyTokenAddresses();
       const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
@@ -1062,15 +1062,9 @@ async function fetchDpriceHistorical(
   }
 
   try {
-    // Build filters using stored dprice asset IDs when available
+    // dprice asset IDs are stored in crypto_asset_info.dprice_asset_id
+    // For now, use symbol-based resolution (dprice disambiguates internally)
     const idMap = new Map<string, string>();
-    if (config.storedSources) {
-      for (const src of config.storedSources) {
-        if (src.rate_source === "dprice" && src.rate_source_id) {
-          idMap.set(src.currency, src.rate_source_id);
-        }
-      }
-    }
     const filters = [...allSymbols].map(s => {
       const id = idMap.get(s);
       if (id) return { id };
@@ -1357,7 +1351,49 @@ export async function cascadeFetchRates(
     }
   }
 
-  // Remaining currencies = unfilled after full cascade
+  // ---- tracks_currency fallback: copy tracked currency's rates for unfilled currencies ----
+  if (remainingCodes.size > 0) {
+    // Load tracking relationships for remaining currencies
+    const allCurrencies = await backend.listCurrencies();
+    const trackingMap = new Map<string, string>();
+    for (const c of allCurrencies) {
+      if (c.tracks_currency && remainingCodes.has(c.code)) {
+        trackingMap.set(c.code, c.tracks_currency);
+      }
+    }
+
+    for (const [code, trackedCode] of trackingMap) {
+      const dates = neededByCode.get(code);
+      if (!dates || dates.length === 0) continue;
+
+      // For each needed date, look up the tracked currency's rate and copy it
+      let copiedCount = 0;
+      for (const date of dates) {
+        const trackedRate = await backend.getExchangeRate(trackedCode, config.baseCurrency, date);
+        if (trackedRate) {
+          try {
+            await backend.recordExchangeRate({
+              id: uuidv7(),
+              date,
+              from_currency: code,
+              to_currency: config.baseCurrency,
+              rate: trackedRate,
+              source: `tracked:${trackedCode}`,
+            });
+            copiedCount++;
+          } catch {
+            // Rate may already exist (same date/pair)
+          }
+        }
+      }
+      if (copiedCount > 0) {
+        remainingCodes.delete(code);
+        result.fetched += copiedCount;
+      }
+    }
+  }
+
+  // Remaining currencies = unfilled after full cascade + tracking fallback
   result.failedCurrencies = [...remainingCodes];
 
   // Mark stale: currencies where all cascade sources exhausted and no rates for recent 30 days
@@ -1472,23 +1508,7 @@ export async function autoBackfillRates(
       }
     }
 
-    // Clear auto-"none" markings for Frankfurter fiat currencies — transient API
-    // failures shouldn't permanently block currencies with a known-reliable source.
-    const fiatInCurrencyDates = new Set(
-      currencyDates.filter((cd) => FRANKFURTER_FIAT.has(cd.currency)).map((cd) => cd.currency),
-    );
-    if (fiatInCurrencyDates.size > 0) {
-      const storedSources = await backend.getCurrencyRateSources();
-      for (const src of storedSources) {
-        if (
-          src.rate_source === "none" &&
-          src.set_by === "auto" &&
-          fiatInCurrencyDates.has(src.currency)
-        ) {
-          await backend.setCurrencyRateSource(src.currency, null, "auto");
-        }
-      }
-    }
+    // Auto-"none" clearing is no longer needed — the TTL failure cache auto-heals
   }
 
   // ---- Load shared reference data once (used by dprice resolution, findMissingRates, fetchHistoricalRates) ----
@@ -1499,14 +1519,12 @@ export async function autoBackfillRates(
   const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
   const tokenAddrCurrencies = new Set(tokenAddresses.map((t) => t.currency));
 
-  // ---- Build dpriceAssets from stored sources (avoids redundant getRates() calls) ----
-  // On first run for a currency, getRates() discovers it and we store the preference.
-  // On subsequent runs, we read the stored preference — no dprice call needed.
+  // ---- Build dpriceAssets from overrides + discovery ----
   if (!dpriceAssets && isDpriceActive(config.dpriceMode)) {
-    const storedSources = await backend.getCurrencyRateSources();
-    // Reconstruct dpriceAssets from currencies already known to dprice
+    const overrides = await backend.getCurrencyRateOverrides();
+    // Reconstruct dpriceAssets from currencies with dprice override
     dpriceAssets = new Set(
-      storedSources.filter(s => s.rate_source === "dprice").map(s => s.currency),
+      overrides.filter(s => s.rate_source === "dprice").map(s => s.currency),
     );
     // USD is dprice's internal base unit — no fiat:USD asset exists. But when
     // baseCurrency != USD, we can derive USD rates via cross-rate (1 / base→USD).
@@ -1514,15 +1532,10 @@ export async function autoBackfillRates(
       dpriceAssets.add("USD");
     }
 
-    // Query dprice for currencies with NO stored source, or with auto-"none" (re-evaluable).
-    // Auto-"none" currencies are re-checked because dprice data may have become available
-    // since they were last classified.
-    const hasStored = new Set(storedSources.map(s => s.currency));
-    const noneStored = new Set(
-      storedSources.filter(s => s.rate_source === "none" && s.set_by === "auto").map(s => s.currency),
-    );
+    // Query dprice for currencies not yet known to dprice
+    const overrideSet = new Set(overrides.map(s => s.currency));
     const codes = [...new Set(currencyDates.map(cd => cd.currency))];
-    const newCodes = codes.filter(c => (!hasStored.has(c) || noneStored.has(c)) && !FRANKFURTER_FIAT.has(c));
+    const newCodes = codes.filter(c => !overrideSet.has(c) && !dpriceAssets!.has(c) && !FRANKFURTER_FIAT.has(c));
 
     if (newCodes.length > 0) {
       try {
@@ -1531,10 +1544,9 @@ export async function autoBackfillRates(
         const discoveredCodes = new Set(entries.map(e => e.from));
         for (const code of discoveredCodes) {
           dpriceAssets.add(code);
-          await backend.setCurrencyRateSource(code, "dprice", "auto");
         }
 
-        // Batch-resolve dprice asset IDs for all new currencies (discovered + unresolved)
+        // Batch-resolve dprice asset IDs for all new currencies
         const unresolvedCodes = newCodes.filter(c => !discoveredCodes.has(c) && c !== config.baseCurrency);
         const allCodesToResolve = [...discoveredCodes, ...unresolvedCodes];
         if (allCodesToResolve.length > 0) {
@@ -1555,17 +1567,8 @@ export async function autoBackfillRates(
           for (const [code, resolved] of batchResults) {
             if (resolved !== "none" && resolved !== "ambiguous") {
               if (!discoveredCodes.has(code)) dpriceAssets.add(code);
-              await backend.setCurrencyRateSource(code, "dprice", "auto", resolved.id);
             }
           }
-        }
-
-        // For new codes that dprice doesn't know, auto-detect their fallback source
-        // and store it so they're not re-queried from dprice on every refresh.
-        for (const code of newCodes) {
-          if (dpriceAssets!.has(code)) continue; // successfully resolved to dprice
-          const fallback = classifySource(code, currencyTypeMap.get(code) ?? "", config.baseCurrency, new Map(), tokenAddrCurrencies, undefined, config.disabledSources);
-          await backend.setCurrencyRateSource(code, fallback ?? "none", "auto");
         }
       } catch {
         // dprice unavailable — proceed with DB-known dprice currencies only
@@ -1580,45 +1583,63 @@ export async function autoBackfillRates(
     return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [], missingDatesByCode: {}, currenciesAnalyzed: filtered.length, totalDatesRequested: 0 };
   }
 
-  // Single load of stored sources for findMissingRates and fetchHistoricalRates.
-  // This consolidates the multiple getCurrencyRateSources() calls those functions
-  // would otherwise make independently.
-  const freshStoredSources = await backend.getCurrencyRateSources();
+  // Load overrides and failures for cascade runner
+  const overrides = await backend.getCurrencyRateOverrides();
+  const failures = await backend.getRateFetchFailures();
 
-  const unsourceable = new Set<string>();
-  const missing = await findMissingRates(backend, config.baseCurrency, currencyDates, dpriceAssets, { exactDateMatch: true }, config.disabledSources, unsourceable, {
-    storedSources: freshStoredSources,
-    currencyTypeMap,
-    tokenAddrCurrencies,
-  });
+  // Build needed dates per currency, checking which dates already have rates
+  const neededByCode = new Map<string, string[]>();
+  const datesByCurrency = new Map<string, Set<string>>();
+  for (const cd of currencyDates) {
+    if (cd.currency === config.baseCurrency) continue;
+    let dates = datesByCurrency.get(cd.currency);
+    if (!dates) { dates = new Set(); datesByCurrency.set(cd.currency, dates); }
+    dates.add(cd.date);
+  }
 
-  // Collect per-currency missing dates for unsourceable currencies
+  // Check which dates already have rates (batch exact check)
+  if (backend.getExchangeRatesBatchExact) {
+    const allPairs = [...datesByCurrency.entries()].flatMap(([currency, dates]) =>
+      [...dates].map((date) => ({ currency, date })),
+    );
+    if (allPairs.length > 0) {
+      const existing = await backend.getExchangeRatesBatchExact(allPairs, config.baseCurrency);
+      for (const [key, exists] of existing) {
+        if (exists) {
+          const [currency, date] = key.split(":");
+          datesByCurrency.get(currency)?.delete(date);
+        }
+      }
+    }
+  }
+
+  for (const [currency, dates] of datesByCurrency) {
+    if (dates.size > 0) {
+      neededByCode.set(currency, [...dates].sort());
+    }
+  }
+
   const missingDatesByCode: Record<string, string[]> = {};
-  for (const code of unsourceable) {
-    const dates = [...new Set(currencyDates.filter((cd) => cd.currency === code).map((cd) => cd.date))].sort();
-    if (dates.length > 0) missingDatesByCode[code] = dates;
+
+  if (neededByCode.size === 0) {
+    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [], missingDatesByCode, currenciesAnalyzed: filtered.length, totalDatesRequested };
   }
 
-  if (missing.length === 0) {
-    return { fetched: 0, skipped: 0, errors: [], failedCurrencies: [], unsourceableCurrencies: [...unsourceable], missingDatesByCode, currenciesAnalyzed: filtered.length, totalDatesRequested };
-  }
-
-  // Pass storedSources through config for dprice ID-based lookups in fetchDpriceHistorical
-  const effectiveConfig = config.storedSources
-    ? config
-    : { ...config, storedSources: freshStoredSources };
-
-  const result = await fetchHistoricalRates(backend, missing, effectiveConfig, dpriceAssets);
+  // Run cascade fetcher
+  const cascadeResult = await cascadeFetchRates(backend, neededByCode, currencyTypeMap, config, overrides, failures);
 
   // Collect per-currency missing dates for failed currencies
-  for (const code of result.failedCurrencies) {
-    const req = missing.find((m) => m.currency === code);
-    if (req) missingDatesByCode[code] = req.dates;
+  for (const code of cascadeResult.failedCurrencies) {
+    const dates = neededByCode.get(code);
+    if (dates) missingDatesByCode[code] = dates;
   }
 
   return {
-    ...result,
-    unsourceableCurrencies: [...unsourceable],
+    fetched: cascadeResult.fetched,
+    skipped: cascadeResult.skipped,
+    errors: cascadeResult.errors,
+    failedCurrencies: cascadeResult.failedCurrencies,
+    unsourceableCurrencies: [],
     missingDatesByCode,
     currenciesAnalyzed: filtered.length,
     totalDatesRequested,

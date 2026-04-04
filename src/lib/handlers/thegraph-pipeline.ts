@@ -355,7 +355,7 @@ export async function syncTheGraphWithHandlers(
       if (handlerResult.currencyHints) {
         for (const [currency, source] of Object.entries(handlerResult.currencyHints)) {
           const rateSource = source ?? "none";
-          await backend.setCurrencyRateSource(currency, rateSource, `handler:${handlerResult.handlerId}`);
+          await backend.setCurrencyRateOverride(currency, rateSource, `handler:${handlerResult.handlerId}`);
         }
       }
     }

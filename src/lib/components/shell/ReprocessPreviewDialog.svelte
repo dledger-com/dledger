@@ -79,12 +79,17 @@
 
         // Rebuild currency rate sources from dry-run hints
         if (!target) {
-          await backend.clearNonUserRateSources();
+          const overrides = await backend.getCurrencyRateOverrides();
+          for (const o of overrides) {
+            if (o.set_by.startsWith("handler:")) {
+              await backend.removeCurrencyRateOverride(o.currency);
+            }
+          }
         }
         if (preview.currencyHints) {
           for (const [currency, hint] of Object.entries(preview.currencyHints)) {
             const rateSource = hint.source ?? "none";
-            await backend.setCurrencyRateSource(currency, rateSource, `handler:${hint.handler}`);
+            await backend.setCurrencyRateOverride(currency, rateSource, `handler:${hint.handler}`);
           }
         }
 

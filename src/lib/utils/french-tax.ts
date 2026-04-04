@@ -325,7 +325,7 @@ export async function computeFrenchTaxReport(
 
   // Build skip set: hidden currencies + rate_source="none" — these can never have rates
   const hiddenCodes = await backend.listHiddenCurrencies();
-  const rateSources = await backend.getCurrencyRateSources();
+  const rateSources = await backend.getCurrencyRateOverrides();
   const skipCurrencies = new Set<string>([
     ...hiddenCodes,
     ...rateSources.filter(s => s.rate_source === "none").map(s => s.currency),
