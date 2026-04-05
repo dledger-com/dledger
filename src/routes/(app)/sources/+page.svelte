@@ -375,6 +375,7 @@
         taskQueue.enqueue({
             key: `btc-sync:${account.id}`,
             label: `Sync ${account.label} (Bitcoin)`,
+            concurrencyGroup: "btc",
             async run(ctx) {
                 const r = await getBackend().syncBitcoin(
                     account,
@@ -428,6 +429,7 @@
         taskQueue.enqueue({
             key: `${config.syncTaskPrefix}:${account.id}`,
             label: `Sync ${account.label} (${config.name})`,
+            concurrencyGroup: config.syncTaskPrefix,
             async run(ctx) {
                 const r = await (getBackend() as any)[config.backendSync](
                     account,
@@ -492,6 +494,7 @@
         taskQueue.enqueue({
             key: `cex-sync:${account.id}`,
             label: `Sync ${account.label} (${adapter.exchangeName})`,
+            concurrencyGroup: `cex:${account.exchange}`,
             async run(ctx) {
                 const result = await syncCexAccount(
                     getBackend(),
@@ -611,6 +614,7 @@
         taskQueue.enqueue({
             key: `etherscan-sync:${account.address}:${account.chain_id}`,
             label: `Sync ${account.label} (${getChainName(account.chain_id)})${viaLabel}`,
+            concurrencyGroup: "etherscan",
             async run() {
                 const r = source.type === "thegraph"
                     ? await getBackend().syncTheGraph(

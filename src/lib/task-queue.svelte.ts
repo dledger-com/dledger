@@ -2,6 +2,7 @@ export interface TaskDefinition {
   key: string;
   label: string;
   description?: string;
+  concurrencyGroup?: string;
   run: (ctx: TaskContext) => Promise<TaskResult | void>;
   onAction?: (task: QueuedTask) => void;
 }
@@ -31,6 +32,7 @@ export interface QueuedTask {
   key: string;
   label: string;
   description?: string;
+  concurrencyGroup: string;
   status: TaskStatus;
   progress: TaskProgress | null;
   result: TaskResult | null;
@@ -52,7 +54,7 @@ class TaskQueueStore {
   private runFns = new Map<string, TaskDefinition["run"]>();
   private actionCallbacks = new Map<string, (task: QueuedTask) => void>();
   private abortControllers = new Map<string, AbortController>();
-  private processing = false;
+  private processingGroups = new Set<string>();
   private autoDismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly running = $derived(this.queue.filter((t) => t.status === "running"));
@@ -101,6 +103,7 @@ class TaskQueueStore {
       key: def.key,
       label: def.label,
       description: def.description,
+      concurrencyGroup: def.concurrencyGroup ?? "default",
       status: "pending",
       progress: null,
       result: null,
@@ -167,27 +170,36 @@ class TaskQueueStore {
     );
   }
 
-  private async scheduleNext(): Promise<void> {
-    if (this.processing) return;
+  private scheduleNext(): void {
+    // Find one pending task per idle concurrency group
+    const startable = new Map<string, QueuedTask>();
+    for (const task of this.queue) {
+      if (task.status !== "pending") continue;
+      if (this.processingGroups.has(task.concurrencyGroup)) continue;
+      if (!startable.has(task.concurrencyGroup)) {
+        startable.set(task.concurrencyGroup, task);
+      }
+    }
+    for (const [group, task] of startable) {
+      this.processingGroups.add(group); // mark busy synchronously before any await
+      this.runTask(task); // fire-and-forget
+    }
+  }
 
-    const next = this.queue.find((t) => t.status === "pending");
-    if (!next) return;
-
-    this.processing = true;
+  private async runTask(task: QueuedTask): Promise<void> {
     const controller = new AbortController();
-    this.abortControllers.set(next.id, controller);
+    this.abortControllers.set(task.id, controller);
 
-    // Update status to running
-    next.status = "running";
-    next.startedAt = Date.now();
+    task.status = "running";
+    task.startedAt = Date.now();
 
-    const runFn = this.runFns.get(next.id);
+    const runFn = this.runFns.get(task.id);
     if (!runFn) {
-      next.status = "failed";
-      next.error = "No run function found";
-      next.finishedAt = Date.now();
-      this.processing = false;
-      this.cleanup(next.id);
+      task.status = "failed";
+      task.error = "No run function found";
+      task.finishedAt = Date.now();
+      this.processingGroups.delete(task.concurrencyGroup);
+      this.cleanup(task.id);
       this.scheduleNext();
       return;
     }
@@ -196,33 +208,33 @@ class TaskQueueStore {
       const ctx: TaskContext = {
         signal: controller.signal,
         reportProgress: (progress: TaskProgress) => {
-          next.progress = { ...progress };
+          task.progress = { ...progress };
         },
       };
       const result = await runFn(ctx);
       if (controller.signal.aborted) {
-        next.status = "cancelled";
+        task.status = "cancelled";
       } else {
-        next.status = "completed";
-        next.result = result ?? null;
+        task.status = "completed";
+        task.result = result ?? null;
         if (!result?.actionRequired) {
-          this.scheduleAutoDismiss(next.id);
+          this.scheduleAutoDismiss(task.id);
         }
       }
     } catch (err: unknown) {
       if (isAbortError(err) || controller.signal.aborted) {
-        next.status = "cancelled";
+        task.status = "cancelled";
       } else {
-        next.status = "failed";
-        next.error =
+        task.status = "failed";
+        task.error =
           err instanceof Error
             ? err.message || err.name || "Unknown error"
             : String(err) || "Unknown error";
       }
     } finally {
-      next.finishedAt = Date.now();
-      this.processing = false;
-      this.cleanup(next.id);
+      task.finishedAt = Date.now();
+      this.processingGroups.delete(task.concurrencyGroup);
+      this.cleanup(task.id);
       this.trimHistory();
       this.scheduleNext();
     }

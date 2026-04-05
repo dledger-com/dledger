@@ -312,4 +312,294 @@ describe("TaskQueueStore", () => {
     taskQueue.dismiss(id1!);
     taskQueue.dismiss(id2!);
   });
+
+  it("default concurrencyGroup is 'default'", async () => {
+    const id = taskQueue.enqueue({
+      key: "group-default",
+      label: "Default Group",
+      async run() { return { summary: "ok" }; },
+    });
+    const task = taskQueue.queue.find((t) => t.id === id);
+    expect(task?.concurrencyGroup).toBe("default");
+
+    await vi.advanceTimersByTimeAsync(0);
+    taskQueue.dismiss(id!);
+  });
+
+  it("parallel execution: tasks in different groups run concurrently", async () => {
+    const order: string[] = [];
+    let resolveA: () => void;
+    let resolveB: () => void;
+    const promiseA = new Promise<void>((r) => { resolveA = r; });
+    const promiseB = new Promise<void>((r) => { resolveB = r; });
+
+    const idA = taskQueue.enqueue({
+      key: "par-a",
+      label: "A",
+      concurrencyGroup: "group-a",
+      async run() {
+        order.push("a-start");
+        await promiseA;
+        order.push("a-end");
+      },
+    });
+    const idB = taskQueue.enqueue({
+      key: "par-b",
+      label: "B",
+      concurrencyGroup: "group-b",
+      async run() {
+        order.push("b-start");
+        await promiseB;
+        order.push("b-end");
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Both should be running simultaneously
+    expect(taskQueue.queue.find((t) => t.id === idA)?.status).toBe("running");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+    expect(order).toEqual(["a-start", "b-start"]);
+
+    resolveA!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order).toContain("a-end");
+
+    resolveB!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order).toContain("b-end");
+
+    expect(taskQueue.queue.find((t) => t.id === idA)?.status).toBe("completed");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("completed");
+
+    taskQueue.dismiss(idA!);
+    taskQueue.dismiss(idB!);
+  });
+
+  it("same-group sequential: tasks in the same group wait", async () => {
+    const order: string[] = [];
+    let resolveFirst: () => void;
+    const firstPromise = new Promise<void>((r) => { resolveFirst = r; });
+
+    const id1 = taskQueue.enqueue({
+      key: "same-1",
+      label: "Same 1",
+      concurrencyGroup: "shared",
+      async run() {
+        order.push("first-start");
+        await firstPromise;
+        order.push("first-end");
+      },
+    });
+    const id2 = taskQueue.enqueue({
+      key: "same-2",
+      label: "Same 2",
+      concurrencyGroup: "shared",
+      async run() {
+        order.push("second-start");
+        order.push("second-end");
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(taskQueue.queue.find((t) => t.id === id1)?.status).toBe("running");
+    expect(taskQueue.queue.find((t) => t.id === id2)?.status).toBe("pending");
+    expect(order).toEqual(["first-start"]);
+
+    resolveFirst!();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(order).toContain("first-end");
+    expect(order).toContain("second-start");
+    expect(order).toContain("second-end");
+
+    taskQueue.dismiss(id1!);
+    taskQueue.dismiss(id2!);
+  });
+
+  it("mixed groups: parallel across groups, sequential within", async () => {
+    const order: string[] = [];
+    let resolveA1: () => void;
+    let resolveB: () => void;
+    const promiseA1 = new Promise<void>((r) => { resolveA1 = r; });
+    const promiseB = new Promise<void>((r) => { resolveB = r; });
+
+    const idA1 = taskQueue.enqueue({
+      key: "mix-a1",
+      label: "A1",
+      concurrencyGroup: "alpha",
+      async run() { order.push("a1-start"); await promiseA1; order.push("a1-end"); },
+    });
+    const idA2 = taskQueue.enqueue({
+      key: "mix-a2",
+      label: "A2",
+      concurrencyGroup: "alpha",
+      async run() { order.push("a2-start"); order.push("a2-end"); },
+    });
+    const idB = taskQueue.enqueue({
+      key: "mix-b",
+      label: "B",
+      concurrencyGroup: "beta",
+      async run() { order.push("b-start"); await promiseB; order.push("b-end"); },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A1 and B should be running; A2 should be pending (same group as A1)
+    expect(taskQueue.queue.find((t) => t.id === idA1)?.status).toBe("running");
+    expect(taskQueue.queue.find((t) => t.id === idA2)?.status).toBe("pending");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+    expect(order).toEqual(["a1-start", "b-start"]);
+
+    // Complete A1 → A2 should start
+    resolveA1!();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(order).toContain("a1-end");
+    expect(order).toContain("a2-start");
+    expect(taskQueue.queue.find((t) => t.id === idA2)?.status).toBe("completed");
+
+    // B still running
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+
+    resolveB!();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(taskQueue.queue.find((t) => t.id === idA1)?.status).toBe("completed");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("completed");
+
+    taskQueue.dismiss(idA1!);
+    taskQueue.dismiss(idA2!);
+    taskQueue.dismiss(idB!);
+  });
+
+  it("cancel in one group does not affect another", async () => {
+    let resolveA: () => void;
+    let resolveB: () => void;
+    const promiseA = new Promise<void>((r) => { resolveA = r; });
+    const promiseB = new Promise<void>((r) => { resolveB = r; });
+
+    const idA = taskQueue.enqueue({
+      key: "cancel-a",
+      label: "A",
+      concurrencyGroup: "grp-a",
+      async run() { await promiseA; },
+    });
+    const idB = taskQueue.enqueue({
+      key: "cancel-b",
+      label: "B",
+      concurrencyGroup: "grp-b",
+      async run() { await promiseB; },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(taskQueue.queue.find((t) => t.id === idA)?.status).toBe("running");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+
+    // Cancel A
+    taskQueue.cancel(idA!);
+    resolveA!();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(taskQueue.queue.find((t) => t.id === idA)?.status).toBe("cancelled");
+    // B still running
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+
+    resolveB!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("completed");
+
+    taskQueue.dismiss(idA!);
+    taskQueue.dismiss(idB!);
+  });
+
+  it("bulk enqueue: one task per unique group starts immediately", async () => {
+    const resolvers: (() => void)[] = [];
+    const ids: string[] = [];
+
+    // Enqueue 12 tasks across 4 groups (3 per group)
+    for (let g = 0; g < 4; g++) {
+      for (let i = 0; i < 3; i++) {
+        let resolve: () => void;
+        const p = new Promise<void>((r) => { resolve = r; });
+        resolvers.push(resolve!);
+        const id = taskQueue.enqueue({
+          key: `bulk-g${g}-${i}`,
+          label: `G${g}-${i}`,
+          concurrencyGroup: `bulk-group-${g}`,
+          async run() { await p; },
+        });
+        ids.push(id!);
+      }
+    }
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Exactly 4 running (one per group), 8 pending
+    const running = taskQueue.queue.filter((t) => t.status === "running");
+    const pending = taskQueue.queue.filter((t) => t.status === "pending");
+    expect(running.length).toBe(4);
+    expect(pending.length).toBe(8);
+
+    // Each running task is the first enqueued in its group
+    const runningKeys = running.map((t) => t.key).sort();
+    expect(runningKeys).toEqual(["bulk-g0-0", "bulk-g1-0", "bulk-g2-0", "bulk-g3-0"]);
+
+    // Cleanup: resolve all and flush enough times for all 3 rounds per group
+    for (const r of resolvers) r();
+    for (let i = 0; i < 10; i++) await vi.advanceTimersByTimeAsync(0);
+    taskQueue.clearHistory();
+  });
+
+  it("isIdle requires all groups to be idle", async () => {
+    // Ensure clean slate — wait for any cascading tasks from previous tests
+    for (let i = 0; i < 15; i++) await vi.advanceTimersByTimeAsync(0);
+    taskQueue.clearHistory();
+
+    let resolveA: () => void;
+    let resolveB: () => void;
+    const promiseA = new Promise<void>((r) => { resolveA = r; });
+    const promiseB = new Promise<void>((r) => { resolveB = r; });
+
+    const idA = taskQueue.enqueue({
+      key: "idle-a",
+      label: "A",
+      concurrencyGroup: "grp-x",
+      async run() { await promiseA; },
+    });
+    const idB = taskQueue.enqueue({
+      key: "idle-b",
+      label: "B",
+      concurrencyGroup: "grp-y",
+      async run() { await promiseB; },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Both running — not idle (check via status, not $derived)
+    expect(taskQueue.queue.find((t) => t.id === idA)?.status).toBe("running");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+    expect(taskQueue.queue.filter((t) => t.status === "running" || t.status === "pending").length).toBeGreaterThan(0);
+
+    // Complete A — still not idle because B is running
+    resolveA!();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(taskQueue.queue.find((t) => t.id === idA)?.status).toBe("completed");
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("running");
+
+    // Complete B — now idle
+    resolveB!();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(taskQueue.queue.find((t) => t.id === idB)?.status).toBe("completed");
+    expect(taskQueue.queue.filter((t) => t.status === "running" || t.status === "pending").length).toBe(0);
+
+    taskQueue.dismiss(idA!);
+    taskQueue.dismiss(idB!);
+  });
 });

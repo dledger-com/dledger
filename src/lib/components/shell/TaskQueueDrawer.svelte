@@ -27,26 +27,20 @@
     return () => mq.removeEventListener("change", handler);
   });
 
-  let elapsed = $state(0);
-  let intervalId: ReturnType<typeof setInterval> | undefined;
+  let tick = $state(0);
 
   $effect(() => {
-    const running = taskQueue.running;
-    if (running.length > 0 && running[0].startedAt) {
-      elapsed = Math.floor((Date.now() - running[0].startedAt) / 1000);
-      intervalId = setInterval(() => {
-        const task = taskQueue.running[0];
-        if (task?.startedAt) {
-          elapsed = Math.floor((Date.now() - task.startedAt) / 1000);
-        }
-      }, 1000);
-    } else {
-      elapsed = 0;
+    if (taskQueue.running.length > 0) {
+      const id = setInterval(() => { tick++; }, 1000);
+      return () => clearInterval(id);
     }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
+    tick = 0;
   });
+
+  function taskElapsed(task: QueuedTask): string {
+    void tick; // reactive dependency
+    return task.startedAt ? formatElapsed(Math.floor((Date.now() - task.startedAt) / 1000)) : "0s";
+  }
 
   function formatElapsed(seconds: number): string {
     const m = Math.floor(seconds / 60);
@@ -109,7 +103,7 @@
                 <p class="mt-2 text-xs text-muted-foreground">{task.progress.message}</p>
               {/if}
             {/if}
-            <p class="mt-1 text-xs text-muted-foreground">{m.label_elapsed({ time: formatElapsed(elapsed) })}</p>
+            <p class="mt-1 text-xs text-muted-foreground">{m.label_elapsed({ time: taskElapsed(task) })}</p>
           </div>
         {/each}
 
