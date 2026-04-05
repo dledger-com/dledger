@@ -124,6 +124,21 @@
     step = "contribute";
   }
 
+  function buildIssueBody(): string {
+    const parts = [
+      `## Plugin: ${loadedPluginName}`,
+      "",
+      `**Type:** ${sourceTypeLabel(sourceType)}`,
+      "",
+      "## Source code",
+      "",
+      "```javascript",
+      lastLoadedSourceCode,
+      "```",
+    ];
+    return parts.join("\n");
+  }
+
   function sourceTypeLabel(type: SourceType): string {
     switch (type) {
       case "csv": return m.feedback_source_csv();
@@ -367,7 +382,7 @@
 
       <div class="space-y-2">
         <a
-          href="{GITHUB_REPO}/issues/new?title=New+plugin:+{encodeURIComponent(loadedPluginName)}&body=Plugin+code+attached"
+          href="{GITHUB_REPO}/issues/new?title=New+plugin:+{encodeURIComponent(loadedPluginName)}&body={encodeURIComponent(buildIssueBody())}"
           target="_blank"
           rel="noopener noreferrer"
           class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted"
@@ -375,6 +390,7 @@
           <GitPullRequest class="h-5 w-5 shrink-0 text-muted-foreground" />
           <div class="flex-1">
             <p class="text-sm font-medium">{m.feedback_contribute_pr()}</p>
+            <p class="text-xs text-muted-foreground">{m.feedback_contribute_pr_desc()}</p>
           </div>
           <ExternalLink class="h-4 w-4 text-muted-foreground" />
         </a>
