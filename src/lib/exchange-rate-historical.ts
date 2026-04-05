@@ -1317,6 +1317,10 @@ export async function cascadeFetchRates(
 
   // Track remaining currencies (those not yet fully served)
   const remainingCodes = new Set(neededByCode.keys());
+  // Recent cutoff for per-date tracking (same logic as autoBackfillRates)
+  const cascadeRecentCutoffDate = new Date();
+  cascadeRecentCutoffDate.setDate(cascadeRecentCutoffDate.getDate() - 7);
+  const cascadeRecentCutoff = cascadeRecentCutoffDate.toISOString().slice(0, 10);
   // Track currencies that got at least some rates (partial success = not stale, just weekend/holiday gaps)
   const partialSuccess = new Set<string>();
 
@@ -1373,25 +1377,45 @@ export async function cascadeFetchRates(
           // Source returned nothing for this currency — record failure
           try { await backend.recordRateFetchFailure(c, source); } catch { /* ignore */ }
         } else {
-          // Source succeeded for at least some dates — check which are still missing
+          // Source succeeded for at least some dates — check which are still missing.
+          // Use same old/recent split as autoBackfillRates:
+          // - Old dates (>7 days): "on or before" — bounded gaps (weekends/holidays) are covered
+          // - Recent dates (last 7 days): exact — unbounded tail must cascade to next source
           try { await backend.clearRateFetchFailure(c, source); } catch { /* ignore */ }
           const dates = neededByCode.get(c);
-          if (dates && dates.length > 0 && backend.getExchangeRatesBatchExact) {
-            const pairs = dates.map((d) => ({ currency: c, date: d }));
-            const filled = await backend.getExchangeRatesBatchExact(pairs, config.baseCurrency);
-            const stillMissing = dates.filter((d) => !filled.get(`${c}:${d}`));
+          if (dates && dates.length > 0) {
+            const oldDates = dates.filter((d) => d < cascadeRecentCutoff);
+            const recentDates = dates.filter((d) => d >= cascadeRecentCutoff);
+            const covered = new Set<string>();
+
+            // Old dates: "on or before"
+            if (oldDates.length > 0 && backend.getExchangeRatesBatch) {
+              const oldPairs = oldDates.map((d) => ({ currency: c, date: d }));
+              const oldFilled = await backend.getExchangeRatesBatch(oldPairs, config.baseCurrency);
+              for (const [key, exists] of oldFilled) {
+                if (exists) covered.add(key.split(":")[1]);
+              }
+            }
+
+            // Recent dates: exact
+            if (recentDates.length > 0 && backend.getExchangeRatesBatchExact) {
+              const recentPairs = recentDates.map((d) => ({ currency: c, date: d }));
+              const recentFilled = await backend.getExchangeRatesBatchExact(recentPairs, config.baseCurrency);
+              for (const [key, exists] of recentFilled) {
+                if (exists) covered.add(key.split(":")[1]);
+              }
+            }
+
+            const stillMissing = dates.filter((d) => !covered.has(d));
             if (stillMissing.length === 0) {
-              // All dates filled — currency fully served
               neededByCode.delete(c);
               groupRemaining.delete(c);
               remainingCodes.delete(c);
             } else {
-              // Partial success — update remaining dates for next source in cascade
               neededByCode.set(c, stillMissing);
               partialSuccess.add(c);
             }
           } else {
-            // No batch check available — assume fully served
             neededByCode.delete(c);
             groupRemaining.delete(c);
             remainingCodes.delete(c);
@@ -1443,8 +1467,10 @@ export async function cascadeFetchRates(
     }
   }
 
-  // Remaining currencies = unfilled after full cascade + tracking fallback
-  result.failedCurrencies = [...remainingCodes];
+  // Remaining currencies = truly failed (got ZERO rates from all sources).
+  // Currencies with partial success (some dates filled, remaining gaps are holidays)
+  // are NOT failed — "on or before" matching covers the gaps at query time.
+  result.failedCurrencies = [...remainingCodes].filter(c => !partialSuccess.has(c));
 
   // Mark stale: only currencies that got ZERO rates from all sources (truly failed).
   // Currencies with partial success (some dates filled, some weekend/holiday gaps) are NOT stale.
@@ -1494,11 +1520,18 @@ export async function autoBackfillRates(
   for (const req of filtered) {
     if (req.mode === "range") {
       // Generate daily dates from firstDate to max(lastDate, today if hasBalance)
+      // For fiat currencies, skip weekends — ECB/Frankfurter/dprice don't publish on Sat/Sun,
+      // and getExchangeRate's "on or before" lookup handles gaps automatically.
+      // Crypto markets trade 24/7, so weekends are kept for non-fiat currencies.
       const endDate = req.hasBalance && today > req.lastDate ? today : req.lastDate;
+      const skipWeekends = FRANKFURTER_FIAT.has(req.currency);
       let current = new Date(req.firstDate);
       const end = new Date(endDate);
       while (current <= end) {
-        currencyDates.push({ currency: req.currency, date: current.toISOString().slice(0, 10) });
+        const day = current.getDay();
+        if (!skipWeekends || (day !== 0 && day !== 6)) {
+          currencyDates.push({ currency: req.currency, date: current.toISOString().slice(0, 10) });
+        }
         current.setDate(current.getDate() + 1);
       }
     } else {
@@ -1555,7 +1588,10 @@ export async function autoBackfillRates(
       let current = new Date(minDate);
       const end = new Date(maxDate);
       while (current <= end) {
-        currencyDates.push({ currency: "USD", date: current.toISOString().slice(0, 10) });
+        const day = current.getDay();
+        if (day !== 0 && day !== 6) { // USD is fiat — skip weekends
+          currencyDates.push({ currency: "USD", date: current.toISOString().slice(0, 10) });
+        }
         current.setDate(current.getDate() + 1);
       }
     }
@@ -1649,18 +1685,44 @@ export async function autoBackfillRates(
     dates.add(cd.date);
   }
 
-  // Check which dates already have rates (batch exact check)
-  if (backend.getExchangeRatesBatchExact) {
-    const allPairs = [...datesByCurrency.entries()].flatMap(([currency, dates]) =>
-      [...dates].map((date) => ({ currency, date })),
-    );
-    if (allPairs.length > 0) {
-      const existing = await backend.getExchangeRatesBatchExact(allPairs, config.baseCurrency);
-      for (const [key, exists] of existing) {
-        if (exists) {
-          const [currency, date] = key.split(":");
-          datesByCurrency.get(currency)?.delete(date);
-        }
+  // Check which dates already have rates.
+  //
+  // Split into two groups with different tolerance:
+  // - Old dates (>7 days ago): use "on or before" matching. Bounded gaps (weekends,
+  //   holidays, maintenance) are covered by the nearest prior rate — same as
+  //   getExchangeRate's query-time behavior.
+  // - Recent dates (last 7 days): use exact matching. These are the unbounded tail
+  //   where the cascade should fetch fresh data from providers.
+  const recentCutoff = new Date();
+  recentCutoff.setDate(recentCutoff.getDate() - 7);
+  const recentCutoffStr = recentCutoff.toISOString().slice(0, 10);
+
+  const oldPairs: { currency: string; date: string }[] = [];
+  const recentPairs: { currency: string; date: string }[] = [];
+  for (const [currency, dates] of datesByCurrency) {
+    for (const date of dates) {
+      (date < recentCutoffStr ? oldPairs : recentPairs).push({ currency, date });
+    }
+  }
+
+  // Old dates: "on or before" — filters bounded gaps universally
+  if (oldPairs.length > 0 && backend.getExchangeRatesBatch) {
+    const existing = await backend.getExchangeRatesBatch(oldPairs, config.baseCurrency);
+    for (const [key, exists] of existing) {
+      if (exists) {
+        const [currency, date] = key.split(":");
+        datesByCurrency.get(currency)?.delete(date);
+      }
+    }
+  }
+
+  // Recent dates: exact — ensures cascade fills the tail
+  if (recentPairs.length > 0 && backend.getExchangeRatesBatchExact) {
+    const existing = await backend.getExchangeRatesBatchExact(recentPairs, config.baseCurrency);
+    for (const [key, exists] of existing) {
+      if (exists) {
+        const [currency, date] = key.split(":");
+        datesByCurrency.get(currency)?.delete(date);
       }
     }
   }
