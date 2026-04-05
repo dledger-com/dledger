@@ -126,12 +126,27 @@
     let viewCodeDialogOpen = $state(false);
     let viewCodePlugin = $state<CustomPluginRecord | null>(null);
     let viewCodeCopied = $state(false);
+    let viewCodeHtml = $state("");
 
     function showPluginCode(plugin: CustomPluginRecord) {
         viewCodePlugin = plugin;
         viewCodeCopied = false;
+        viewCodeHtml = "";
         viewCodeDialogOpen = true;
     }
+
+    $effect(() => {
+        if (viewCodeDialogOpen && viewCodePlugin) {
+            const code = viewCodePlugin.source_code;
+            import("shiki/bundle/web").then(({ codeToHtml }) => {
+                const isDark = document.documentElement.classList.contains("dark");
+                codeToHtml(code, {
+                    lang: "javascript",
+                    theme: isDark ? "github-dark" : "github-light",
+                }).then((html) => { viewCodeHtml = html; });
+            });
+        }
+    });
 
     async function copyPluginCode() {
         if (!viewCodePlugin) return;
@@ -2042,7 +2057,13 @@
                 </Dialog.Description>
             </Dialog.Header>
             <div class="relative">
-                <pre class="max-h-[60vh] overflow-auto rounded-md border bg-muted p-4 text-xs font-mono whitespace-pre-wrap">{viewCodePlugin?.source_code ?? ""}</pre>
+                {#if viewCodeHtml}
+                    <div class="max-h-[60vh] overflow-auto rounded-md border text-xs [&_pre]:!p-4 [&_pre]:!m-0 [&_pre]:!rounded-md [&_code]:!text-xs">
+                        {@html viewCodeHtml}
+                    </div>
+                {:else}
+                    <pre class="max-h-[60vh] overflow-auto rounded-md border bg-muted p-4 text-xs font-mono whitespace-pre-wrap">{viewCodePlugin?.source_code ?? ""}</pre>
+                {/if}
                 <button
                     type="button"
                     class="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
