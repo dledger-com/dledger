@@ -350,7 +350,7 @@ export async function syncEtherscanWithHandlers(
   });
 
   // Pre-scan for Aave groups and batch-prefetch enrichment data
-  if ((settings.enrichmentEnabled ?? false) && settings.theGraphApiKey && settings.theGraphEnabled !== false) {
+  if ((settings.enrichmentEnabled ?? true) && settings.theGraphApiKey && settings.theGraphEnabled !== false) {
     const aaveEntries: { hash: string; isV2: boolean }[] = [];
     for (const group of sortedGroups) {
       const source = `etherscan:${chainId}:${group.hash}`;
@@ -626,7 +626,7 @@ function buildHandlerContext(
     chain,
     backend,
     settings,
-    enrichment: settings.enrichmentEnabled ?? false,
+    enrichment: settings.enrichmentEnabled ?? true,
     ensureAccount,
     ensureCurrency,
   };

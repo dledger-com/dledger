@@ -1596,7 +1596,7 @@
                     </p>
                 </div>
                 <Switch
-                    checked={settings.settings.enrichmentEnabled ?? false}
+                    checked={settings.settings.enrichmentEnabled ?? true}
                     onCheckedChange={(v) => {
                         settings.update({ enrichmentEnabled: v });
                         suggestReprocess();
