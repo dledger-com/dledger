@@ -150,7 +150,7 @@ export async function syncBitsharesAccount(
             name: parts[depth - 1],
             full_name: ancestorName,
             allowed_currencies: [],
-            is_postable: true,
+            is_postable: false,
             is_archived: false,
             created_at: date,
           };
