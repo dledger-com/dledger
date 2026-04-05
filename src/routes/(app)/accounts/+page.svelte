@@ -609,11 +609,11 @@
       <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible">
       <Table.Root>
         <Table.Header class="sticky top-0 z-10 bg-background">
-          <Table.Row>
+          <Table.Row class="hidden sm:table-row">
             <Table.Head>{m.label_account()}</Table.Head>
             <Table.Head>{m.label_type()}</Table.Head>
             <Table.Head class="hidden md:table-cell">{m.label_postable_short()}</Table.Head>
-            <Table.Head class="text-right hidden sm:table-cell">{m.label_actions()}</Table.Head>
+            <Table.Head class="text-right">{m.label_actions()}</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -623,8 +623,75 @@
           {#each virtualItems as row (row.key)}
             {@const account = filteredAccounts[row.index]}
             {#if editingId === account.id}
+              <!-- Mobile edit row -->
+              <Table.Row class="sm:hidden">
+                <Table.Cell colspan={99} class="py-2 px-3">
+                  <div style:padding-left="{getDepth(account) * 1}rem">
+                    <div class="space-y-2">
+                      <Popover.Root bind:open={suggestionsOpen}>
+                        <Popover.Trigger class="w-full text-left">
+                          <Input
+                            bind:value={editFullName}
+                            class={editError ? "border-destructive" : isMerge ? "border-yellow-500" : ""}
+                            onfocus={() => { suggestionsOpen = true; }}
+                            oninput={() => { pendingMergeTarget = null; suggestionsOpen = true; }}
+                            onkeydown={(e: KeyboardEvent) => {
+                              if (e.key === "Escape") { if (suggestionsOpen) { suggestionsOpen = false; e.stopPropagation(); } else cancelEdit(); }
+                              if (e.key === "Enter" && !suggestionsOpen && !editError && editHasChanges) saveEdit();
+                            }}
+                          />
+                        </Popover.Trigger>
+                        {#if editSuggestions.length > 0}
+                          <Popover.Content class="w-[320px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                            <Command.Root shouldFilter={false}>
+                              <Command.List class="max-h-[200px]">
+                                <Command.Group heading={m.label_suggestions()}>
+                                  {#each editSuggestions as suggestion}
+                                    <Command.Item
+                                      value={suggestion.full_name}
+                                      onSelect={() => selectSuggestion(suggestion)}
+                                      class="font-mono text-xs"
+                                    >
+                                      {suggestion.full_name}
+                                    </Command.Item>
+                                  {/each}
+                                </Command.Group>
+                              </Command.List>
+                            </Command.Root>
+                          </Popover.Content>
+                        {/if}
+                      </Popover.Root>
+                      {#if editError}
+                        <p class="text-xs text-destructive">{editError}</p>
+                      {:else if isMerge}
+                        <p class="text-xs text-yellow-600 dark:text-yellow-400">{m.label_will_merge({ name: (pendingMergeTarget ?? matchedExisting)?.full_name ?? "" })}</p>
+                      {/if}
+                      <div class="flex items-center gap-2">
+                        <Button
+                          variant={isMerge ? "destructive" : "ghost"}
+                          size="sm"
+                          onclick={saveEdit}
+                          disabled={!!editError || !editHasChanges || editSaving}
+                        >
+                          {#if editSaving}
+                            {m.state_saving()}
+                          {:else if isMerge}
+                            {m.btn_merge()}
+                          {:else}
+                            {m.btn_save()}
+                          {/if}
+                        </Button>
+                        <Button variant="ghost" size="sm" onclick={cancelEdit} disabled={editSaving}>
+                          {m.btn_cancel()}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Table.Cell>
+              </Table.Row>
+              <!-- Desktop edit row -->
               <Table.Row
-                class={hoveredAncestorIds.has(account.id) ? "bg-muted/30" : ""}
+                class="hidden sm:table-row {hoveredAncestorIds.has(account.id) ? 'bg-muted/30' : ''}"
                 onmouseenter={() => (hoveredId = account.id)}
                 onmouseleave={() => { if (hoveredId === account.id) hoveredId = null; }}
               >
@@ -678,7 +745,7 @@
                 <Table.Cell class="hidden md:table-cell">
                   <Switch bind:checked={editPostable} />
                 </Table.Cell>
-                <Table.Cell class="text-right hidden sm:table-cell">
+                <Table.Cell class="text-right">
                   <div class="flex items-center justify-end gap-1">
                     <Button
                       variant={isMerge ? "destructive" : "ghost"}
@@ -701,8 +768,70 @@
                 </Table.Cell>
               </Table.Row>
             {:else}
+              <!-- Mobile row -->
               <Table.Row
-                class="{hoveredAncestorIds.has(account.id) ? 'bg-muted/30' : ''} {account.is_archived ? 'opacity-50' : ''}"
+                class="sm:hidden {account.is_archived ? 'opacity-50' : ''}"
+              >
+                <Table.Cell colspan={99} class="py-2 px-3">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1" style:padding-left="{getDepth(account) * 1}rem">
+                      <!-- Line 1: expand/collapse + name -->
+                      <div class="flex items-center gap-1">
+                        {#if parentIds.has(account.id)}
+                          <button class="p-0.5 -ml-1 rounded hover:bg-muted" onclick={() => toggleCollapse(account.id)}>
+                            {#if collapsedIds.has(account.id)}
+                              <ChevronRight class="h-3.5 w-3.5 text-muted-foreground" />
+                            {:else}
+                              <ChevronDown class="h-3.5 w-3.5 text-muted-foreground" />
+                            {/if}
+                          </button>
+                        {:else}
+                          <span class="w-5"></span>
+                        {/if}
+                        {#if account.is_postable}
+                          <a href="/accounts/{account.id}" class="font-medium hover:underline truncate" title={account.full_name}>{account.name}</a>
+                        {:else}
+                          <span class="text-sm text-muted-foreground font-medium truncate" title={account.full_name}>{account.name}</span>
+                        {/if}
+                      </div>
+                      <!-- Line 2: type badge + postable -->
+                      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 ml-5 text-xs text-muted-foreground">
+                        <AccountTypeBadge type={account.account_type} />
+                        {#if account.is_postable}
+                          <span>{m.label_postable_short()}</span>
+                        {/if}
+                      </div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="shrink-0">
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger>
+                          {#snippet child({ props })}
+                            <Button variant="ghost" size="icon-sm" {...props}>
+                              <EllipsisVertical class="h-4 w-4" />
+                              <span class="sr-only">{m.label_actions()}</span>
+                            </Button>
+                          {/snippet}
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item onclick={() => startSubAccount(account)}>{m.btn_add_sub_account()}</DropdownMenu.Item>
+                          {#if account.parent_id !== null}
+                            <DropdownMenu.Item onclick={() => startEdit(account)}>{m.btn_edit()}</DropdownMenu.Item>
+                          {/if}
+                          {#if account.is_archived}
+                            <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>{m.btn_unarchive()}</DropdownMenu.Item>
+                          {:else}
+                            <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>{m.btn_archive()}</DropdownMenu.Item>
+                          {/if}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    </div>
+                  </div>
+                </Table.Cell>
+              </Table.Row>
+              <!-- Desktop row -->
+              <Table.Row
+                class="hidden sm:table-row {hoveredAncestorIds.has(account.id) ? 'bg-muted/30' : ''} {account.is_archived ? 'opacity-50' : ''}"
                 onmouseenter={() => (hoveredId = account.id)}
                 onmouseleave={() => { if (hoveredId === account.id) hoveredId = null; }}
               >
@@ -731,7 +860,7 @@
                   <AccountTypeBadge type={account.account_type} />
                 </Table.Cell>
                 <Table.Cell class="hidden md:table-cell">{account.is_postable ? m.label_yes() : m.label_no()}</Table.Cell>
-                <Table.Cell class="text-right hidden sm:table-cell">
+                <Table.Cell class="text-right">
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
                       {#snippet child({ props })}
