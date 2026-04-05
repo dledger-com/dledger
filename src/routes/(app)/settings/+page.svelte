@@ -2046,7 +2046,7 @@
 
     <!-- View Plugin Code Dialog -->
     <Dialog.Root bind:open={viewCodeDialogOpen}>
-        <Dialog.Content class="sm:max-w-2xl">
+        <Dialog.Content class="sm:max-w-[calc(100vw-4rem)] w-fit min-w-[32rem]">
             <Dialog.Header>
                 <Dialog.Title>{viewCodePlugin?.name ?? ""}</Dialog.Title>
                 <Dialog.Description>
