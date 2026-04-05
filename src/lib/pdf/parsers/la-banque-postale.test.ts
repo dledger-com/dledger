@@ -355,7 +355,7 @@ describe("parseLbpStatement", () => {
     ]);
 
     const result = parseLbpStatement([page]);
-    expect(result.iban).toBe("FR0020041000010000000X000001");
+    expect(result.iban).toBe("FR0020041000010000000X00001");
   });
 
   it("returns warning for no table found", () => {
