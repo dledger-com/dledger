@@ -1131,5 +1131,18 @@
 
   "toast_opened_date_updated": "Opened date updated",
   "toast_assertion_created": "Assertion created",
-  "toast_pad_entry_created": "Pad entry created"
+  "toast_pad_entry_created": "Pad entry created",
+
+  "backup_reminder_title": "Backup your data",
+  "backup_reminder_overdue": "Last backup: {days} days ago",
+  "backup_reminder_never": "You haven't backed up yet",
+  "backup_reminder_export": "Quick export",
+  "backup_reminder_learn_more": "Why backup?",
+  "dialog_backup_title": "Why regular backups matter",
+  "dialog_backup_description": "Your data is stored locally in the browser",
+  "dialog_backup_no_sync": "dLedger does not yet support cloud sync. Your data lives only in this browser, on this device.",
+  "dialog_backup_ephemeral": "Browser storage can be cleared at any time — by the browser itself, OS updates, or clearing cookies and site data.",
+  "dialog_backup_recommendation": "We recommend exporting a .dledger backup at least once a week to keep your data safe.",
+  "dialog_backup_export_now": "Export now",
+  "toast_quick_export_success": "Backup exported successfully"
 }

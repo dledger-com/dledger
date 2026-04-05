@@ -1131,5 +1131,18 @@
 
   "toast_opened_date_updated": "Date d'ouverture mise à jour",
   "toast_assertion_created": "Assertion créée",
-  "toast_pad_entry_created": "Écriture d'ajustement créée"
+  "toast_pad_entry_created": "Écriture d'ajustement créée",
+
+  "backup_reminder_title": "Sauvegardez vos données",
+  "backup_reminder_overdue": "Dernière sauvegarde : il y a {days} jours",
+  "backup_reminder_never": "Vous n'avez pas encore sauvegardé",
+  "backup_reminder_export": "Export rapide",
+  "backup_reminder_learn_more": "Pourquoi sauvegarder ?",
+  "dialog_backup_title": "Pourquoi sauvegarder régulièrement",
+  "dialog_backup_description": "Vos données sont stockées localement dans le navigateur",
+  "dialog_backup_no_sync": "dLedger ne prend pas encore en charge la synchronisation cloud. Vos données ne se trouvent que dans ce navigateur, sur cet appareil.",
+  "dialog_backup_ephemeral": "Le stockage du navigateur peut être effacé à tout moment — par le navigateur lui-même, les mises à jour du système, ou en vidant les cookies et données de site.",
+  "dialog_backup_recommendation": "Nous recommandons d'exporter une sauvegarde .dledger au moins une fois par semaine pour protéger vos données.",
+  "dialog_backup_export_now": "Exporter maintenant",
+  "toast_quick_export_success": "Sauvegarde exportée avec succès"
 }

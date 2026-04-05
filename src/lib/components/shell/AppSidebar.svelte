@@ -12,12 +12,15 @@
   import PiggyBank from "lucide-svelte/icons/piggy-bank";
   import Coins from "lucide-svelte/icons/coins";
   import ThemeToggle from "./ThemeToggle.svelte";
+  import BackupReminderCard from "./BackupReminderCard.svelte";
   import * as m from "$paraglide/messages.js";
 
   let {
     onfeedback,
+    onbackupinfo,
   }: {
     onfeedback?: () => void;
+    onbackupinfo?: () => void;
   } = $props();
 
   const versionLabel = dev ? `v${__APP_VERSION__}-${__GIT_HASH__}` : `v${__APP_VERSION__}`;
@@ -74,6 +77,8 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
   </Sidebar.Content>
+
+  <BackupReminderCard onlearnmore={() => onbackupinfo?.()} />
 
   <Sidebar.Footer>
     <button

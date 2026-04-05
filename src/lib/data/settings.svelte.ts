@@ -67,6 +67,7 @@ export interface AppSettings {
   onboardingCompleted?: boolean;
   onboardingDismissedChecklist?: boolean;
   dashboardRangePreset?: string;
+  lastExportDate?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {

@@ -6,6 +6,7 @@
   import { getBackend } from "$lib/backend.js";
   import { exportData, downloadExport } from "$lib/export/export.js";
   import { toast } from "svelte-sonner";
+  import { loadSettings, saveToStorage } from "$lib/data/settings.svelte.js";
   import Download from "lucide-svelte/icons/download";
   import Eye from "lucide-svelte/icons/eye";
   import EyeOff from "lucide-svelte/icons/eye-off";
@@ -69,6 +70,9 @@
         (msg) => { progressMessage = msg; },
       );
       downloadExport(data, !!passphrase);
+      const s = loadSettings();
+      s.lastExportDate = new Date().toISOString();
+      saveToStorage(s);
       toast.success("Export complete");
       open = false;
     } catch (e) {

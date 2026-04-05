@@ -12,6 +12,7 @@
   const LedgerImportDialog = () => import("$lib/components/LedgerImportDialog.svelte");
   const DledgerImportDialog = () => import("$lib/components/DledgerImportDialog.svelte");
   const FeedbackWizardDialog = () => import("$lib/components/FeedbackWizardDialog.svelte");
+  const BackupInfoDialog = () => import("$lib/components/BackupInfoDialog.svelte");
   import { importDrop } from "$lib/data/import-drop.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
   import { setFormatLocale } from "$lib/utils/format.js";
@@ -24,6 +25,10 @@
   import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
   import { createDpriceClient } from "$lib/dprice-client.js";
+  import { exportData, downloadExport } from "$lib/export/export.js";
+  import { saveToStorage, loadSettings } from "$lib/data/settings.svelte.js";
+  import { toast } from "svelte-sonner";
+  import * as m from "$paraglide/messages.js";
 
   let { children } = $props();
 
@@ -89,6 +94,22 @@
     return onInvalidate("currencies", refreshIcons);
   });
 
+  let backupInfoOpen = $state(false);
+
+  async function handleQuickExportFromDialog() {
+    try {
+      const backend = getBackend();
+      const data = await exportData(backend, {});
+      downloadExport(data, false);
+      const s = loadSettings();
+      s.lastExportDate = new Date().toISOString();
+      saveToStorage(s);
+      toast.success(m.toast_quick_export_success());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    }
+  }
+
   // Clear content when dialogs close, and advance batch queue.
   // scheduleAdvance() is wrapped in untrack() so these effects only
   // depend on the dialog open/close state, not on queue internals.
@@ -129,7 +150,7 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar onfeedback={() => { feedbackWizard.openDefault(); }} />
+  <AppSidebar onfeedback={() => { feedbackWizard.openDefault(); }} onbackupinfo={() => { backupInfoOpen = true; }} />
   <Sidebar.Inset>
     <TopBar showSidebarTrigger={isDesktop.current} />
     <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4">
@@ -189,5 +210,10 @@
 {#if feedbackWizard.open}
   {#await FeedbackWizardDialog() then mod}
     <mod.default bind:open={feedbackWizard.open} initialStep={feedbackWizard.initialStep} />
+  {/await}
+{/if}
+{#if backupInfoOpen}
+  {#await BackupInfoDialog() then mod}
+    <mod.default bind:open={backupInfoOpen} onexport={handleQuickExportFromDialog} />
   {/await}
 {/if}
