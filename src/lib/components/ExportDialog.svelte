@@ -21,7 +21,7 @@
   let passphrase = $state("");
   let confirmPassphrase = $state("");
   let showPassphrase = $state(false);
-  let includeRaw = $state(false);
+  let includeRaw = $state(true);
   let includeApiKeys = $state(false);
   let includeSettings = $state(true);
   let includePlugins = $state(true);
@@ -39,7 +39,7 @@
     passphrase = "";
     confirmPassphrase = "";
     showPassphrase = false;
-    includeRaw = false;
+    includeRaw = true;
     includeApiKeys = false;
     includeSettings = true;
     includePlugins = true;

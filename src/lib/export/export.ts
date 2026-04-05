@@ -19,7 +19,7 @@ export async function exportData(
 	onProgress?: (message: string) => void,
 ): Promise<Uint8Array> {
 	const settings = loadSettings();
-	const includeRaw = options.includeRawTransactions ?? false;
+	const includeRaw = options.includeRawTransactions ?? true;
 	const includeSettings = options.includeSettings ?? true;
 	const includePlugins = options.includePlugins ?? true;
 
