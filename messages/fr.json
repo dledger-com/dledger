@@ -932,6 +932,8 @@
   "sources_supported_protocols": "Protocoles pris en charge ({count})",
   "sources_filter_protocols": "Filtrer les protocoles ou réseaux\u2026",
   "sources_network_count": "{count} réseau(x)",
+  "sources_custom_plugin": "Plugin",
+  "sources_all_chains": "Tous les réseaux",
   "sources_plain_text": "Texte brut",
   "sources_copy": "Copier",
   "sources_copy_address": "Copier l'adresse",

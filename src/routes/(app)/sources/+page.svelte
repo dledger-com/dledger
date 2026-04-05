@@ -70,6 +70,7 @@
     import ChainIcon from "$lib/components/ChainIcon.svelte";
     import { getDefaultPresetRegistry } from "$lib/csv-presets/index.js";
     import { getPluginManager } from "$lib/plugins/manager.js";
+    import { onInvalidate } from "$lib/data/invalidation.js";
     import CategorizationRulesEditor from "$lib/components/CategorizationRulesEditor.svelte";
     import type { ExchangeId } from "$lib/cex/types.js";
     import {
@@ -96,20 +97,34 @@
     }
 
     const handlerRegistry = getDefaultRegistry();
-    const handlers = handlerRegistry.getAll();
+    let handlers = $state(handlerRegistry.getAll());
 
     function shortPresetName(name: string): string {
         return name.replace(/ (Ledger Export|Trade History|Transactions|Bank Statement|Statement|App|Exchange)$/i, "").trim();
     }
-    const csvPresetNames = [...new Set(
+    let csvPresetNames = $state([...new Set(
         getDefaultPresetRegistry().getAll()
             .filter(p => p.id !== "bank-statement")
             .map(p => shortPresetName(p.name))
-    )].sort((a, b) => a.localeCompare(b));
-    const pdfParserNames = [...new Set(
+    )].sort((a, b) => a.localeCompare(b)));
+    let pdfParserNames = $state([...new Set(
         getPluginManager().pdfParsers.getAll()
             .map(p => shortPresetName(p.name))
-    )].sort((a, b) => a.localeCompare(b));
+    )].sort((a, b) => a.localeCompare(b)));
+
+    // Refresh handler/preset lists when custom plugins are loaded
+    onInvalidate("plugins", () => {
+        handlers = handlerRegistry.getAll();
+        csvPresetNames = [...new Set(
+            getDefaultPresetRegistry().getAll()
+                .filter(p => p.id !== "bank-statement")
+                .map(p => shortPresetName(p.name))
+        )].sort((a, b) => a.localeCompare(b));
+        pdfParserNames = [...new Set(
+            getPluginManager().pdfParsers.getAll()
+                .map(p => shortPresetName(p.name))
+        )].sort((a, b) => a.localeCompare(b));
+    });
 
     const PROTOCOL_CONTRACTS: Record<string, { label: string; address: string }[]> = {
         uniswap: [
@@ -134,16 +149,32 @@
         ],
     };
 
-    const protocolInfos = handlers
-        .filter((h) => h.supportedChainIds.length > 0)
+    // Build contract list for custom handlers from their hints
+    function getHandlerContracts(handlerId: string): { label: string; address: string }[] {
+        if (PROTOCOL_CONTRACTS[handlerId]) return PROTOCOL_CONTRACTS[handlerId];
+        // For custom plugins, extract addresses from hints
+        const ext = handlerRegistry.getAllExtensions().find(e => e.handler.id === handlerId);
+        if (ext?.hints?.addresses && ext.hints.addresses.length > 0) {
+            return ext.hints.addresses.map(a => ({ label: "Contract", address: a.toLowerCase() }));
+        }
+        return [];
+    }
+
+    const pm = getPluginManager();
+
+    const protocolInfos = $derived(handlers
+        .filter((h) => h.id !== "generic-etherscan")
         .map((h) => ({
             ...h,
-            chains: h.supportedChainIds
-                .map((cid) => SUPPORTED_CHAINS.find((c) => c.chain_id === cid)?.name ?? `Chain ${cid}`)
-                .sort(),
-            contracts: PROTOCOL_CONTRACTS[h.id] ?? [],
+            chains: h.supportedChainIds.length > 0
+                ? h.supportedChainIds
+                    .map((cid) => SUPPORTED_CHAINS.find((c) => c.chain_id === cid)?.name ?? `Chain ${cid}`)
+                    .sort()
+                : [m.sources_all_chains()],
+            contracts: getHandlerContracts(h.id),
+            isCustom: pm.isCustomHandler(h.id),
         }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => a.name.localeCompare(b.name)));
 
     let protocolFilter = $state("");
 
@@ -1623,6 +1654,9 @@
                                         <Collapsible.Trigger class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors">
                                             <div class="flex items-center gap-2">
                                                 <span class="font-medium">{proto.name}</span>
+                                                {#if proto.isCustom}
+                                                    <Badge variant="secondary" class="text-[10px] px-1.5 py-0">{m.sources_custom_plugin()}</Badge>
+                                                {/if}
                                                 <span class="text-xs text-muted-foreground">{m.sources_network_count({ count: proto.chains.length })}</span>
                                             </div>
                                             <ChevronsUpDown class="h-3.5 w-3.5 text-muted-foreground" />

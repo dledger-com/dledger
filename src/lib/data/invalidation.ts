@@ -6,7 +6,7 @@
  * A BroadcastChannel relays signals to other browser tabs.
  */
 
-export type InvalidationKind = "journal" | "accounts" | "currencies" | "reports";
+export type InvalidationKind = "journal" | "accounts" | "currencies" | "reports" | "plugins";
 
 type Listener = () => void;
 

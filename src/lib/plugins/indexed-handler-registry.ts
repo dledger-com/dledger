@@ -72,6 +72,10 @@ export class IndexedHandlerRegistry {
     return this.allExtensions.map((e) => e.handler);
   }
 
+  getAllExtensions(): TransactionHandlerExtension[] {
+    return this.allExtensions;
+  }
+
   /**
    * Find the best matching handler for a transaction group.
    * Only calls match() on candidates from index + universal handlers.

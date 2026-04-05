@@ -31,6 +31,8 @@ export class PluginManager {
     this.rateSources = new RateSourceRegistry();
   }
 
+  private handlerToPlugin = new Map<string, string>(); // handler.id → plugin.id
+
   /**
    * Register a plugin and wire all its contributions into sub-registries.
    */
@@ -43,6 +45,7 @@ export class PluginManager {
     if (plugin.transactionHandlers) {
       for (const ext of plugin.transactionHandlers) {
         this.handlers.register(ext);
+        this.handlerToPlugin.set(ext.handler.id, plugin.id);
       }
     }
 
@@ -87,6 +90,14 @@ export class PluginManager {
 
   get pluginCount(): number {
     return this.plugins.size;
+  }
+
+  /**
+   * Check whether a handler was contributed by a custom (non-builtin) plugin.
+   */
+  isCustomHandler(handlerId: string): boolean {
+    const pluginId = this.handlerToPlugin.get(handlerId);
+    return pluginId != null && pluginId !== "org.dledger.builtin";
   }
 }
 

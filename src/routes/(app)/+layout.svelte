@@ -20,7 +20,7 @@
   import { getBackend } from "$lib/backend.js";
   import { initCoinIcons, setAssetProxy, setCryptoGeckoIds, setAsyncGeckoIdResolver } from "$lib/data/coin-icons.svelte.js";
   import { loadCustomPlugins } from "$lib/plugins/custom-plugins.js";
-  import { onInvalidate } from "$lib/data/invalidation.js";
+  import { onInvalidate, invalidate } from "$lib/data/invalidation.js";
   import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
   import { feedbackWizard } from "$lib/data/feedback.svelte.js";
   import { createDpriceClient } from "$lib/dprice-client.js";
@@ -83,7 +83,7 @@
       }).catch(() => { /* non-critical */ });
     };
     refreshIcons();
-    loadCustomPlugins(backend).catch(() => { /* non-critical */ });
+    loadCustomPlugins(backend).then(() => invalidate("plugins")).catch(() => { /* non-critical */ });
 
     // Re-initialize icons when new currencies are created (e.g., after CSV/OFX import)
     return onInvalidate("currencies", refreshIcons);
