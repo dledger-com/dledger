@@ -70,6 +70,7 @@
     import { saveCustomPlugin } from "$lib/plugins/custom-plugins.js";
     import Plus from "lucide-svelte/icons/plus";
     import Code from "lucide-svelte/icons/code";
+    import CodeInput from "$lib/components/CodeInput.svelte";
     import Copy from "lucide-svelte/icons/copy";
     import Check from "lucide-svelte/icons/check";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -2003,17 +2004,13 @@
 
     <!-- Add Plugin Dialog -->
     <Dialog.Root bind:open={addPluginDialogOpen}>
-        <Dialog.Content class="sm:max-w-lg">
+        <Dialog.Content class="sm:max-w-3xl">
             <Dialog.Header>
                 <Dialog.Title>{msg.settings_plugins_add()}</Dialog.Title>
                 <Dialog.Description>{msg.feedback_load_desc()}</Dialog.Description>
             </Dialog.Header>
             <div class="space-y-4">
-                <textarea
-                  class="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  placeholder="// Paste your plugin code here..."
-                  bind:value={addPluginCode}
-                ></textarea>
+                <CodeInput bind:value={addPluginCode} />
                 {#if addPluginError}
                     <p class="text-xs text-destructive">{addPluginError}</p>
                 {/if}

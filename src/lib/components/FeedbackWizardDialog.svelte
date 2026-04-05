@@ -28,6 +28,7 @@
   import Github from "lucide-svelte/icons/github";
   import TriangleAlert from "lucide-svelte/icons/triangle-alert";
   import Info from "lucide-svelte/icons/info";
+  import CodeInput from "./CodeInput.svelte";
 
   const GITHUB_REPO = "https://github.com/dledger-com/dledger";
   const CONTACT_EMAIL = "feedback@dledger.org";
@@ -54,7 +55,9 @@
   let lastLoadedSourceCode = $state("");
 
   const dialogClass = $derived(
-    step === "llm-guide" ? "sm:max-w-2xl" : "sm:max-w-lg",
+    step === "llm-guide" ? "sm:max-w-2xl"
+      : step === "load-plugin" ? "sm:max-w-3xl"
+      : "sm:max-w-lg",
   );
 
   function reset() {
@@ -343,12 +346,8 @@
           <p class="text-xs text-yellow-700 dark:text-yellow-400">{m.feedback_load_warning()}</p>
         </div>
 
-        <!-- Code textarea -->
-        <textarea
-          class="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          placeholder="// Paste your plugin code here..."
-          bind:value={pluginCode}
-        ></textarea>
+        <!-- Code input with syntax highlighting -->
+        <CodeInput bind:value={pluginCode} />
 
         <!-- Error -->
         {#if loadError}
