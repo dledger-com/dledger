@@ -606,7 +606,7 @@
     </Card.Root>
   {:else}
     <Card.Root class="border-x-0 rounded-none shadow-none py-0">
-      <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible">
+      <div bind:this={scrollEl} class="overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[calc(100vh-220px)] [&_[data-slot=table-container]]:overflow-visible">
       <Table.Root>
         <Table.Header class="sticky top-0 z-10 bg-background">
           <Table.Row class="hidden sm:table-row">
