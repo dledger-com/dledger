@@ -117,22 +117,61 @@ export async function syncBitsharesAccount(
       await ensureCurrencyExists(backend, symbol, currencySet, { context: "crypto-chain", decimals: precision });
     }
 
+    function inferAccountType(fullName: string): Account["account_type"] {
+      switch (fullName.split(":")[0]) {
+        case "Assets": return "asset";
+        case "Liabilities": return "liability";
+        case "Equity": return "equity";
+        case "Income": return "revenue";
+        case "Expenses": return "expense";
+        default: return "asset";
+      }
+    }
+
     async function ensureAccount(fullName: string, date: string): Promise<string> {
       const existing = accountMap.get(fullName);
       if (existing) return existing.id;
-      const id = uuidv7();
-      const parts = fullName.split(":");
-      const firstPart = parts[0];
-      let accountType: Account["account_type"] = "asset";
-      if (firstPart === "Expenses") accountType = "expense";
-      else if (firstPart === "Income") accountType = "revenue";
-      else if (firstPart === "Equity") accountType = "equity";
-      else if (firstPart === "Liabilities") accountType = "liability";
 
+      const accountType = inferAccountType(fullName);
+      const parts = fullName.split(":");
+      let parentId: string | null = null;
+
+      for (let depth = 1; depth < parts.length; depth++) {
+        const ancestorName = parts.slice(0, depth).join(":");
+        const existingAncestor = accountMap.get(ancestorName);
+        if (existingAncestor) {
+          parentId = existingAncestor.id;
+        } else {
+          const id = uuidv7();
+          const acc: Account = {
+            id,
+            parent_id: parentId,
+            account_type: accountType,
+            name: parts[depth - 1],
+            full_name: ancestorName,
+            allowed_currencies: [],
+            is_postable: true,
+            is_archived: false,
+            created_at: date,
+          };
+          await backend.createAccount(acc);
+          accountMap.set(ancestorName, acc);
+          result.accounts_created++;
+          parentId = id;
+        }
+      }
+
+      const id = uuidv7();
       const acc: Account = {
-        id, parent_id: null, account_type: accountType,
-        name: parts[parts.length - 1], full_name: fullName,
-        allowed_currencies: [], is_postable: true, is_archived: false, created_at: date,
+        id,
+        parent_id: parentId,
+        account_type: accountType,
+        name: parts[parts.length - 1],
+        full_name: fullName,
+        allowed_currencies: [],
+        is_postable: true,
+        is_archived: false,
+        created_at: date,
       };
       await backend.createAccount(acc);
       accountMap.set(fullName, acc);
