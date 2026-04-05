@@ -244,7 +244,7 @@ interface TransactionHandler {
   name: string;
   description: string;
   website?: string;
-  supportedChainIds: number[];  // empty = all chains
+  supportedChainIds: number[];  // list ALL chain IDs the protocol is deployed on (shown in UI)
 
   match(group: TxHashGroup, ctx: HandlerContext): number;     // 0-100 confidence
   process(group: TxHashGroup, ctx: HandlerContext): Promise<HandlerResult>;
@@ -316,7 +316,12 @@ interface LineItem {
 // ---- Match score guidelines ----
 // 55-60: standard protocol handler
 // 50:    generic/fallback handler
-// 65+:   only for very specific sub-protocol forks`;
+// 65+:   only for very specific sub-protocol forks
+
+// ---- Chain IDs (common values) ----
+// 1=Ethereum, 10=Optimism, 56=BSC, 137=Polygon, 250=Fantom, 324=zkSync Era,
+// 8453=Base, 42161=Arbitrum One, 43114=Avalanche, 59144=Linea, 534352=Scroll
+// Always list the specific chains your protocol is deployed on in supportedChainIds.`;
 
 const DEFI_EXAMPLE = `// Complete DeFi handler example — a lending protocol with deposits, withdrawals, and swaps
 // IMPORTANT: Exactly ONE HandlerEntry per transaction hash. All token flows + gas go in one entry.
