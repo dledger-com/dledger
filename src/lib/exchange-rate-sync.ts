@@ -326,6 +326,7 @@ export async function syncExchangeRates(
   dpriceUrl?: string,
   coingeckoPro?: boolean,
   disabledSources?: Set<string>,
+  dpriceApiKey?: string,
 ): Promise<ExchangeRateSyncResult> {
   const result: ExchangeRateSyncResult = {
     rates_fetched: 0,
@@ -376,7 +377,7 @@ export async function syncExchangeRates(
   const dpriceServed = new Set<string>(); // codes successfully served by dprice this run
   if (isDpriceActive(dpriceMode)) {
     try {
-      const client = createDpriceClient({ dpriceMode, dpriceUrl });
+      const client = createDpriceClient({ dpriceMode, dpriceUrl, dpriceApiKey });
       // Request cross-rates for all codes (including baseCurrency for completeness)
       const entries = await client.getRates([...codes, baseCurrency]);
       dpriceAssets = new Set(entries.map((e) => e.from));
@@ -946,6 +947,7 @@ export async function fetchSingleRate(
   dpriceMode?: DpriceMode,
   dpriceUrl?: string,
   coingeckoPro?: boolean,
+  dpriceApiKey?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const today = todayISO();
 
@@ -1105,7 +1107,7 @@ export async function fetchSingleRate(
 
     case "dprice": {
       try {
-        const client = createDpriceClient({ dpriceMode, dpriceUrl });
+        const client = createDpriceClient({ dpriceMode, dpriceUrl, dpriceApiKey });
         const rate = await client.getRate(code, baseCurrency);
         if (rate == null) return { success: false, error: `dprice: no rate for ${code}/${baseCurrency}` };
         await backend.recordExchangeRate({

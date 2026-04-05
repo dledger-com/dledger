@@ -199,14 +199,28 @@ interface PricesApiResponse {
   }>;
 }
 
+/** Max symbols/ids per /api/v1/prices request (server-enforced cap). */
+const MAX_SYMBOLS_PER_REQUEST = 50;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
 class HttpDpriceClient implements DpriceClient {
-  constructor(private baseUrl: string) {
+  private apiKey?: string;
+
+  constructor(private baseUrl: string, apiKey?: string) {
     // Normalize: strip trailing slash to avoid double-slash in URL construction
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.apiKey = apiKey;
   }
 
   private async fetchJson<T>(path: string): Promise<T> {
-    const resp = await fetch(`${this.baseUrl}${path}`);
+    const headers: Record<string, string> = {};
+    if (this.apiKey) headers["X-API-Key"] = this.apiKey;
+    const resp = await fetch(`${this.baseUrl}${path}`, { headers });
     if (!resp.ok) {
       const text = await resp.text().catch(() => resp.statusText);
       throw new Error(`dprice HTTP ${resp.status}: ${text}`);
@@ -239,17 +253,20 @@ class HttpDpriceClient implements DpriceClient {
     date?: string,
     opts?: { type?: DpriceAssetType },
   ): Promise<DpriceRateEntry[]> {
-    const params = new URLSearchParams({ symbols: currencies.join(",") });
-    if (date) params.set("date", date);
-    if (opts?.type) params.set("type", opts.type);
-    // Fetch all prices in USD (default quote), then compute cross-rate matrix
-    const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+    // Chunk to respect server symbol cap
     const usdPrices = new Map<string, number>();
-    for (const c of resp.currencies) {
-      if (c.prices.length > 0) {
-        usdPrices.set(c.base, Number(c.prices[0][1]));
+    for (const batch of chunk(currencies, MAX_SYMBOLS_PER_REQUEST)) {
+      const params = new URLSearchParams({ symbols: batch.join(",") });
+      if (date) params.set("date", date);
+      if (opts?.type) params.set("type", opts.type);
+      const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+      for (const c of resp.currencies) {
+        if (c.prices.length > 0) {
+          usdPrices.set(c.base, Number(c.prices[0][1]));
+        }
       }
     }
+    // Compute cross-rate matrix from all USD prices
     const entries: DpriceRateEntry[] = [];
     const symbols = [...usdPrices.keys()];
     for (const a of symbols) {
@@ -285,16 +302,25 @@ class HttpDpriceClient implements DpriceClient {
     let resultTo = toDate;
 
     for (const [key, g] of groups) {
-      const params = new URLSearchParams({ date: fromDate, end_date: toDate });
-      if (g.symbols.length > 0) params.set("symbols", g.symbols.join(","));
-      if (g.ids.length > 0) params.set("ids", g.ids.join(","));
-      if (key !== "__id__" && key !== "") params.set("type", key);
+      // Sub-chunk symbols and ids to respect server cap
+      const symbolChunks = g.symbols.length > 0 ? chunk(g.symbols, MAX_SYMBOLS_PER_REQUEST) : [[]];
+      const idChunks = g.ids.length > 0 ? chunk(g.ids, MAX_SYMBOLS_PER_REQUEST) : [[]];
 
-      const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
-      resultFrom = resp.date;
-      resultTo = resp.end_date ?? resp.date;
-      for (const c of resp.currencies) {
-        allCurrencies.push({ id: c.id ?? "", symbol: c.base, prices: c.prices });
+      for (const symBatch of symbolChunks) {
+        for (const idBatch of idChunks) {
+          if (symBatch.length === 0 && idBatch.length === 0) continue;
+          const params = new URLSearchParams({ date: fromDate, end_date: toDate });
+          if (symBatch.length > 0) params.set("symbols", symBatch.join(","));
+          if (idBatch.length > 0) params.set("ids", idBatch.join(","));
+          if (key !== "__id__" && key !== "") params.set("type", key);
+
+          const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+          resultFrom = resp.date;
+          resultTo = resp.end_date ?? resp.date;
+          for (const c of resp.currencies) {
+            allCurrencies.push({ id: c.id ?? "", symbol: c.base, prices: c.prices });
+          }
+        }
       }
     }
 
@@ -331,19 +357,20 @@ class HttpDpriceClient implements DpriceClient {
     }
     const missing = new Set<string>();
     for (const [date, symbols] of byDate) {
-      const params = new URLSearchParams({ symbols: [...symbols].join(","), date });
-      try {
-        const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
-        for (const c of resp.currencies) {
-          if (c.prices.length === 0) missing.add(c.base);
+      for (const batch of chunk([...symbols], MAX_SYMBOLS_PER_REQUEST)) {
+        const params = new URLSearchParams({ symbols: batch.join(","), date });
+        try {
+          const resp = await this.fetchJson<PricesApiResponse>(`/api/v1/prices?${params}`);
+          for (const c of resp.currencies) {
+            if (c.prices.length === 0) missing.add(c.base);
+          }
+          const returned = new Set(resp.currencies.map((c) => c.base));
+          for (const s of batch) {
+            if (!returned.has(s)) missing.add(s);
+          }
+        } catch {
+          for (const s of batch) missing.add(s);
         }
-        // Symbols not in response at all are also missing
-        const returned = new Set(resp.currencies.map((c) => c.base));
-        for (const s of symbols) {
-          if (!returned.has(s)) missing.add(s);
-        }
-      } catch {
-        for (const s of symbols) missing.add(s);
       }
     }
     return [...missing];
@@ -365,10 +392,16 @@ class HttpDpriceClient implements DpriceClient {
   }
 
   async queryAssetsBatch(symbols: string[], limit?: number): Promise<Map<string, DpriceAssetInfo[]>> {
-    const params = new URLSearchParams({ symbol: symbols.join(",") });
-    if (limit) params.set("limit", limit.toString());
-    const resp = await this.fetchJson<{ results: Record<string, DpriceAssetInfo[]> }>(`/api/v1/assets?${params}`);
-    return new Map(Object.entries(resp.results));
+    const merged = new Map<string, DpriceAssetInfo[]>();
+    for (const batch of chunk(symbols, MAX_SYMBOLS_PER_REQUEST)) {
+      const params = new URLSearchParams({ symbol: batch.join(",") });
+      if (limit) params.set("limit", limit.toString());
+      const resp = await this.fetchJson<{ results: Record<string, DpriceAssetInfo[]> }>(`/api/v1/assets?${params}`);
+      for (const [key, val] of Object.entries(resp.results)) {
+        merged.set(key, val);
+      }
+    }
+    return merged;
   }
 
   async exportDb(): Promise<Uint8Array> {
@@ -381,8 +414,11 @@ class HttpDpriceClient implements DpriceClient {
 
   async proxyAsset(url: string): Promise<Blob | null> {
     try {
+      const headers: Record<string, string> = {};
+      if (this.apiKey) headers["X-API-Key"] = this.apiKey;
       const resp = await fetch(
         `${this.baseUrl}/api/v1/asset-proxy?url=${encodeURIComponent(url)}`,
+        { headers },
       );
       if (!resp.ok) return null;
       return resp.blob();
@@ -402,14 +438,15 @@ import type { DpriceMode } from "./data/settings.svelte.js";
 export function createDpriceClient(settings?: {
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
+  dpriceApiKey?: string;
 }): DpriceClient {
   const mode = settings?.dpriceMode;
   if (mode === "http") {
-    return new HttpDpriceClient(settings?.dpriceUrl ?? DEFAULT_DPRICE_URL);
+    return new HttpDpriceClient(settings?.dpriceUrl ?? DEFAULT_DPRICE_URL, settings?.dpriceApiKey);
   }
   if (isTauri) {
     return new TauriDpriceClient();
   }
   // Browser fallback: always HTTP
-  return new HttpDpriceClient(settings?.dpriceUrl ?? DEFAULT_DPRICE_URL);
+  return new HttpDpriceClient(settings?.dpriceUrl ?? DEFAULT_DPRICE_URL, settings?.dpriceApiKey);
 }

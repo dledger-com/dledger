@@ -37,6 +37,7 @@ export interface AppSettings {
   accountPaths?: Partial<AccountPathConfig>;
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
+  dpriceApiKey?: string;
   spamCleanupDone?: boolean;
   rateConfigHash?: string;
   // Per-service enable/disable (undefined = enabled for backward compat)
@@ -99,6 +100,7 @@ export function isServiceEnabled(flag: boolean | undefined): boolean {
 export function computeRateConfigHash(s: AppSettings): string {
   const parts = [
     s.dpriceMode ?? "off",
+    s.dpriceApiKey ? "dpkey:set" : "",
     s.coingeckoApiKey ? "set" : "",
     s.finnhubApiKey ? "set" : "",
     s.cryptoCompareApiKey ? "set" : "",
@@ -248,6 +250,7 @@ export class SettingsStore {
       cryptoCompareApiKey: this.cryptoCompareApiKey,
       dpriceMode: this.settings.dpriceMode,
       dpriceUrl: this.settings.dpriceUrl,
+      dpriceApiKey: this.settings.dpriceApiKey,
       disabledSources: disabled.size > 0 ? disabled : undefined,
     };
   }

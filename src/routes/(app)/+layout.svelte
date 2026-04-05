@@ -43,6 +43,7 @@
     const dpriceClient = createDpriceClient({
       dpriceMode: settings.settings.dpriceMode,
       dpriceUrl: settings.settings.dpriceUrl,
+      dpriceApiKey: settings.settings.dpriceApiKey,
     });
     setAssetProxy((url) => dpriceClient.proxyAsset(url));
     setAsyncGeckoIdResolver(async (symbols) => {

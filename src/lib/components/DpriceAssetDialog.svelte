@@ -33,6 +33,7 @@
             const client = createDpriceClient({
                 dpriceMode: settings.settings.dpriceMode,
                 dpriceUrl: settings.settings.dpriceUrl,
+                dpriceApiKey: settings.settings.dpriceApiKey,
             });
             candidates = await client.queryAssets({ symbol: currencyCode }, 10);
         } catch (e) {

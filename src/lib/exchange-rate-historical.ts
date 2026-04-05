@@ -60,6 +60,7 @@ export interface HistoricalFetchConfig {
   cryptoCompareApiKey?: string;
   dpriceMode?: DpriceMode;
   dpriceUrl?: string;
+  dpriceApiKey?: string;
   storedSources?: CurrencyRateOverride[];
   onProgress?: (fetched: number, total: number) => void;
   signal?: AbortSignal;
@@ -82,12 +83,12 @@ export interface HistoricalFetchResult {
  * Returns undefined if dprice is not active or unavailable.
  */
 export async function resolveDpriceAssets(
-  config: Pick<HistoricalFetchConfig, "dpriceMode" | "dpriceUrl" | "baseCurrency">,
+  config: Pick<HistoricalFetchConfig, "dpriceMode" | "dpriceUrl" | "dpriceApiKey" | "baseCurrency">,
   currencies: string[],
 ): Promise<Set<string> | undefined> {
   if (!isDpriceActive(config.dpriceMode)) return undefined;
   try {
-    const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+    const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl, dpriceApiKey: config.dpriceApiKey });
     // Exclude Frankfurter fiat from untyped getRates to avoid crypto token mismatches
     // (e.g., "USD" matching "Unstable States Dollar" instead of fiat USD)
     const nonFiat = currencies.filter((c) => !FRANKFURTER_FIAT.has(c));
@@ -1050,7 +1051,7 @@ async function fetchDpriceHistorical(
   onDateDone: () => void,
   currencyTypeMap?: Map<string, string>,
 ): Promise<void> {
-  const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+  const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl, dpriceApiKey: config.dpriceApiKey });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
 
   // Collect all symbols and compute a global date range for the batch call
@@ -1090,17 +1091,23 @@ async function fetchDpriceHistorical(
       return assetType ? { symbol: s, type: assetType as import("./dprice-client.js").DpriceAssetType } : { symbol: s };
     });
 
-    // Single batch request for all symbols across the full date range
-    const batch = await client.getPrices(filters, globalFrom, globalTo);
+    // Chunk date range to respect server's ~5-year cap (1826 days).
+    // Symbol chunking is handled internally by client.getPrices().
+    const MAX_DPRICE_DATE_RANGE_DAYS = 1826;
+    const dateChunks = chunkDateRange(globalFrom, globalTo, MAX_DPRICE_DATE_RANGE_DAYS);
 
     // Build per-symbol lookup maps: date string → price_usd string
     const priceMaps = new Map<string, Map<string, string>>();
-    for (const entry of batch.currencies) {
-      const dateMap = new Map<string, string>();
-      for (const [dateInt, priceUsd] of entry.prices) {
-        dateMap.set(dateIntToString(dateInt), priceUsd);
+
+    for (const [chunkFrom, chunkTo] of dateChunks) {
+      const batch = await client.getPrices(filters, chunkFrom, chunkTo);
+      for (const entry of batch.currencies) {
+        let dateMap = priceMaps.get(entry.symbol.toUpperCase());
+        if (!dateMap) { dateMap = new Map<string, string>(); priceMaps.set(entry.symbol.toUpperCase(), dateMap); }
+        for (const [dateInt, priceUsd] of entry.prices) {
+          dateMap.set(dateIntToString(dateInt), priceUsd);
+        }
       }
-      priceMaps.set(entry.symbol.toUpperCase(), dateMap);
     }
 
     const basePriceMap = config.baseCurrency !== "USD"
@@ -1627,7 +1634,7 @@ export async function autoBackfillRates(
 
     if (newCodes.length > 0) {
       try {
-        const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl });
+        const client = createDpriceClient({ dpriceMode: config.dpriceMode, dpriceUrl: config.dpriceUrl, dpriceApiKey: config.dpriceApiKey });
         const entries = await client.getRates(newCodes);
         const discoveredCodes = new Set(entries.map(e => e.from));
         for (const code of discoveredCodes) {

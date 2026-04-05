@@ -88,6 +88,7 @@
               const client = createDpriceClient({
                 dpriceMode,
                 dpriceUrl: settings.settings.dpriceUrl,
+                dpriceApiKey: settings.settings.dpriceApiKey,
               });
               await client.syncLatest();
               return { summary: "dprice prices updated" };

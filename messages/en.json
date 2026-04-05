@@ -653,6 +653,8 @@
   "settings_dprice_http_desc": "Connects to an external dprice serve instance.",
   "settings_dprice_http_mode_hint": "Using HTTP API mode. Configure the server URL below.",
   "settings_dprice_server_url": "Server URL",
+  "settings_dprice_api_key": "API Key",
+  "settings_dprice_api_key_placeholder": "Optional — only needed for protected servers",
   "settings_dprice_db_path": "Database path: {path}",
   "settings_dprice_loading": "Loading status...",
   "settings_dprice_status_info": "{assets} assets, {prices} prices",

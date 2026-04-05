@@ -656,6 +656,7 @@
         return createDpriceClient({
             dpriceMode: settings.settings.dpriceMode,
             dpriceUrl: settings.settings.dpriceUrl,
+            dpriceApiKey: settings.settings.dpriceApiKey,
         });
     }
 
@@ -1165,6 +1166,27 @@
                                                     ).value || undefined,
                                             })}
                                         placeholder="http://localhost:3080"
+                                        class="w-80"
+                                    />
+                                </div>
+                                <div class="space-y-2">
+                                    <label
+                                        for="dprice-api-key"
+                                        class="text-sm font-medium"
+                                        >{msg.settings_dprice_api_key()}</label
+                                    >
+                                    <Input
+                                        id="dprice-api-key"
+                                        type="password"
+                                        value={settings.settings.dpriceApiKey ?? ""}
+                                        oninput={(e) =>
+                                            settings.update({
+                                                dpriceApiKey:
+                                                    (
+                                                        e.target as HTMLInputElement
+                                                    ).value || undefined,
+                                            })}
+                                        placeholder={msg.settings_dprice_api_key_placeholder()}
                                         class="w-80"
                                     />
                                 </div>
