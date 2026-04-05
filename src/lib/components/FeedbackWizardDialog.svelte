@@ -381,11 +381,18 @@
       </Dialog.Header>
 
       <div class="space-y-2">
-        <a
-          href="{GITHUB_REPO}/issues/new?title=New+plugin:+{encodeURIComponent(loadedPluginName)}&body={encodeURIComponent(buildIssueBody())}"
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
           class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted"
+          onclick={async () => {
+            await navigator.clipboard.writeText(buildIssueBody());
+            toast.success(m.feedback_contribute_copied());
+            window.open(
+              `${GITHUB_REPO}/issues/new?title=New+plugin:+${encodeURIComponent(loadedPluginName)}&labels=plugin`,
+              "_blank",
+              "noopener,noreferrer",
+            );
+          }}
         >
           <GitPullRequest class="h-5 w-5 shrink-0 text-muted-foreground" />
           <div class="flex-1">
@@ -393,7 +400,7 @@
             <p class="text-xs text-muted-foreground">{m.feedback_contribute_pr_desc()}</p>
           </div>
           <ExternalLink class="h-4 w-4 text-muted-foreground" />
-        </a>
+        </button>
 
         <a
           href="mailto:{CONTACT_EMAIL}?subject={encodeURIComponent('dLedger plugin: ' + loadedPluginName)}"

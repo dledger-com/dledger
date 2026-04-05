@@ -1057,6 +1057,7 @@
   "feedback_contribute_desc": "Other users might need the same source. If it works well, we can include it as a built-in plugin in a future release.",
   "feedback_contribute_pr": "Open a GitHub issue with the code",
   "feedback_contribute_pr_desc": "We'll review it and may include it as a built-in plugin",
+  "feedback_contribute_copied": "Plugin code copied — paste it in the GitHub issue body",
   "feedback_contribute_email": "Send by email",
   "feedback_bug_title": "Report a bug",
   "feedback_bug_desc": "We don't collect any data automatically. Choose how you'd like to report:",
