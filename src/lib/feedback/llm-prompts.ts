@@ -7,8 +7,8 @@ const CSV_PRESET_INTERFACE = `interface CsvRecord {
   description: string;
   descriptionData?: DescriptionData;  // structured description for UI rendering (optional)
   lines: { account: string; currency: string; amount: string }[];
-  groupKey?: string;      // group related rows (e.g. trades)
-  sourceKey?: string;     // dedup key
+  groupKey?: string;      // rows with the same groupKey are merged into one journal entry (e.g. trade legs)
+  sourceKey?: string;     // unique dedup key — prevents re-importing the same record (e.g. transaction ID)
   metadata?: Record<string, string>;
 }
 
@@ -91,7 +91,7 @@ const preset = {
 };`;
 
 const CEX_ADAPTER_INTERFACE = `interface CexLedgerRecord {
-  refid: string;         // unique ID for dedup
+  refid: string;         // globally unique ID for dedup — must not repeat across calls
   type: "trade" | "deposit" | "withdrawal" | "transfer" | "staking" | "other";
   asset: string;         // normalized symbol (e.g. "BTC")
   amount: string;        // positive for receives, the sign depends on type
@@ -284,6 +284,10 @@ interface HandlerEntry {
   items: LineItem[];            // must sum to zero per currency (double-entry)
   metadata: Record<string, string>;
 }
+// IMPORTANT: Create exactly ONE HandlerEntry per TxHashGroup. The source field
+// ("etherscan:{chainId}:{hash}") is used for dedup — multiple entries with the
+// same source will conflict. Combine all token flows AND gas fees into a single
+// entry's items array.
 
 // Line items — the core of double-entry bookkeeping:
 interface LineItem {
@@ -314,9 +318,8 @@ interface LineItem {
 // 50:    generic/fallback handler
 // 65+:   only for very specific sub-protocol forks`;
 
-const DEFI_EXAMPLE = `// Complete DeFi handler example — a lending protocol with deposits and withdrawals
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const DEFI_EXAMPLE = `// Complete DeFi handler example — a lending protocol with deposits, withdrawals, and swaps
+// IMPORTANT: Exactly ONE HandlerEntry per transaction hash. All token flows + gas go in one entry.
 
 // Known contract addresses (always lowercase for comparison)
 const CONTRACTS = {
@@ -330,7 +333,7 @@ function isProtocolContract(addr) {
   return a === CONTRACTS.VAULT || a === CONTRACTS.ROUTER;
 }
 
-// Convert raw token value to decimal string
+// Convert raw token value (BigInt string) to decimal string
 function formatTokenAmount(value, decimals) {
   if (!value || value === "0") return "0";
   const d = parseInt(decimals) || 18;
@@ -348,7 +351,7 @@ function tsToDate(ts) {
 const handler = {
   id: "my-protocol",
   name: "My Protocol",
-  description: "Handles My Protocol lending deposits, withdrawals, and borrows",
+  description: "Handles My Protocol lending deposits, withdrawals, and swaps",
   website: "https://myprotocol.xyz",
   supportedChainIds: [1, 42161],  // Ethereum + Arbitrum
 
@@ -367,7 +370,7 @@ const handler = {
     const date = tsToDate(group.timestamp);
     const chainName = ctx.chain.name;
 
-    // Analyze ERC-20 token flows relative to user
+    // ---- Analyze ERC-20 token flows relative to user ----
     const deposited = [];   // user → protocol
     const withdrawn = [];   // protocol → user
     for (const tx of group.erc20s) {
@@ -378,136 +381,122 @@ const handler = {
     }
 
     // Classify action
-    let action;
-    if (deposited.length > 0 && withdrawn.length === 0) action = "DEPOSIT";
-    else if (withdrawn.length > 0 && deposited.length === 0) action = "WITHDRAW";
-    else if (deposited.length > 0 && withdrawn.length > 0) action = "SWAP";
-    else return { type: "skip", reason: "no token movement detected" };
+    let action, actionLabel;
+    if (deposited.length > 0 && withdrawn.length === 0) {
+      action = "DEPOSIT"; actionLabel = "Deposit";
+    } else if (withdrawn.length > 0 && deposited.length === 0) {
+      action = "WITHDRAW"; actionLabel = "Withdrawal";
+    } else if (deposited.length > 0 && withdrawn.length > 0) {
+      action = "SWAP"; actionLabel = "Swap";
+    } else {
+      return { type: "skip", reason: "no token movement detected" };
+    }
 
-    // Build entries
-    const entries = [];
+    // ---- Build a SINGLE entry with ALL items (tokens + gas) ----
+    const items = [];
 
+    // Token flow items
     if (action === "DEPOSIT") {
       for (const tx of deposited) {
         const symbol = tx.tokenSymbol;
         const amount = formatTokenAmount(tx.value, tx.tokenDecimal);
         await ctx.ensureCurrency(symbol, parseInt(tx.tokenDecimal), tx.contractAddress);
-
-        const defiAccountId = await ctx.ensureAccount(
-          "Assets:Crypto:DeFi:MyProtocol:Supply", date);
-        const walletAccountId = await ctx.ensureAccount(
-          "Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
-
-        const descData = {
-          type: "defi", protocol: "My Protocol", action: "Deposit",
-          chain: chainName, txHash: group.hash,
-          summary: "My Protocol (" + chainName + "): Deposit " + amount + " " + symbol,
-        };
-
-        entries.push({
-          entry: {
-            date,
-            description: descData.summary,
-            description_data: JSON.stringify(descData),
-            status: "confirmed",
-            source: "etherscan:" + ctx.chainId + ":" + group.hash,
-            voided_by: null,
-          },
-          items: [
-            { account_id: defiAccountId, currency: symbol, amount: amount, lot_id: null },
-            { account_id: walletAccountId, currency: symbol, amount: "-" + amount, lot_id: null },
-          ],
-          metadata: {
-            "handler": "my-protocol",
-            "handler:action": "DEPOSIT",
-          },
-        });
+        const defiId   = await ctx.ensureAccount("Assets:Crypto:DeFi:MyProtocol:Supply", date);
+        const walletId = await ctx.ensureAccount("Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
+        items.push(
+          { account_id: defiId,   currency: symbol, amount: amount,       lot_id: null },
+          { account_id: walletId, currency: symbol, amount: "-" + amount, lot_id: null },
+        );
       }
-    }
-
-    if (action === "WITHDRAW") {
+    } else if (action === "WITHDRAW") {
       for (const tx of withdrawn) {
         const symbol = tx.tokenSymbol;
         const amount = formatTokenAmount(tx.value, tx.tokenDecimal);
         await ctx.ensureCurrency(symbol, parseInt(tx.tokenDecimal), tx.contractAddress);
-
-        const defiAccountId = await ctx.ensureAccount(
-          "Assets:Crypto:DeFi:MyProtocol:Supply", date);
-        const walletAccountId = await ctx.ensureAccount(
-          "Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
-
-        const descData = {
-          type: "defi", protocol: "My Protocol", action: "Withdrawal",
-          chain: chainName, txHash: group.hash,
-          summary: "My Protocol (" + chainName + "): Withdraw " + amount + " " + symbol,
-        };
-
-        entries.push({
-          entry: {
-            date,
-            description: descData.summary,
-            description_data: JSON.stringify(descData),
-            status: "confirmed",
-            source: "etherscan:" + ctx.chainId + ":" + group.hash,
-            voided_by: null,
-          },
-          items: [
-            { account_id: walletAccountId, currency: symbol, amount: amount, lot_id: null },
-            { account_id: defiAccountId, currency: symbol, amount: "-" + amount, lot_id: null },
-          ],
-          metadata: {
-            "handler": "my-protocol",
-            "handler:action": "WITHDRAW",
-          },
-        });
+        const defiId   = await ctx.ensureAccount("Assets:Crypto:DeFi:MyProtocol:Supply", date);
+        const walletId = await ctx.ensureAccount("Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
+        items.push(
+          { account_id: walletId, currency: symbol, amount: amount,       lot_id: null },
+          { account_id: defiId,   currency: symbol, amount: "-" + amount, lot_id: null },
+        );
+      }
+    } else if (action === "SWAP") {
+      const walletId = await ctx.ensureAccount("Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
+      for (const tx of deposited) {
+        const symbol = tx.tokenSymbol;
+        const amount = formatTokenAmount(tx.value, tx.tokenDecimal);
+        await ctx.ensureCurrency(symbol, parseInt(tx.tokenDecimal), tx.contractAddress);
+        items.push({ account_id: walletId, currency: symbol, amount: "-" + amount, lot_id: null });
+      }
+      for (const tx of withdrawn) {
+        const symbol = tx.tokenSymbol;
+        const amount = formatTokenAmount(tx.value, tx.tokenDecimal);
+        await ctx.ensureCurrency(symbol, parseInt(tx.tokenDecimal), tx.contractAddress);
+        items.push({ account_id: walletId, currency: symbol, amount: amount, lot_id: null });
       }
     }
 
+    // Gas fee items — include in the SAME entry, not a separate one
+    if (group.normal && group.normal.gasUsed && group.normal.gasPrice) {
+      const gasCost = (BigInt(group.normal.gasUsed) * BigInt(group.normal.gasPrice)).toString();
+      const gasAmount = formatTokenAmount(gasCost, ctx.chain.decimals);
+      if (gasAmount !== "0") {
+        const native = ctx.chain.native_currency;
+        await ctx.ensureCurrency(native, ctx.chain.decimals);
+        const walletId = await ctx.ensureAccount("Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
+        const feeId    = await ctx.ensureAccount("Expenses:Crypto:Fees:" + chainName, date);
+        items.push(
+          { account_id: feeId,    currency: native, amount: gasAmount,       lot_id: null },
+          { account_id: walletId, currency: native, amount: "-" + gasAmount, lot_id: null },
+        );
+      }
+    }
+
+    if (items.length === 0) {
+      return { type: "skip", reason: "no net movement" };
+    }
+
+    // Build summary for description
+    let summary;
     if (action === "SWAP" && deposited.length > 0 && withdrawn.length > 0) {
-      const tokenIn = deposited[0];
-      const tokenOut = withdrawn[0];
-      const symbolIn = tokenIn.tokenSymbol;
-      const symbolOut = tokenOut.tokenSymbol;
-      const amtIn = formatTokenAmount(tokenIn.value, tokenIn.tokenDecimal);
-      const amtOut = formatTokenAmount(tokenOut.value, tokenOut.tokenDecimal);
+      const inStr  = deposited.map(tx => formatTokenAmount(tx.value, tx.tokenDecimal) + " " + tx.tokenSymbol).join(" + ");
+      const outStr = withdrawn.map(tx => formatTokenAmount(tx.value, tx.tokenDecimal) + " " + tx.tokenSymbol).join(" + ");
+      summary = "My Protocol (" + chainName + "): Swap " + inStr + " → " + outStr;
+    } else {
+      const txs = action === "DEPOSIT" ? deposited : withdrawn;
+      const parts = txs.map(tx => formatTokenAmount(tx.value, tx.tokenDecimal) + " " + tx.tokenSymbol);
+      summary = "My Protocol (" + chainName + "): " + actionLabel + " " + parts.join(", ");
+    }
 
-      await ctx.ensureCurrency(symbolIn, parseInt(tokenIn.tokenDecimal), tokenIn.contractAddress);
-      await ctx.ensureCurrency(symbolOut, parseInt(tokenOut.tokenDecimal), tokenOut.contractAddress);
+    const descData = {
+      type: "defi", protocol: "My Protocol", action: actionLabel,
+      chain: chainName, txHash: group.hash, summary,
+    };
 
-      const walletAccountId = await ctx.ensureAccount(
-        "Assets:Crypto:Wallet:" + chainName + ":" + ctx.label, date);
-
-      const descData = {
-        type: "defi", protocol: "My Protocol", action: "Swap",
-        chain: chainName, txHash: group.hash,
-        summary: "My Protocol (" + chainName + "): Swap " + amtIn + " " + symbolIn + " → " + amtOut + " " + symbolOut,
-      };
-
-      entries.push({
+    return {
+      type: "entries",
+      entries: [{
         entry: {
           date,
-          description: descData.summary,
+          description: summary,
           description_data: JSON.stringify(descData),
           status: "confirmed",
           source: "etherscan:" + ctx.chainId + ":" + group.hash,
           voided_by: null,
         },
-        items: [
-          { account_id: walletAccountId, currency: symbolIn, amount: "-" + amtIn, lot_id: null },
-          { account_id: walletAccountId, currency: symbolOut, amount: amtOut, lot_id: null },
-        ],
+        items,
         metadata: {
           "handler": "my-protocol",
-          "handler:action": "SWAP",
+          "handler:action": action,
         },
-      });
-    }
-
-    return { type: "entries", entries };
+      }],
+    };
   },
 };`;
 
-const PDF_PARSER_INTERFACE = `interface PdfTextItem {
+const PDF_PARSER_INTERFACE = `// Each text item has x,y coordinates — use x position to distinguish columns
+// (e.g., dates at x < 100, descriptions at 100 < x < 400, amounts at x > 400)
+interface PdfTextItem {
   str: string;
   x: number;
   y: number;
@@ -556,6 +545,7 @@ interface PdfParserExtension {
 }`;
 
 const PDF_EXAMPLE = `// PDF parser example — a bank statement
+// For complex layouts, use item.x coordinates to identify columns instead of regex.
 
 function parseMyBankStatement(pages) {
   const transactions = [];
@@ -720,6 +710,7 @@ export function generateLlmPrompt(type: SourceType, url?: string): string {
       parts.push("");
       parts.push("Please visit the website above, find the protocol name and relevant documentation, then implement a TransactionHandler that matches and processes these transactions.");
       parts.push("Follow the example closely — use the exact same data shapes for entries, items, metadata, and description_data.");
+      parts.push("CRITICAL: Create exactly ONE HandlerEntry per transaction hash. Combine all token flows AND gas fee into a single entry's items array (see example). The source field is used for dedup — multiple entries with the same source will conflict.");
       parts.push("Use ctx.ensureAccount() for every account and ctx.ensureCurrency() for every token before referencing them in items.");
       break;
 
