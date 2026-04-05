@@ -1081,6 +1081,7 @@
   "settings_plugins_none": "Aucun plugin personnalisé installé.",
   "settings_plugins_delete_confirm": "Supprimer le plugin « {name} » ? Cette action est irréversible.",
   "settings_plugins_enabled": "Activé",
+  "settings_plugins_view_code": "Voir le code source",
   "settings_plugins_disabled": "Désactivé",
   "settings_plugins_loaded_at": "Chargé le {date}",
 

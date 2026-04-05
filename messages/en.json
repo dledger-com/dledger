@@ -1081,6 +1081,7 @@
   "settings_plugins_none": "No custom plugins installed.",
   "settings_plugins_delete_confirm": "Delete plugin \"{name}\"? This cannot be undone.",
   "settings_plugins_enabled": "Enabled",
+  "settings_plugins_view_code": "View source code",
   "settings_plugins_disabled": "Disabled",
   "settings_plugins_loaded_at": "Loaded {date}",
 

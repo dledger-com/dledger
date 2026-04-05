@@ -69,6 +69,9 @@
     import { loadPluginFromCode } from "$lib/feedback/plugin-loader.js";
     import { saveCustomPlugin } from "$lib/plugins/custom-plugins.js";
     import Plus from "lucide-svelte/icons/plus";
+    import Code from "lucide-svelte/icons/code";
+    import Copy from "lucide-svelte/icons/copy";
+    import Check from "lucide-svelte/icons/check";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { AlertDialog } from "bits-ui";
     import ExportDialog from "$lib/components/ExportDialog.svelte";
@@ -119,6 +122,23 @@
     let addPluginCode = $state("");
     let addPluginError = $state("");
     let pluginFileInput: HTMLInputElement | undefined = $state();
+
+    let viewCodeDialogOpen = $state(false);
+    let viewCodePlugin = $state<CustomPluginRecord | null>(null);
+    let viewCodeCopied = $state(false);
+
+    function showPluginCode(plugin: CustomPluginRecord) {
+        viewCodePlugin = plugin;
+        viewCodeCopied = false;
+        viewCodeDialogOpen = true;
+    }
+
+    async function copyPluginCode() {
+        if (!viewCodePlugin) return;
+        await navigator.clipboard.writeText(viewCodePlugin.source_code);
+        viewCodeCopied = true;
+        setTimeout(() => { viewCodeCopied = false; }, 2000);
+    }
 
     function handlePluginFileLoad() {
         const file = pluginFileInput?.files?.[0];
@@ -1945,6 +1965,15 @@
                             <Button
                                 variant="ghost"
                                 size="icon"
+                                class="h-8 w-8"
+                                onclick={() => showPluginCode(plugin)}
+                                title={msg.settings_plugins_view_code()}
+                            >
+                                <Code class="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
                                 class="h-8 w-8 text-destructive hover:text-destructive"
                                 onclick={() => deletePlugin(plugin)}
                             >
@@ -1996,6 +2025,40 @@
                         {msg.feedback_load_validate()}
                     </Button>
                 </div>
+            </Dialog.Footer>
+        </Dialog.Content>
+    </Dialog.Root>
+
+    <!-- View Plugin Code Dialog -->
+    <Dialog.Root bind:open={viewCodeDialogOpen}>
+        <Dialog.Content class="sm:max-w-2xl">
+            <Dialog.Header>
+                <Dialog.Title>{viewCodePlugin?.name ?? ""}</Dialog.Title>
+                <Dialog.Description>
+                    v{viewCodePlugin?.version ?? ""}
+                    {#if viewCodePlugin?.description}
+                        &mdash; {viewCodePlugin.description}
+                    {/if}
+                </Dialog.Description>
+            </Dialog.Header>
+            <div class="relative">
+                <pre class="max-h-[60vh] overflow-auto rounded-md border bg-muted p-4 text-xs font-mono whitespace-pre-wrap">{viewCodePlugin?.source_code ?? ""}</pre>
+                <button
+                    type="button"
+                    class="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                    onclick={copyPluginCode}
+                >
+                    {#if viewCodeCopied}
+                        <Check class="h-4 w-4 text-green-500" />
+                    {:else}
+                        <Copy class="h-4 w-4" />
+                    {/if}
+                </button>
+            </div>
+            <Dialog.Footer>
+                <Button variant="outline" onclick={() => { viewCodeDialogOpen = false; }}>
+                    {msg.btn_close()}
+                </Button>
             </Dialog.Footer>
         </Dialog.Content>
     </Dialog.Root>
