@@ -42,17 +42,24 @@ nix develop
 bun install
 ```
 
-### Development
+### Desktop (Tauri)
 
 ```sh
 bun run tauri dev       # Launch desktop app in dev mode
+bun run tauri build     # Production build (frontend + Rust binary)
 ```
 
-### Build
+### Web App
+
+The app also runs entirely in the browser using sql.js (SQLite compiled to WASM) with OPFS for persistence. No backend server required.
 
 ```sh
-bun run tauri build     # Production build
+bun run dev             # Vite dev server at http://localhost:1420
+bun run build           # Production build → build/
+bun run preview         # Preview the production build locally
 ```
+
+The `build/` output is fully static and can be deployed to any file host.
 
 ### Tests
 
