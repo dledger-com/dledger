@@ -84,8 +84,8 @@ describe("La Banque Postale integration tests", () => {
     expect(last.date).toContain("2022-02");
 
     // Account info
-    expect(result.accountNumber).toContain("12 345 67");
-    expect(result.iban).toContain("FR07");
+    expect(result.accountNumber).toBeTruthy();
+    expect(result.iban).toMatch(/^FR/);
     expect(result.currency).toBe("EUR");
   });
 

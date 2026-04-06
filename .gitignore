@@ -109,6 +109,10 @@ temp/
 /build
 /package
 
+# Vendored runtime binaries (copied by postinstall)
+static/sql-wasm.wasm
+static/pdf.worker.min.mjs
+
 # Test artifacts
 *.test
 test-output/
