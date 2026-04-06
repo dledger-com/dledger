@@ -426,7 +426,7 @@ impl Storage for SqliteStorage {
 
         // account_ids takes precedence over account_id when both set
         // Use account_closure to include sub-account transactions
-        if filter.account_ids.as_ref().map_or(false, |ids| !ids.is_empty()) {
+        if filter.account_ids.as_ref().is_some_and(|ids| !ids.is_empty()) {
             sql.push_str(" JOIN line_item li ON li.journal_entry_id = je.id");
             let ids = filter.account_ids.as_ref().unwrap();
             let placeholders: Vec<String> = ids.iter().map(|id| {

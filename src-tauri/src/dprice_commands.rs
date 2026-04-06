@@ -590,7 +590,7 @@ pub async fn dprice_asset_proxy(
             .map_err(|e| format!("upstream fetch failed: {e}"))?;
 
         let status = resp.status().as_u16();
-        if status < 200 || status >= 300 {
+        if !(200..300).contains(&status) {
             return Err(format!("upstream returned {status}"));
         }
 

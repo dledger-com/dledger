@@ -69,10 +69,10 @@ pub fn detect_format(content: &str) -> LedgerFormat {
             hl += 3;
         }
         // Inline balance assertion in posting
-        if raw_line.starts_with(' ') || raw_line.starts_with('\t') {
-            if line.contains(" = ") || line.contains(" == ") {
-                hl += 5;
-            }
+        if (raw_line.starts_with(' ') || raw_line.starts_with('\t'))
+            && (line.contains(" = ") || line.contains(" == "))
+        {
+            hl += 5;
         }
     }
 
@@ -206,20 +206,19 @@ fn import_ledger_internal(
         }
 
         // Beancount: skip option, plugin, note, document, event, custom, include directives
-        if fmt == LedgerFormat::Beancount {
-            if trimmed.starts_with("option ") || trimmed.starts_with("plugin ")
+        if fmt == LedgerFormat::Beancount
+            && (trimmed.starts_with("option ") || trimmed.starts_with("plugin ")
                 || trimmed.starts_with("note ") || trimmed.starts_with("document ")
                 || trimmed.starts_with("event ") || trimmed.starts_with("custom ")
-                || trimmed.starts_with("include ")
-            {
-                i += 1;
-                continue;
-            }
+                || trimmed.starts_with("include "))
+        {
+            i += 1;
+            continue;
         }
 
         // ledger: `commodity` directive sets default commodity
         if fmt == LedgerFormat::Ledger && trimmed.starts_with("commodity ") {
-            let code = trimmed[10..].trim().split_whitespace().next().unwrap_or("");
+            let code = trimmed[10..].split_whitespace().next().unwrap_or("");
             if !code.is_empty() && default_commodity.is_none() {
                 default_commodity = Some(code.to_string());
             }
@@ -228,16 +227,16 @@ fn import_ledger_internal(
         }
 
         // hledger: skip include, commodity directives
-        if fmt == LedgerFormat::Hledger {
-            if trimmed.starts_with("include ") || trimmed.starts_with("commodity ") {
-                i += 1;
-                continue;
-            }
+        if fmt == LedgerFormat::Hledger
+            && (trimmed.starts_with("include ") || trimmed.starts_with("commodity "))
+        {
+            i += 1;
+            continue;
         }
 
         // hledger: `account` directive (no date prefix)
         if fmt == LedgerFormat::Hledger && trimmed.starts_with("account ") {
-            let account_name = trimmed[8..].trim().split_whitespace().next().unwrap_or("");
+            let account_name = trimmed[8..].split_whitespace().next().unwrap_or("");
             if !account_name.is_empty() {
                 let fallback_date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
                 ensure_account(engine, account_name, vec![], fallback_date, &mut result)?;
@@ -264,7 +263,7 @@ fn import_ledger_internal(
             }
 
             if let Some(stripped) = rest.strip_prefix("close ") {
-                let account_name = stripped.trim().split_whitespace().next()
+                let account_name = stripped.split_whitespace().next()
                     .ok_or_else(|| format!("line {}: close directive missing account name", i + 1))?;
                 deferred_closes.push((account_name.to_string(), i + 1));
                 i += 1;
@@ -285,13 +284,12 @@ fn import_ledger_internal(
             }
 
             // Beancount: skip date-prefixed note, document, event, custom directives
-            if fmt == LedgerFormat::Beancount {
-                if rest.starts_with("note ") || rest.starts_with("document ")
-                    || rest.starts_with("event ") || rest.starts_with("custom ")
-                {
-                    i += 1;
-                    continue;
-                }
+            if fmt == LedgerFormat::Beancount
+                && (rest.starts_with("note ") || rest.starts_with("document ")
+                    || rest.starts_with("event ") || rest.starts_with("custom "))
+            {
+                i += 1;
+                continue;
             }
 
             // Transaction block
@@ -674,6 +672,7 @@ struct ParsedPosting {
     cost_price: Option<(Decimal, String)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_transaction(
     engine: &LedgerEngine,
     date: NaiveDate,
@@ -729,14 +728,15 @@ fn parse_transaction(
 
 fn strip_beancount_quotes(s: &str) -> String {
     let s = s.trim();
-    if s.starts_with('"') {
-        if let Some(end) = s[1..].find('"') {
-            return s[1..end + 1].to_string();
+    if let Some(rest) = s.strip_prefix('"') {
+        if let Some(end) = rest.find('"') {
+            return rest[..end].to_string();
         }
     }
     s.to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_transaction_body(
     engine: &LedgerEngine,
     date: NaiveDate,
@@ -1080,7 +1080,7 @@ fn split_account_amount(line: &str) -> (&str, &str) {
     // Fallback: single space before a number/sign (for beancount single-space postings)
     // Account names contain colons and never start with digits, so we look for
     // a non-whitespace token followed by whitespace and a numeric amount.
-    if let Some(pos) = line.find(|c: char| c == ' ' || c == '\t') {
+    if let Some(pos) = line.find([' ', '\t']) {
         let rest = line[pos..].trim_start();
         if rest.starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '+') {
             return (line[..pos].trim(), rest);

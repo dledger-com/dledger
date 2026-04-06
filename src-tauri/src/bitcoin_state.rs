@@ -17,6 +17,7 @@ pub struct BitcoinAccount {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BtcDerivedAddress {
     pub address: String,
@@ -207,6 +208,7 @@ impl BitcoinState {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn mark_address_has_transactions(&self, address: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
@@ -217,6 +219,7 @@ impl BitcoinState {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn update_last_sync(&self, account_id: &str, timestamp: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(

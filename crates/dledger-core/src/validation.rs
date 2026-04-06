@@ -53,7 +53,7 @@ pub fn validate_balancing(items: &[LineItem]) -> ValidationResult<()> {
         if item.amount.is_zero() {
             return Err(ValidationError::ZeroAmount);
         }
-        *sums.entry(&item.currency).or_insert_with(Decimal::default) += item.amount;
+        *sums.entry(&item.currency).or_default() += item.amount;
     }
 
     for (currency, sum) in &sums {

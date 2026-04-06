@@ -92,7 +92,7 @@ fn try_parse_xprv(input: &str) -> Option<(Xpriv, String, String, u32)> {
             } else {
                 "testnet"
             };
-            let bip: u32 = if prefix == "xprv" { 44 } else { 44 };
+            let bip: u32 = 44;
             Some((xpriv, prefix.to_string(), net.to_string(), bip))
         }
         "yprv" | "zprv" | "uprv" | "vprv" => {

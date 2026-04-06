@@ -44,6 +44,7 @@ pub type LotResult<T> = Result<T, LotError>;
 /// Create a new lot for an acquisition (debit to a non-base-currency asset account).
 ///
 /// Returns the created Lot.
+#[allow(clippy::too_many_arguments)]
 pub fn create_acquisition_lot(
     storage: &dyn Storage,
     account_id: Uuid,
@@ -81,6 +82,7 @@ pub fn create_acquisition_lot(
 /// lot remaining quantities.
 ///
 /// Returns the list of disposals created.
+#[allow(clippy::too_many_arguments)]
 pub fn dispose_lots_fifo(
     storage: &dyn Storage,
     account_id: Uuid,

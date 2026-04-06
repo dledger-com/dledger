@@ -25,6 +25,7 @@ impl AccountType {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "asset" => Some(Self::Asset),
@@ -100,6 +101,7 @@ impl JournalEntryStatus {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "confirmed" => Some(Self::Confirmed),
@@ -282,18 +284,13 @@ pub struct TransactionFilter {
 }
 
 /// Lot booking method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BookingMethod {
     /// First In, First Out (default, matches French PEPS)
+    #[default]
     Fifo,
     /// Specific identification by lot ID
     SpecificIdentification,
-}
-
-impl Default for BookingMethod {
-    fn default() -> Self {
-        Self::Fifo
-    }
 }
 
 /// Which normalized source types a currency appears in (e.g. "etherscan", "manual", "ledger-file").

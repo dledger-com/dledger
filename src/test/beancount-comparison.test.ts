@@ -25,7 +25,7 @@ let accountsByName: Map<string, string>; // full_name → id
 beforeAll(async () => {
   backend = await createTestBackend();
   const content = readFileSync(
-    resolve(__dirname, "../../tmp/example.beancount"),
+    resolve(__dirname, "./fixtures/example.beancount"),
     "utf-8",
   );
   importResult = await importLedger(backend, content, "beancount");

@@ -26,7 +26,7 @@ let accountsByName: Map<string, string>; // full_name → id
 beforeAll(async () => {
   backend = await createTestBackend();
   const content = readFileSync(
-    resolve(__dirname, "../../tmp/example.dat"),
+    resolve(__dirname, "./fixtures/example.dat"),
     "utf-8",
   );
   importResult = await importLedger(backend, content, "ledger");

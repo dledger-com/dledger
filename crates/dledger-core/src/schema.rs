@@ -1,6 +1,5 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
-
 pub const SCHEMA_VERSION: u32 = 20;
 
 pub const SCHEMA_SQL: &str = r#"
