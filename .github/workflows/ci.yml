@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Configure SSH for private dependencies
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DPRICE_DEPLOY_KEY }}
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install Tauri system dependencies
