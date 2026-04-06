@@ -83,7 +83,6 @@ crates/
   dsample/              Sample data generator
 messages/               i18n message files (en.json, fr.json)
 e2e/                    Playwright E2E tests
-docs/                   Technical documentation
 ```
 
 ## License

@@ -91,7 +91,6 @@ coverage/
 lcov.info
 tarpaulin-report.html
 
-# Generated documentation (keep docs/, ignore generated)
 /doc/
 
 # Temporary files
