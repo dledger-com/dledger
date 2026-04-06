@@ -13,7 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 dledger-core = { workspace = true }
-dprice = { workspace = true }
+dprice = { git = "ssh://git@github.com/dledger-com/dprice.git" }
 tokio = { version = "1", features = ["rt"] }
 tokio-util = "0.7"
 tauri = { version = "2", features = [] }
