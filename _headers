@@ -1,0 +1,14 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/_app/immutable/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/sql-wasm.wasm
+  Cache-Control: public, max-age=604800
+
+/pdf.worker.min.mjs
+  Cache-Control: public, max-age=604800

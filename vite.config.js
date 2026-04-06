@@ -9,7 +9,8 @@ import { paraglideVitePlugin } from "@inlang/paraglide-js";
 const host = process.env.TAURI_DEV_HOST;
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
-const gitHash = execSync("git rev-parse --short HEAD").toString().trim();
+let gitHash = "unknown";
+try { gitHash = execSync("git rev-parse --short HEAD").toString().trim(); } catch {}
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
