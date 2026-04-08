@@ -8,7 +8,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "binding": "ASSETS",
-    "directory": ".svelte-kit/cloudflare"
+    "directory": ".svelte-kit/cloudflare",
+    "not_found_handling": "single-page-application"
   },
   "routes": [
     { "pattern": "app.dledger.com", "custom_domain": true }
