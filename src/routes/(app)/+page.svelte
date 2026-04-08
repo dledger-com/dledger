@@ -26,6 +26,7 @@
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
   import OnboardingChecklist from "$lib/components/OnboardingChecklist.svelte";
+  import { DEMO_MODE } from "$lib/demo.js";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
   import AmountWithIcon from "$lib/components/AmountWithIcon.svelte";
   import SourceIcon from "$lib/components/SourceIcon.svelte";
@@ -81,8 +82,8 @@
 
   // Onboarding state
   let sourceCount = $state(0);
-  const showOnboardingWizard = $derived(!settings.onboardingCompleted && recentEntries.length === 0 && !loadingActive);
-  const showOnboardingChecklist = $derived(!!settings.onboardingCompleted && !settings.onboardingDismissedChecklist);
+  const showOnboardingWizard = $derived(!DEMO_MODE && !settings.onboardingCompleted && recentEntries.length === 0 && !loadingActive);
+  const showOnboardingChecklist = $derived(!DEMO_MODE && !!settings.onboardingCompleted && !settings.onboardingDismissedChecklist);
 
   async function loadTagsAndLinks(entries: [JournalEntry, LineItem[]][]) {
     const ids = entries.map(([e]) => e.id);

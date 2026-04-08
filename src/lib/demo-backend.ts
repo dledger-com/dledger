@@ -42,12 +42,17 @@ const READ_METHODS: ReadonlySet<string> = new Set([
   // Journal
   "getJournalEntry",
   "queryJournalEntries",
+  "queryJournalEntriesOnly",
+  "getLineItemsForEntries",
+  "getJournalChartAggregation",
   "countJournalEntries",
   "queryEntriesByMetadata",
   "getMetadata",
+  "getMetadataBatch",
   "getAllMetadataKeys",
   "getAllTagValues",
   "getEntryLinks",
+  "getEntryLinksBatch",
   "getAllLinkNames",
   "getAllLinksWithCounts",
   "getEntriesByLink",
@@ -62,6 +67,10 @@ const READ_METHODS: ReadonlySet<string> = new Set([
   "listBudgets",
   // Exchange rates
   "getExchangeRate",
+  "getExchangeRatesBatch",
+  "getExchangeRatesBatchExact",
+  "getExchangeRateCurrenciesOnDate",
+  "getCurrencyDateRequirements",
   "listExchangeRates",
   // Reconciliation / assertions
   "listBalanceAssertions",
