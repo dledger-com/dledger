@@ -14,6 +14,7 @@
   import { initLocale } from "$lib/i18n.js";
   import { loadSettings } from "$lib/data/settings.svelte.js";
   import { onMount } from "svelte";
+  import { page } from "$app/state";
 
   // Initialize locale BEFORE any rendering so message functions resolve correctly
   const savedSettings = loadSettings();
@@ -121,6 +122,6 @@
 
 <ModeWatcher />
 <Toaster />
-{#if ready}
+{#if ready || page.error}
   {@render children?.()}
 {/if}
