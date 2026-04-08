@@ -696,6 +696,21 @@ export class SqlJsBackend implements Backend {
     return backend;
   }
 
+  /**
+   * Construct a backend from an existing SQLite file (e.g. the pre-built
+   * demo snapshot at /demo.sqlite). No persistence: any in-memory mutations
+   * are discarded on dispose. Used by demo mode.
+   */
+  static async fromSnapshot(snapshot: Uint8Array): Promise<SqlJsBackend> {
+    const SQL = await initSqlJs({
+      locateFile: () => `/sql-wasm.wasm`,
+    });
+    const db = new SQL.Database(snapshot);
+    const backend = new SqlJsBackend(db, SQL);
+    db.exec("PRAGMA foreign_keys=ON");
+    return backend;
+  }
+
   static async create(): Promise<SqlJsBackend> {
     const SQL = await initSqlJs({
       locateFile: () => `/sql-wasm.wasm`,

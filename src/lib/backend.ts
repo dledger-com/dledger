@@ -1338,6 +1338,12 @@ export async function initBackend(): Promise<Backend> {
   if (_g.__dledger_backend) return _g.__dledger_backend;
   if (_g.__dledger_initPromise) return _g.__dledger_initPromise;
   _g.__dledger_initPromise = (async () => {
+    const { DEMO_MODE } = await import("./demo.js");
+    if (DEMO_MODE) {
+      const { createDemoBackend } = await import("./demo-backend.js");
+      _g.__dledger_backend = await createDemoBackend();
+      return _g.__dledger_backend;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((window as any).__TAURI_INTERNALS__) {
       _g.__dledger_backend = new TauriBackend();
