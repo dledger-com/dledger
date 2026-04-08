@@ -1,3 +1,5 @@
+<svelte:head><title>Tax Report · dLedger</title></svelte:head>
+
 <script lang="ts">
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";

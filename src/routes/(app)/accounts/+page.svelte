@@ -1,3 +1,5 @@
+<svelte:head><title>Accounts · dLedger</title></svelte:head>
+
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import Plus from "lucide-svelte/icons/plus";

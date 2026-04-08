@@ -1,3 +1,5 @@
+<svelte:head><title>Sources · dLedger</title></svelte:head>
+
 <script lang="ts">
     import * as m from "$paraglide/messages.js";
     import * as Card from "$lib/components/ui/card/index.js";

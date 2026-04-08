@@ -192,6 +192,8 @@
   });
 </script>
 
+<svelte:head><title>{entry?.description ?? "Entry"} · dLedger</title></svelte:head>
+
 <div class="space-y-6">
   {#if loading}
     <Card.Root>

@@ -158,6 +158,8 @@
   });
 </script>
 
+<svelte:head><title>Reconcile · dLedger</title></svelte:head>
+
 <div class="space-y-6">
   {#if loading}
     <Skeleton class="h-10 w-64" />

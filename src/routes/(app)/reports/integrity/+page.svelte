@@ -1,3 +1,5 @@
+<svelte:head><title>Data Integrity · dLedger</title></svelte:head>
+
 <script lang="ts">
   import { onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";

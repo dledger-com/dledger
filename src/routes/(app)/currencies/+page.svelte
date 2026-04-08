@@ -1,3 +1,5 @@
+<svelte:head><title>Currencies · dLedger</title></svelte:head>
+
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";

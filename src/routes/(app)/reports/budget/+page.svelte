@@ -1,3 +1,5 @@
+<svelte:head><title>Budget Report · dLedger</title></svelte:head>
+
 <script lang="ts">
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";

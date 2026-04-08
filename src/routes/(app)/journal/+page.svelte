@@ -1,3 +1,5 @@
+<svelte:head><title>Journal · dLedger</title></svelte:head>
+
 <script lang="ts">
     import { onDestroy, onMount, tick } from "svelte";
     import * as m from "$paraglide/messages.js";
