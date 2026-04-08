@@ -123,7 +123,7 @@ describe("laBanquePostalePreset", () => {
   describe("categorization rules", () => {
     it("applies categorization rules to descriptions", () => {
       setLaBanquePostaleRules([
-        { id: "1", pattern: "orange", account: "Expenses:Telecom" },
+        { id: "1", pattern: "example telco", account: "Expenses:Telecom" },
       ]);
 
       const headers = ["Date", "Libellé", "Montant(EUROS)"];

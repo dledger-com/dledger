@@ -134,7 +134,7 @@ describe("parseLbpStatement", () => {
     expect(result.transactions[0].amount).toBe(-2.2);
     expect(result.transactions[0].index).toBe(0);
     expect(result.transactions[0].metadata?.["transaction-type"]).toBe("card-purchase");
-    expect(result.transactions[0].metadata?.["card-number"]).toBe("336");
+    expect(result.transactions[0].metadata?.["card-number"]).toBe("999");
     expect(result.transactions[0].metadata?.["operation-date"]).toBe("28/01");
   });
 
@@ -429,7 +429,7 @@ describe("extractLbpMetadata", () => {
     const result = extractLbpMetadata("ACHAT CB TOLLOPERATOR EXAMPLE 28.01.22 CARTE NUMERO 999");
     expect(result.description).toBe("TOLLOPERATOR EXAMPLE");
     expect(result.metadata["transaction-type"]).toBe("card-purchase");
-    expect(result.metadata["card-number"]).toBe("336");
+    expect(result.metadata["card-number"]).toBe("999");
     expect(result.metadata["operation-date"]).toBe("28/01");
   });
 
