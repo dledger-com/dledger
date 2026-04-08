@@ -226,7 +226,7 @@
                 <Table.Cell class="text-right">
                   {#if info.nonCustodial}
                     <Badge variant="outline">{m.report_french_tax_3916bis_badge_non_custodial()}</Badge>
-                  {:else if requiresDeclaration(id, taxYear)}
+                  {:else if info.foreign}
                     <Badge variant="destructive">{m.report_french_tax_3916bis_badge_foreign()}</Badge>
                   {:else}
                     <Badge variant="secondary">{m.report_french_tax_3916bis_badge_french_exempt()}</Badge>
