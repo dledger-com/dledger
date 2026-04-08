@@ -10,6 +10,7 @@
     import * as Tabs from "$lib/components/ui/tabs/index.js";
     import { SettingsStore } from "$lib/data/settings.svelte.js";
     import { getBackend } from "$lib/backend.js";
+    import { DEMO_MODE } from "$lib/demo.js";
     import { reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
     import type { Currency } from "$lib/types/index.js";
     import type { CurrencyAssetType } from "$lib/types/account.js";
@@ -848,6 +849,12 @@
 </script>
 
 <div class="space-y-6">
+    {#if DEMO_MODE}
+        <div class="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+            <p class="font-medium text-amber-900 dark:text-amber-100">{msg.demo_settings_readonly_notice()}</p>
+        </div>
+    {/if}
+
     <!-- General -->
     <Card.Root>
         <Card.Header>
@@ -858,30 +865,32 @@
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="space-y-2">
-                    <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
-                    {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
-                        <Select.Trigger class="w-full">
-                            {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
-                            {@const flagUrl = getFiatFlagUrl(settings.currency)}
-                            <span class="inline-flex items-center gap-2">
-                                {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
-                                {cur ? `${cur.code} — ${cur.name}` : settings.currency}
-                            </span>
-                        </Select.Trigger>
-                        <Select.Content>
-                            {#each baseCurrencyOptions as c (c.code)}
-                                {@const flagUrl = getFiatFlagUrl(c.code)}
-                                <Select.Item value={c.code}>
-                                    <span class="inline-flex items-center gap-2">
-                                        {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
-                                        {c.code} — {c.name}
-                                    </span>
-                                </Select.Item>
-                            {/each}
-                        </Select.Content>
-                    </Select.Root>{/key}
-                </div>
+                {#if !DEMO_MODE}
+                    <div class="space-y-2">
+                        <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
+                        {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
+                            <Select.Trigger class="w-full">
+                                {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
+                                {@const flagUrl = getFiatFlagUrl(settings.currency)}
+                                <span class="inline-flex items-center gap-2">
+                                    {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                    {cur ? `${cur.code} — ${cur.name}` : settings.currency}
+                                </span>
+                            </Select.Trigger>
+                            <Select.Content>
+                                {#each baseCurrencyOptions as c (c.code)}
+                                    {@const flagUrl = getFiatFlagUrl(c.code)}
+                                    <Select.Item value={c.code}>
+                                        <span class="inline-flex items-center gap-2">
+                                            {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                            {c.code} — {c.name}
+                                        </span>
+                                    </Select.Item>
+                                {/each}
+                            </Select.Content>
+                        </Select.Root>{/key}
+                    </div>
+                {/if}
 
                 <div class="space-y-2">
                     <span class="text-sm font-medium">{msg.settings_date_format()}</span>
@@ -964,6 +973,7 @@
         </Card.Content>
     </Card.Root>
 
+    {#if !DEMO_MODE}
     <!-- ML Classification -->
     <Card.Root>
         <Card.Header>
@@ -2249,8 +2259,9 @@
             </div>
         </Card.Content>
     </Card.Root>
+    {/if}
 
-    {#if import.meta.env.DEV}
+    {#if import.meta.env.DEV && !DEMO_MODE}
         <Card.Root>
             <Card.Header>
                 <Card.Title>{msg.settings_development()}</Card.Title>
