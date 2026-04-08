@@ -47,6 +47,21 @@ cargo clippy --manifest-path src-tauri/Cargo.toml   # Lint Rust code
 cargo test --manifest-path src-tauri/Cargo.toml     # Run Rust tests
 ```
 
+## PII Policy — NEVER commit personal data
+
+**Absolute rule**: no personally identifiable information may ever be stored in this repository. This applies to source code, tests, fixtures, sample files, snapshots, comments, commit messages, and every other tracked file.
+
+PII includes (non-exhaustive): real names, real email addresses, real phone numbers, postal/street addresses, real IBANs / BIC / account numbers / card numbers (or last-4), bank statement excerpts, real merchant names tied to a real transaction, transaction reference numbers, real wallet addresses, real API keys, real geolocations.
+
+When implementing a parser, importer, handler, or anything else that needs sample data:
+- Use real data **only** in `tmp/` (which is gitignored). Never copy that data into `src/`, `tests/`, `samples/`, or any tracked path.
+- When deriving a test fixture from a real document, **fully anonymize before saving**: replace names with generic placeholders (`JANE DOE`, `MAX MUSTERMANN`), references with `0000…`, IBANs with checksum-invalid placeholders (`FR00…`, `DE00…`), merchants with `EXAMPLE …`, dates and amounts with neutral round values when they could uniquely identify a transaction.
+- Do not assume "looks generic enough" is good enough — if a string came from a real document, treat it as PII until proven synthetic.
+- Before staging changes, grep your diff for the original real strings. Before committing, re-grep `git diff --cached`.
+- If you discover PII already in the tree, treat it as a release blocker, not a follow-up.
+
+The same rule applies to plugin code, plugin LLM-prompt templates (`src/lib/feedback/llm-prompts.ts`), and any user-facing text that could embed real-world examples.
+
 ## Architecture
 
 - **`src/`** — SvelteKit frontend (SPA mode via `adapter-static`, SSR disabled)

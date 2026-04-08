@@ -629,6 +629,10 @@ const plugin = {
 exports.plugin = plugin;
 `;
 
+const PII_NOTICE = `
+IMPORTANT — DO NOT INCLUDE ANY PERSONAL DATA IN THE PLUGIN CODE.
+The sample data I paste above may contain real personal information (names, IBANs, account/card numbers, references, merchants, addresses, wallet addresses, etc.). Use it only to understand the format. The plugin code you produce — including any tests, examples, comments, default values, hardcoded strings, or fixtures — must contain ZERO real PII. Replace every real value with an obviously synthetic placeholder (e.g. "JANE DOE", "EXAMPLE BANK", checksum-invalid IBANs like "FR00…", "0000…" references, round neutral amounts). If you are unsure whether a string is synthetic, treat it as PII and replace it.`;
+
 const SANDBOX_NOTICE = `
 IMPORTANT: Plugin code runs in a sandboxed scope with NO access to imports or modules.
 Available: all browser globals (fetch, crypto.subtle, BigInt, Date, JSON, TextEncoder, etc.).
@@ -746,6 +750,8 @@ export function generateLlmPrompt(type: SourceType, url?: string): string {
   parts.push("```");
   parts.push("");
   parts.push(SANDBOX_NOTICE.trim());
+  parts.push("");
+  parts.push(PII_NOTICE.trim());
 
   return parts.join("\n");
 }
