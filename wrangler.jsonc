@@ -1,5 +1,26 @@
-// Cloudflare Workers config for the dledger web build (adapter-cloudflare).
-// Mirrors the dledger-web setup: Workers + static assets, custom-domain route.
+// Cloudflare Workers config for dledger.
+//
+// This file is shared by TWO Workers projects, one per environment:
+//
+//   default env  (no --env flag) → "dledger"      → app.dledger.com
+//   "demo" env   (--env demo)    → "dledger-demo" → demo.dledger.com
+//
+// Each project on the Cloudflare dashboard has its own build settings.
+// The build command sets VITE_DEMO_MODE differently so each project
+// produces a different bundle; the wrangler --env flag only changes
+// which name/routes wrangler uses to publish:
+//
+//   prod (dledger):
+//     Build command : bun run build:web
+//     Deploy command: npx wrangler deploy
+//
+//   demo (dledger-demo):
+//     Build command : bun run build:demo
+//     Deploy command: npx wrangler deploy --env demo
+//
+// `main`, `assets`, `compatibility_date`, `compatibility_flags` are
+// inherited from the top-level by every named env, so the demo block
+// only redeclares what differs (name + routes).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dledger",
@@ -13,5 +34,13 @@
   },
   "routes": [
     { "pattern": "app.dledger.com", "custom_domain": true }
-  ]
+  ],
+  "env": {
+    "demo": {
+      "name": "dledger-demo",
+      "routes": [
+        { "pattern": "demo.dledger.com", "custom_domain": true }
+      ]
+    }
+  }
 }
