@@ -23,22 +23,23 @@ A personal double-entry ledger for tracking finances across bank accounts, crypt
 | Charts | LayerChart (d3) |
 | Database | rusqlite (Tauri) / sql.js WASM + OPFS (browser) |
 | JS runtime | Bun |
-| Dev environment | Nix flakes (direnv) |
 | Testing | Vitest, Playwright (E2E), Cargo test |
 
 ## Getting Started
 
+dledger can be built two ways: as a native desktop app via Tauri, or as a static web app running entirely in the browser.
+
 ### Prerequisites
 
-- [Nix](https://nixos.org/) with flakes enabled (provides Rust, Bun, and system deps)
+- **Rust** (stable, via [rustup](https://rustup.rs/)) — for the Tauri backend and Rust tests
+- **Bun** ≥ 1.0 ([bun.sh](https://bun.sh/)) — JS package manager and runtime
+- **Tauri system dependencies** — webkit2gtk / libsoup on Linux, Xcode Command Line Tools on macOS, WebView2 + MSVC Build Tools on Windows. See the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for the exact list.
+
+> The web-only build needs just Rust + Bun; you can skip the Tauri system libs if you don't plan to build the desktop app.
 
 ### Setup
 
 ```sh
-# Enter the dev shell (automatic with direnv)
-nix develop
-
-# Install frontend dependencies
 bun install
 ```
 
@@ -51,11 +52,11 @@ bun run tauri build     # Production build (frontend + Rust binary)
 
 ### Web App
 
-The app also runs entirely in the browser using sql.js (SQLite compiled to WASM) with OPFS for persistence. No backend server required.
+A pure-browser build using sql.js (SQLite WASM) with OPFS persistence — no server required.
 
 ```sh
 bun run dev             # Vite dev server at http://localhost:1420
-bun run build           # Production build → build/
+bun run build           # Static production build → build/
 bun run preview         # Preview the production build locally
 ```
 
@@ -75,6 +76,16 @@ cargo test --manifest-path src-tauri/Cargo.toml   # Rust tests
 bun run check           # One-shot
 bun run check:watch     # Watch mode
 ```
+
+### Nix (optional)
+
+The repo ships a Nix flake that provides Rust, Bun, and the Tauri system libraries in a single shell — handy if you'd rather not install them globally. With [direnv](https://direnv.net/) installed, the shell activates automatically on `cd` (run `direnv allow` once); otherwise:
+
+```sh
+nix develop
+```
+
+Nix is just one supported setup — anything that satisfies the prerequisites above works.
 
 ## Project Structure
 
