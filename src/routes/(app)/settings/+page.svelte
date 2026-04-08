@@ -26,6 +26,7 @@
     } from "$lib/dprice-client.js";
     import {
         isDpriceActive,
+        DEFAULT_DPRICE_URL,
         type DpriceMode,
     } from "$lib/data/settings.svelte.js";
     import * as Collapsible from "$lib/components/ui/collapsible/index.js";
@@ -1192,20 +1193,36 @@
                                         class="text-sm font-medium"
                                         >{msg.settings_dprice_server_url()}</label
                                     >
-                                    <Input
-                                        id="dprice-url"
-                                        value={settings.settings.dpriceUrl ??
-                                            "http://localhost:3080"}
-                                        oninput={(e) =>
-                                            settings.update({
-                                                dpriceUrl:
-                                                    (
-                                                        e.target as HTMLInputElement
-                                                    ).value || undefined,
-                                            })}
-                                        placeholder="http://localhost:3080"
-                                        class="w-80"
-                                    />
+                                    <div class="flex items-center gap-2">
+                                        <Input
+                                            id="dprice-url"
+                                            value={settings.settings.dpriceUrl ??
+                                                DEFAULT_DPRICE_URL}
+                                            oninput={(e) =>
+                                                settings.update({
+                                                    dpriceUrl:
+                                                        (
+                                                            e.target as HTMLInputElement
+                                                        ).value || undefined,
+                                                })}
+                                            placeholder={DEFAULT_DPRICE_URL}
+                                            class="w-80"
+                                        />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={(settings.settings
+                                                .dpriceUrl ??
+                                                DEFAULT_DPRICE_URL) ===
+                                                DEFAULT_DPRICE_URL}
+                                            onclick={() =>
+                                                settings.update({
+                                                    dpriceUrl: DEFAULT_DPRICE_URL,
+                                                })}
+                                        >
+                                            {msg.btn_reset()}
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div class="space-y-2">
                                     <label

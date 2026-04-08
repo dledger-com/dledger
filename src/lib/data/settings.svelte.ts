@@ -70,6 +70,8 @@ export interface AppSettings {
   lastExportDate?: string;
 }
 
+export const DEFAULT_DPRICE_URL = "https://dprice.dledger.com";
+
 const DEFAULT_SETTINGS: AppSettings = {
   currency: "USD",
   dateFormat: "YYYY-MM-DD",
@@ -86,7 +88,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   holdingPeriodDays: 365,
   handlers: { "generic-etherscan": { enabled: true } },
   dpriceMode: "http",
-  dpriceUrl: "https://dprice.dledger.com",
+  dpriceUrl: DEFAULT_DPRICE_URL,
 };
 
 /**
