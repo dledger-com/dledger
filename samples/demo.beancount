@@ -210,6 +210,42 @@ option "operating_currency" "EUR"
   Income:Crypto:DeFi:Aave:Interest  -0.00910000 ETH
   Assets:Crypto:DeFi:Aave:Lending    0.00910000 ETH
 
+;; ─── 2026 (the seed-author's "current year") — first months ──────────────
+;; Anchored to the seed-author year so that, after build-time date shifting,
+;; the demo always shows "history through last full year + current year so
+;; far." Keep this block sparse — just enough activity for the dashboard's
+;; recent-entries and YTD widgets to feel populated.
+
+2026-01-31 * "Salary January"
+  Income:Salary                   -4200.00 EUR
+  Assets:Bank:N26                  4200.00 EUR
+
+2026-02-01 * "Rent February"
+  Expenses:Housing:Rent            1280.00 EUR
+  Assets:Bank:N26                 -1280.00 EUR
+
+2026-02-08 * "Groceries"
+  Expenses:Food:Groceries           115.30 EUR
+  Assets:Bank:N26                  -115.30 EUR
+
+2026-02-18 * "Streaming subscription"
+  Expenses:Subscriptions             14.99 EUR
+  Liabilities:CreditCards:Visa      -14.99 EUR
+
+2026-02-28 * "Salary February"
+  Income:Salary                   -4200.00 EUR
+  Assets:Bank:N26                  4200.00 EUR
+
+2026-03-12 * "Buy 0.10 ETH on Kraken"
+  Assets:Crypto:Exchange:Kraken     0.10000000 ETH {3250 EUR}
+  Assets:Crypto:Exchange:Kraken     -325.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     0.85 EUR
+  Assets:Crypto:Exchange:Kraken          -0.85 EUR
+
+2026-03-15 * "Aave interest accrual Q1"
+  Income:Crypto:DeFi:Aave:Interest  -0.00420000 ETH
+  Assets:Crypto:DeFi:Aave:Lending    0.00420000 ETH
+
 ;; ─── Price snapshots for portfolio valuation ──────────────────────────────
 ;; Quarterly prices give the dashboard, balance sheet, and tax report
 ;; enough data to compute portfolio values across the timeline.
@@ -224,6 +260,9 @@ option "operating_currency" "EUR"
 2024-12-31 price BTC  88900 EUR
 2025-03-31 price BTC  76500 EUR
 2025-06-30 price BTC  91200 EUR
+2025-09-30 price BTC  97400 EUR
+2025-12-31 price BTC 102800 EUR
+2026-03-31 price BTC  98600 EUR
 
 2023-03-31 price ETH  1680 EUR
 2023-06-30 price ETH  1740 EUR
@@ -235,9 +274,13 @@ option "operating_currency" "EUR"
 2024-12-31 price ETH  3120 EUR
 2025-03-31 price ETH  2880 EUR
 2025-06-30 price ETH  3340 EUR
+2025-09-30 price ETH  3520 EUR
+2025-12-31 price ETH  3680 EUR
+2026-03-31 price ETH  3290 EUR
 
 ;; ─── Balance assertions ──────────────────────────────────────────────────
-;; Two snapshots the integrity report can verify.
+;; Snapshots the integrity report can verify.
 
 2023-12-31 balance Assets:Bank:LBP    8000.00 EUR
 2024-12-31 balance Assets:Bank:LBP   10500.00 EUR
+2025-12-31 balance Assets:Bank:LBP   10500.00 EUR

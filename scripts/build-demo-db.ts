@@ -43,9 +43,54 @@ const REPO_ROOT = resolve(__dirname, "..");
 const BEANCOUNT_PATH = resolve(REPO_ROOT, "samples/demo.beancount");
 const OUT_PATH = resolve(REPO_ROOT, "static/demo.sqlite");
 
+// The seed file is authored as if "today" is this calendar year. The build
+// script shifts every date in the seed by `currentYear - SEED_AUTHOR_YEAR`
+// so the demo always shows "history through last full year + current year
+// so far," regardless of when it's rebuilt. Bump this constant when you
+// rewrite the seed file with new dates.
+const SEED_AUTHOR_YEAR = 2026;
+
+function isLeapYear(y: number): boolean {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+/**
+ * Shift every YYYY-MM-DD in the beancount text forward by `offset` years.
+ * Year-only shift preserves tax-year boundaries (no transaction crosses
+ * a year boundary as a side effect of shifting). Feb 29 is clamped to
+ * Feb 28 in non-leap target years.
+ */
+function shiftDates(content: string, offset: number): string {
+  if (offset === 0) return content;
+  return content.replace(
+    /\b(20\d{2})-(\d{2})-(\d{2})\b/g,
+    (_match, y: string, mo: string, d: string) => {
+      const newYear = parseInt(y, 10) + offset;
+      let day = parseInt(d, 10);
+      if (mo === "02" && day === 29 && !isLeapYear(newYear)) {
+        day = 28; // clamp to Feb 28 when target year isn't a leap year
+      }
+      return `${newYear}-${mo}-${String(day).padStart(2, "0")}`;
+    },
+  );
+}
+
 async function main() {
+  const TODAY_YEAR = new Date().getFullYear();
+  const YEAR_OFFSET = TODAY_YEAR - SEED_AUTHOR_YEAR;
+
   console.log(`[demo-db] reading ${BEANCOUNT_PATH}`);
-  const beancount = readFileSync(BEANCOUNT_PATH, "utf-8");
+  const rawBeancount = readFileSync(BEANCOUNT_PATH, "utf-8");
+
+  if (YEAR_OFFSET !== 0) {
+    console.log(
+      `[demo-db] shifting seed dates by ${YEAR_OFFSET >= 0 ? "+" : ""}${YEAR_OFFSET} years ` +
+        `(seed author=${SEED_AUTHOR_YEAR}, today=${TODAY_YEAR})`,
+    );
+  } else {
+    console.log(`[demo-db] no date shift (seed author=${SEED_AUTHOR_YEAR}, today=${TODAY_YEAR})`);
+  }
+  const beancount = shiftDates(rawBeancount, YEAR_OFFSET);
 
   console.log("[demo-db] initializing in-memory backend");
   const { SqlJsBackend } = await import("../src/lib/sql-js-backend.js");
@@ -71,7 +116,9 @@ async function main() {
   // chains from the previous year's finalAcquisitionCost.
   console.log("[demo-db] pre-baking French tax reports");
   const { computeFrenchTaxReport } = await import("../src/lib/utils/french-tax.js");
-  const TAX_YEARS = [2023, 2024, 2025];
+  // Same offset as the seed dates so the cached reports line up with the
+  // (shifted) underlying data.
+  const TAX_YEARS = [2023, 2024, 2025].map((y) => y + YEAR_OFFSET);
   let priorCost = "0";
   for (const year of TAX_YEARS) {
     const report = await computeFrenchTaxReport(backend, {
