@@ -22,6 +22,7 @@
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import Copy from "lucide-svelte/icons/copy";
   import Check from "lucide-svelte/icons/check";
@@ -173,7 +174,7 @@
   });
 
   $effect(() => {
-    if (entry && entry.status === "confirmed") {
+    if (entry && entry.status === "confirmed" && !DEMO_MODE) {
       setTopBarActions([
         { type: 'button', label: 'Edit Entry', href: `/journal/new?edit=${entryId}`, variant: 'outline' },
         { type: 'menu', items: [

@@ -15,6 +15,7 @@
   import { loadSettings } from "$lib/data/settings.svelte.js";
   import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { DEMO_MODE } from "$lib/demo.js";
 
   // Initialize locale BEFORE any rendering so message functions resolve correctly
   const savedSettings = loadSettings();
@@ -51,6 +52,11 @@
 
         const settings = new SettingsStore();
         ready = true;
+
+        // Demo mode: skip every startup mutation flow (spam cleanup,
+        // dprice sync, rate backfill, periodic refresh). The snapshot is
+        // pre-built and the read-only Proxy would reject these anyway.
+        if (DEMO_MODE) return;
 
         // --- One-time spam cleanup of existing currencies ---
         if (!settings.settings.spamCleanupDone) {

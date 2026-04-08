@@ -26,6 +26,7 @@
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
   import * as m from "$paraglide/messages.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
@@ -215,9 +216,13 @@
   $effect(() => {
     if (account) {
       setBreadcrumbOverride(accountId!, account.full_name);
-      setTopBarActions([
-        { type: 'button', label: m.btn_reconcile(), href: `/accounts/${accountId}/reconcile`, variant: 'outline' }
-      ]);
+      setTopBarActions(
+        DEMO_MODE
+          ? []
+          : [
+              { type: 'button', label: m.btn_reconcile(), href: `/accounts/${accountId}/reconcile`, variant: 'outline' }
+            ],
+      );
     }
   });
 
@@ -371,7 +376,7 @@
                     {/if}
                   </Table.Cell>
                   <Table.Cell>
-                    {#if !a.is_passing}
+                    {#if !a.is_passing && !DEMO_MODE}
                       <Button variant="outline" size="sm" class="h-7 px-2 text-xs" onclick={() => {
                         paddingAssertionId = paddingAssertionId === a.id ? null : a.id;
                         padCounterparty = "Equity:Opening-Balances";

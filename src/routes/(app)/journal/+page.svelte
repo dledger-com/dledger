@@ -3,6 +3,7 @@
 <script lang="ts">
     import { onDestroy, onMount, tick } from "svelte";
     import * as m from "$paraglide/messages.js";
+    import { DEMO_MODE } from "$lib/demo.js";
     import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
     import { page } from "$app/state";
     import { goto, pushState, replaceState } from "$app/navigation";
@@ -218,29 +219,40 @@
         const _fm = findingMatches;
         const _dd = detectingDuplicates;
         const _ri = reinterpreting;
+        // In demo mode: only the export sub-menu remains. The "New entry"
+        // FAB and the analysis actions (find matches, detect duplicates,
+        // reinterpret) are all mutations and are removed.
         setTopBarActions([
-            { type: 'button', label: m.journal_new_entry(), onclick: () => openEntryDrawer("new"), fab: true, fabIcon: Plus },
+            ...(DEMO_MODE
+              ? []
+              : [
+                  { type: 'button' as const, label: m.journal_new_entry(), onclick: () => openEntryDrawer("new"), fab: true, fabIcon: Plus },
+                ]),
             {
                 type: 'menu',
                 items: [
-                    { label: m.journal_analysis(), header: true },
-                    { label: '', separator: true },
-                    {
-                        label: _fm ? m.journal_finding() : m.journal_find_matches(),
-                        disabled: _fm,
-                        onclick: handleFindMatches,
-                    },
-                    {
-                        label: _dd ? m.journal_detecting() : m.journal_detect_duplicates(),
-                        disabled: _dd,
-                        onclick: handleDetectDuplicates,
-                    },
-                    {
-                        label: _ri ? m.journal_reinterpreting() : m.journal_reinterpret(),
-                        disabled: _ri,
-                        onclick: handleReinterpret,
-                    },
-                    { label: '', separator: true },
+                    ...(DEMO_MODE
+                      ? []
+                      : [
+                          { label: m.journal_analysis(), header: true as const },
+                          { label: '', separator: true as const },
+                          {
+                              label: _fm ? m.journal_finding() : m.journal_find_matches(),
+                              disabled: _fm,
+                              onclick: handleFindMatches,
+                          },
+                          {
+                              label: _dd ? m.journal_detecting() : m.journal_detect_duplicates(),
+                              disabled: _dd,
+                              onclick: handleDetectDuplicates,
+                          },
+                          {
+                              label: _ri ? m.journal_reinterpreting() : m.journal_reinterpret(),
+                              disabled: _ri,
+                              onclick: handleReinterpret,
+                          },
+                          { label: '', separator: true as const },
+                        ]),
                     { label: m.btn_export(), header: true },
                     { label: '', separator: true },
                     { label: 'Beancount (.beancount)', onclick: () => handleExport('beancount') },
@@ -2938,7 +2950,7 @@
                                     <Badge variant="outline" class="text-xs"
                                         >{entry.status}</Badge
                                     >
-                                    {#if entry.status !== "voided"}
+                                    {#if entry.status !== "voided" && !DEMO_MODE}
                                         <Button
                                             variant="ghost"
                                             size="sm"

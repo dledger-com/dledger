@@ -12,6 +12,7 @@
   import MessageCircleQuestion from "lucide-svelte/icons/message-circle-question";
   import Ellipsis from "lucide-svelte/icons/ellipsis";
   import * as m from "$paraglide/messages.js";
+  import { DEMO_MODE } from "$lib/demo.js";
 
   let {
     onfeedback,
@@ -29,7 +30,7 @@
   const moreItems = [
     { title: () => m.nav_currencies(), href: "/currencies", icon: Coins },
     { title: () => m.nav_budgets(), href: "/budgets", icon: PiggyBank },
-    { title: () => m.nav_sources(), href: "/sources", icon: ArrowUpDown },
+    ...(DEMO_MODE ? [] : [{ title: () => m.nav_sources(), href: "/sources", icon: ArrowUpDown }]),
   ];
 
   let moreOpen = $state(false);
@@ -98,14 +99,16 @@
           <Settings class="h-5 w-5" />
           {m.nav_settings()}
         </a>
-        <button
-          type="button"
-          onclick={() => { moreOpen = false; onfeedback?.(); }}
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors text-foreground hover:bg-accent cursor-pointer"
-        >
-          <MessageCircleQuestion class="h-5 w-5" />
-          {m.feedback_sidebar()}
-        </button>
+        {#if !DEMO_MODE}
+          <button
+            type="button"
+            onclick={() => { moreOpen = false; onfeedback?.(); }}
+            class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors text-foreground hover:bg-accent cursor-pointer"
+          >
+            <MessageCircleQuestion class="h-5 w-5" />
+            {m.feedback_sidebar()}
+          </button>
+        {/if}
       </div>
     </Drawer.Content>
   </Drawer.Portal>

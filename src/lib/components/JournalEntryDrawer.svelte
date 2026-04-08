@@ -18,6 +18,7 @@
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import type { AccountType } from "$lib/types/account.js";
   import { invalidate } from "$lib/data/invalidation.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import Pencil from "lucide-svelte/icons/pencil";
   import X from "lucide-svelte/icons/x";
   import ArrowRightLeft from "lucide-svelte/icons/arrow-right-left";
@@ -217,7 +218,7 @@
       <div class="flex items-center justify-between">
         <Drawer.Title class="text-sm font-medium text-muted-foreground">{m.dialog_entry_details()}</Drawer.Title>
         <div class="flex items-center gap-1">
-          {#if entry && entry.status === "confirmed"}
+          {#if entry && entry.status === "confirmed" && !DEMO_MODE}
             <Button variant="outline" size="sm" onclick={() => { onedit?.(); }}>
               <Pencil class="h-3.5 w-3.5 mr-1" /> {m.btn_edit()}
             </Button>
@@ -338,20 +339,34 @@
         <section>
             <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.section_metadata()}</h3>
             <div class="space-y-3 text-sm">
-              <div class="space-y-2">
-                  <div>
-                    <dt class="text-muted-foreground">{m.label_tags()}</dt>
-                    <dd><TagInput tags={viewTags} onchange={handleViewTagsChange} /></dd>
-                  </div>
-                  <div>
-                    <dt class="text-muted-foreground">{m.label_links()}</dt>
-                    <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
-                  </div>
-                  <div>
-                    <dt class="text-muted-foreground">{m.label_note()}</dt>
-                    <dd><NoteInput note={viewNote} onchange={handleViewNoteChange} /></dd>
-                  </div>
-              </div>
+              {#if !DEMO_MODE}
+                <div class="space-y-2">
+                    <div>
+                      <dt class="text-muted-foreground">{m.label_tags()}</dt>
+                      <dd><TagInput tags={viewTags} onchange={handleViewTagsChange} /></dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted-foreground">{m.label_links()}</dt>
+                      <dd><LinkInput links={viewEntryLinks} onchange={handleViewLinksChange} suggestions={viewLinkSuggestions} /></dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted-foreground">{m.label_note()}</dt>
+                      <dd><NoteInput note={viewNote} onchange={handleViewNoteChange} /></dd>
+                    </div>
+                </div>
+              {:else if viewTags.length > 0 || viewEntryLinks.length > 0 || viewNote}
+                <dl class="space-y-2 text-sm">
+                  {#if viewTags.length > 0}
+                    <div><dt class="text-muted-foreground">{m.label_tags()}</dt><dd>{viewTags.join(", ")}</dd></div>
+                  {/if}
+                  {#if viewEntryLinks.length > 0}
+                    <div><dt class="text-muted-foreground">{m.label_links()}</dt><dd>{viewEntryLinks.join(", ")}</dd></div>
+                  {/if}
+                  {#if viewNote}
+                    <div><dt class="text-muted-foreground">{m.label_note()}</dt><dd>{viewNote}</dd></div>
+                  {/if}
+                </dl>
+              {/if}
               {#if displayMeta.length > 0}
                 <details>
                   <summary class="text-xs text-muted-foreground cursor-pointer">{m.btn_more_metadata()}</summary>
@@ -477,7 +492,7 @@
       {/if}
     </div>
 
-    {#if entry && entry.status === "confirmed"}
+    {#if entry && entry.status === "confirmed" && !DEMO_MODE}
       <Drawer.Footer>
         <div class="flex justify-end gap-2">
           <Button variant="destructive" size="sm" onclick={handleVoid}>{m.btn_void_entry()}</Button>

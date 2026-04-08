@@ -68,16 +68,19 @@
       } catch { return new Map(symbols.map(s => [s, null])); }
     });
 
-    // Ensure the base currency exists in the database on startup
-    const baseCurrency = settings.currency;
-    if (baseCurrency) {
-      const name = COMMON_CURRENCIES.find((c) => c.code === baseCurrency)?.name ?? baseCurrency;
-      backend.createCurrency({
-        code: baseCurrency,
-        asset_type: "",
-        name,
-        decimal_places: baseCurrency.length <= 3 ? 2 : 8,
-      }).catch(() => { /* already exists — expected */ });
+    // Ensure the base currency exists in the database on startup.
+    // Skipped in demo mode — the snapshot already has every currency.
+    if (!DEMO_MODE) {
+      const baseCurrency = settings.currency;
+      if (baseCurrency) {
+        const name = COMMON_CURRENCIES.find((c) => c.code === baseCurrency)?.name ?? baseCurrency;
+        backend.createCurrency({
+          code: baseCurrency,
+          asset_type: "",
+          name,
+          decimal_places: baseCurrency.length <= 3 ? 2 : 8,
+        }).catch(() => { /* already exists — expected */ });
+      }
     }
 
     const refreshIcons = () => {
@@ -165,57 +168,59 @@
   <BottomTabBar onfeedback={() => { feedbackWizard.openDefault(); }} />
 </Sidebar.Provider>
 
-<GlobalDropZone />
-<BatchImportBar />
+{#if !DEMO_MODE}
+  <GlobalDropZone />
+  <BatchImportBar />
 
-{#if importDrop.ledgerOpen}
-  {#await LedgerImportDialog() then mod}
-    <mod.default
-      bind:open={importDrop.ledgerOpen}
-      initialContent={importDrop.ledgerContent}
-      initialFileName={importDrop.ledgerFileName}
-    />
-  {/await}
-{/if}
-{#if importDrop.csvOpen}
-  {#await CsvImportDialog() then mod}
-    <mod.default
-      bind:open={importDrop.csvOpen}
-      initialContent={importDrop.csvContent}
-      initialFileName={importDrop.csvFileName}
-    />
-  {/await}
-{/if}
-{#if importDrop.ofxOpen}
-  {#await OfxImportDialog() then mod}
-    <mod.default
-      bind:open={importDrop.ofxOpen}
-      initialContent={importDrop.ofxContent}
-      initialFileName={importDrop.ofxFileName}
-    />
-  {/await}
-{/if}
-{#if importDrop.pdfOpen}
-  {#await PdfImportDialog() then mod}
-    <mod.default
-      bind:open={importDrop.pdfOpen}
-      initialFile={importDrop.pdfFile}
-      initialFileName={importDrop.pdfFileName}
-    />
-  {/await}
-{/if}
-{#if importDrop.dledgerOpen}
-  {#await DledgerImportDialog() then mod}
-    <mod.default
-      bind:open={importDrop.dledgerOpen}
-      initialFile={importDrop.dledgerFile ?? undefined}
-    />
-  {/await}
-{/if}
-{#if feedbackWizard.open}
-  {#await FeedbackWizardDialog() then mod}
-    <mod.default bind:open={feedbackWizard.open} initialStep={feedbackWizard.initialStep} />
-  {/await}
+  {#if importDrop.ledgerOpen}
+    {#await LedgerImportDialog() then mod}
+      <mod.default
+        bind:open={importDrop.ledgerOpen}
+        initialContent={importDrop.ledgerContent}
+        initialFileName={importDrop.ledgerFileName}
+      />
+    {/await}
+  {/if}
+  {#if importDrop.csvOpen}
+    {#await CsvImportDialog() then mod}
+      <mod.default
+        bind:open={importDrop.csvOpen}
+        initialContent={importDrop.csvContent}
+        initialFileName={importDrop.csvFileName}
+      />
+    {/await}
+  {/if}
+  {#if importDrop.ofxOpen}
+    {#await OfxImportDialog() then mod}
+      <mod.default
+        bind:open={importDrop.ofxOpen}
+        initialContent={importDrop.ofxContent}
+        initialFileName={importDrop.ofxFileName}
+      />
+    {/await}
+  {/if}
+  {#if importDrop.pdfOpen}
+    {#await PdfImportDialog() then mod}
+      <mod.default
+        bind:open={importDrop.pdfOpen}
+        initialFile={importDrop.pdfFile}
+        initialFileName={importDrop.pdfFileName}
+      />
+    {/await}
+  {/if}
+  {#if importDrop.dledgerOpen}
+    {#await DledgerImportDialog() then mod}
+      <mod.default
+        bind:open={importDrop.dledgerOpen}
+        initialFile={importDrop.dledgerFile ?? undefined}
+      />
+    {/await}
+  {/if}
+  {#if feedbackWizard.open}
+    {#await FeedbackWizardDialog() then mod}
+      <mod.default bind:open={feedbackWizard.open} initialStep={feedbackWizard.initialStep} />
+    {/await}
+  {/if}
 {/if}
 {#if backupInfoOpen}
   {#await BackupInfoDialog() then mod}

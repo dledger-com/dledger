@@ -128,12 +128,13 @@ export function wrapReadOnly(backend: Backend): Backend {
       if (READ_METHODS.has(prop)) {
         return value.bind(target);
       }
-      // Anything else is treated as a mutation. Return a thunk that throws
-      // when called rather than throwing on access (so feature-detection like
-      // `if (backend.exportDatabase)` still works for actual reads).
-      return (..._args: unknown[]) => {
-        throw new DemoReadOnlyError(prop);
-      };
+      // Anything else is treated as a mutation. Return a thunk that returns
+      // a rejected Promise (NOT a synchronous throw) so callers using
+      // `backend.foo(...).catch(...)` see the rejection and don't blow up
+      // before they can install their handler. Every Backend mutation method
+      // returns Promise<T>, so this matches the type contract.
+      return (..._args: unknown[]) =>
+        Promise.reject(new DemoReadOnlyError(prop));
     },
   }) as Backend;
 }

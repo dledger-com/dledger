@@ -14,6 +14,7 @@
   import ThemeToggle from "./ThemeToggle.svelte";
   import BackupReminderCard from "./BackupReminderCard.svelte";
   import * as m from "$paraglide/messages.js";
+  import { DEMO_MODE } from "$lib/demo.js";
 
   let {
     onfeedback,
@@ -32,7 +33,9 @@
     { title: () => m.nav_currencies(), href: "/currencies", icon: Coins },
     { title: () => m.nav_budgets(), href: "/budgets", icon: PiggyBank },
     { title: () => m.nav_reports(), href: "/reports", icon: BarChart3 },
-    { title: () => m.nav_sources(), href: "/sources", icon: ArrowUpDown },
+    // Sources is purely a mutation surface (file imports, API keys,
+    // blockchain syncs), so it disappears from the nav in demo mode.
+    ...(DEMO_MODE ? [] : [{ title: () => m.nav_sources(), href: "/sources", icon: ArrowUpDown }]),
   ];
 
   function isActive(href: string): boolean {
@@ -78,17 +81,21 @@
     </Sidebar.Group>
   </Sidebar.Content>
 
-  <BackupReminderCard onlearnmore={() => onbackupinfo?.()} />
+  {#if !DEMO_MODE}
+    <BackupReminderCard onlearnmore={() => onbackupinfo?.()} />
+  {/if}
 
   <Sidebar.Footer>
-    <button
-      type="button"
-      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors cursor-pointer"
-      onclick={() => onfeedback?.()}
-    >
-      <MessageCircleQuestion class="h-4 w-4" />
-      <span>{m.feedback_sidebar()}</span>
-    </button>
+    {#if !DEMO_MODE}
+      <button
+        type="button"
+        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors cursor-pointer"
+        onclick={() => onfeedback?.()}
+      >
+        <MessageCircleQuestion class="h-4 w-4" />
+        <span>{m.feedback_sidebar()}</span>
+      </button>
+    {/if}
     <div class="flex items-center justify-between px-2 py-1">
       <span class="text-xs text-muted-foreground">dLedger {versionLabel}</span>
       <div class="flex items-center gap-1">

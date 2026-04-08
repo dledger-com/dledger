@@ -22,6 +22,7 @@
   import SortableHeader from "$lib/components/SortableHeader.svelte";
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
   import * as m from "$paraglide/messages.js";
 
@@ -146,9 +147,13 @@
   onDestroy(() => { unsubJournal(); clearTopBarActions(); });
 
   $effect(() => {
-    setTopBarActions([
-      { type: "button", label: m.btn_add(), onclick: openAddDialog, fab: true, fabIcon: Plus },
-    ]);
+    setTopBarActions(
+      DEMO_MODE
+        ? []
+        : [
+            { type: "button", label: m.btn_add(), onclick: openAddDialog, fab: true, fabIcon: Plus },
+          ],
+    );
   });
 
   onMount(() => {
@@ -199,20 +204,22 @@
 {/snippet}
 
 {#snippet budgetActions(budget: Budget)}
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger>
-      {#snippet child({ props })}
-        <Button variant="ghost" size="icon-sm" {...props}>
-          <EllipsisVertical class="h-4 w-4" />
-          <span class="sr-only">{m.label_actions()}</span>
-        </Button>
-      {/snippet}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end">
-      <DropdownMenu.Item onclick={() => openEditDialog(budget)}>{m.btn_edit()}</DropdownMenu.Item>
-      <DropdownMenu.Item class="text-destructive" onclick={() => handleDelete(budget.id)}>{m.btn_delete()}</DropdownMenu.Item>
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
+  {#if !DEMO_MODE}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button variant="ghost" size="icon-sm" {...props}>
+            <EllipsisVertical class="h-4 w-4" />
+            <span class="sr-only">{m.label_actions()}</span>
+          </Button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        <DropdownMenu.Item onclick={() => openEditDialog(budget)}>{m.btn_edit()}</DropdownMenu.Item>
+        <DropdownMenu.Item class="text-destructive" onclick={() => handleDelete(budget.id)}>{m.btn_delete()}</DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  {/if}
 {/snippet}
 
 <div class="space-y-6">

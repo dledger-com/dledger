@@ -4,6 +4,7 @@
   import { onMount, onDestroy } from "svelte";
   import Plus from "lucide-svelte/icons/plus";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import { v7 as uuidv7 } from "uuid";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
@@ -39,9 +40,13 @@
   const unsubAccounts = onInvalidate("accounts", () => { store.load(); });
 
   $effect(() => {
-    setTopBarActions([
-      { type: 'button', label: m.btn_new_account(), onclick: () => { dialogOpen = true; }, fab: true, fabIcon: Plus }
-    ]);
+    setTopBarActions(
+      DEMO_MODE
+        ? []
+        : [
+            { type: 'button', label: m.btn_new_account(), onclick: () => { dialogOpen = true; }, fab: true, fabIcon: Plus }
+          ],
+    );
   });
 
   onDestroy(() => {
@@ -804,30 +809,32 @@
                         {/if}
                       </div>
                     </div>
-                    <!-- Actions -->
-                    <div class="shrink-0">
-                      <DropdownMenu.Root>
-                        <DropdownMenu.Trigger>
-                          {#snippet child({ props })}
-                            <Button variant="ghost" size="icon-sm" {...props}>
-                              <EllipsisVertical class="h-4 w-4" />
-                              <span class="sr-only">{m.label_actions()}</span>
-                            </Button>
-                          {/snippet}
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Content align="end">
-                          <DropdownMenu.Item onclick={() => startSubAccount(account)}>{m.btn_add_sub_account()}</DropdownMenu.Item>
-                          {#if account.parent_id !== null}
-                            <DropdownMenu.Item onclick={() => startEdit(account)}>{m.btn_edit()}</DropdownMenu.Item>
-                          {/if}
-                          {#if account.is_archived}
-                            <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>{m.btn_unarchive()}</DropdownMenu.Item>
-                          {:else}
-                            <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>{m.btn_archive()}</DropdownMenu.Item>
-                          {/if}
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Root>
-                    </div>
+                    {#if !DEMO_MODE}
+                      <!-- Actions -->
+                      <div class="shrink-0">
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger>
+                            {#snippet child({ props })}
+                              <Button variant="ghost" size="icon-sm" {...props}>
+                                <EllipsisVertical class="h-4 w-4" />
+                                <span class="sr-only">{m.label_actions()}</span>
+                              </Button>
+                            {/snippet}
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Content align="end">
+                            <DropdownMenu.Item onclick={() => startSubAccount(account)}>{m.btn_add_sub_account()}</DropdownMenu.Item>
+                            {#if account.parent_id !== null}
+                              <DropdownMenu.Item onclick={() => startEdit(account)}>{m.btn_edit()}</DropdownMenu.Item>
+                            {/if}
+                            {#if account.is_archived}
+                              <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>{m.btn_unarchive()}</DropdownMenu.Item>
+                            {:else}
+                              <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>{m.btn_archive()}</DropdownMenu.Item>
+                            {/if}
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Root>
+                      </div>
+                    {/if}
                   </div>
                 </Table.Cell>
               </Table.Row>
@@ -863,27 +870,29 @@
                 </Table.Cell>
                 <Table.Cell class="hidden md:table-cell">{account.is_postable ? m.label_yes() : m.label_no()}</Table.Cell>
                 <Table.Cell class="text-right">
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      {#snippet child({ props })}
-                        <Button variant="ghost" size="icon-sm" {...props}>
-                          <EllipsisVertical class="h-4 w-4" />
-                          <span class="sr-only">{m.label_actions()}</span>
-                        </Button>
-                      {/snippet}
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content>
-                      <DropdownMenu.Item onclick={() => startSubAccount(account)}>{m.btn_add_sub_account()}</DropdownMenu.Item>
-                      {#if account.parent_id !== null}
-                        <DropdownMenu.Item onclick={() => startEdit(account)}>{m.btn_edit()}</DropdownMenu.Item>
-                      {/if}
-                      {#if account.is_archived}
-                        <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>{m.btn_unarchive()}</DropdownMenu.Item>
-                      {:else}
-                        <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>{m.btn_archive()}</DropdownMenu.Item>
-                      {/if}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
+                  {#if !DEMO_MODE}
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger>
+                        {#snippet child({ props })}
+                          <Button variant="ghost" size="icon-sm" {...props}>
+                            <EllipsisVertical class="h-4 w-4" />
+                            <span class="sr-only">{m.label_actions()}</span>
+                          </Button>
+                        {/snippet}
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content>
+                        <DropdownMenu.Item onclick={() => startSubAccount(account)}>{m.btn_add_sub_account()}</DropdownMenu.Item>
+                        {#if account.parent_id !== null}
+                          <DropdownMenu.Item onclick={() => startEdit(account)}>{m.btn_edit()}</DropdownMenu.Item>
+                        {/if}
+                        {#if account.is_archived}
+                          <DropdownMenu.Item onclick={() => handleUnarchive(account.id, account.full_name)}>{m.btn_unarchive()}</DropdownMenu.Item>
+                        {:else}
+                          <DropdownMenu.Item onclick={() => handleArchive(account.id, account.full_name)}>{m.btn_archive()}</DropdownMenu.Item>
+                        {/if}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                  {/if}
                 </Table.Cell>
               </Table.Row>
             {/if}

@@ -22,6 +22,7 @@
   import { createSortState, sortItems, type SortAccessor } from "$lib/utils/sort.svelte.js";
   import { createVirtualizer } from "$lib/utils/virtual.svelte.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
 
   const settings = new SettingsStore();
@@ -479,34 +480,36 @@
       </Card.Content>
     </Card.Root>
 
-    <!-- Add Rate Form -->
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Add Exchange Rate</Card.Title>
-        <Card.Description>Manually record a rate for this currency.</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <form onsubmit={(e) => { e.preventDefault(); addExchangeRate(); }} class="flex items-end gap-3">
-          <div class="space-y-1">
-            <label for="rate-from" class="text-xs text-muted-foreground">From</label>
-            <Input id="rate-from" bind:value={rateFrom} placeholder="BTC" class="w-24" />
-          </div>
-          <div class="space-y-1">
-            <label for="rate-to" class="text-xs text-muted-foreground">To</label>
-            <Input id="rate-to" bind:value={rateTo} placeholder="EUR" class="w-24" />
-          </div>
-          <div class="space-y-1">
-            <label for="rate-val" class="text-xs text-muted-foreground">Rate</label>
-            <Input id="rate-val" bind:value={rateValue} placeholder="45000.00" class="w-36" />
-          </div>
-          <div class="space-y-1">
-            <label for="rate-date" class="text-xs text-muted-foreground">Date</label>
-            <Input id="rate-date" type="date" bind:value={rateDate} class="w-40" />
-          </div>
-          <Button type="submit" size="sm">Add Rate</Button>
-        </form>
-      </Card.Content>
-    </Card.Root>
+    {#if !DEMO_MODE}
+      <!-- Add Rate Form -->
+      <Card.Root>
+        <Card.Header>
+          <Card.Title>Add Exchange Rate</Card.Title>
+          <Card.Description>Manually record a rate for this currency.</Card.Description>
+        </Card.Header>
+        <Card.Content>
+          <form onsubmit={(e) => { e.preventDefault(); addExchangeRate(); }} class="flex items-end gap-3">
+            <div class="space-y-1">
+              <label for="rate-from" class="text-xs text-muted-foreground">From</label>
+              <Input id="rate-from" bind:value={rateFrom} placeholder="BTC" class="w-24" />
+            </div>
+            <div class="space-y-1">
+              <label for="rate-to" class="text-xs text-muted-foreground">To</label>
+              <Input id="rate-to" bind:value={rateTo} placeholder="EUR" class="w-24" />
+            </div>
+            <div class="space-y-1">
+              <label for="rate-val" class="text-xs text-muted-foreground">Rate</label>
+              <Input id="rate-val" bind:value={rateValue} placeholder="45000.00" class="w-36" />
+            </div>
+            <div class="space-y-1">
+              <label for="rate-date" class="text-xs text-muted-foreground">Date</label>
+              <Input id="rate-date" type="date" bind:value={rateDate} class="w-40" />
+            </div>
+            <Button type="submit" size="sm">Add Rate</Button>
+          </form>
+        </Card.Content>
+      </Card.Root>
+    {/if}
 
     <!-- Exchange Rates Table -->
     <Card.Root>

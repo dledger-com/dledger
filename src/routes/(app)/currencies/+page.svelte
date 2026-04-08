@@ -23,6 +23,7 @@
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import { rateHealth } from "$lib/data/rate-health.svelte.js";
   import CircleCheck from "lucide-svelte/icons/circle-check";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
@@ -190,9 +191,13 @@
   onDestroy(() => { unsubCurrencies(); clearTopBarActions(); });
 
   $effect(() => {
-    setTopBarActions([
-      { type: "button", label: m.btn_add(), onclick: () => { addDialogOpen = true; }, fab: true, fabIcon: Plus },
-    ]);
+    setTopBarActions(
+      DEMO_MODE
+        ? []
+        : [
+            { type: "button", label: m.btn_add(), onclick: () => { addDialogOpen = true; }, fab: true, fabIcon: Plus },
+          ],
+    );
   });
 
   onMount(() => {
@@ -470,32 +475,34 @@
                         {/if}
                       </div>
                     </div>
-                    <!-- Actions -->
-                    <div class="shrink-0" onclick={(e: MouseEvent) => e.stopPropagation()}>
-                      <DropdownMenu.Root>
-                        <DropdownMenu.Trigger>
-                          {#snippet child({ props })}
-                            <Button variant="ghost" size="icon-sm" {...props}>
-                              <EllipsisVertical class="h-4 w-4" />
-                              <span class="sr-only">{m.label_actions()}</span>
-                            </Button>
-                          {/snippet}
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Content align="end">
-                          <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
-                          {#if c.code !== settings.currency}
-                            {#if c.is_hidden}
-                              <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
-                            {:else}
-                              <DropdownMenu.Item onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</DropdownMenu.Item>
+                    {#if !DEMO_MODE}
+                      <!-- Actions -->
+                      <div class="shrink-0" onclick={(e: MouseEvent) => e.stopPropagation()}>
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger>
+                            {#snippet child({ props })}
+                              <Button variant="ghost" size="icon-sm" {...props}>
+                                <EllipsisVertical class="h-4 w-4" />
+                                <span class="sr-only">{m.label_actions()}</span>
+                              </Button>
+                            {/snippet}
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Content align="end">
+                            <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
+                            {#if c.code !== settings.currency}
+                              {#if c.is_hidden}
+                                <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
+                              {:else}
+                                <DropdownMenu.Item onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</DropdownMenu.Item>
+                              {/if}
                             {/if}
-                          {/if}
-                          {#if dpriceEnabled}
-                            <DropdownMenu.Item onclick={() => { dpriceDialogCode = c.code; dpriceDialogOpen = true; }}>{m.btn_link_dprice()}</DropdownMenu.Item>
-                          {/if}
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Root>
-                    </div>
+                            {#if dpriceEnabled}
+                              <DropdownMenu.Item onclick={() => { dpriceDialogCode = c.code; dpriceDialogOpen = true; }}>{m.btn_link_dprice()}</DropdownMenu.Item>
+                            {/if}
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Root>
+                      </div>
+                    {/if}
                   </div>
                 </Table.Cell>
               </Table.Row>
@@ -567,29 +574,31 @@
                 {/if}
 
                 <Table.Cell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      {#snippet child({ props })}
-                        <Button variant="ghost" size="icon-sm" {...props}>
-                          <EllipsisVertical class="h-4 w-4" />
-                          <span class="sr-only">{m.label_actions()}</span>
-                        </Button>
-                      {/snippet}
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="end">
-                      <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
-                      {#if c.code !== settings.currency}
-                        {#if c.is_hidden}
-                          <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
-                        {:else}
-                          <DropdownMenu.Item onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</DropdownMenu.Item>
+                  {#if !DEMO_MODE}
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger>
+                        {#snippet child({ props })}
+                          <Button variant="ghost" size="icon-sm" {...props}>
+                            <EllipsisVertical class="h-4 w-4" />
+                            <span class="sr-only">{m.label_actions()}</span>
+                          </Button>
+                        {/snippet}
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        <DropdownMenu.Item onclick={() => startRename(c.code, c.name)}>{m.btn_rename()}</DropdownMenu.Item>
+                        {#if c.code !== settings.currency}
+                          {#if c.is_hidden}
+                            <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
+                          {:else}
+                            <DropdownMenu.Item onclick={async () => { await markCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_hide()}</DropdownMenu.Item>
+                          {/if}
                         {/if}
-                      {/if}
-                      {#if dpriceEnabled}
-                        <DropdownMenu.Item onclick={() => { dpriceDialogCode = c.code; dpriceDialogOpen = true; }}>{m.btn_link_dprice()}</DropdownMenu.Item>
-                      {/if}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
+                        {#if dpriceEnabled}
+                          <DropdownMenu.Item onclick={() => { dpriceDialogCode = c.code; dpriceDialogOpen = true; }}>{m.btn_link_dprice()}</DropdownMenu.Item>
+                        {/if}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                  {/if}
                 </Table.Cell>
               </Table.Row>
             {/each}
@@ -626,19 +635,21 @@
                   <Table.Cell class="font-mono">{c.code}</Table.Cell>
                   <Table.Cell>{c.name}</Table.Cell>
                   <Table.Cell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger>
-                        {#snippet child({ props })}
-                          <Button variant="ghost" size="icon-sm" {...props}>
-                            <EllipsisVertical class="h-4 w-4" />
-                            <span class="sr-only">{m.label_actions()}</span>
-                          </Button>
-                        {/snippet}
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content align="end">
-                        <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Root>
+                    {#if !DEMO_MODE}
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger>
+                          {#snippet child({ props })}
+                            <Button variant="ghost" size="icon-sm" {...props}>
+                              <EllipsisVertical class="h-4 w-4" />
+                              <span class="sr-only">{m.label_actions()}</span>
+                            </Button>
+                          {/snippet}
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item onclick={async () => { await unmarkCurrencyHidden(getBackend(), c.code); await loadCurrencies(); }}>{m.btn_unhide()}</DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    {/if}
                   </Table.Cell>
                 </Table.Row>
               {/each}
