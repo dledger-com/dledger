@@ -157,7 +157,11 @@ export async function createDemoBackend(): Promise<Backend> {
     );
   }
   const snapshot = new Uint8Array(await response.arrayBuffer());
+  const { default: initSqlJs } = await import("sql.js");
   const { SqlJsBackend } = await import("./sql-js-backend.js");
-  const inner = await SqlJsBackend.fromSnapshot(snapshot);
+  const SQL = await initSqlJs({ locateFile: () => `/sql-wasm.wasm` });
+  const db = new SQL.Database(snapshot);
+  const inner = new SqlJsBackend(db, SQL);
+  db.exec("PRAGMA foreign_keys=ON");
   return wrapReadOnly(inner);
 }

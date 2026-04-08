@@ -438,7 +438,7 @@ export class SqlJsBackend implements Backend {
   private inTransaction = false;
   private disposed = false;
 
-  private constructor(db: Database, sql: SqlJsStatic) {
+  constructor(db: Database, sql: SqlJsStatic) {
     this.db = db;
     this.sql = sql;
   }
@@ -696,20 +696,10 @@ export class SqlJsBackend implements Backend {
     return backend;
   }
 
-  /**
-   * Construct a backend from an existing SQLite file (e.g. the pre-built
-   * demo snapshot at /demo.sqlite). No persistence: any in-memory mutations
-   * are discarded on dispose. Used by demo mode.
-   */
-  static async fromSnapshot(snapshot: Uint8Array): Promise<SqlJsBackend> {
-    const SQL = await initSqlJs({
-      locateFile: () => `/sql-wasm.wasm`,
-    });
-    const db = new SQL.Database(snapshot);
-    const backend = new SqlJsBackend(db, SQL);
-    db.exec("PRAGMA foreign_keys=ON");
-    return backend;
-  }
+  // Note: a `fromSnapshot(buffer)` factory used to live here for demo mode,
+  // but it's been inlined into src/lib/demo-backend.ts so the snapshot
+  // loader doesn't ship to production builds. The constructor is public
+  // (no longer `private`) so demo-backend.ts can construct directly.
 
   static async create(): Promise<SqlJsBackend> {
     const SQL = await initSqlJs({

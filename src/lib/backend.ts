@@ -92,6 +92,14 @@ export interface CurrencyDateRequirement {
   dates: string[];      // populated when mode="dates"
 }
 
+// Static import: Vite inlines DEMO_MODE as a literal boolean here, so the
+// `if (DEMO_MODE)` branch in initBackend() is statically dead in regular
+// builds and the dynamic import to ./demo-backend.js gets eliminated.
+// (A dynamic `await import("./demo.js")` would put DEMO_MODE behind a chunk
+// split, breaking constant folding and leaving demo-backend.js shipped to
+// production.)
+import { DEMO_MODE } from "./demo.js";
+
 export interface Backend {
   // Currencies
   listCurrencies(): Promise<Currency[]>;
@@ -1338,7 +1346,6 @@ export async function initBackend(): Promise<Backend> {
   if (_g.__dledger_backend) return _g.__dledger_backend;
   if (_g.__dledger_initPromise) return _g.__dledger_initPromise;
   _g.__dledger_initPromise = (async () => {
-    const { DEMO_MODE } = await import("./demo.js");
     if (DEMO_MODE) {
       const { createDemoBackend } = await import("./demo-backend.js");
       _g.__dledger_backend = await createDemoBackend();
