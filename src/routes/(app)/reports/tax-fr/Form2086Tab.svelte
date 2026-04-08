@@ -10,6 +10,7 @@
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import Info from "lucide-svelte/icons/info";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import * as m from "$paraglide/messages.js";
 
   let { report }: { report: FrenchTaxReport } = $props();
 
@@ -43,8 +44,8 @@
   {#if report.dispositions.length > 0}
     <Card.Root>
       <Card.Header>
-        <Card.Title>Dispositions (Form 2086)</Card.Title>
-        <Card.Description>One row per crypto-to-fiat sale event. Column headers show Form 2086 line numbers.</Card.Description>
+        <Card.Title>{m.report_french_tax_2086_section_title()}</Card.Title>
+        <Card.Description>{m.report_french_tax_2086_section_desc()}</Card.Description>
       </Card.Header>
       <div class="overflow-x-auto">
         <Table.Root>
@@ -54,19 +55,19 @@
               <SortableHeader active={sortDisp.key === "date"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("date")}>
                 <Tooltip.Root>
                   <Tooltip.Trigger class="inline-flex items-center gap-1">
-                    Date <span class="text-muted-foreground text-[10px]">(211)</span>
+                    {m.label_date()} <span class="text-muted-foreground text-[10px]">(211)</span>
                   </Tooltip.Trigger>
-                  <Tooltip.Content><p class="text-xs max-w-48">Line 211: Date of the disposition</p></Tooltip.Content>
+                  <Tooltip.Content><p class="text-xs max-w-48">{m.report_french_tax_2086_tooltip_211()}</p></Tooltip.Content>
                 </Tooltip.Root>
               </SortableHeader>
-              <SortableHeader active={sortDisp.key === "description"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("description")} class="hidden sm:table-cell">Description</SortableHeader>
-              <SortableHeader active={sortDisp.key === "crypto"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("crypto")}>Crypto</SortableHeader>
+              <SortableHeader active={sortDisp.key === "description"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("description")} class="hidden sm:table-cell">{m.label_description()}</SortableHeader>
+              <SortableHeader active={sortDisp.key === "crypto"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("crypto")}>{m.label_crypto()}</SortableHeader>
               <SortableHeader active={sortDisp.key === "fiat"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("fiat")} class="text-right">
                 <Tooltip.Root>
                   <Tooltip.Trigger class="inline-flex items-center gap-1">
                     C <span class="text-muted-foreground text-[10px]">(217-218)</span>
                   </Tooltip.Trigger>
-                  <Tooltip.Content><p class="text-xs max-w-48">Lines 217-218: Sale price — total EUR received from the crypto sale</p></Tooltip.Content>
+                  <Tooltip.Content><p class="text-xs max-w-48">{m.report_french_tax_2086_tooltip_217_218()}</p></Tooltip.Content>
                 </Tooltip.Root>
               </SortableHeader>
               <SortableHeader active={sortDisp.key === "portfolio"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("portfolio")} class="text-right hidden md:table-cell">
@@ -74,7 +75,7 @@
                   <Tooltip.Trigger class="inline-flex items-center gap-1">
                     V <span class="text-muted-foreground text-[10px]">(212)</span>
                   </Tooltip.Trigger>
-                  <Tooltip.Content><p class="text-xs max-w-48">Line 212: Total portfolio value in EUR at the moment of sale</p></Tooltip.Content>
+                  <Tooltip.Content><p class="text-xs max-w-48">{m.report_french_tax_2086_tooltip_212()}</p></Tooltip.Content>
                 </Tooltip.Root>
               </SortableHeader>
               <SortableHeader active={sortDisp.key === "acqCost"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("acqCost")} class="text-right hidden md:table-cell">
@@ -82,7 +83,7 @@
                   <Tooltip.Trigger class="inline-flex items-center gap-1">
                     A <span class="text-muted-foreground text-[10px]">(220-223)</span>
                   </Tooltip.Trigger>
-                  <Tooltip.Content><p class="text-xs max-w-48">Lines 220-223: Total acquisition cost — cumulative EUR spent on crypto, minus prior fractions</p></Tooltip.Content>
+                  <Tooltip.Content><p class="text-xs max-w-48">{m.report_french_tax_2086_tooltip_220_223()}</p></Tooltip.Content>
                 </Tooltip.Root>
               </SortableHeader>
               <SortableHeader active={sortDisp.key === "costFraction"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("costFraction")} class="text-right hidden lg:table-cell">
@@ -90,7 +91,7 @@
                   <Tooltip.Trigger class="inline-flex items-center gap-1">
                     A*C/V
                   </Tooltip.Trigger>
-                  <Tooltip.Content><p class="text-xs max-w-48">Cost fraction: portion of acquisition cost attributable to this sale</p></Tooltip.Content>
+                  <Tooltip.Content><p class="text-xs max-w-48">{m.report_french_tax_2086_tooltip_acv()}</p></Tooltip.Content>
                 </Tooltip.Root>
               </SortableHeader>
               <SortableHeader active={sortDisp.key === "plusValue"} direction={sortDisp.direction} onclick={() => sortDisp.toggle("plusValue")} class="text-right">
@@ -98,7 +99,7 @@
                   <Tooltip.Trigger class="inline-flex items-center gap-1">
                     PV <span class="text-muted-foreground text-[10px]">(224)</span>
                   </Tooltip.Trigger>
-                  <Tooltip.Content><p class="text-xs max-w-48">Line 224: Plus-value = C - (A*C/V). Positive = taxable gain, negative = loss</p></Tooltip.Content>
+                  <Tooltip.Content><p class="text-xs max-w-48">{m.report_french_tax_2086_tooltip_224()}</p></Tooltip.Content>
                 </Tooltip.Root>
               </SortableHeader>
             </Table.Row>
@@ -128,7 +129,7 @@
           </Table.Body>
           <Table.Footer>
             <Table.Row>
-              <Table.Cell colspan={4} class="font-medium">Total</Table.Cell>
+              <Table.Cell colspan={4} class="font-medium">{m.label_total()}</Table.Cell>
               <Table.Cell class="text-right font-mono font-medium">{formatCurrency(totalFiat, "EUR")}</Table.Cell>
               <Table.Cell class="hidden md:table-cell"></Table.Cell>
               <Table.Cell class="hidden md:table-cell"></Table.Cell>
@@ -145,7 +146,7 @@
     <Card.Root>
       <Card.Content class="py-8">
         <p class="text-sm text-muted-foreground text-center">
-          No crypto-to-fiat dispositions in {report.taxYear}.
+          {m.report_french_tax_2086_empty({ year: String(report.taxYear) })}
         </p>
       </Card.Content>
     </Card.Root>
@@ -158,8 +159,8 @@
         <Collapsible.Trigger class="w-full">
           <Card.Header class="flex flex-row items-center justify-between">
             <div>
-              <Card.Title>Acquisitions Reference</Card.Title>
-              <Card.Description>Fiat-to-crypto purchases that contributed to acquisition cost (A).</Card.Description>
+              <Card.Title>{m.report_french_tax_2086_acquisitions_title()}</Card.Title>
+              <Card.Description>{m.report_french_tax_2086_acquisitions_desc()}</Card.Description>
             </div>
             <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
           </Card.Header>
@@ -169,10 +170,10 @@
             <Table.Root>
               <Table.Header>
                 <Table.Row>
-                  <SortableHeader active={sortAcq.key === "date"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("date")}>Date</SortableHeader>
-                  <SortableHeader active={sortAcq.key === "description"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("description")} class="hidden sm:table-cell">Description</SortableHeader>
-                  <SortableHeader active={sortAcq.key === "crypto"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("crypto")}>Crypto</SortableHeader>
-                  <SortableHeader active={sortAcq.key === "fiatSpent"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("fiatSpent")} class="text-right">Fiat Spent (EUR)</SortableHeader>
+                  <SortableHeader active={sortAcq.key === "date"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("date")}>{m.label_date()}</SortableHeader>
+                  <SortableHeader active={sortAcq.key === "description"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("description")} class="hidden sm:table-cell">{m.label_description()}</SortableHeader>
+                  <SortableHeader active={sortAcq.key === "crypto"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("crypto")}>{m.label_crypto()}</SortableHeader>
+                  <SortableHeader active={sortAcq.key === "fiatSpent"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("fiatSpent")} class="text-right">{m.report_french_tax_2086_col_fiat_spent()}</SortableHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>

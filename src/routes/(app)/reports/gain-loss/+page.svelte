@@ -1,4 +1,4 @@
-<svelte:head><title>Gain/Loss · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_gain_loss()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";

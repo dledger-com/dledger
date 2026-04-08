@@ -1,4 +1,4 @@
-<svelte:head><title>Portfolio · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_portfolio()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";

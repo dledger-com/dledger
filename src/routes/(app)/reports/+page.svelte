@@ -1,4 +1,4 @@
-<svelte:head><title>Reports · dLedger</title></svelte:head>
+<svelte:head><title>{m.nav_reports()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import * as Card from "$lib/components/ui/card/index.js";

@@ -1,4 +1,4 @@
-<svelte:head><title>Data Integrity · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_integrity()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onDestroy } from "svelte";

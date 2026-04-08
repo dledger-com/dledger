@@ -2,6 +2,7 @@
   import * as Card from "$lib/components/ui/card/index.js";
   import { formatCurrency } from "$lib/utils/format.js";
   import type { FrenchTaxReport } from "$lib/utils/french-tax.js";
+  import * as m from "$paraglide/messages.js";
 
   let {
     report,
@@ -40,31 +41,35 @@
   });
 
   const items = $derived([
-    { label: `Report generated for ${taxYear}`, checked: hasSavedReport, auto: true },
+    { label: m.report_french_tax_checklist_report_generated({ year: String(taxYear) }), checked: hasSavedReport, auto: true },
     {
-      label: `Form 2086 filled (${report.dispositions.length} disposition${report.dispositions.length !== 1 ? "s" : ""})`,
+      label: report.dispositions.length === 1
+        ? m.report_french_tax_checklist_2086_done_one()
+        : m.report_french_tax_checklist_2086_done_other({ count: String(report.dispositions.length) }),
       checked: form2086Done,
       auto: false,
       key: "form2086" as const,
       skip: report.dispositions.length === 0,
     },
     {
-      label: `Form 2042 C — box ${activeBox} filled`,
+      label: m.report_french_tax_checklist_2042c_done({ box: activeBox }),
       checked: form2042cDone,
       auto: false,
       key: "form2042c" as const,
       skip: box3AN === 0 && box3BN === 0,
     },
     {
-      label: `Form 3916-bis filed (${foreignAccountCount} foreign account${foreignAccountCount !== 1 ? "s" : ""})`,
+      label: foreignAccountCount === 1
+        ? m.report_french_tax_checklist_3916bis_done_one()
+        : m.report_french_tax_checklist_3916bis_done_other({ count: String(foreignAccountCount) }),
       checked: form3916bisDone,
       auto: false,
       key: "form3916bis" as const,
       skip: foreignAccountCount === 0,
     },
-    { label: "CSV backup downloaded", checked: csvDownloaded, auto: false, key: "csv" as const },
+    { label: m.report_french_tax_checklist_csv_downloaded(), checked: csvDownloaded, auto: false, key: "csv" as const },
     {
-      label: `Acquisition cost noted for next year: ${formatCurrency(finalA, "EUR")}`,
+      label: m.report_french_tax_checklist_acq_cost_noted({ cost: formatCurrency(finalA, "EUR") }),
       checked: acqCostNoted,
       auto: false,
       key: "acqCost" as const,
@@ -97,8 +102,8 @@
 <div class="space-y-6">
   <Card.Root>
     <Card.Header>
-      <Card.Title>Declaration Checklist — {taxYear}</Card.Title>
-      <Card.Description>{completedCount}/{totalCount} completed</Card.Description>
+      <Card.Title>{m.report_french_tax_checklist_title({ year: String(taxYear) })}</Card.Title>
+      <Card.Description>{m.report_french_tax_checklist_progress({ done: String(completedCount), total: String(totalCount) })}</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <!-- Progress bar -->
@@ -123,7 +128,7 @@
               </div>
               <span class="text-sm {item.checked ? 'text-muted-foreground line-through' : ''}">{item.label}</span>
               {#if item.checked}
-                <span class="text-xs text-muted-foreground">(auto)</span>
+                <span class="text-xs text-muted-foreground">({m.label_auto()})</span>
               {/if}
             {:else}
               <button
@@ -144,7 +149,7 @@
 
       {#if progressPct === 100}
         <div class="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200 text-center">
-          All done! Your {taxYear} crypto tax declaration is complete.
+          {m.report_french_tax_checklist_complete({ year: String(taxYear) })}
         </div>
       {/if}
     </Card.Content>

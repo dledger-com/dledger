@@ -1,4 +1,4 @@
-<svelte:head><title>Tax Report · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_tax()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import * as Card from "$lib/components/ui/card/index.js";

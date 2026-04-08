@@ -1,4 +1,4 @@
-<svelte:head><title>Trial Balance · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_trial_balance()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";

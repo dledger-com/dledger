@@ -1,4 +1,4 @@
-<svelte:head><title>French Tax Report · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_french_tax()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import * as Card from "$lib/components/ui/card/index.js";
@@ -109,7 +109,7 @@
       actualStartingA = new Decimal(rpt.finalAcquisitionCost).minus(inYearAcqTotal);
     }
     if (!expectedStartingA.eq(actualStartingA)) {
-      return `The initial acquisition cost has changed since the ${earliestYear} report was generated — consider regenerating.`;
+      return m.report_french_tax_stale_upstream({ year: String(earliestYear) });
     }
     return null;
   });
@@ -225,7 +225,7 @@
             if (nextYearReport) {
               const nextResolved = resolvePriorAcquisitionCost(capturedYear + 1, capturedInitialCost, chainData);
               if (nextResolved.source === "chained" && nextResolved.value !== nextYearReport.report.dispositions?.[0]?.acquisitionCostBefore) {
-                staleWarning = `The ${capturedYear + 1} report may be stale — its prior acquisition cost differs from the new ${capturedYear} final value. Consider regenerating it.`;
+                staleWarning = m.report_french_tax_stale_downstream({ nextYear: String(capturedYear + 1), year: String(capturedYear) });
               }
             }
 

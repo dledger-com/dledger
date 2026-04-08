@@ -1,4 +1,4 @@
-<svelte:head><title>Protocol P&L · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_protocol_pnl()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";

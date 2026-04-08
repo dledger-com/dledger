@@ -1,4 +1,4 @@
-<svelte:head><title>DeFi Positions · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_defi_positions()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";

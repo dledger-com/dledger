@@ -1,4 +1,4 @@
-<svelte:head><title>Balance Sheet · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_balance_sheet()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";

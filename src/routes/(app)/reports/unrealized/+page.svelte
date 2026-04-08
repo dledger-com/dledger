@@ -1,4 +1,4 @@
-<svelte:head><title>Unrealized Gains · dLedger</title></svelte:head>
+<svelte:head><title>{m.report_unrealized()} · dLedger</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from "svelte";
