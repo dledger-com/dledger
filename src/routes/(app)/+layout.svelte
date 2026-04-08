@@ -6,6 +6,8 @@
   import BottomTabBar from "$lib/components/shell/BottomTabBar.svelte";
   import GlobalDropZone from "$lib/components/GlobalDropZone.svelte";
   import BatchImportBar from "$lib/components/BatchImportBar.svelte";
+  import DemoBanner from "$lib/components/DemoBanner.svelte";
+  import { DEMO_MODE } from "$lib/demo.js";
   const CsvImportDialog = () => import("$lib/components/CsvImportDialog.svelte");
   const OfxImportDialog = () => import("$lib/components/OfxImportDialog.svelte");
   const PdfImportDialog = () => import("$lib/components/PdfImportDialog.svelte");
@@ -152,6 +154,9 @@
 <Sidebar.Provider>
   <AppSidebar onfeedback={() => { feedbackWizard.openDefault(); }} onbackupinfo={() => { backupInfoOpen = true; }} />
   <Sidebar.Inset>
+    {#if DEMO_MODE}
+      <DemoBanner />
+    {/if}
     <TopBar showSidebarTrigger={isDesktop.current} />
     <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4">
       {@render children?.()}
