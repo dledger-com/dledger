@@ -64,8 +64,29 @@ async function main() {
     for (const w of result.warnings) console.warn("  ", w);
   }
 
-  // TODO (Phase 2b): seed budgets, balance assertion results cache, French
-  // tax report cache, and any other extras the importer can't produce.
+  // Pre-bake French tax reports for the years that have crypto activity in
+  // the seed file. The demo runtime can't call saveFrenchTaxReport (the
+  // ReadOnlyBackend rejects mutations), so we cache them here and the page
+  // serves them via getFrenchTaxReport. Each year's prior acquisition cost
+  // chains from the previous year's finalAcquisitionCost.
+  console.log("[demo-db] pre-baking French tax reports");
+  const { computeFrenchTaxReport } = await import("../src/lib/utils/french-tax.js");
+  const TAX_YEARS = [2023, 2024, 2025];
+  let priorCost = "0";
+  for (const year of TAX_YEARS) {
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: year,
+      priorAcquisitionCost: priorCost,
+      priorCostSource: priorCost === "0" ? "none" : "chained",
+    });
+    await backend.saveFrenchTaxReport(year, report, {});
+    console.log(
+      `[demo-db]   ${year}: ${report.dispositions.length} dispositions, ` +
+        `total PV=${report.totalPlusValue} EUR, ` +
+        `final A=${report.finalAcquisitionCost} EUR`,
+    );
+    priorCost = report.finalAcquisitionCost;
+  }
 
   console.log("[demo-db] exporting snapshot");
   const snapshot = await backend.exportDatabase();

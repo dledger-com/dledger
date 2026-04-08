@@ -24,6 +24,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { DEMO_MODE } from "$lib/demo.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
@@ -259,7 +260,7 @@
 
   async function handleChecklistChange(newChecklist: Record<string, boolean>) {
     checklist = newChecklist;
-    if (report) {
+    if (report && !DEMO_MODE) {
       await getBackend().saveFrenchTaxReport(taxYear, report, newChecklist);
     }
   }
@@ -345,14 +346,18 @@
     const _hasSaved = hasSavedReport;
     const _loading = loading;
 
-    const actions: import("$lib/data/page-actions.svelte.js").PageAction[] = [
-      {
+    const actions: import("$lib/data/page-actions.svelte.js").PageAction[] = [];
+
+    // Generate / Regenerate is a mutation (saveFrenchTaxReport) — hidden in
+    // demo mode. Demo reports are pre-baked by scripts/build-demo-db.ts.
+    if (!DEMO_MODE) {
+      actions.push({
         type: "button",
         label: _loading ? m.state_generating() : _hasSaved ? m.report_regenerate() : m.btn_generate(),
         onclick: generate,
         disabled: _loading,
-      },
-    ];
+      });
+    }
 
     if (_report || _hasSaved) {
       actions.push({
@@ -367,7 +372,7 @@
                 { separator: true, label: "" },
               ]
             : []),
-          ...(_hasSaved
+          ...(_hasSaved && !DEMO_MODE
             ? [{ label: m.report_delete(), onclick: deleteReport }]
             : []),
         ],
@@ -398,7 +403,7 @@
   {/if}
 
   <!-- Multi-year gap warning -->
-  {#if missingYears.length > 0}
+  {#if missingYears.length > 0 && !DEMO_MODE}
     <div class="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
       <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" />
       <div class="flex-1">
@@ -570,9 +575,11 @@
             <span>{m.report_no_prior_year()}</span>
           </div>
         {/if}
-        <Button onclick={generate} disabled={loading} class="mt-2">
-          {m.report_generate_report()}
-        </Button>
+        {#if !DEMO_MODE}
+          <Button onclick={generate} disabled={loading} class="mt-2">
+            {m.report_generate_report()}
+          </Button>
+        {/if}
       </Card.Content>
     </Card.Root>
   {/if}
