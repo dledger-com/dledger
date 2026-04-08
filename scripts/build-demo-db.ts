@@ -114,6 +114,33 @@ async function main() {
   // ReadOnlyBackend rejects mutations), so we cache them here and the page
   // serves them via getFrenchTaxReport. Each year's prior acquisition cost
   // chains from the previous year's finalAcquisitionCost.
+  // Seed a few monthly budgets so the Reports → Budgets page has actual
+  // vs target bars. The seeding uses createBudget() (which the demo's
+  // ReadOnlyBackend would block at runtime — but the script runs against
+  // the raw SqlJsBackend, not the wrapper).
+  console.log("[demo-db] seeding budgets");
+  const { v7: uuidv7 } = await import("uuid");
+  const nowIso = new Date().toISOString();
+  const budgets = [
+    { account_pattern: "Expenses:Food", amount: "550" },
+    { account_pattern: "Expenses:Transport", amount: "180" },
+    { account_pattern: "Expenses:Entertainment", amount: "120" },
+    { account_pattern: "Expenses:Shopping", amount: "200" },
+  ];
+  for (const b of budgets) {
+    await backend.createBudget({
+      id: uuidv7(),
+      account_pattern: b.account_pattern,
+      period_type: "monthly",
+      amount: b.amount,
+      currency: "EUR",
+      start_date: null,
+      end_date: null,
+      created_at: nowIso,
+    });
+  }
+  console.log(`[demo-db]   seeded ${budgets.length} monthly budgets`);
+
   console.log("[demo-db] pre-baking French tax reports");
   const { computeFrenchTaxReport } = await import("../src/lib/utils/french-tax.js");
   // Same offset as the seed dates so the cached reports line up with the

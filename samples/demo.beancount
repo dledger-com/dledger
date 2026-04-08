@@ -1,12 +1,21 @@
 ;; dledger demo ledger — synthetic data, no PII.
 ;; Designed to exercise every feature surface of dledger:
-;;   - Multi-bank EUR accounts
-;;   - Crypto exchange (Kraken) with proper cost-basis tracking
-;;   - On-chain wallet (Ethereum) with a DeFi position (Aave)
+;;   - Three banks (N26 EUR, LBP EUR, Wise EUR/USD multi-currency)
+;;   - Two crypto exchanges (Kraken, Coinbase) with cost-basis tracking
+;;   - Three on-chain wallets (Bitcoin xpub, Ethereum, Solana)
+;;   - DeFi positions: Aave (lending), Lido (staking), Uniswap V2 (LP)
 ;;   - Multi-year French tax: buys in 2023, partial sells in 2024 + 2025
-;;     producing positive plus-value above the 305 EUR exemption
+;;     producing positive plus-values above the 305 EUR exemption
 ;;   - Quarterly price snapshots for portfolio valuation
 ;;   - Balance assertions for the integrity report
+;;   - Eight expense second-level categories so the dashboard pie has
+;;     a varied breakdown (Housing, Food, Transport, Utilities,
+;;     Subscriptions, Health, Entertainment, Shopping, Travel)
+;;
+;; All dates are anchored to SEED_AUTHOR_YEAR (2026) — the build script
+;; (scripts/build-demo-db.ts) shifts every date by `currentYear - 2026`
+;; before importing, so the demo always reads as "history through last
+;; full year + current year so far."
 ;;
 ;; Loaded into the demo build via scripts/build-demo-db.ts.
 
@@ -14,103 +23,241 @@ option "operating_currency" "EUR"
 
 ;; ─── Account opens ─────────────────────────────────────────────────────────
 
-2023-01-01 open Equity:Opening                  EUR
+;; Equity
+2023-01-01 open Equity:Opening                          EUR
 2023-01-01 open Equity:Trading
 
-2023-01-01 open Assets:Bank:N26                 EUR
-2023-01-01 open Assets:Bank:LBP                 EUR
-2023-01-01 open Liabilities:CreditCards:Visa    EUR
+;; Banks
+2023-01-01 open Assets:Bank:N26                         EUR
+2023-01-01 open Assets:Bank:LBP                         EUR
+2023-01-01 open Assets:Bank:Wise:EUR                    EUR
+2023-01-01 open Assets:Bank:Wise:USD                    USD
+2023-01-01 open Liabilities:CreditCards:Visa            EUR
 
-2023-01-01 open Income:Salary                   EUR
+;; Crypto exchanges
+2023-01-01 open Assets:Crypto:Exchange:Kraken
+2023-01-01 open Assets:Crypto:Exchange:Coinbase
+
+;; On-chain wallets
+2023-01-01 open Assets:Crypto:Wallet:Bitcoin:Main
+2023-01-01 open Assets:Crypto:Wallet:Ethereum:Main
+2023-01-01 open Assets:Crypto:Wallet:Solana:Main
+
+;; DeFi positions
+2023-01-01 open Assets:Crypto:DeFi:Aave:Lending
+2023-01-01 open Assets:Crypto:DeFi:Lido:Staking
+2023-01-01 open Assets:Crypto:DeFi:Uniswap:LP
+
+;; Income
+2023-01-01 open Income:Salary                           EUR
 2023-01-01 open Income:Crypto:Staking
 2023-01-01 open Income:Crypto:DeFi:Aave:Interest
+2023-01-01 open Income:Crypto:DeFi:Lido:Staking
+2023-01-01 open Income:Crypto:DeFi:Uniswap:Fees
 
-2023-01-01 open Expenses:Housing:Rent           EUR
-2023-01-01 open Expenses:Food:Groceries         EUR
-2023-01-01 open Expenses:Food:Dining            EUR
-2023-01-01 open Expenses:Utilities              EUR
-2023-01-01 open Expenses:Transport              EUR
-2023-01-01 open Expenses:Subscriptions          EUR
-2023-01-01 open Expenses:Health                 EUR
-2023-01-01 open Expenses:Bank:Fees              EUR
+;; Expenses — second-level categories drive the dashboard pie chart
+2023-01-01 open Expenses:Housing:Rent                   EUR
+2023-01-01 open Expenses:Food:Groceries                 EUR
+2023-01-01 open Expenses:Food:Dining                    EUR
+2023-01-01 open Expenses:Transport:Public               EUR
+2023-01-01 open Expenses:Transport:Fuel                 EUR
+2023-01-01 open Expenses:Utilities:Internet             EUR
+2023-01-01 open Expenses:Utilities:Mobile               EUR
+2023-01-01 open Expenses:Utilities:Electricity          EUR
+2023-01-01 open Expenses:Subscriptions                  EUR
+2023-01-01 open Expenses:Health:Pharmacy                EUR
+2023-01-01 open Expenses:Health:Doctor                  EUR
+2023-01-01 open Expenses:Entertainment:Streaming        EUR
+2023-01-01 open Expenses:Entertainment:Cinema           EUR
+2023-01-01 open Expenses:Entertainment:Concerts         EUR
+2023-01-01 open Expenses:Shopping:Clothes               EUR
+2023-01-01 open Expenses:Shopping:Home                  EUR
+2023-01-01 open Expenses:Shopping:Electronics           EUR
+2023-01-01 open Expenses:Travel:Hotel                   EUR
+2023-01-01 open Expenses:Travel:Transport               EUR
+2023-01-01 open Expenses:Bank:Fees                      EUR
 2023-01-01 open Expenses:Crypto:Fees:Trading:Kraken
+2023-01-01 open Expenses:Crypto:Fees:Trading:Coinbase
+2023-01-01 open Expenses:Crypto:Fees:Bitcoin
 2023-01-01 open Expenses:Crypto:Fees:Ethereum
-
-2023-01-01 open Assets:Crypto:Exchange:Kraken
-2023-01-01 open Assets:Crypto:Wallet:Ethereum:Main
-2023-01-01 open Assets:Crypto:DeFi:Aave:Lending
+2023-01-01 open Expenses:Crypto:Fees:Solana
 
 ;; ─── Opening balances ──────────────────────────────────────────────────────
 
 2023-01-01 * "Opening balance — N26"
-  Assets:Bank:N26                  4250.00 EUR
-  Equity:Opening                  -4250.00 EUR
+  Assets:Bank:N26                  1000.00 EUR
+  Equity:Opening                  -1000.00 EUR
 
 2023-01-01 * "Opening balance — LBP"
-  Assets:Bank:LBP                  8000.00 EUR
-  Equity:Opening                  -8000.00 EUR
+  Assets:Bank:LBP                  3500.00 EUR
+  Equity:Opening                  -3500.00 EUR
 
-;; ─── 2023 — routine bank activity (monthly salary, rent, expenses) ────────
-;; A representative slice; not every month is fully populated to keep the
-;; file readable. The build script can pad if we want more density.
+;; ─── 2023 — routine bank activity (sparse: salary + rent monthly, ──────────
+;; periodic everything else) ───────────────────────────────────────────────
 
 2023-01-31 * "Salary January"
-  Income:Salary                   -3850.00 EUR
-  Assets:Bank:N26                  3850.00 EUR
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
 
 2023-02-01 * "Rent February"
-  Expenses:Housing:Rent            1200.00 EUR
-  Assets:Bank:N26                 -1200.00 EUR
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
 
-2023-02-05 * "Groceries"
-  Expenses:Food:Groceries            72.40 EUR
-  Assets:Bank:N26                   -72.40 EUR
-
-2023-02-12 * "Dinner out"
-  Expenses:Food:Dining               48.50 EUR
-  Liabilities:CreditCards:Visa      -48.50 EUR
+2023-02-08 * "Groceries"
+  Expenses:Food:Groceries           142.30 EUR
+  Assets:Bank:N26                  -142.30 EUR
 
 2023-02-15 * "Electricity bill"
-  Expenses:Utilities                 64.80 EUR
-  Assets:Bank:N26                   -64.80 EUR
+  Expenses:Utilities:Electricity     58.40 EUR
+  Assets:Bank:N26                   -58.40 EUR
 
 2023-02-20 * "Monthly transit pass"
-  Expenses:Transport                 75.20 EUR
+  Expenses:Transport:Public          75.20 EUR
   Assets:Bank:N26                   -75.20 EUR
 
 2023-02-28 * "Salary February"
-  Income:Salary                   -3850.00 EUR
-  Assets:Bank:N26                  3850.00 EUR
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
 
-2023-03-05 * "Streaming subscription"
+2023-03-01 * "Rent March"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-03-08 * "Groceries"
+  Expenses:Food:Groceries           128.50 EUR
+  Assets:Bank:N26                  -128.50 EUR
+
+2023-03-12 * "Streaming subscription"
   Expenses:Subscriptions             12.99 EUR
   Liabilities:CreditCards:Visa      -12.99 EUR
 
-2023-03-15 * "Pharmacy"
-  Expenses:Health                    23.10 EUR
-  Assets:Bank:N26                   -23.10 EUR
-
 2023-03-31 * "Salary March"
-  Income:Salary                   -3850.00 EUR
-  Assets:Bank:N26                  3850.00 EUR
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
 
-;; ─── 2023 — crypto: open positions on Kraken ──────────────────────────────
-;; Beancount cost-basis syntax — the importer auto-creates Equity:Trading:*
-;; entries and records the trade price as an exchange rate.
+2023-04-01 * "Rent April"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-04-15 * "Pharmacy"
+  Expenses:Health:Pharmacy           23.40 EUR
+  Assets:Bank:N26                   -23.40 EUR
+
+2023-04-30 * "Salary April"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-05-01 * "Rent May"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-05-19 * "Cinema"
+  Expenses:Entertainment:Cinema      13.50 EUR
+  Liabilities:CreditCards:Visa      -13.50 EUR
+
+2023-05-31 * "Salary May"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-06-01 * "Rent June"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-06-30 * "Salary June"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-07-01 * "Rent July"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-07-15 * "Annual checkup"
+  Expenses:Health:Doctor             45.00 EUR
+  Assets:Bank:N26                   -45.00 EUR
+
+2023-07-20 * "Summer trip — train"
+  Expenses:Travel:Transport         128.00 EUR
+  Liabilities:CreditCards:Visa     -128.00 EUR
+
+2023-07-22 * "Summer trip — hotel"
+  Expenses:Travel:Hotel             310.00 EUR
+  Liabilities:CreditCards:Visa     -310.00 EUR
+
+2023-07-31 * "Salary July"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-08-01 * "Rent August"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-08-15 * "Pay credit card"
+  Liabilities:CreditCards:Visa      464.49 EUR
+  Assets:Bank:N26                  -464.49 EUR
+
+2023-08-31 * "Salary August"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-09-01 * "Rent September"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-09-29 * "Salary September"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-10-02 * "Rent October"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-10-14 * "Pharmacy"
+  Expenses:Health:Pharmacy           18.20 EUR
+  Assets:Bank:N26                   -18.20 EUR
+
+2023-10-31 * "Salary October"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-11-01 * "Rent November"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-11-30 * "Salary November"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-12-01 * "Rent December"
+  Expenses:Housing:Rent            1180.00 EUR
+  Assets:Bank:N26                 -1180.00 EUR
+
+2023-12-08 * "Holiday shopping — clothes"
+  Expenses:Shopping:Clothes         185.00 EUR
+  Liabilities:CreditCards:Visa     -185.00 EUR
+
+2023-12-22 * "Salary December"
+  Income:Salary                   -2400.00 EUR
+  Assets:Bank:N26                  2400.00 EUR
+
+2023-12-28 * "Pay credit card"
+  Liabilities:CreditCards:Visa      185.00 EUR
+  Assets:Bank:N26                  -185.00 EUR
+
+;; ─── 2023 — open crypto positions on Kraken (cost-basis tracked) ──────────
 
 2023-02-10 * "Transfer EUR to Kraken"
-  Assets:Bank:N26                 -5000.00 EUR
-  Assets:Crypto:Exchange:Kraken    5000.00 EUR
+  Assets:Bank:N26                 -2400.00 EUR
+  Assets:Crypto:Exchange:Kraken    2400.00 EUR
 
-2023-02-15 * "Buy 0.20 BTC on Kraken"
-  Assets:Crypto:Exchange:Kraken     0.20000000 BTC {22500 EUR}
-  Assets:Crypto:Exchange:Kraken    -4500.00 EUR
-  Expenses:Crypto:Fees:Trading:Kraken    11.25 EUR
-  Assets:Crypto:Exchange:Kraken         -11.25 EUR
+2023-02-15 * "Buy 0.10 BTC on Kraken"
+  Assets:Crypto:Exchange:Kraken     0.10000000 BTC {22500 EUR}
+  Assets:Crypto:Exchange:Kraken    -2250.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     5.65 EUR
+  Assets:Crypto:Exchange:Kraken          -5.65 EUR
 
 2023-04-12 * "Transfer EUR to Kraken"
-  Assets:Bank:N26                 -3000.00 EUR
-  Assets:Crypto:Exchange:Kraken    3000.00 EUR
+  Assets:Bank:N26                 -2750.00 EUR
+  Assets:Crypto:Exchange:Kraken    2750.00 EUR
 
 2023-04-15 * "Buy 1.5 ETH on Kraken"
   Assets:Crypto:Exchange:Kraken     1.50000000 ETH {1700 EUR}
@@ -118,11 +265,11 @@ option "operating_currency" "EUR"
   Expenses:Crypto:Fees:Trading:Kraken     6.40 EUR
   Assets:Crypto:Exchange:Kraken          -6.40 EUR
 
-2023-07-20 * "Buy 0.05 BTC on Kraken"
-  Assets:Crypto:Exchange:Kraken     0.05000000 BTC {26800 EUR}
-  Assets:Crypto:Exchange:Kraken    -1340.00 EUR
-  Expenses:Crypto:Fees:Trading:Kraken     3.40 EUR
-  Assets:Crypto:Exchange:Kraken          -3.40 EUR
+2023-07-25 * "Buy 0.03 BTC on Kraken"
+  Assets:Crypto:Exchange:Kraken     0.03000000 BTC {26800 EUR}
+  Assets:Crypto:Exchange:Kraken     -804.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     2.05 EUR
+  Assets:Crypto:Exchange:Kraken          -2.05 EUR
 
 2023-09-05 * "Buy 0.5 ETH on Kraken"
   Assets:Crypto:Exchange:Kraken     0.50000000 ETH {1450 EUR}
@@ -130,111 +277,597 @@ option "operating_currency" "EUR"
   Expenses:Crypto:Fees:Trading:Kraken     1.85 EUR
   Assets:Crypto:Exchange:Kraken          -1.85 EUR
 
-;; ─── 2023 — wallet: withdraw ETH on-chain, open an Aave position ──────────
-
+;; Withdraw 0.8 ETH on-chain to wallet
 2023-10-10 * "Withdraw 0.8 ETH to wallet"
-  Assets:Crypto:Exchange:Kraken    -0.80000000 ETH
-  Assets:Crypto:Wallet:Ethereum:Main  0.80000000 ETH
-  Expenses:Crypto:Fees:Ethereum    0.00200000 ETH
-  Assets:Crypto:Wallet:Ethereum:Main -0.00200000 ETH
+  Assets:Crypto:Exchange:Kraken          -0.80000000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main      0.80000000 ETH
+  Expenses:Crypto:Fees:Ethereum           0.00200000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main     -0.00200000 ETH
 
+;; Move 0.5 ETH from wallet → Aave to start earning yield
 2023-11-04 * "Supply 0.5 ETH to Aave"
-  Assets:Crypto:Wallet:Ethereum:Main  -0.50000000 ETH
-  Assets:Crypto:DeFi:Aave:Lending      0.50000000 ETH
-  Expenses:Crypto:Fees:Ethereum     0.00150000 ETH
-  Assets:Crypto:Wallet:Ethereum:Main -0.00150000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main     -0.50000000 ETH
+  Assets:Crypto:DeFi:Aave:Lending         0.50000000 ETH
+  Expenses:Crypto:Fees:Ethereum           0.00150000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main     -0.00150000 ETH
 
-;; ─── 2024 — routine activity, staking income, Aave interest accrual ──────
+;; ─── 2024 — denser routine + Wise multi-currency + USDC + Coinbase + ──────
+;; BTC wallet + first French tax disposition ───────────────────────────────
+
+2024-01-12 * "Transfer to Wise EUR"
+  Assets:Bank:N26                 -1500.00 EUR
+  Assets:Bank:Wise:EUR             1500.00 EUR
+
+2024-01-15 * "Convert EUR to USD on Wise"
+  Assets:Bank:Wise:EUR             -500.00 EUR @ 1.10 USD
+  Assets:Bank:Wise:USD              550.00 USD
 
 2024-01-31 * "Salary January"
-  Income:Salary                   -4000.00 EUR
-  Assets:Bank:N26                  4000.00 EUR
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
 
 2024-02-01 * "Rent February"
-  Expenses:Housing:Rent            1250.00 EUR
-  Assets:Bank:N26                 -1250.00 EUR
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
 
-2024-02-15 * "Groceries"
+2024-02-05 * "Internet bill"
+  Expenses:Utilities:Internet        29.99 EUR
+  Assets:Bank:N26                   -29.99 EUR
+
+2024-02-08 * "Groceries"
   Expenses:Food:Groceries           134.20 EUR
   Assets:Bank:N26                  -134.20 EUR
 
+2024-02-12 * "Mobile bill"
+  Expenses:Utilities:Mobile          19.99 EUR
+  Assets:Bank:N26                   -19.99 EUR
+
+2024-02-18 * "Dinner out"
+  Expenses:Food:Dining               42.50 EUR
+  Liabilities:CreditCards:Visa      -42.50 EUR
+
+2024-02-22 * "Groceries"
+  Expenses:Food:Groceries            96.80 EUR
+  Assets:Bank:N26                   -96.80 EUR
+
+2024-02-29 * "Salary February"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-03-01 * "Rent March"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+2024-03-09 * "Groceries"
+  Expenses:Food:Groceries           118.40 EUR
+  Assets:Bank:N26                  -118.40 EUR
+
+2024-03-14 * "Streaming subscription"
+  Expenses:Subscriptions             14.99 EUR
+  Liabilities:CreditCards:Visa      -14.99 EUR
+
 2024-03-20 * "Aave interest accrual Q1"
-  Income:Crypto:DeFi:Aave:Interest  -0.00450000 ETH
-  Assets:Crypto:DeFi:Aave:Lending    0.00450000 ETH
+  Income:Crypto:DeFi:Aave:Interest       -0.00450000 ETH
+  Assets:Crypto:DeFi:Aave:Lending         0.00450000 ETH
+
+2024-03-29 * "Salary March"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-04-01 * "Rent April"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+2024-04-12 * "Groceries"
+  Expenses:Food:Groceries           126.50 EUR
+  Assets:Bank:N26                  -126.50 EUR
+
+2024-04-22 * "Concert tickets"
+  Expenses:Entertainment:Concerts    78.00 EUR
+  Liabilities:CreditCards:Visa      -78.00 EUR
 
 2024-04-30 * "Salary April"
-  Income:Salary                   -4000.00 EUR
-  Assets:Bank:N26                  4000.00 EUR
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-05-01 * "Rent May"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+2024-05-10 * "Transfer to Coinbase"
+  Assets:Bank:N26                  -500.00 EUR
+  Assets:Crypto:Exchange:Coinbase   500.00 EUR
+
+2024-05-12 * "Buy 0.15 ETH on Coinbase"
+  Assets:Crypto:Exchange:Coinbase   0.15000000 ETH {3000 EUR}
+  Assets:Crypto:Exchange:Coinbase  -450.00 EUR
+  Expenses:Crypto:Fees:Trading:Coinbase    6.50 EUR
+  Assets:Crypto:Exchange:Coinbase         -6.50 EUR
+
+2024-05-31 * "Salary May"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-06-01 * "Rent June"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
 
 2024-06-15 * "Kraken staking reward — ETH"
-  Income:Crypto:Staking             -0.01200000 ETH
-  Assets:Crypto:Exchange:Kraken      0.01200000 ETH
+  Income:Crypto:Staking                  -0.01200000 ETH
+  Assets:Crypto:Exchange:Kraken           0.01200000 ETH
 
-2024-08-10 * "Transfer to LBP savings"
-  Assets:Bank:N26                  -2500.00 EUR
-  Assets:Bank:LBP                   2500.00 EUR
+2024-06-28 * "Salary June"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-07-01 * "Rent July"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+2024-07-08 * "Groceries"
+  Expenses:Food:Groceries           104.30 EUR
+  Assets:Bank:N26                  -104.30 EUR
+
+2024-07-19 * "Summer trip — hotel"
+  Expenses:Travel:Hotel             420.00 EUR
+  Liabilities:CreditCards:Visa     -420.00 EUR
+
+2024-07-31 * "Salary July"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-08-01 * "Rent August"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+;; Move some BTC on-chain (BTC xpub demo)
+2024-08-15 * "Withdraw 0.03 BTC to wallet"
+  Assets:Crypto:Exchange:Kraken          -0.03000000 BTC
+  Assets:Crypto:Wallet:Bitcoin:Main       0.03000000 BTC
+  Expenses:Crypto:Fees:Bitcoin            0.00010000 BTC
+  Assets:Crypto:Wallet:Bitcoin:Main      -0.00010000 BTC
+
+2024-08-30 * "Salary August"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-09-01 * "Rent September"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
 
 2024-09-30 * "Aave interest accrual Q3"
-  Income:Crypto:DeFi:Aave:Interest  -0.00580000 ETH
-  Assets:Crypto:DeFi:Aave:Lending    0.00580000 ETH
+  Income:Crypto:DeFi:Aave:Interest       -0.00580000 ETH
+  Assets:Crypto:DeFi:Aave:Lending         0.00580000 ETH
 
-;; ─── 2024 — first French tax disposition (positive PV above 305 EUR) ─────
+2024-09-30 * "Salary September"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
 
+2024-10-01 * "Rent October"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+2024-10-08 * "Buy 1000 USDC on Kraken"
+  Assets:Crypto:Exchange:Kraken         1000.00 USDC {0.92 EUR}
+  Assets:Crypto:Exchange:Kraken         -920.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     2.30 EUR
+  Assets:Crypto:Exchange:Kraken          -2.30 EUR
+
+2024-10-12 * "Withdraw 800 USDC to Ethereum wallet"
+  Assets:Crypto:Exchange:Kraken              -800.00000000 USDC
+  Assets:Crypto:Wallet:Ethereum:Main          800.00000000 USDC
+  Expenses:Crypto:Fees:Ethereum               0.00200000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main         -0.00200000 ETH
+
+2024-10-31 * "Salary October"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-11-04 * "Rent November"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+;; First French tax disposition: positive PV well above 305 EUR
 2024-11-20 * "Sell 0.05 BTC on Kraken"
   Assets:Crypto:Exchange:Kraken    -0.05000000 BTC {} @ 64500 EUR
   Assets:Crypto:Exchange:Kraken     3225.00 EUR
   Expenses:Crypto:Fees:Trading:Kraken     8.10 EUR
   Assets:Crypto:Exchange:Kraken          -8.10 EUR
 
+2024-11-29 * "Salary November"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
+
+2024-12-02 * "Rent December"
+  Expenses:Housing:Rent            1230.00 EUR
+  Assets:Bank:N26                 -1230.00 EUR
+
+2024-12-08 * "Holiday shopping — clothes"
+  Expenses:Shopping:Clothes         215.00 EUR
+  Liabilities:CreditCards:Visa     -215.00 EUR
+
 2024-12-15 * "Withdraw EUR from Kraken"
   Assets:Crypto:Exchange:Kraken   -3000.00 EUR
   Assets:Bank:N26                  3000.00 EUR
 
-;; ─── 2025 — second French tax disposition + ETH sell ─────────────────────
+2024-12-20 * "Salary December"
+  Income:Salary                   -2550.00 EUR
+  Assets:Bank:N26                  2550.00 EUR
 
-2025-02-10 * "Salary January"
-  Income:Salary                   -4100.00 EUR
-  Assets:Bank:N26                  4100.00 EUR
+2024-12-28 * "Pay credit card"
+  Liabilities:CreditCards:Visa      770.49 EUR
+  Assets:Bank:N26                  -770.49 EUR
 
+;; ─── 2025 — full monthly recurring across categories + SOL + Lido + LP ───
+
+2025-01-31 * "Salary January"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-02-03 * "Rent February"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-02-05 * "Internet bill"
+  Expenses:Utilities:Internet        29.99 EUR
+  Assets:Bank:N26                   -29.99 EUR
+
+2025-02-08 * "Groceries"
+  Expenses:Food:Groceries           128.40 EUR
+  Assets:Bank:N26                  -128.40 EUR
+
+2025-02-10 * "Mobile bill"
+  Expenses:Utilities:Mobile          19.99 EUR
+  Assets:Bank:N26                   -19.99 EUR
+
+2025-02-12 * "Streaming subscription"
+  Expenses:Subscriptions             14.99 EUR
+  Liabilities:CreditCards:Visa      -14.99 EUR
+
+2025-02-15 * "Dinner out"
+  Expenses:Food:Dining               48.50 EUR
+  Liabilities:CreditCards:Visa      -48.50 EUR
+
+2025-02-19 * "Monthly transit pass"
+  Expenses:Transport:Public          84.10 EUR
+  Assets:Bank:N26                   -84.10 EUR
+
+2025-02-22 * "Groceries"
+  Expenses:Food:Groceries            92.10 EUR
+  Assets:Bank:N26                   -92.10 EUR
+
+2025-02-28 * "Salary February"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-03-03 * "Rent March"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-03-08 * "Groceries"
+  Expenses:Food:Groceries           116.20 EUR
+  Assets:Bank:N26                  -116.20 EUR
+
+2025-03-10 * "Electricity bill"
+  Expenses:Utilities:Electricity     74.30 EUR
+  Assets:Bank:N26                   -74.30 EUR
+
+;; Second French tax disposition: ETH sell with positive PV
 2025-03-15 * "Sell 0.5 ETH on Kraken"
   Assets:Crypto:Exchange:Kraken    -0.50000000 ETH {} @ 3100 EUR
   Assets:Crypto:Exchange:Kraken     1550.00 EUR
   Expenses:Crypto:Fees:Trading:Kraken     3.90 EUR
   Assets:Crypto:Exchange:Kraken          -3.90 EUR
 
+2025-03-22 * "Cinema"
+  Expenses:Entertainment:Cinema      14.50 EUR
+  Liabilities:CreditCards:Visa      -14.50 EUR
+
+2025-03-31 * "Salary March"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-04-01 * "Rent April"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+;; Stake some ETH on Lido (same currency, no disposition)
+2025-04-08 * "Stake 0.10 ETH on Lido"
+  Assets:Crypto:Wallet:Ethereum:Main     -0.10000000 ETH
+  Assets:Crypto:DeFi:Lido:Staking         0.10000000 ETH
+  Expenses:Crypto:Fees:Ethereum           0.00120000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main     -0.00120000 ETH
+
+2025-04-12 * "Pharmacy"
+  Expenses:Health:Pharmacy           34.20 EUR
+  Assets:Bank:N26                   -34.20 EUR
+
 2025-04-30 * "Salary April"
-  Income:Salary                   -4100.00 EUR
-  Assets:Bank:N26                  4100.00 EUR
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-05-02 * "Rent May"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+;; Provide liquidity to a Uniswap V2 ETH/USDC LP
+2025-05-15 * "Open Uniswap V2 ETH/USDC LP"
+  Assets:Crypto:Wallet:Ethereum:Main     -0.05000000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main          -150.00000000 USDC
+  Assets:Crypto:DeFi:Uniswap:LP           0.05000000 ETH
+  Assets:Crypto:DeFi:Uniswap:LP                150.00000000 USDC
+  Expenses:Crypto:Fees:Ethereum           0.00400000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main     -0.00400000 ETH
+
+2025-05-30 * "Salary May"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-06-02 * "Rent June"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
 
 2025-06-15 * "Aave interest accrual H1"
-  Income:Crypto:DeFi:Aave:Interest  -0.00910000 ETH
-  Assets:Crypto:DeFi:Aave:Lending    0.00910000 ETH
+  Income:Crypto:DeFi:Aave:Interest       -0.00910000 ETH
+  Assets:Crypto:DeFi:Aave:Lending         0.00910000 ETH
 
-;; ─── 2026 (the seed-author's "current year") — first months ──────────────
-;; Anchored to the seed-author year so that, after build-time date shifting,
-;; the demo always shows "history through last full year + current year so
-;; far." Keep this block sparse — just enough activity for the dashboard's
-;; recent-entries and YTD widgets to feel populated.
+2025-06-30 * "Lido staking yield Q2"
+  Income:Crypto:DeFi:Lido:Staking        -0.00080000 ETH
+  Assets:Crypto:DeFi:Lido:Staking         0.00080000 ETH
 
-2026-01-31 * "Salary January"
-  Income:Salary                   -4200.00 EUR
-  Assets:Bank:N26                  4200.00 EUR
+2025-06-30 * "Uniswap LP fees Q2"
+  Income:Crypto:DeFi:Uniswap:Fees        -0.00060000 ETH
+  Assets:Crypto:DeFi:Uniswap:LP           0.00060000 ETH
 
-2026-02-01 * "Rent February"
+2025-06-30 * "Salary June"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-07-01 * "Rent July"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-07-19 * "Weekend trip — train"
+  Expenses:Travel:Transport         142.00 EUR
+  Liabilities:CreditCards:Visa     -142.00 EUR
+
+2025-07-20 * "Weekend trip — hotel"
+  Expenses:Travel:Hotel             280.00 EUR
+  Liabilities:CreditCards:Visa     -280.00 EUR
+
+2025-07-31 * "Salary July"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-08-01 * "Rent August"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-08-15 * "Pay credit card"
+  Liabilities:CreditCards:Visa      499.99 EUR
+  Assets:Bank:N26                  -499.99 EUR
+
+2025-08-29 * "Salary August"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-09-01 * "Rent September"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+;; Buy and withdraw SOL (Solana wallet demo)
+2025-09-10 * "Buy 5 SOL on Kraken"
+  Assets:Crypto:Exchange:Kraken     5.00000000 SOL {145 EUR}
+  Assets:Crypto:Exchange:Kraken     -725.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     1.85 EUR
+  Assets:Crypto:Exchange:Kraken          -1.85 EUR
+
+2025-09-15 * "Withdraw 5 SOL to Solana wallet"
+  Assets:Crypto:Exchange:Kraken          -5.00000000 SOL
+  Assets:Crypto:Wallet:Solana:Main        5.00000000 SOL
+  Expenses:Crypto:Fees:Solana             0.00010000 SOL
+  Assets:Crypto:Wallet:Solana:Main       -0.00010000 SOL
+
+2025-09-30 * "Salary September"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-10-01 * "Rent October"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-10-12 * "Annual checkup"
+  Expenses:Health:Doctor             52.00 EUR
+  Assets:Bank:N26                   -52.00 EUR
+
+2025-10-31 * "Salary October"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-11-03 * "Rent November"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-11-28 * "Salary November"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-12-01 * "Rent December"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2025-12-09 * "Holiday shopping — electronics"
+  Expenses:Shopping:Electronics     299.00 EUR
+  Liabilities:CreditCards:Visa     -299.00 EUR
+
+2025-12-22 * "Salary December"
+  Income:Salary                   -2700.00 EUR
+  Assets:Bank:N26                  2700.00 EUR
+
+2025-12-30 * "Pay credit card"
+  Liabilities:CreditCards:Visa      299.00 EUR
+  Assets:Bank:N26                  -299.00 EUR
+
+;; Year-end transfer to LBP savings
+2025-12-31 * "Transfer to LBP savings"
+  Assets:Bank:N26                  -8000.00 EUR
+  Assets:Bank:LBP                   8000.00 EUR
+
+;; ─── 2026 — current year so far (Jan → early April) — DENSE ──────────────
+;; This is the YTD window most demo visitors look at first, so it gets
+;; the most density: weekly groceries, monthly all-categories, varied
+;; merchant names, plus a small recent crypto buy and DeFi accruals.
+
+;; January
+2026-01-04 * "Groceries"
+  Expenses:Food:Groceries           135.20 EUR
+  Assets:Bank:N26                  -135.20 EUR
+
+2026-01-05 * "Rent January"
   Expenses:Housing:Rent            1280.00 EUR
   Assets:Bank:N26                 -1280.00 EUR
+
+2026-01-06 * "Internet bill"
+  Expenses:Utilities:Internet        29.99 EUR
+  Assets:Bank:N26                   -29.99 EUR
+
+2026-01-08 * "Mobile bill"
+  Expenses:Utilities:Mobile          19.99 EUR
+  Assets:Bank:N26                   -19.99 EUR
+
+2026-01-10 * "Pharmacy"
+  Expenses:Health:Pharmacy           18.40 EUR
+  Assets:Bank:N26                   -18.40 EUR
+
+2026-01-11 * "Groceries"
+  Expenses:Food:Groceries            87.30 EUR
+  Assets:Bank:N26                   -87.30 EUR
+
+2026-01-12 * "Streaming subscription"
+  Expenses:Subscriptions             14.99 EUR
+  Liabilities:CreditCards:Visa      -14.99 EUR
+
+2026-01-14 * "Dinner with friends"
+  Expenses:Food:Dining               52.40 EUR
+  Liabilities:CreditCards:Visa      -52.40 EUR
+
+2026-01-17 * "Monthly transit pass"
+  Expenses:Transport:Public          84.10 EUR
+  Assets:Bank:N26                   -84.10 EUR
+
+2026-01-18 * "Groceries"
+  Expenses:Food:Groceries            94.60 EUR
+  Assets:Bank:N26                   -94.60 EUR
+
+2026-01-20 * "Cinema"
+  Expenses:Entertainment:Cinema      14.50 EUR
+  Liabilities:CreditCards:Visa      -14.50 EUR
+
+2026-01-22 * "Electricity bill"
+  Expenses:Utilities:Electricity     76.20 EUR
+  Assets:Bank:N26                   -76.20 EUR
+
+2026-01-24 * "Shopping — household"
+  Expenses:Shopping:Home             62.30 EUR
+  Liabilities:CreditCards:Visa      -62.30 EUR
+
+2026-01-25 * "Groceries"
+  Expenses:Food:Groceries            78.40 EUR
+  Assets:Bank:N26                   -78.40 EUR
+
+2026-01-27 * "Lunch out"
+  Expenses:Food:Dining               18.90 EUR
+  Liabilities:CreditCards:Visa      -18.90 EUR
+
+2026-01-30 * "Salary January"
+  Income:Salary                   -2900.00 EUR
+  Assets:Bank:N26                  2900.00 EUR
+
+;; February
+2026-02-02 * "Rent February"
+  Expenses:Housing:Rent            1280.00 EUR
+  Assets:Bank:N26                 -1280.00 EUR
+
+2026-02-04 * "Internet bill"
+  Expenses:Utilities:Internet        29.99 EUR
+  Assets:Bank:N26                   -29.99 EUR
+
+2026-02-06 * "Mobile bill"
+  Expenses:Utilities:Mobile          19.99 EUR
+  Assets:Bank:N26                   -19.99 EUR
 
 2026-02-08 * "Groceries"
   Expenses:Food:Groceries           115.30 EUR
   Assets:Bank:N26                  -115.30 EUR
 
-2026-02-18 * "Streaming subscription"
+2026-02-10 * "Streaming subscription"
   Expenses:Subscriptions             14.99 EUR
   Liabilities:CreditCards:Visa      -14.99 EUR
 
-2026-02-28 * "Salary February"
-  Income:Salary                   -4200.00 EUR
-  Assets:Bank:N26                  4200.00 EUR
+2026-02-13 * "Dinner with friends"
+  Expenses:Food:Dining               64.20 EUR
+  Liabilities:CreditCards:Visa      -64.20 EUR
+
+2026-02-14 * "Concert tickets"
+  Expenses:Entertainment:Concerts    85.00 EUR
+  Liabilities:CreditCards:Visa      -85.00 EUR
+
+2026-02-15 * "Groceries"
+  Expenses:Food:Groceries            96.50 EUR
+  Assets:Bank:N26                   -96.50 EUR
+
+2026-02-17 * "Monthly transit pass"
+  Expenses:Transport:Public          84.10 EUR
+  Assets:Bank:N26                   -84.10 EUR
+
+2026-02-19 * "Pharmacy"
+  Expenses:Health:Pharmacy           24.30 EUR
+  Assets:Bank:N26                   -24.30 EUR
+
+2026-02-20 * "Electricity bill"
+  Expenses:Utilities:Electricity     71.40 EUR
+  Assets:Bank:N26                   -71.40 EUR
+
+2026-02-22 * "Groceries"
+  Expenses:Food:Groceries           104.80 EUR
+  Assets:Bank:N26                  -104.80 EUR
+
+2026-02-24 * "Shopping — clothes"
+  Expenses:Shopping:Clothes         128.00 EUR
+  Liabilities:CreditCards:Visa     -128.00 EUR
+
+2026-02-25 * "Lunch out"
+  Expenses:Food:Dining               16.50 EUR
+  Liabilities:CreditCards:Visa      -16.50 EUR
+
+2026-02-27 * "Salary February"
+  Income:Salary                   -2900.00 EUR
+  Assets:Bank:N26                  2900.00 EUR
+
+;; March
+2026-03-02 * "Rent March"
+  Expenses:Housing:Rent            1280.00 EUR
+  Assets:Bank:N26                 -1280.00 EUR
+
+2026-03-04 * "Internet bill"
+  Expenses:Utilities:Internet        29.99 EUR
+  Assets:Bank:N26                   -29.99 EUR
+
+2026-03-06 * "Mobile bill"
+  Expenses:Utilities:Mobile          19.99 EUR
+  Assets:Bank:N26                   -19.99 EUR
+
+2026-03-07 * "Groceries"
+  Expenses:Food:Groceries           102.40 EUR
+  Assets:Bank:N26                  -102.40 EUR
+
+2026-03-08 * "Pay credit card"
+  Liabilities:CreditCards:Visa      450.27 EUR
+  Assets:Bank:N26                  -450.27 EUR
+
+2026-03-10 * "Streaming subscription"
+  Expenses:Subscriptions             14.99 EUR
+  Liabilities:CreditCards:Visa      -14.99 EUR
 
 2026-03-12 * "Buy 0.10 ETH on Kraken"
   Assets:Crypto:Exchange:Kraken     0.10000000 ETH {3250 EUR}
@@ -242,14 +875,76 @@ option "operating_currency" "EUR"
   Expenses:Crypto:Fees:Trading:Kraken     0.85 EUR
   Assets:Crypto:Exchange:Kraken          -0.85 EUR
 
+2026-03-14 * "Groceries"
+  Expenses:Food:Groceries            89.60 EUR
+  Assets:Bank:N26                   -89.60 EUR
+
 2026-03-15 * "Aave interest accrual Q1"
-  Income:Crypto:DeFi:Aave:Interest  -0.00420000 ETH
-  Assets:Crypto:DeFi:Aave:Lending    0.00420000 ETH
+  Income:Crypto:DeFi:Aave:Interest       -0.00420000 ETH
+  Assets:Crypto:DeFi:Aave:Lending         0.00420000 ETH
+
+2026-03-17 * "Monthly transit pass"
+  Expenses:Transport:Public          84.10 EUR
+  Assets:Bank:N26                   -84.10 EUR
+
+2026-03-18 * "Dinner out"
+  Expenses:Food:Dining               42.80 EUR
+  Liabilities:CreditCards:Visa      -42.80 EUR
+
+2026-03-19 * "Annual checkup"
+  Expenses:Health:Doctor             55.00 EUR
+  Assets:Bank:N26                   -55.00 EUR
+
+2026-03-20 * "Electricity bill"
+  Expenses:Utilities:Electricity     68.50 EUR
+  Assets:Bank:N26                   -68.50 EUR
+
+2026-03-22 * "Groceries"
+  Expenses:Food:Groceries           110.20 EUR
+  Assets:Bank:N26                  -110.20 EUR
+
+2026-03-25 * "Cinema"
+  Expenses:Entertainment:Cinema      14.50 EUR
+  Liabilities:CreditCards:Visa      -14.50 EUR
+
+2026-03-27 * "Shopping — household"
+  Expenses:Shopping:Home             46.80 EUR
+  Liabilities:CreditCards:Visa      -46.80 EUR
+
+2026-03-29 * "Groceries"
+  Expenses:Food:Groceries            83.10 EUR
+  Assets:Bank:N26                   -83.10 EUR
+
+2026-03-31 * "Salary March"
+  Income:Salary                   -2900.00 EUR
+  Assets:Bank:N26                  2900.00 EUR
+
+;; April (current month so far)
+2026-04-01 * "Rent April"
+  Expenses:Housing:Rent            1280.00 EUR
+  Assets:Bank:N26                 -1280.00 EUR
+
+2026-04-03 * "Internet bill"
+  Expenses:Utilities:Internet        29.99 EUR
+  Assets:Bank:N26                   -29.99 EUR
+
+2026-04-04 * "Groceries"
+  Expenses:Food:Groceries            96.80 EUR
+  Assets:Bank:N26                   -96.80 EUR
+
+2026-04-06 * "Lunch out"
+  Expenses:Food:Dining               17.40 EUR
+  Liabilities:CreditCards:Visa      -17.40 EUR
+
+2026-04-07 * "Mobile bill"
+  Expenses:Utilities:Mobile          19.99 EUR
+  Assets:Bank:N26                   -19.99 EUR
 
 ;; ─── Price snapshots for portfolio valuation ──────────────────────────────
 ;; Quarterly prices give the dashboard, balance sheet, and tax report
 ;; enough data to compute portfolio values across the timeline.
 
+;; BTC/EUR
 2023-03-31 price BTC  26500 EUR
 2023-06-30 price BTC  28100 EUR
 2023-09-30 price BTC  25800 EUR
@@ -264,6 +959,7 @@ option "operating_currency" "EUR"
 2025-12-31 price BTC 102800 EUR
 2026-03-31 price BTC  98600 EUR
 
+;; ETH/EUR
 2023-03-31 price ETH  1680 EUR
 2023-06-30 price ETH  1740 EUR
 2023-09-30 price ETH  1530 EUR
@@ -278,9 +974,27 @@ option "operating_currency" "EUR"
 2025-12-31 price ETH  3680 EUR
 2026-03-31 price ETH  3290 EUR
 
+;; SOL/EUR (Sol activity starts late 2025)
+2025-09-30 price SOL  148 EUR
+2025-12-31 price SOL  165 EUR
+2026-03-31 price SOL  154 EUR
+
+;; USDC/EUR (stablecoin, hovers near 0.92)
+2024-12-31 price USDC 0.92 EUR
+2025-06-30 price USDC 0.91 EUR
+2025-12-31 price USDC 0.93 EUR
+2026-03-31 price USDC 0.92 EUR
+
+;; EUR/USD for the Wise multi-currency demo
+2024-01-15 price USD  0.91 EUR
+2024-12-31 price USD  0.93 EUR
+2025-12-31 price USD  0.92 EUR
+2026-03-31 price USD  0.91 EUR
+
 ;; ─── Balance assertions ──────────────────────────────────────────────────
 ;; Snapshots the integrity report can verify.
 
-2023-12-31 balance Assets:Bank:LBP    8000.00 EUR
-2024-12-31 balance Assets:Bank:LBP   10500.00 EUR
-2025-12-31 balance Assets:Bank:LBP   10500.00 EUR
+;; Beancount balance assertions check start-of-day, so use the day after
+;; the most recent activity to assert the post-activity balance.
+2024-12-31 balance Assets:Bank:LBP    3500.00 EUR
+2026-01-01 balance Assets:Bank:LBP   11500.00 EUR
