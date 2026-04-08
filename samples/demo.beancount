@@ -1,0 +1,243 @@
+;; dledger demo ledger — synthetic data, no PII.
+;; Designed to exercise every feature surface of dledger:
+;;   - Multi-bank EUR accounts
+;;   - Crypto exchange (Kraken) with proper cost-basis tracking
+;;   - On-chain wallet (Ethereum) with a DeFi position (Aave)
+;;   - Multi-year French tax: buys in 2023, partial sells in 2024 + 2025
+;;     producing positive plus-value above the 305 EUR exemption
+;;   - Quarterly price snapshots for portfolio valuation
+;;   - Balance assertions for the integrity report
+;;
+;; Loaded into the demo build via scripts/build-demo-db.ts.
+
+option "operating_currency" "EUR"
+
+;; ─── Account opens ─────────────────────────────────────────────────────────
+
+2023-01-01 open Equity:Opening                  EUR
+2023-01-01 open Equity:Trading
+
+2023-01-01 open Assets:Bank:N26                 EUR
+2023-01-01 open Assets:Bank:LBP                 EUR
+2023-01-01 open Liabilities:CreditCards:Visa    EUR
+
+2023-01-01 open Income:Salary                   EUR
+2023-01-01 open Income:Crypto:Staking
+2023-01-01 open Income:Crypto:DeFi:Aave:Interest
+
+2023-01-01 open Expenses:Housing:Rent           EUR
+2023-01-01 open Expenses:Food:Groceries         EUR
+2023-01-01 open Expenses:Food:Dining            EUR
+2023-01-01 open Expenses:Utilities              EUR
+2023-01-01 open Expenses:Transport              EUR
+2023-01-01 open Expenses:Subscriptions          EUR
+2023-01-01 open Expenses:Health                 EUR
+2023-01-01 open Expenses:Bank:Fees              EUR
+2023-01-01 open Expenses:Crypto:Fees:Trading:Kraken
+2023-01-01 open Expenses:Crypto:Fees:Ethereum
+
+2023-01-01 open Assets:Crypto:Exchange:Kraken
+2023-01-01 open Assets:Crypto:Wallet:Ethereum:Main
+2023-01-01 open Assets:Crypto:DeFi:Aave:Lending
+
+;; ─── Opening balances ──────────────────────────────────────────────────────
+
+2023-01-01 * "Opening balance — N26"
+  Assets:Bank:N26                  4250.00 EUR
+  Equity:Opening                  -4250.00 EUR
+
+2023-01-01 * "Opening balance — LBP"
+  Assets:Bank:LBP                  8000.00 EUR
+  Equity:Opening                  -8000.00 EUR
+
+;; ─── 2023 — routine bank activity (monthly salary, rent, expenses) ────────
+;; A representative slice; not every month is fully populated to keep the
+;; file readable. The build script can pad if we want more density.
+
+2023-01-31 * "Salary January"
+  Income:Salary                   -3850.00 EUR
+  Assets:Bank:N26                  3850.00 EUR
+
+2023-02-01 * "Rent February"
+  Expenses:Housing:Rent            1200.00 EUR
+  Assets:Bank:N26                 -1200.00 EUR
+
+2023-02-05 * "Groceries"
+  Expenses:Food:Groceries            72.40 EUR
+  Assets:Bank:N26                   -72.40 EUR
+
+2023-02-12 * "Dinner out"
+  Expenses:Food:Dining               48.50 EUR
+  Liabilities:CreditCards:Visa      -48.50 EUR
+
+2023-02-15 * "Electricity bill"
+  Expenses:Utilities                 64.80 EUR
+  Assets:Bank:N26                   -64.80 EUR
+
+2023-02-20 * "Monthly transit pass"
+  Expenses:Transport                 75.20 EUR
+  Assets:Bank:N26                   -75.20 EUR
+
+2023-02-28 * "Salary February"
+  Income:Salary                   -3850.00 EUR
+  Assets:Bank:N26                  3850.00 EUR
+
+2023-03-05 * "Streaming subscription"
+  Expenses:Subscriptions             12.99 EUR
+  Liabilities:CreditCards:Visa      -12.99 EUR
+
+2023-03-15 * "Pharmacy"
+  Expenses:Health                    23.10 EUR
+  Assets:Bank:N26                   -23.10 EUR
+
+2023-03-31 * "Salary March"
+  Income:Salary                   -3850.00 EUR
+  Assets:Bank:N26                  3850.00 EUR
+
+;; ─── 2023 — crypto: open positions on Kraken ──────────────────────────────
+;; Beancount cost-basis syntax — the importer auto-creates Equity:Trading:*
+;; entries and records the trade price as an exchange rate.
+
+2023-02-10 * "Transfer EUR to Kraken"
+  Assets:Bank:N26                 -5000.00 EUR
+  Assets:Crypto:Exchange:Kraken    5000.00 EUR
+
+2023-02-15 * "Buy 0.20 BTC on Kraken"
+  Assets:Crypto:Exchange:Kraken     0.20000000 BTC {22500 EUR}
+  Assets:Crypto:Exchange:Kraken    -4500.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken    11.25 EUR
+  Assets:Crypto:Exchange:Kraken         -11.25 EUR
+
+2023-04-12 * "Transfer EUR to Kraken"
+  Assets:Bank:N26                 -3000.00 EUR
+  Assets:Crypto:Exchange:Kraken    3000.00 EUR
+
+2023-04-15 * "Buy 1.5 ETH on Kraken"
+  Assets:Crypto:Exchange:Kraken     1.50000000 ETH {1700 EUR}
+  Assets:Crypto:Exchange:Kraken    -2550.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     6.40 EUR
+  Assets:Crypto:Exchange:Kraken          -6.40 EUR
+
+2023-07-20 * "Buy 0.05 BTC on Kraken"
+  Assets:Crypto:Exchange:Kraken     0.05000000 BTC {26800 EUR}
+  Assets:Crypto:Exchange:Kraken    -1340.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     3.40 EUR
+  Assets:Crypto:Exchange:Kraken          -3.40 EUR
+
+2023-09-05 * "Buy 0.5 ETH on Kraken"
+  Assets:Crypto:Exchange:Kraken     0.50000000 ETH {1450 EUR}
+  Assets:Crypto:Exchange:Kraken     -725.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     1.85 EUR
+  Assets:Crypto:Exchange:Kraken          -1.85 EUR
+
+;; ─── 2023 — wallet: withdraw ETH on-chain, open an Aave position ──────────
+
+2023-10-10 * "Withdraw 0.8 ETH to wallet"
+  Assets:Crypto:Exchange:Kraken    -0.80000000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main  0.80000000 ETH
+  Expenses:Crypto:Fees:Ethereum    0.00200000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main -0.00200000 ETH
+
+2023-11-04 * "Supply 0.5 ETH to Aave"
+  Assets:Crypto:Wallet:Ethereum:Main  -0.50000000 ETH
+  Assets:Crypto:DeFi:Aave:Lending      0.50000000 ETH
+  Expenses:Crypto:Fees:Ethereum     0.00150000 ETH
+  Assets:Crypto:Wallet:Ethereum:Main -0.00150000 ETH
+
+;; ─── 2024 — routine activity, staking income, Aave interest accrual ──────
+
+2024-01-31 * "Salary January"
+  Income:Salary                   -4000.00 EUR
+  Assets:Bank:N26                  4000.00 EUR
+
+2024-02-01 * "Rent February"
+  Expenses:Housing:Rent            1250.00 EUR
+  Assets:Bank:N26                 -1250.00 EUR
+
+2024-02-15 * "Groceries"
+  Expenses:Food:Groceries           134.20 EUR
+  Assets:Bank:N26                  -134.20 EUR
+
+2024-03-20 * "Aave interest accrual Q1"
+  Income:Crypto:DeFi:Aave:Interest  -0.00450000 ETH
+  Assets:Crypto:DeFi:Aave:Lending    0.00450000 ETH
+
+2024-04-30 * "Salary April"
+  Income:Salary                   -4000.00 EUR
+  Assets:Bank:N26                  4000.00 EUR
+
+2024-06-15 * "Kraken staking reward — ETH"
+  Income:Crypto:Staking             -0.01200000 ETH
+  Assets:Crypto:Exchange:Kraken      0.01200000 ETH
+
+2024-08-10 * "Transfer to LBP savings"
+  Assets:Bank:N26                  -2500.00 EUR
+  Assets:Bank:LBP                   2500.00 EUR
+
+2024-09-30 * "Aave interest accrual Q3"
+  Income:Crypto:DeFi:Aave:Interest  -0.00580000 ETH
+  Assets:Crypto:DeFi:Aave:Lending    0.00580000 ETH
+
+;; ─── 2024 — first French tax disposition (positive PV above 305 EUR) ─────
+
+2024-11-20 * "Sell 0.05 BTC on Kraken"
+  Assets:Crypto:Exchange:Kraken    -0.05000000 BTC {} @ 64500 EUR
+  Assets:Crypto:Exchange:Kraken     3225.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     8.10 EUR
+  Assets:Crypto:Exchange:Kraken          -8.10 EUR
+
+2024-12-15 * "Withdraw EUR from Kraken"
+  Assets:Crypto:Exchange:Kraken   -3000.00 EUR
+  Assets:Bank:N26                  3000.00 EUR
+
+;; ─── 2025 — second French tax disposition + ETH sell ─────────────────────
+
+2025-02-10 * "Salary January"
+  Income:Salary                   -4100.00 EUR
+  Assets:Bank:N26                  4100.00 EUR
+
+2025-03-15 * "Sell 0.5 ETH on Kraken"
+  Assets:Crypto:Exchange:Kraken    -0.50000000 ETH {} @ 3100 EUR
+  Assets:Crypto:Exchange:Kraken     1550.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     3.90 EUR
+  Assets:Crypto:Exchange:Kraken          -3.90 EUR
+
+2025-04-30 * "Salary April"
+  Income:Salary                   -4100.00 EUR
+  Assets:Bank:N26                  4100.00 EUR
+
+2025-06-15 * "Aave interest accrual H1"
+  Income:Crypto:DeFi:Aave:Interest  -0.00910000 ETH
+  Assets:Crypto:DeFi:Aave:Lending    0.00910000 ETH
+
+;; ─── Price snapshots for portfolio valuation ──────────────────────────────
+;; Quarterly prices give the dashboard, balance sheet, and tax report
+;; enough data to compute portfolio values across the timeline.
+
+2023-03-31 price BTC  26500 EUR
+2023-06-30 price BTC  28100 EUR
+2023-09-30 price BTC  25800 EUR
+2023-12-31 price BTC  39400 EUR
+2024-03-31 price BTC  60500 EUR
+2024-06-30 price BTC  56800 EUR
+2024-09-30 price BTC  58200 EUR
+2024-12-31 price BTC  88900 EUR
+2025-03-31 price BTC  76500 EUR
+2025-06-30 price BTC  91200 EUR
+
+2023-03-31 price ETH  1680 EUR
+2023-06-30 price ETH  1740 EUR
+2023-09-30 price ETH  1530 EUR
+2023-12-31 price ETH  2080 EUR
+2024-03-31 price ETH  3050 EUR
+2024-06-30 price ETH  2810 EUR
+2024-09-30 price ETH  2400 EUR
+2024-12-31 price ETH  3120 EUR
+2025-03-31 price ETH  2880 EUR
+2025-06-30 price ETH  3340 EUR
+
+;; ─── Balance assertions ──────────────────────────────────────────────────
+;; Two snapshots the integrity report can verify.
+
+2023-12-31 balance Assets:Bank:LBP    8000.00 EUR
+2024-12-31 balance Assets:Bank:LBP   10500.00 EUR

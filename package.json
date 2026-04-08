@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:web": "ADAPTER=cloudflare bun run build",
+    "build:demo-db": "bun scripts/build-demo-db.ts",
+    "build:demo": "bun run build:demo-db && VITE_DEMO_MODE=true ADAPTER=cloudflare bun run build",
     "e2e": "playwright test",
     "tauri": "tauri",
     "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/sql-wasm.wasm && cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs static/pdf.worker.min.mjs"
