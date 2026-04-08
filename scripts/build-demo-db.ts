@@ -141,11 +141,113 @@ async function main() {
   }
   console.log(`[demo-db]   seeded ${budgets.length} monthly budgets`);
 
+  // Synthesize lot + lot_disposal rows so the gain/loss report has data.
+  // The browser SqlJsBackend never writes these tables (lot tracking is
+  // implemented only in the Rust backend used by the Tauri build), so the
+  // demo build needs explicit inserts. We use direct SQL via the private
+  // db handle and reference the imported journal entries by description.
+  console.log("[demo-db] synthesizing lot / lot_disposal rows");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const innerDb = (backend as any).db as import("sql.js").Database;
+
+  function findEntryId(description: string): string {
+    const result = innerDb.exec(
+      "SELECT id FROM journal_entry WHERE description = ? LIMIT 1",
+      [description],
+    );
+    if (result.length === 0 || result[0].values.length === 0) {
+      throw new Error(`[demo-db] no journal_entry found for "${description}"`);
+    }
+    return result[0].values[0][0] as string;
+  }
+
+  function findAccountId(fullName: string): string {
+    const result = innerDb.exec(
+      "SELECT id FROM account WHERE full_name = ? LIMIT 1",
+      [fullName],
+    );
+    if (result.length === 0 || result[0].values.length === 0) {
+      throw new Error(`[demo-db] no account found for "${fullName}"`);
+    }
+    return result[0].values[0][0] as string;
+  }
+
+  const krakenId = findAccountId("Assets:Crypto:Exchange:Kraken");
+  const coinbaseId = findAccountId("Assets:Crypto:Exchange:Coinbase");
+
+  // Lots: each cost-basis buy in the seed file becomes one lot row.
+  // remaining_quantity is the post-sell residual (for the open-lots view);
+  // the gain_loss report itself only reads the disposal table.
+  type LotSeed = {
+    key: string;
+    description: string;
+    accountId: string;
+    currency: string;
+    acquiredDate: string;
+    originalQty: string;
+    remainingQty: string;
+    unitCost: string;
+  };
+  const lotSeeds: LotSeed[] = [
+    { key: "btc1", description: "Buy 0.10 BTC on Kraken", accountId: krakenId, currency: "BTC", acquiredDate: "2023-02-15", originalQty: "0.10000000", remainingQty: "0.04500000", unitCost: "22500" },
+    { key: "eth1", description: "Buy 1.5 ETH on Kraken",  accountId: krakenId, currency: "ETH", acquiredDate: "2023-04-15", originalQty: "1.50000000", remainingQty: "0.95000000", unitCost: "1700" },
+    { key: "btc2", description: "Buy 0.03 BTC on Kraken", accountId: krakenId, currency: "BTC", acquiredDate: "2023-07-25", originalQty: "0.03000000", remainingQty: "0.03000000", unitCost: "26800" },
+    { key: "eth2", description: "Buy 0.5 ETH on Kraken",  accountId: krakenId, currency: "ETH", acquiredDate: "2023-09-05", originalQty: "0.50000000", remainingQty: "0.50000000", unitCost: "1450" },
+    { key: "ethC", description: "Buy 0.15 ETH on Coinbase", accountId: coinbaseId, currency: "ETH", acquiredDate: "2024-05-12", originalQty: "0.15000000", remainingQty: "0.15000000", unitCost: "3000" },
+    { key: "usdc", description: "Buy 1000 USDC on Kraken", accountId: krakenId, currency: "USDC", acquiredDate: "2024-10-08", originalQty: "1000.00000000", remainingQty: "1000.00000000", unitCost: "0.92" },
+    { key: "sol",  description: "Buy 5 SOL on Kraken",     accountId: krakenId, currency: "SOL",  acquiredDate: "2025-09-10", originalQty: "5.00000000",   remainingQty: "5.00000000",   unitCost: "145" },
+    { key: "eth3", description: "Buy 0.10 ETH on Kraken",  accountId: krakenId, currency: "ETH",  acquiredDate: "2026-03-12", originalQty: "0.10000000",  remainingQty: "0.10000000",  unitCost: "3250" },
+  ];
+
+  const lotIds = new Map<string, string>();
+  for (const lot of lotSeeds) {
+    const lotId = uuidv7();
+    const journalId = findEntryId(lot.description);
+    const isClosed = parseFloat(lot.remainingQty) === 0 ? 1 : 0;
+    innerDb.run(
+      `INSERT INTO lot (id, account_id, currency, acquired_date, original_quantity, remaining_quantity, cost_basis_per_unit, cost_basis_currency, journal_entry_id, is_closed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [lotId, lot.accountId, lot.currency, lot.acquiredDate, lot.originalQty, lot.remainingQty, lot.unitCost, "EUR", journalId, isClosed],
+    );
+    lotIds.set(lot.key, lotId);
+  }
+
+  // Disposals: each cost-basis sell in the seed file becomes one row.
+  // FIFO from the oldest matching lot of the same currency on the same
+  // account. Realized gain = (proceeds_per_unit - cost_per_unit) * qty.
+  type DisposalSeed = {
+    description: string;
+    lotKey: string;
+    qty: string;
+    unitProceeds: string;
+    realizedGain: string;
+    date: string;
+  };
+  const disposalSeeds: DisposalSeed[] = [
+    { description: "Sell 0.05 BTC on Kraken",  lotKey: "btc1", qty: "0.05000000", unitProceeds: "64500", realizedGain: "2100.00", date: "2024-11-20" },
+    { description: "Sell 0.5 ETH on Kraken",   lotKey: "eth1", qty: "0.50000000", unitProceeds: "3100",  realizedGain: "700.00",  date: "2025-03-15" },
+    { description: "Sell 0.005 BTC on Kraken", lotKey: "btc1", qty: "0.00500000", unitProceeds: "99000", realizedGain: "382.50",  date: "2026-02-23" },
+    { description: "Sell 0.05 ETH on Kraken",  lotKey: "eth1", qty: "0.05000000", unitProceeds: "3290",  realizedGain: "79.50",   date: "2026-03-26" },
+  ];
+
+  for (const d of disposalSeeds) {
+    const lotId = lotIds.get(d.lotKey);
+    if (!lotId) throw new Error(`[demo-db] unknown lot key ${d.lotKey}`);
+    const journalId = findEntryId(d.description);
+    innerDb.run(
+      `INSERT INTO lot_disposal (id, lot_id, journal_entry_id, quantity, proceeds_per_unit, proceeds_currency, realized_gain_loss, disposal_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv7(), lotId, journalId, d.qty, d.unitProceeds, "EUR", d.realizedGain, d.date],
+    );
+  }
+  console.log(`[demo-db]   wrote ${lotSeeds.length} lots, ${disposalSeeds.length} disposals`);
+
   console.log("[demo-db] pre-baking French tax reports");
   const { computeFrenchTaxReport } = await import("../src/lib/utils/french-tax.js");
   // Same offset as the seed dates so the cached reports line up with the
-  // (shifted) underlying data.
-  const TAX_YEARS = [2023, 2024, 2025].map((y) => y + YEAR_OFFSET);
+  // (shifted) underlying data. Includes 2026 (the seed-author year) so
+  // the small in-progress current-year dispositions get a cached report.
+  const TAX_YEARS = [2023, 2024, 2025, 2026].map((y) => y + YEAR_OFFSET);
   let priorCost = "0";
   for (const year of TAX_YEARS) {
     const report = await computeFrenchTaxReport(backend, {

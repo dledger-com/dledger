@@ -875,6 +875,22 @@ option "operating_currency" "EUR"
   Expenses:Crypto:Fees:Trading:Kraken     0.85 EUR
   Assets:Crypto:Exchange:Kraken          -0.85 EUR
 
+;; A small 2026 disposition so the gain-loss report has values inside
+;; the default year-to-date window. Trims a tiny slice off the
+;; existing BTC lot at a healthy mark-up vs the 2023 cost basis.
+2026-02-23 * "Sell 0.005 BTC on Kraken"
+  Assets:Crypto:Exchange:Kraken    -0.00500000 BTC {} @ 99000 EUR
+  Assets:Crypto:Exchange:Kraken      495.00 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     1.25 EUR
+  Assets:Crypto:Exchange:Kraken          -1.25 EUR
+
+;; Second 2026 disposition (smaller ETH slice) for a varied report.
+2026-03-26 * "Sell 0.05 ETH on Kraken"
+  Assets:Crypto:Exchange:Kraken    -0.05000000 ETH {} @ 3290 EUR
+  Assets:Crypto:Exchange:Kraken      164.50 EUR
+  Expenses:Crypto:Fees:Trading:Kraken     0.45 EUR
+  Assets:Crypto:Exchange:Kraken          -0.45 EUR
+
 2026-03-14 * "Groceries"
   Expenses:Food:Groceries            89.60 EUR
   Assets:Bank:N26                   -89.60 EUR
