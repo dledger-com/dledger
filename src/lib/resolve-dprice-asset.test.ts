@@ -22,7 +22,7 @@ function mockClient(assets: DpriceAssetInfo[]): DpriceClient {
 }
 
 const DEPIN_HL: DpriceAssetInfo = {
-  id: "crypto:cg:depin:DEPIN",
+  id: "crypto:cg:depin",
   symbol: "DEPIN",
   name: "DEPIN",
   type: "crypto",
@@ -34,7 +34,7 @@ const DEPIN_HL: DpriceAssetInfo = {
 };
 
 const DEPIN_BASE: DpriceAssetInfo = {
-  id: "crypto:cg:depin-baby:DEPIN",
+  id: "crypto:cg:depin-baby",
   symbol: "DEPIN",
   name: "DePIN Baby",
   type: "crypto",
@@ -45,7 +45,7 @@ const DEPIN_BASE: DpriceAssetInfo = {
 };
 
 const DEPIN_NO_PRICES: DpriceAssetInfo = {
-  id: "crypto:cp:depin-depin-finance:DEPIN",
+  id: "crypto:cp:depin-depin-finance",
   symbol: "DEPIN",
   name: "DePIN Finance",
   type: "crypto",

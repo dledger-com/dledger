@@ -684,7 +684,7 @@ export class SqlJsBackend implements Backend {
       coingecko_id TEXT NOT NULL DEFAULT '',
       dprice_asset_id TEXT NOT NULL DEFAULT ''
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (35)");
+    db.exec("INSERT INTO schema_version (version) VALUES (36)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1563,6 +1563,22 @@ PRAGMA foreign_keys = ON;
           `);
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (35)");
+        }
+        if (currentVersion < 36) {
+          // Migrate v35 → v36: clear stale dprice_asset_id values.
+          //
+          // dprice 0.2.3 (schema v14) reshapes CoinGecko / CoinPaprika asset
+          // ids from `crypto:cg:<id>:<SYMBOL>` to `crypto:cg:<id>` (and the
+          // CP equivalent). Any pre-existing values cached in this column
+          // are now stale strings. The column is currently unused by any
+          // dledger code path — we just blank it to avoid future confusion
+          // for anyone wiring it back up. Re-population (if/when needed)
+          // would happen via a fresh resolveDpriceAsset call.
+          db.exec(`
+UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
+          `);
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (36)");
         }
       }
     }
