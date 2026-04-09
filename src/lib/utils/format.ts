@@ -129,6 +129,19 @@ export function formatCurrencyFull(amount: string | number, currency = "USD"): s
   return formatted;
 }
 
+/** Negate a string amount for credit-normal display (revenue, liability, equity). */
+export function negateAmount(amount: string): string {
+  const n = parseFloat(amount);
+  return (n === 0 ? 0 : -n).toString();
+}
+
+/** Negate all amounts in a CurrencyBalance array for credit-normal display. */
+export function negateCurrencyBalances<T extends { currency: string; amount: string }>(
+  balances: T[],
+): T[] {
+  return balances.map((b) => ({ ...b, amount: negateAmount(b.amount) }));
+}
+
 export function formatDate(dateStr: string, format = "YYYY-MM-DD"): string {
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;

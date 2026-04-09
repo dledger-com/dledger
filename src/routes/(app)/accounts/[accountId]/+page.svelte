@@ -11,7 +11,7 @@
   import { AccountStore } from "$lib/data/accounts.svelte.js";
   import { JournalStore } from "$lib/data/journal.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { formatCurrency } from "$lib/utils/format.js";
+  import { formatCurrency, negateCurrencyBalances } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { getBackend } from "$lib/backend.js";
@@ -282,7 +282,8 @@
             {#if filteredBalances.length === 0}
               {formatCurrency(0, settings.currency)}
             {:else}
-              {filteredBalances.map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
+              {@const displayBalances = account && ["liability", "equity", "revenue"].includes(account.account_type) ? negateCurrencyBalances(filteredBalances) : filteredBalances}
+              {displayBalances.map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
             {/if}
           </Card.Title>
         </Card.Header>

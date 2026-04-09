@@ -13,7 +13,7 @@
   import { ReportStore } from "$lib/data/reports.svelte.js";
   import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { formatCurrency } from "$lib/utils/format.js";
+  import { formatCurrency, negateCurrencyBalances } from "$lib/utils/format.js";
   import { filterHiddenEntries, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { onInvalidate } from "$lib/data/invalidation.js";
@@ -263,7 +263,7 @@
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch((e) => { if (!signal.aborted) console.warn("Asset conversion failed:", e); }),
           convertBalances(
-            filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
+            negateCurrencyBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet)),
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch((e) => { if (!signal.aborted) console.warn("Liability conversion failed:", e); }),
         );
@@ -277,11 +277,11 @@
       if (reportStore.incomeStatement) {
         conversionPromises.push(
           convertBalances(
-            filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
+            negateCurrencyBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet)),
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch((e) => { if (!signal.aborted) console.warn("Revenue conversion failed:", e); }),
           convertBalances(
-            filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
+            negateCurrencyBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet)),
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch((e) => { if (!signal.aborted) console.warn("Net income conversion failed:", e); }),
         );
@@ -341,7 +341,7 @@
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { assetsSummary = s; setCachedSummary("assets", s); } }).catch((e) => { if (!signal.aborted) console.warn("Asset conversion failed:", e); }),
           convertBalances(
-            filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet),
+            negateCurrencyBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hiddenSet)),
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { liabilitiesSummary = s; setCachedSummary("liabilities", s); } }).catch((e) => { if (!signal.aborted) console.warn("Liability conversion failed:", e); }),
         );
@@ -354,11 +354,11 @@
       if (reportStore.incomeStatement) {
         refreshConversionPromises.push(
           convertBalances(
-            filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet),
+            negateCurrencyBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hiddenSet)),
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { revenueSummary = s; setCachedSummary("revenue", s); } }).catch((e) => { if (!signal.aborted) console.warn("Revenue conversion failed:", e); }),
           convertBalances(
-            filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet),
+            negateCurrencyBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hiddenSet)),
             base, date, sharedCache, signal,
           ).then((s) => { if (!signal.aborted) { netIncomeSummary = s; setCachedSummary("netIncome", s); } }).catch((e) => { if (!signal.aborted) console.warn("Net income conversion failed:", e); }),
         );
@@ -485,21 +485,21 @@
     {@render summaryCard(
       m.report_total_liabilities(),
       liabilitiesSummary,
-      reportStore.balanceSheet ? filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden) : undefined,
+      reportStore.balanceSheet ? negateCurrencyBalances(filterHiddenBalances(reportStore.balanceSheet.liabilities.totals, hidden)) : undefined,
       showLiabilities,
       () => { showLiabilities = !showLiabilities },
     )}
     {@render summaryCard(
       m.dashboard_revenue_period({ period: rangePreset.toUpperCase() }),
       revenueSummary,
-      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden) : undefined,
+      reportStore.incomeStatement ? negateCurrencyBalances(filterHiddenBalances(reportStore.incomeStatement.revenue.totals, hidden)) : undefined,
       showRevenue,
       () => { showRevenue = !showRevenue },
     )}
     {@render summaryCard(
       m.dashboard_net_income_period({ period: rangePreset.toUpperCase() }),
       netIncomeSummary,
-      reportStore.incomeStatement ? filterHiddenBalances(reportStore.incomeStatement.net_income, hidden) : undefined,
+      reportStore.incomeStatement ? negateCurrencyBalances(filterHiddenBalances(reportStore.incomeStatement.net_income, hidden)) : undefined,
       showNetIncome,
       () => { showNetIncome = !showNetIncome },
     )}

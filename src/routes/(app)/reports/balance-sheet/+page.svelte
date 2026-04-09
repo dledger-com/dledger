@@ -11,7 +11,7 @@
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { ReportStore } from "$lib/data/reports.svelte.js";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
-  import { formatCurrency } from "$lib/utils/format.js";
+  import { formatCurrency, negateCurrencyBalances } from "$lib/utils/format.js";
   import { filterHiddenTrialLines, filterHiddenBalances } from "$lib/utils/currency-filter.js";
   import { getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
   import { convertBalances, type ConvertedSummary } from "$lib/utils/currency-convert.js";
@@ -95,15 +95,16 @@
     }
   }
 
-  function renderTotals(section: ReportSection): string {
-    const totals = filterHiddenBalances(section.totals, settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
+  function renderTotals(section: ReportSection, negate = false): string {
+    let totals = filterHiddenBalances(section.totals, settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
     if (totals.length === 0) return formatCurrency(0, settings.currency);
+    if (negate) totals = negateCurrencyBalances(totals);
     return totals.map((b) => formatCurrency(b.amount, b.currency)).join(", ");
   }
 
-  function renderConvertedTotal(summary: ConvertedSummary | null): string {
+  function renderConvertedTotal(summary: ConvertedSummary | null, negate = false): string {
     if (!summary) return "";
-    return formatCurrency(summary.total, summary.baseCurrency);
+    return formatCurrency(negate ? -summary.total : summary.total, summary.baseCurrency);
   }
 
   onMount(generate);
@@ -154,10 +155,10 @@
     {/if}
 
     {#each [
-      { section: report.assets, summary: assetsSummary },
-      { section: report.liabilities, summary: liabilitiesSummary },
-      { section: report.equity, summary: equitySummary },
-    ] as { section, summary } (section.title)}
+      { section: report.assets, summary: assetsSummary, negate: false },
+      { section: report.liabilities, summary: liabilitiesSummary, negate: true },
+      { section: report.equity, summary: equitySummary, negate: true },
+    ] as { section, summary, negate } (section.title)}
       {@const filteredLines = filterHiddenTrialLines(section.lines, settings.showHidden ? new Set<string>() : getHiddenCurrencySet())}
       <Card.Root>
         <Card.Header>
@@ -181,7 +182,7 @@
                 <Table.Row>
                   <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
                   <Table.Cell class="text-right font-mono">
-                    {line.balances.map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
+                    {(negate ? negateCurrencyBalances(line.balances) : line.balances).map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
                   </Table.Cell>
                 </Table.Row>
               {/each}
@@ -190,9 +191,9 @@
               <Table.Row class="font-bold">
                 <Table.Cell>{m.report_total()} {section.title}</Table.Cell>
                 <Table.Cell class="text-right font-mono">
-                  {renderTotals(section)}
+                  {renderTotals(section, negate)}
                   {#if convertToBase && summary}
-                    <span class="ml-2 text-primary">({renderConvertedTotal(summary)})</span>
+                    <span class="ml-2 text-primary">({renderConvertedTotal(summary, negate)})</span>
                     {#if summary.unconverted.length > 0}
                       <span class="ml-1 text-xs text-amber-600">
                         {m.report_unconverted_count({ count: summary.unconverted.length })}
