@@ -428,12 +428,10 @@ class HttpDpriceClient implements DpriceClient {
   }
 }
 
-const DEFAULT_DPRICE_URL = "http://localhost:3080";
+import { DEFAULT_DPRICE_URL, type DpriceMode } from "./data/settings.svelte.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
-
-import type { DpriceMode } from "./data/settings.svelte.js";
 
 export function createDpriceClient(settings?: {
   dpriceMode?: DpriceMode;

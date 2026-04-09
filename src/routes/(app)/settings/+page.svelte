@@ -512,8 +512,8 @@
     let currencySelectKey = $state(0);
 
     function handleCurrencyChange(val: string) {
-        // If the currency already exists in the database, just switch — no confirmation needed
-        if (currencies.some((c) => c.code === val)) {
+        // If the currency already exists in the database (or we're in demo mode), just switch
+        if (currencies.some((c) => c.code === val) || DEMO_MODE) {
             settings.update({ currency: val });
             return;
         }
@@ -531,16 +531,18 @@
         confirmCurrencyOpen = false;
         const val = pendingCurrency;
         settings.update({ currency: val });
-        try {
-            const name = COMMON_CURRENCIES.find((c) => c.code === val)?.name ?? val;
-            await getBackend().createCurrency({
-                code: val,
-                asset_type: "fiat",
-                name,
-                decimal_places: 2,
-            });
-        } catch {
-            // Already exists — expected
+        if (!DEMO_MODE) {
+            try {
+                const name = COMMON_CURRENCIES.find((c) => c.code === val)?.name ?? val;
+                await getBackend().createCurrency({
+                    code: val,
+                    asset_type: "fiat",
+                    name,
+                    decimal_places: 2,
+                });
+            } catch {
+                // Already exists — expected
+            }
         }
         await loadCurrencies();
         invalidate("currencies");
@@ -865,32 +867,30 @@
         </Card.Header>
         <Card.Content class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {#if !DEMO_MODE}
-                    <div class="space-y-2">
-                        <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
-                        {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
-                            <Select.Trigger class="w-full">
-                                {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
-                                {@const flagUrl = getFiatFlagUrl(settings.currency)}
-                                <span class="inline-flex items-center gap-2">
-                                    {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
-                                    {cur ? `${cur.code} — ${cur.name}` : settings.currency}
-                                </span>
-                            </Select.Trigger>
-                            <Select.Content>
-                                {#each baseCurrencyOptions as c (c.code)}
-                                    {@const flagUrl = getFiatFlagUrl(c.code)}
-                                    <Select.Item value={c.code}>
-                                        <span class="inline-flex items-center gap-2">
-                                            {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
-                                            {c.code} — {c.name}
-                                        </span>
-                                    </Select.Item>
-                                {/each}
-                            </Select.Content>
-                        </Select.Root>{/key}
-                    </div>
-                {/if}
+                <div class="space-y-2">
+                    <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
+                    {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
+                        <Select.Trigger class="w-full">
+                            {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
+                            {@const flagUrl = getFiatFlagUrl(settings.currency)}
+                            <span class="inline-flex items-center gap-2">
+                                {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                {cur ? `${cur.code} — ${cur.name}` : settings.currency}
+                            </span>
+                        </Select.Trigger>
+                        <Select.Content>
+                            {#each baseCurrencyOptions as c (c.code)}
+                                {@const flagUrl = getFiatFlagUrl(c.code)}
+                                <Select.Item value={c.code}>
+                                    <span class="inline-flex items-center gap-2">
+                                        {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                        {c.code} — {c.name}
+                                    </span>
+                                </Select.Item>
+                            {/each}
+                        </Select.Content>
+                    </Select.Root>{/key}
+                </div>
 
                 <div class="space-y-2">
                     <span class="text-sm font-medium">{msg.settings_date_format()}</span>

@@ -109,17 +109,36 @@ async function main() {
     for (const w of result.warnings) console.warn("  ", w);
   }
 
-  // Pre-bake French tax reports for the years that have crypto activity in
-  // the seed file. The demo runtime can't call saveFrenchTaxReport (the
-  // ReadOnlyBackend rejects mutations), so we cache them here and the page
-  // serves them via getFrenchTaxReport. Each year's prior acquisition cost
-  // chains from the previous year's finalAcquisitionCost.
+  // Seed exchange rates for "today" so the transitive fallback (7-day
+  // staleness window) can resolve e.g. BTC→EUR→USD even when the last
+  // quarterly snapshot in the beancount file is more than 7 days old.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const innerDb = (backend as any).db as import("sql.js").Database;
+  const { v7: uuidv7 } = await import("uuid");
+
+  console.log("[demo-db] seeding today's exchange rates");
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const demoRates = [
+    { from: "BTC",  to: "EUR", rate: "98600" },
+    { from: "ETH",  to: "EUR", rate: "3290" },
+    { from: "SOL",  to: "EUR", rate: "154" },
+    { from: "USDC", to: "EUR", rate: "0.92" },
+    { from: "USD",  to: "EUR", rate: "0.91" },
+  ];
+  for (const r of demoRates) {
+    innerDb.run(
+      `INSERT OR IGNORE INTO exchange_rate (id, date, from_currency, to_currency, rate, source)
+       VALUES (?, ?, ?, ?, ?, 'demo-seed')`,
+      [uuidv7(), todayStr, r.from, r.to, r.rate],
+    );
+  }
+  console.log(`[demo-db]   seeded ${demoRates.length} rates for ${todayStr}`);
+
   // Seed a few monthly budgets so the Reports → Budgets page has actual
   // vs target bars. The seeding uses createBudget() (which the demo's
   // ReadOnlyBackend would block at runtime — but the script runs against
   // the raw SqlJsBackend, not the wrapper).
   console.log("[demo-db] seeding budgets");
-  const { v7: uuidv7 } = await import("uuid");
   const nowIso = new Date().toISOString();
   const budgets = [
     { account_pattern: "Expenses:Food", amount: "550" },
@@ -147,8 +166,6 @@ async function main() {
   // demo build needs explicit inserts. We use direct SQL via the private
   // db handle and reference the imported journal entries by description.
   console.log("[demo-db] synthesizing lot / lot_disposal rows");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const innerDb = (backend as any).db as import("sql.js").Database;
 
   function findEntryId(description: string): string {
     const result = innerDb.exec(

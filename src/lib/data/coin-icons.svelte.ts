@@ -193,7 +193,7 @@ function blobToDataUri(blob: Blob): Promise<string | null> {
 }
 
 /** URLs that browsers block via CORS — cannot direct-fetch, must proxy or skip */
-const CORS_BLOCKED = ["coingecko.com", "google.com/s2/favicons"];
+const CORS_BLOCKED = ["google.com/s2/favicons"];
 
 async function fetchAsDataUri(url: string): Promise<string | null> {
   try {
@@ -329,15 +329,28 @@ export async function initCoinIcons(currencyCodes: string[]): Promise<void> {
   await _fetchCoinGecko(currencyCodes);
 }
 
-/** Fetch a single CoinGecko batch with 429 retry, routed through proxy to avoid CORS. */
+/** Fetch a single CoinGecko batch with 429 retry. Tries proxy first, falls back to direct fetch. */
 async function _fetchGeckoBatch(url: string): Promise<Array<{ id: string; symbol: string; image: string }>> {
+  // Try proxy/Tauri route first
   let result = await cexFetch(url, 'https://api.coingecko.com', '/api/coingecko');
   if (result.status === 429) {
     await new Promise((r) => setTimeout(r, 60_000));
     result = await cexFetch(url, 'https://api.coingecko.com', '/api/coingecko');
   }
-  if (result.status < 200 || result.status >= 300) return [];
-  try { return JSON.parse(result.body); } catch { return []; }
+  if (result.status >= 200 && result.status < 300) {
+    try { return JSON.parse(result.body); } catch { /* fall through to direct fetch */ }
+  }
+  // Direct fetch fallback — CoinGecko public API supports CORS.
+  // Needed in production web builds where the Vite dev proxy is absent.
+  try {
+    let resp = await fetch(url);
+    if (resp.status === 429) {
+      await new Promise((r) => setTimeout(r, 60_000));
+      resp = await fetch(url);
+    }
+    if (!resp.ok) return [];
+    return await resp.json();
+  } catch { return []; }
 }
 
 /** Fetch missing crypto icons from CoinGecko, processing queued codes after completion. */
