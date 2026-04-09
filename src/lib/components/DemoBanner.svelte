@@ -1,7 +1,6 @@
 <script lang="ts">
   // Read-only demo mode banner. Mounted at the top of (app)/+layout.svelte
   // when DEMO_MODE is true. Tree-shaken out of regular builds.
-  import ExternalLink from "lucide-svelte/icons/external-link";
   import * as m from "$paraglide/messages.js";
 </script>
 
@@ -19,12 +18,9 @@
     {m.demo_banner_message()}
   </span>
   <a
-    href="https://dledger.com"
-    target="_blank"
-    rel="noopener noreferrer"
-    class="hidden shrink-0 items-center gap-1 font-medium text-amber-800 hover:underline sm:inline-flex dark:text-amber-200"
+    href="https://www.dledger.com"
+    class="hidden shrink-0 font-medium text-amber-800 hover:underline sm:inline dark:text-amber-200"
   >
     {m.demo_banner_cta()}
-    <ExternalLink class="size-3" />
   </a>
 </div>
