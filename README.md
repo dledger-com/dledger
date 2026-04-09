@@ -1,6 +1,25 @@
-# dledger
+<p align="center">
+  <img src="static/dledger-logo-48px.webp" alt="dledger" width="48" height="48">
+</p>
 
-A personal double-entry ledger for tracking finances across bank accounts, crypto exchanges, DeFi protocols, and wallets. Runs as a native desktop app (Tauri) or in the browser (sql.js + OPFS).
+<h1 align="center">dledger</h1>
+
+<p align="center">
+  A personal double-entry ledger for tracking finances across bank accounts,<br>
+  crypto exchanges, DeFi protocols, and wallets.<br>
+  Runs as a native desktop app (Tauri) or in the browser.
+</p>
+
+<p align="center">
+  <a href="https://www.dledger.com">Website</a> &middot;
+  <a href="https://app.dledger.com">Web App</a> &middot;
+  <a href="https://demo.dledger.com">Live Demo</a>
+</p>
+
+---
+
+> [!NOTE]
+> **Early release** — dledger is under active development (v0.2.x). Features may change and rough edges are expected. Bug reports, feature suggestions, and contributions of any kind are very welcome! Feel free to [open an issue](https://github.com/dledger-com/dledger/issues) or start a discussion.
 
 ## Features
 
