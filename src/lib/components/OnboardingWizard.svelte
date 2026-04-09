@@ -16,7 +16,7 @@
     import Check from "lucide-svelte/icons/check";
     import { importDrop } from "$lib/data/import-drop.svelte.js";
     import { getFiatFlagUrl } from "$lib/data/coin-icons.svelte.js";
-    import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
+    import { COMMON_CURRENCIES, currencyForLocale } from "$lib/data/common-currencies.js";
     import AddOnlineSourceDialog from "$lib/components/AddOnlineSourceDialog.svelte";
 
     let {
@@ -29,7 +29,7 @@
 
     const settings = new SettingsStore();
     let step = $state(0);
-    let currency = $state(settings.currency || "EUR");
+    let currency = $state(currencyForLocale());
     let preset = $state<DefaultAccountSet>("standard");
     let accountsCreated = $state(false);
     let sourceAdded = $state(false);
