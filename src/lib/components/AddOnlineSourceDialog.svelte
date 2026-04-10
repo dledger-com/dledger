@@ -35,12 +35,16 @@
     import AddSourceInput from "$lib/components/AddSourceInput.svelte";
     import BlockchainAddForm from "$lib/components/BlockchainAddForm.svelte";
 
+    import { getPluginManager } from "$lib/plugins/manager.js";
+    import type { GenericBlockchainAccount } from "$lib/backend.js";
+
     let {
         open = $bindable(false),
         existingCexAccounts = [],
         existingEthAccounts = [],
         existingBtcAccounts = [],
         chainStates = new Map(),
+        pluginChainStates = new Map(),
         onAccountAdded,
     }: {
         open: boolean;
@@ -48,6 +52,7 @@
         existingEthAccounts?: EtherscanAccount[];
         existingBtcAccounts?: BitcoinAccount[];
         chainStates?: Map<string, { accounts: any[] }>;
+        pluginChainStates?: Map<string, { accounts: GenericBlockchainAccount[] }>;
         onAccountAdded: () => void;
     } = $props();
 
@@ -630,6 +635,10 @@
             return m.sources_add_evm_address();
         } else if (addSourceMode === "bitcoin") {
             return m.sources_add_bitcoin();
+        } else if (addSourceMode.startsWith("plugin:")) {
+            const ext = getPluginManager().blockchainSources.get(addSourceMode.slice(7));
+            if (ext) return `Add ${ext.chainName} Account`;
+            return m.sources_add_account();
         } else {
             const chainConfig = BLOCKCHAIN_CHAINS.find(c => c.id === addSourceMode);
             if (chainConfig) return `Add ${chainConfig.name} Account`;
@@ -681,6 +690,15 @@
                 onSelectMonero={() => startAddChain("xmr")}
                 onSelectBitshares={() => startAddChain("bitshares")}
             />
+            {#if getPluginManager().blockchainSources.getAll().length > 0}
+                <div class="flex flex-wrap gap-2">
+                    {#each getPluginManager().blockchainSources.getAll() as ext}
+                        <Button variant="outline" size="sm" onclick={() => { addSourceMode = `plugin:${ext.chainId}`; }}>
+                            <Plus class="mr-1 h-3 w-3" />{ext.chainName}
+                        </Button>
+                    {/each}
+                </div>
+            {/if}
             <button
               type="button"
               class="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
@@ -1118,6 +1136,23 @@
                     config={activeChainConfig}
                     existingAddresses={existingAddrs}
                     embedded
+                    onClose={() => { addSourceMode = "idle"; }}
+                    onAccountAdded={async () => { onAccountAdded(); open = false; }}
+                />
+            {/if}
+        {/if}
+
+        {#if addSourceMode.startsWith("plugin:")}
+            {@const pluginChainId = addSourceMode.slice(7)}
+            {@const pluginExt = getPluginManager().blockchainSources.get(pluginChainId)}
+            {#if pluginExt}
+                {@const existingAddrs = new Set((pluginChainStates.get(pluginChainId)?.accounts ?? []).map(a => pluginExt.caseSensitive ? a.address : a.address.toLowerCase()))}
+                {@const pluginConfig = { id: pluginExt.chainId, name: pluginExt.chainName, symbol: pluginExt.symbol, addressRegex: pluginExt.compiledRegex, addressPlaceholder: pluginExt.addressPlaceholder, addressSlicePrefix: 8, addressSliceSuffix: 4, caseSensitive: pluginExt.caseSensitive ?? false, backendList: "", backendAdd: "", backendRemove: "", backendUpdateLabel: "", backendSync: "", syncTaskPrefix: `plugin-${pluginExt.chainId}-sync`, detectInput: null, deriveAddresses: null }}
+                <BlockchainAddForm
+                    config={pluginConfig}
+                    existingAddresses={existingAddrs}
+                    embedded
+                    pluginChainId={pluginChainId}
                     onClose={() => { addSourceMode = "idle"; }}
                     onAccountAdded={async () => { onAccountAdded(); open = false; }}
                 />

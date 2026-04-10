@@ -72,6 +72,8 @@
     import ChainIcon from "$lib/components/ChainIcon.svelte";
     import { getDefaultPresetRegistry } from "$lib/csv-presets/index.js";
     import { getPluginManager } from "$lib/plugins/manager.js";
+    import type { GenericBlockchainAccount } from "$lib/backend.js";
+    import { syncPluginChain } from "$lib/plugins/blockchain-sync.js";
     import { onInvalidate } from "$lib/data/invalidation.js";
     import CategorizationRulesEditor from "$lib/components/CategorizationRulesEditor.svelte";
     import type { ExchangeId } from "$lib/cex/types.js";
@@ -220,6 +222,10 @@
             } else if (kind === "cex") {
                 await getBackend().updateExchangeAccount(editingRowId, { label });
                 await loadCexAccounts();
+            } else if (kind.startsWith("plugin:")) {
+                const chainId = kind.slice(7);
+                await getBackend().updateBlockchainAccountLabel(editingRowId, label);
+                await loadPluginChainAccounts(chainId);
             } else {
                 // Generic blockchain chain
                 const config = getBlockchainConfig(kind);
@@ -282,6 +288,14 @@
             if (state) {
                 for (const account of state.accounts) {
                     rows.push({ kind: config.id, data: account });
+                }
+            }
+        }
+        for (const ext of pluginChains) {
+            const state = pluginChainStates.get(ext.chainId);
+            if (state) {
+                for (const account of state.accounts) {
+                    rows.push({ kind: `plugin:${ext.chainId}`, data: account });
                 }
             }
         }
@@ -367,6 +381,7 @@
         await loadEthAccounts();
         await loadBtcAccounts();
         await loadAllChainAccounts();
+        await loadAllPluginChainAccounts();
     }
 
     // -- Bitcoin state --
@@ -377,6 +392,10 @@
     let chainStates = $state<Map<string, ChainState>>(new Map(
         BLOCKCHAIN_CHAINS.map(c => [c.id, { accounts: [], busy: false }])
     ));
+
+    // -- Plugin blockchain chain state --
+    const pluginChains = $derived(getPluginManager().blockchainSources.getAll());
+    let pluginChainStates = $state<Map<string, { accounts: GenericBlockchainAccount[]; busy: boolean }>>(new Map());
 
     function isChainBusy(chainId: string): boolean {
         const config = getBlockchainConfig(chainId);
@@ -458,6 +477,54 @@
         }
     }
 
+    // ---- Plugin blockchain chain functions ----
+
+    async function loadPluginChainAccounts(chainId: string) {
+        try {
+            const accounts = await getBackend().listBlockchainAccounts(chainId);
+            pluginChainStates.set(chainId, { accounts, busy: false });
+            pluginChainStates = new Map(pluginChainStates);
+        } catch { /* table may not exist */ }
+    }
+
+    async function loadAllPluginChainAccounts() {
+        for (const ext of pluginChains) {
+            await loadPluginChainAccounts(ext.chainId);
+        }
+    }
+
+    function syncPluginChainAccount(ext: typeof pluginChains[number], account: GenericBlockchainAccount) {
+        const prefix = `plugin-${ext.chainId}-sync`;
+        taskQueue.enqueue({
+            key: `${prefix}:${account.id}`,
+            label: `Sync ${account.label} (${ext.chainName})`,
+            concurrencyGroup: prefix,
+            async run(ctx) {
+                const config = settings.settings.pluginChainConfig?.[ext.chainId] ?? {};
+                const r = await syncPluginChain(
+                    getBackend(), ext, account, config,
+                    (msg: string) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                    ctx.signal,
+                );
+                await loadPluginChainAccounts(ext.chainId);
+                if (r.transactions_imported > 0) {
+                    enqueueRateBackfill(taskQueue, getBackend(), settings.buildRateConfig(), getHiddenCurrencySet());
+                }
+                return { summary: `${r.transactions_imported} imported${r.transactions_skipped ? `, ${r.transactions_skipped} skipped` : ""}`, data: r };
+            },
+        });
+    }
+
+    async function removePluginChainAccount(chainId: string, id: string, chainName: string) {
+        try {
+            await getBackend().removeBlockchainAccount(id);
+            await loadPluginChainAccounts(chainId);
+            toast.success(`${chainName} account removed`);
+        } catch (err) {
+            toast.error(`Failed to remove: ${err}`);
+        }
+    }
+
     function syncChainAccount(config: BlockchainConfig, account: any) {
         taskQueue.enqueue({
             key: `${config.syncTaskPrefix}:${account.id}`,
@@ -493,7 +560,8 @@
 
     const anyBusy = $derived(
         cexBusy || ethBusy || btcBusy ||
-        BLOCKCHAIN_CHAINS.some(c => taskQueue.isActive(c.syncTaskPrefix))
+        BLOCKCHAIN_CHAINS.some(c => taskQueue.isActive(c.syncTaskPrefix)) ||
+        pluginChains.some(ext => taskQueue.isActive(`plugin-${ext.chainId}-sync`))
     );
 
 
@@ -609,6 +677,7 @@
         loadCexAccounts();
         loadBtcAccounts();
         loadAllChainAccounts();
+        loadAllPluginChainAccounts();
     });
 
 
@@ -716,6 +785,15 @@
             if (state) {
                 for (const account of state.accounts) {
                     syncChainAccount(config, account);
+                }
+            }
+        }
+        // Sync all plugin blockchain chains
+        for (const ext of pluginChains) {
+            const state = pluginChainStates.get(ext.chainId);
+            if (state) {
+                for (const account of state.accounts) {
+                    syncPluginChainAccount(ext, account);
                 }
             }
         }
@@ -1165,6 +1243,26 @@
                                             </div>
                                         </Table.Cell>
                                     </Table.Row>
+                                {:else if row.kind.startsWith("plugin:")}
+                                    {@const pluginChainId = row.kind.slice(7)}
+                                    {@const pluginExt = getPluginManager().blockchainSources.get(pluginChainId)}
+                                    {#if pluginExt}
+                                        {@const pluginConfig = { id: pluginExt.chainId, name: pluginExt.chainName, symbol: pluginExt.symbol, addressRegex: pluginExt.compiledRegex, addressPlaceholder: pluginExt.addressPlaceholder, addressSlicePrefix: 8, addressSliceSuffix: 4, caseSensitive: pluginExt.caseSensitive ?? false, backendList: "", backendAdd: "", backendRemove: "", backendUpdateLabel: "", backendSync: "", syncTaskPrefix: `plugin-${pluginExt.chainId}-sync`, detectInput: null, deriveAddresses: null }}
+                                        <BlockchainAccountRow
+                                            config={pluginConfig}
+                                            account={row.data}
+                                            syncing={taskQueue.isRunning(`plugin-${pluginChainId}-sync:${row.data.id}`)}
+                                            queued={taskQueue.isQueued(`plugin-${pluginChainId}-sync:${row.data.id}`)}
+                                            {editingRowId}
+                                            {editingRowLabel}
+                                            onSync={() => syncPluginChainAccount(pluginExt, row.data)}
+                                            onRemove={() => removePluginChainAccount(pluginChainId, row.data.id, pluginExt.chainName)}
+                                            onStartEdit={() => startEditLabel(row.data.id, row.data.label)}
+                                            onCancelEdit={() => editingRowId = null}
+                                            onSaveEdit={() => saveEditLabel(row.kind)}
+                                            onEditLabelChange={(v) => editingRowLabel = v}
+                                        />
+                                    {/if}
                                 {:else}
                                     {@const chainConfig = getBlockchainConfig(row.kind)}
                                     {#if chainConfig}
@@ -1702,5 +1800,6 @@
     existingEthAccounts={ethAccounts}
     existingBtcAccounts={btcAccounts}
     {chainStates}
+    {pluginChainStates}
     onAccountAdded={handleAccountAdded}
 />

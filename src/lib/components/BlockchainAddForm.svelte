@@ -18,6 +18,7 @@
         existingAddresses = new Set<string>(),
         prefillAddress = "",
         embedded = false,
+        pluginChainId = undefined,
         onClose,
         onAccountAdded,
     }: {
@@ -25,6 +26,7 @@
         existingAddresses?: Set<string>;
         prefillAddress?: string;
         embedded?: boolean;
+        pluginChainId?: string;
         onClose: () => void;
         onAccountAdded: () => Promise<void>;
     } = $props();
@@ -133,7 +135,11 @@
                 const backend = getBackend();
                 for (const { index, addr } of selected.map(s => ({ index: s.index, addr: s.address }))) {
                     const lbl = itemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : shortAddr(addr));
-                    await (backend as any)[config.backendAdd]({ id: uuidv7(), address: addr, label: lbl, created_at: new Date().toISOString() });
+                    if (pluginChainId) {
+                        await backend.addBlockchainAccount({ id: uuidv7(), chain: pluginChainId, address: addr, label: lbl, created_at: new Date().toISOString() });
+                    } else {
+                        await (backend as any)[config.backendAdd]({ id: uuidv7(), address: addr, label: lbl, created_at: new Date().toISOString() });
+                    }
                 }
                 label = ""; privateKeyAck = false; seedPassphrase = "";
                 await onAccountAdded();
@@ -154,12 +160,22 @@
             }
             const backend = getBackend();
             const chainName = config.name;
-            await (backend as any)[config.backendAdd]({
-                id: uuidv7(),
-                address: config.caseSensitive ? input : addr,
-                label: baseLabel || shortAddr(input),
-                created_at: new Date().toISOString(),
-            });
+            if (pluginChainId) {
+                await backend.addBlockchainAccount({
+                    id: uuidv7(),
+                    chain: pluginChainId,
+                    address: config.caseSensitive ? input : addr,
+                    label: baseLabel || shortAddr(input),
+                    created_at: new Date().toISOString(),
+                });
+            } else {
+                await (backend as any)[config.backendAdd]({
+                    id: uuidv7(),
+                    address: config.caseSensitive ? input : addr,
+                    label: baseLabel || shortAddr(input),
+                    created_at: new Date().toISOString(),
+                });
+            }
             address = ""; label = "";
             await onAccountAdded();
             onClose();

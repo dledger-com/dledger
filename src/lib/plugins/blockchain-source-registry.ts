@@ -1,5 +1,6 @@
 import type { BlockchainSourceExtension } from "./types.js";
 import { BLOCKCHAIN_CHAINS } from "../blockchain-registry.js";
+import { setCryptoGeckoIds } from "../data/coin-icons.svelte.js";
 
 /** Compiled version of a blockchain source extension with pre-compiled regex. */
 export interface CompiledBlockchainSource extends BlockchainSourceExtension {
@@ -24,6 +25,11 @@ export class BlockchainSourceRegistry {
     const compiledRegex = new RegExp(ext.addressRegex);
 
     this.sources.set(id, { ...ext, chainId: id, compiledRegex });
+
+    // Register native token icon via CoinGecko ID if provided
+    if (ext.coingeckoId) {
+      setCryptoGeckoIds(new Map([[ext.symbol.toUpperCase(), ext.coingeckoId]]));
+    }
   }
 
   get(chainId: string): CompiledBlockchainSource | undefined {
