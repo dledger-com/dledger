@@ -5,7 +5,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { getBackend } from "$lib/backend.js";
   import { toast } from "svelte-sonner";
-  import { generateLlmPrompt, type SourceType } from "$lib/feedback/llm-prompts.js";
+  import { generateLlmPrompt, type SourceType, type DefiChainFamily } from "$lib/feedback/llm-prompts.js";
   import { loadPluginFromCode } from "$lib/feedback/plugin-loader.js";
   import { getSystemInfo } from "$lib/feedback/system-info.js";
   import { saveCustomPlugin } from "$lib/plugins/custom-plugins.js";
@@ -16,6 +16,8 @@
   import FileSpreadsheet from "lucide-svelte/icons/file-spreadsheet";
   import ArrowUpDown from "lucide-svelte/icons/arrow-up-down";
   import Blocks from "lucide-svelte/icons/blocks";
+  import Hexagon from "lucide-svelte/icons/hexagon";
+  import Circle from "lucide-svelte/icons/circle";
   import FileText from "lucide-svelte/icons/file-text";
   import HandHelping from "lucide-svelte/icons/hand-helping";
   import ChevronLeft from "lucide-svelte/icons/chevron-left";
@@ -41,10 +43,11 @@
     initialStep?: string | null;
   } = $props();
 
-  type WizardStep = "choose" | "source-type" | "llm-guide" | "load-plugin" | "contribute" | "bug-report" | "general" | "done";
+  type WizardStep = "choose" | "source-type" | "defi-chain" | "llm-guide" | "load-plugin" | "contribute" | "bug-report" | "general" | "done";
 
   let step = $state<WizardStep>("choose");
   let sourceType = $state<SourceType>("csv");
+  let defiChain = $state<DefiChainFamily>("evm");
   let pluginCode = $state("");
   let loadError = $state("");
   let loadedPluginName = $state("");
@@ -63,6 +66,7 @@
   function reset() {
     step = "choose";
     sourceType = "csv";
+    defiChain = "evm";
     sourceUrl = "";
     pluginCode = "";
     loadError = "";
@@ -84,7 +88,8 @@
   function goBack() {
     switch (step) {
       case "source-type": step = "choose"; break;
-      case "llm-guide": step = "source-type"; break;
+      case "defi-chain": step = "source-type"; break;
+      case "llm-guide": step = sourceType === "defi" ? "defi-chain" : "source-type"; break;
       case "load-plugin": step = "llm-guide"; break;
       case "contribute": step = "load-plugin"; break;
       case "bug-report": step = "choose"; break;
@@ -223,7 +228,7 @@
             <button
               type="button"
               class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"
-              onclick={() => { sourceType = item.type; step = "llm-guide"; }}
+              onclick={() => { sourceType = item.type; step = item.type === "defi" ? "defi-chain" : "llm-guide"; }}
             >
               <item.icon class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div class="flex-1">
@@ -252,6 +257,44 @@
           <div class="flex-1">
             <p class="text-sm font-medium">{m.feedback_source_human()}</p>
             <p class="text-xs text-muted-foreground">{m.feedback_source_human_desc()}</p>
+          </div>
+        </button>
+      </div>
+
+    <!-- Step: DeFi Chain Selection -->
+    {:else if step === "defi-chain"}
+      <Dialog.Header>
+        <div class="flex items-center gap-2">
+          <button type="button" class="text-muted-foreground hover:text-foreground transition-colors" onclick={goBack}>
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <Dialog.Title>{m.feedback_defi_chain_title()}</Dialog.Title>
+        </div>
+        <Dialog.Description>{m.feedback_defi_chain_desc()}</Dialog.Description>
+      </Dialog.Header>
+
+      <div class="space-y-2">
+        <button
+          type="button"
+          class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"
+          onclick={() => { defiChain = "evm"; step = "llm-guide"; }}
+        >
+          <Hexagon class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div>
+            <p class="text-sm font-medium">{m.feedback_defi_evm()}</p>
+            <p class="text-xs text-muted-foreground">{m.feedback_defi_evm_desc()}</p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          class="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted cursor-pointer"
+          onclick={() => { defiChain = "solana"; step = "llm-guide"; }}
+        >
+          <Circle class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div>
+            <p class="text-sm font-medium">{m.feedback_defi_solana()}</p>
+            <p class="text-xs text-muted-foreground">{m.feedback_defi_solana_desc()}</p>
           </div>
         </button>
       </div>
@@ -287,12 +330,12 @@
         <!-- Prompt block -->
         <div class="relative">
           <div class="rounded-lg bg-muted p-4 pr-12 font-mono text-xs max-h-64 overflow-y-auto whitespace-pre-wrap break-words">
-            {generateLlmPrompt(sourceType, sourceUrl || undefined)}
+            {generateLlmPrompt(sourceType, sourceUrl || undefined, defiChain)}
           </div>
           <button
             type="button"
             class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors"
-            onclick={() => copyToClipboard(generateLlmPrompt(sourceType, sourceUrl || undefined), "prompt")}
+            onclick={() => copyToClipboard(generateLlmPrompt(sourceType, sourceUrl || undefined, defiChain), "prompt")}
           >
             {#if promptCopied}
               <Check class="h-4 w-4 text-green-500" />

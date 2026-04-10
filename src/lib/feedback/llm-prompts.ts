@@ -1,6 +1,7 @@
 // LLM prompt templates for plugin creation guidance.
 
 export type SourceType = "csv" | "cex" | "defi" | "pdf";
+export type DefiChainFamily = "evm" | "solana";
 
 const CSV_PRESET_INTERFACE = `interface CsvRecord {
   date: string;           // YYYY-MM-DD
@@ -499,6 +500,264 @@ const handler = {
   },
 };`;
 
+const SOLANA_HANDLER_INTERFACE = `// ---- Data shapes ----
+
+// A SolTxGroup represents a single Solana transaction (from the Helius Enhanced API):
+interface SolTxGroup {
+  signature: string;
+  timestamp: number;          // Unix seconds
+  slot: number;
+  fee: number;                // lamports (1 SOL = 1_000_000_000 lamports)
+  feePayer: string;
+  status: "success" | "failed";
+  nativeTransfers: SolNativeTransfer[];
+  tokenTransfers: SolTokenTransfer[];
+  instructions: SolInstruction[];
+  type?: string;              // Helius classification: "TRANSFER", "SWAP", "BURN", etc.
+  source?: string;            // Helius source: "JUPITER", "RAYDIUM", "MARINADE", etc.
+}
+
+interface SolNativeTransfer {
+  from: string;
+  to: string;
+  amount: number;             // lamports
+}
+
+interface SolTokenTransfer {
+  from: string;
+  to: string;
+  mint: string;               // SPL token mint address
+  amount: string;             // raw amount as string
+  decimals: number;
+  tokenSymbol?: string;       // may be absent for unknown tokens
+}
+
+interface SolInstruction {
+  programId: string;
+  data?: string;
+  accounts: string[];
+  innerInstructions?: SolInstruction[];
+}
+
+// ---- Handler interface ----
+
+interface SolanaHandler {
+  id: string;
+  name: string;
+  description: string;
+
+  match(tx: SolTxGroup, ctx: SolanaHandlerContext): number;     // 0-100 confidence
+  process(tx: SolTxGroup, ctx: SolanaHandlerContext): Promise<HandlerResult>;
+}
+
+// ---- Context passed to your handler ----
+
+interface SolanaHandlerContext {
+  address: string;       // user's wallet address
+  label: string;         // user's label for this wallet
+  // Create account/currency if they don't exist yet:
+  ensureAccount(fullName: string, date: string): Promise<string>;    // returns account_id
+  ensureCurrency(code: string, decimals: number, mintAddress?: string): Promise<void>;
+}
+
+// ---- Return types (same as EVM) ----
+
+type HandlerResult =
+  | { type: "entries"; entries: HandlerEntry[] }
+  | { type: "skip"; reason: string };
+
+interface HandlerEntry {
+  entry: {
+    date: string;               // YYYY-MM-DD
+    description: string;        // human-readable fallback
+    description_data?: string;  // JSON.stringify of DescriptionData (see below)
+    status: "confirmed";
+    source: string;             // format: "solana:{signature}"
+    voided_by: null;
+  };
+  items: LineItem[];            // must sum to zero per currency (double-entry)
+  metadata: Record<string, string>;
+}
+// IMPORTANT: Create exactly ONE HandlerEntry per SolTxGroup. The source field
+// ("solana:{signature}") is used for dedup — multiple entries with the same
+// source will conflict. Combine all token flows AND fee into a single
+// entry's items array.
+
+interface LineItem {
+  account_id: string;   // from ctx.ensureAccount()
+  currency: string;     // e.g. "SOL", "USDC"
+  amount: string;       // positive = debit, negative = credit; string for precision
+  lot_id: string | null; // null for most cases
+}
+
+// DescriptionData for Solana DeFi handlers:
+// { type: "solana-defi", protocol: "MyProtocol", action: "swap", signature: "...", summary?: "MyProtocol (Solana): Swap 1.5 SOL → 100 USDC" }
+// The summary is displayed in the UI. If omitted, rendered as "{protocol} (Solana): {action}".
+
+// ---- Account path conventions ----
+// Assets:Crypto:DeFi:{Protocol}:{Type}     — e.g. "Assets:Crypto:DeFi:Jupiter:Swap"
+// Income:Crypto:DeFi:{Protocol}:{Type}      — e.g. "Income:Crypto:DeFi:Marinade:Staking"
+// Expenses:Crypto:DeFi:{Protocol}:{Type}
+// Expenses:Crypto:Fees:Solana               — transaction fees
+// Assets:Crypto:Wallet:Solana:{Label}       — user's wallet
+
+// ---- Matching strategies ----
+// 1. tx.source === "YOUR_PROTOCOL" — best for protocols classified by Helius
+//    Known Helius source values: JUPITER, RAYDIUM, MARINADE, ORCA, TENSOR, METAPLEX, etc.
+// 2. tx.instructions.some(ix => ix.programId === "YOUR_PROGRAM_ID") — match by program ID
+// 3. Combine both for maximum reliability
+
+// ---- Match score guidelines ----
+// 55-60: standard protocol handler
+// 50:    generic/fallback handler
+// 65+:   only for very specific sub-protocol forks`;
+
+const SOLANA_DEFI_EXAMPLE = `// Complete Solana DeFi handler example — a swap protocol
+// IMPORTANT: Exactly ONE HandlerEntry per transaction. All token flows + fee go in one entry.
+
+const PROTOCOL_PROGRAM = "Proto111111111111111111111111111111111111111";
+
+// Convert raw token value to decimal string (no external deps)
+function formatAmount(value, decimals) {
+  if (!value || value === "0") return "0";
+  const s = String(value).padStart(decimals + 1, "0");
+  const whole = s.slice(0, s.length - decimals) || "0";
+  const frac = s.slice(s.length - decimals).replace(/0+$/, "");
+  return frac ? whole + "." + frac : whole;
+}
+
+// Convert lamports to SOL string
+function lamportsToSol(lamports) {
+  return formatAmount(String(Math.abs(lamports)), 9);
+}
+
+// Convert Unix timestamp to YYYY-MM-DD
+function tsToDate(ts) {
+  return new Date(ts * 1000).toISOString().slice(0, 10);
+}
+
+const handler = {
+  id: "my-protocol",
+  name: "My Protocol",
+  description: "Handles My Protocol swaps on Solana",
+
+  match(tx, ctx) {
+    if (tx.status === "failed") return 0;
+    // Strategy 1: Helius source classification
+    if (tx.source === "MY_PROTOCOL") return 55;
+    // Strategy 2: match by program ID
+    if (tx.instructions.some(ix => ix.programId === PROTOCOL_PROGRAM)) return 55;
+    return 0;
+  },
+
+  async process(tx, ctx) {
+    const addr = ctx.address;
+    const date = tsToDate(tx.timestamp);
+    const items = [];
+
+    const walletAccount = "Assets:Crypto:Wallet:Solana:" + ctx.label;
+
+    // ---- Analyze SPL token flows ----
+    const inflows = [];   // tokens received by user
+    const outflows = [];  // tokens sent by user
+
+    for (const t of tx.tokenTransfers) {
+      const symbol = t.tokenSymbol || t.mint.slice(0, 6);
+      const amount = formatAmount(t.amount, t.decimals);
+
+      if (t.from === addr && t.to !== addr) {
+        outflows.push({ symbol, amount, mint: t.mint, decimals: t.decimals });
+      } else if (t.to === addr && t.from !== addr) {
+        inflows.push({ symbol, amount, mint: t.mint, decimals: t.decimals });
+      }
+    }
+
+    // ---- Analyze native SOL flows (excluding fee) ----
+    let netLamports = 0;
+    for (const nt of tx.nativeTransfers) {
+      if (nt.from === addr && nt.to !== addr) netLamports -= nt.amount;
+      else if (nt.to === addr && nt.from !== addr) netLamports += nt.amount;
+    }
+    if (netLamports !== 0) {
+      const solAmount = lamportsToSol(netLamports);
+      if (netLamports > 0) {
+        inflows.push({ symbol: "SOL", amount: solAmount, mint: "SOL", decimals: 9 });
+      } else {
+        outflows.push({ symbol: "SOL", amount: solAmount, mint: "SOL", decimals: 9 });
+      }
+    }
+
+    if (inflows.length === 0 && outflows.length === 0) {
+      return { type: "skip", reason: "no token movement detected" };
+    }
+
+    // ---- Ensure currencies ----
+    for (const flow of [...inflows, ...outflows]) {
+      await ctx.ensureCurrency(flow.symbol, flow.decimals, flow.mint === "SOL" ? undefined : flow.mint);
+    }
+
+    // ---- Build swap items ----
+    const walletId = await ctx.ensureAccount(walletAccount, date);
+    const defiId = await ctx.ensureAccount("Assets:Crypto:DeFi:MyProtocol:Swap", date);
+
+    for (const outflow of outflows) {
+      items.push(
+        { account_id: walletId, currency: outflow.symbol, amount: "-" + outflow.amount, lot_id: null },
+        { account_id: defiId, currency: outflow.symbol, amount: outflow.amount, lot_id: null },
+      );
+    }
+    for (const inflow of inflows) {
+      items.push(
+        { account_id: walletId, currency: inflow.symbol, amount: inflow.amount, lot_id: null },
+        { account_id: defiId, currency: inflow.symbol, amount: "-" + inflow.amount, lot_id: null },
+      );
+    }
+
+    // ---- Fee ----
+    if (tx.feePayer === addr && tx.fee > 0) {
+      await ctx.ensureCurrency("SOL", 9);
+      const feeAmount = lamportsToSol(tx.fee);
+      const feeId = await ctx.ensureAccount("Expenses:Crypto:Fees:Solana", date);
+      items.push(
+        { account_id: feeId, currency: "SOL", amount: feeAmount, lot_id: null },
+        { account_id: walletId, currency: "SOL", amount: "-" + feeAmount, lot_id: null },
+      );
+    }
+
+    // ---- Build entry ----
+    const spentStr = outflows.map(o => o.amount + " " + o.symbol).join(", ") || "?";
+    const receivedStr = inflows.map(i => i.amount + " " + i.symbol).join(", ") || "?";
+    const summary = "My Protocol (Solana): Swap " + spentStr + " → " + receivedStr;
+
+    const descData = {
+      type: "solana-defi", protocol: "My Protocol", action: "swap",
+      signature: tx.signature, summary,
+    };
+
+    return {
+      type: "entries",
+      entries: [{
+        entry: {
+          date,
+          description: summary,
+          description_data: JSON.stringify(descData),
+          status: "confirmed",
+          source: "solana:" + tx.signature,
+          voided_by: null,
+        },
+        items,
+        metadata: {
+          "sol:signature": tx.signature,
+          "sol:slot": String(tx.slot),
+          "sol:timestamp": String(tx.timestamp),
+          "sol:fee_lamports": String(tx.fee),
+          "sol:handler": "my-protocol",
+        },
+      }],
+    };
+  },
+};`;
+
 const PDF_PARSER_INTERFACE = `// Each text item has x,y coordinates — use x position to distinguish columns
 // (e.g., dates at x < 100, descriptions at 100 < x < 400, amounts at x > 400)
 interface PdfTextItem {
@@ -650,7 +909,7 @@ function sourceTypeLabel(type: SourceType): string {
   }
 }
 
-export function generateLlmPrompt(type: SourceType, url?: string): string {
+export function generateLlmPrompt(type: SourceType, url?: string, defiChain?: DefiChainFamily): string {
   const parts: string[] = [];
 
   parts.push(`I need help creating a dLedger ${sourceTypeLabel(type)} plugin.`);
@@ -701,26 +960,49 @@ export function generateLlmPrompt(type: SourceType, url?: string): string {
       break;
 
     case "defi":
-      parts.push("## Interfaces to implement");
-      parts.push("```typescript");
-      parts.push(DEFI_HANDLER_INTERFACE);
-      parts.push("```");
-      parts.push("");
-      parts.push("## Complete working example");
-      parts.push("```javascript");
-      parts.push(DEFI_EXAMPLE);
-      parts.push("```");
-      parts.push("");
-      parts.push("## Protocol details");
-      parts.push(`The protocol website: ${url ?? "[URL]"}`);
-      parts.push("The contract address(es): [0x...]");
-      parts.push("The chain: [Ethereum/Polygon/Arbitrum/etc.]");
-      parts.push("What it does: [DESCRIBE: swaps, lending, staking, etc.]");
-      parts.push("");
-      parts.push("Please visit the website above, find the protocol name and relevant documentation, then implement a TransactionHandler that matches and processes these transactions.");
-      parts.push("Follow the example closely — use the exact same data shapes for entries, items, metadata, and description_data.");
-      parts.push("CRITICAL: Create exactly ONE HandlerEntry per transaction hash. Combine all token flows AND gas fee into a single entry's items array (see example). The source field is used for dedup — multiple entries with the same source will conflict.");
-      parts.push("Use ctx.ensureAccount() for every account and ctx.ensureCurrency() for every token before referencing them in items.");
+      if (defiChain === "solana") {
+        parts.push("## Interfaces to implement");
+        parts.push("```typescript");
+        parts.push(SOLANA_HANDLER_INTERFACE);
+        parts.push("```");
+        parts.push("");
+        parts.push("## Complete working example");
+        parts.push("```javascript");
+        parts.push(SOLANA_DEFI_EXAMPLE);
+        parts.push("```");
+        parts.push("");
+        parts.push("## Protocol details");
+        parts.push(`The protocol website: ${url ?? "[URL]"}`);
+        parts.push("The program ID(s): [...]");
+        parts.push("What it does: [DESCRIBE: swaps, lending, staking, etc.]");
+        parts.push("");
+        parts.push("Please visit the website above, find the protocol name and relevant documentation, then implement a SolanaHandler that matches and processes these transactions.");
+        parts.push("Follow the example closely — use the exact same data shapes for entries, items, metadata, and description_data.");
+        parts.push("CRITICAL: Create exactly ONE HandlerEntry per transaction. Combine all token flows AND fee into a single entry's items array (see example). The source field is used for dedup — multiple entries with the same source will conflict.");
+        parts.push("Use ctx.ensureAccount() for every account and ctx.ensureCurrency() for every token before referencing them in items.");
+        parts.push("Match by tx.source (Helius classification) and/or programId for maximum reliability.");
+      } else {
+        parts.push("## Interfaces to implement");
+        parts.push("```typescript");
+        parts.push(DEFI_HANDLER_INTERFACE);
+        parts.push("```");
+        parts.push("");
+        parts.push("## Complete working example");
+        parts.push("```javascript");
+        parts.push(DEFI_EXAMPLE);
+        parts.push("```");
+        parts.push("");
+        parts.push("## Protocol details");
+        parts.push(`The protocol website: ${url ?? "[URL]"}`);
+        parts.push("The contract address(es): [0x...]");
+        parts.push("The chain: [Ethereum/Polygon/Arbitrum/etc.]");
+        parts.push("What it does: [DESCRIBE: swaps, lending, staking, etc.]");
+        parts.push("");
+        parts.push("Please visit the website above, find the protocol name and relevant documentation, then implement a TransactionHandler that matches and processes these transactions.");
+        parts.push("Follow the example closely — use the exact same data shapes for entries, items, metadata, and description_data.");
+        parts.push("CRITICAL: Create exactly ONE HandlerEntry per transaction hash. Combine all token flows AND gas fee into a single entry's items array (see example). The source field is used for dedup — multiple entries with the same source will conflict.");
+        parts.push("Use ctx.ensureAccount() for every account and ctx.ensureCurrency() for every token before referencing them in items.");
+      }
       break;
 
     case "pdf":
@@ -746,7 +1028,20 @@ export function generateLlmPrompt(type: SourceType, url?: string): string {
   parts.push("## Plugin wrapper");
   parts.push("Wrap everything in this plugin object and export it:");
   parts.push("```typescript");
-  parts.push(PLUGIN_WRAPPER.trim());
+  if (type === "defi" && defiChain === "solana") {
+    parts.push(`// Wrap your implementation in a Plugin object:
+const plugin = {
+  id: "com.example.my-plugin",   // use reverse-domain naming
+  name: "My Plugin",
+  version: "1.0.0",
+  description: "Description of what this plugin does",
+  solanaHandlers: [{ handler, programIds: ["Proto111..."] }],
+};
+
+exports.plugin = plugin;`);
+  } else {
+    parts.push(PLUGIN_WRAPPER.trim());
+  }
   parts.push("```");
   parts.push("");
   parts.push(SANDBOX_NOTICE.trim());
