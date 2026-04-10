@@ -51,7 +51,7 @@
 
 {#if !isTauri && isOverdue}
   <div class="px-2 pb-2">
-    <Card.Root class="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+    <Card.Root class="border-amber-200 bg-amber-50/50 dark:border-amber-400/20 dark:bg-amber-400/5">
       <Card.Content class="py-3 px-3 space-y-2">
         <div class="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
           <ShieldAlert class="h-4 w-4 shrink-0" />
