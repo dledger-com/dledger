@@ -684,7 +684,18 @@ export class SqlJsBackend implements Backend {
       coingecko_id TEXT NOT NULL DEFAULT '',
       dprice_asset_id TEXT NOT NULL DEFAULT ''
     )`);
-    db.exec("INSERT INTO schema_version (version) VALUES (36)");
+    // Generic blockchain account table (v37) — for plugin-provided chains
+    db.exec(`CREATE TABLE IF NOT EXISTS blockchain_account (
+      id TEXT PRIMARY KEY NOT NULL,
+      chain TEXT NOT NULL,
+      address TEXT NOT NULL,
+      label TEXT NOT NULL,
+      cursor TEXT,
+      last_sync TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blockchain_account_chain_addr ON blockchain_account(chain, address)");
+    db.exec("INSERT INTO schema_version (version) VALUES (37)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1579,6 +1590,20 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
           `);
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (36)");
+        }
+        if (currentVersion < 37) {
+          db.exec(`CREATE TABLE IF NOT EXISTS blockchain_account (
+            id TEXT PRIMARY KEY NOT NULL,
+            chain TEXT NOT NULL,
+            address TEXT NOT NULL,
+            label TEXT NOT NULL,
+            cursor TEXT,
+            last_sync TEXT,
+            created_at TEXT NOT NULL
+          )`);
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blockchain_account_chain_addr ON blockchain_account(chain, address)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (37)");
         }
       }
     }
@@ -6211,6 +6236,43 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
       this.rollbackTransaction();
       throw e;
     }
+  }
+
+  // ---- Generic blockchain accounts (plugin chains) ----
+
+  async listBlockchainAccounts(chain: string): Promise<import("./backend.js").GenericBlockchainAccount[]> {
+    return this.query(
+      "SELECT id, chain, address, label, cursor, last_sync, created_at FROM blockchain_account WHERE chain = ? ORDER BY created_at",
+      [chain],
+      (row) => ({
+        id: row.id as string, chain: row.chain as string, address: row.address as string,
+        label: row.label as string, cursor: (row.cursor as string) ?? null,
+        last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+      }),
+    );
+  }
+
+  async addBlockchainAccount(account: Omit<import("./backend.js").GenericBlockchainAccount, "cursor" | "last_sync">): Promise<void> {
+    this.run(
+      "INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)",
+      [account.id, account.chain, account.address, account.label, account.created_at],
+    );
+    this.scheduleSave();
+  }
+
+  async removeBlockchainAccount(id: string): Promise<void> {
+    this.run("DELETE FROM blockchain_account WHERE id = ?", [id]);
+    this.scheduleSave();
+  }
+
+  async updateBlockchainAccountLabel(id: string, label: string): Promise<void> {
+    this.run("UPDATE blockchain_account SET label = ? WHERE id = ?", [label, id]);
+    this.scheduleSave();
+  }
+
+  async updateBlockchainAccountCursor(id: string, cursor: string | null): Promise<void> {
+    this.run("UPDATE blockchain_account SET cursor = ?, last_sync = ? WHERE id = ?", [cursor, new Date().toISOString(), id]);
+    this.scheduleSave();
   }
 
   // ---- Crypto asset info ----

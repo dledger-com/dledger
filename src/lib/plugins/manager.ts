@@ -4,6 +4,7 @@ import { CsvPresetRegistry } from "../csv-presets/registry.js";
 import { PdfParserRegistry } from "./pdf-parser-registry.js";
 import { CexAdapterRegistry } from "./cex-adapter-registry.js";
 import { RateSourceRegistry } from "./rate-source-registry.js";
+import { BlockchainSourceRegistry } from "./blockchain-source-registry.js";
 import { SolanaHandlerRegistry } from "../solana/handlers/registry.js";
 
 import { builtinHandlerExtensions } from "./builtin/handlers.js";
@@ -21,6 +22,7 @@ export class PluginManager {
   readonly pdfParsers: PdfParserRegistry;
   readonly cexAdapters: CexAdapterRegistry;
   readonly rateSources: RateSourceRegistry;
+  readonly blockchainSources: BlockchainSourceRegistry;
 
   constructor() {
     this.handlers = new IndexedHandlerRegistry();
@@ -29,6 +31,7 @@ export class PluginManager {
     this.pdfParsers = new PdfParserRegistry();
     this.cexAdapters = new CexAdapterRegistry();
     this.rateSources = new RateSourceRegistry();
+    this.blockchainSources = new BlockchainSourceRegistry();
   }
 
   private handlerToPlugin = new Map<string, string>(); // handler.id → plugin.id
@@ -76,6 +79,12 @@ export class PluginManager {
     if (plugin.rateSources) {
       for (const source of plugin.rateSources) {
         this.rateSources.register(source);
+      }
+    }
+
+    if (plugin.blockchainSources) {
+      for (const ext of plugin.blockchainSources) {
+        this.blockchainSources.register(ext);
       }
     }
   }

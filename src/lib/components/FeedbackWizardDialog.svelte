@@ -18,6 +18,7 @@
   import Blocks from "lucide-svelte/icons/blocks";
   import Hexagon from "lucide-svelte/icons/hexagon";
   import Circle from "lucide-svelte/icons/circle";
+  import Globe from "lucide-svelte/icons/globe";
   import FileText from "lucide-svelte/icons/file-text";
   import HandHelping from "lucide-svelte/icons/hand-helping";
   import ChevronLeft from "lucide-svelte/icons/chevron-left";
@@ -153,6 +154,7 @@
       case "cex": return m.feedback_source_cex();
       case "defi": return m.feedback_source_defi();
       case "pdf": return m.feedback_source_pdf();
+      case "blockchain": return m.feedback_source_blockchain();
     }
   }
 </script>
@@ -224,6 +226,7 @@
             { type: "pdf" as SourceType, icon: FileText, name: m.feedback_source_pdf(), desc: m.feedback_source_pdf_desc(), difficulty: m.feedback_difficulty_advanced() },
             { type: "cex" as SourceType, icon: ArrowUpDown, name: m.feedback_source_cex(), desc: m.feedback_source_cex_desc(), difficulty: m.feedback_difficulty_moderate() },
             { type: "defi" as SourceType, icon: Blocks, name: m.feedback_source_defi(), desc: m.feedback_source_defi_desc(), difficulty: m.feedback_difficulty_moderate() },
+            { type: "blockchain" as SourceType, icon: Globe, name: m.feedback_source_blockchain(), desc: m.feedback_source_blockchain_desc(), difficulty: m.feedback_difficulty_advanced() },
           ] as item (item.type)}
             <button
               type="button"
@@ -309,11 +312,12 @@
           <Dialog.Title>{m.feedback_llm_title({ type: sourceTypeLabel(sourceType) })}</Dialog.Title>
         </div>
         <Dialog.Description>{sourceType === "csv" || sourceType === "pdf" ? m.feedback_llm_desc_file() : m.feedback_llm_desc_api()}</Dialog.Description>
+
       </Dialog.Header>
 
       <div class="space-y-4">
         <!-- URL input for API-based types -->
-        {#if sourceType === "cex" || sourceType === "defi"}
+        {#if sourceType === "cex" || sourceType === "defi" || sourceType === "blockchain"}
           <div class="space-y-1">
             <label for="source-url" class="text-sm font-medium">
               {m.feedback_llm_website_url()}

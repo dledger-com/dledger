@@ -41,7 +41,8 @@ export function loadPluginFromCode(code: string): PluginLoadResult {
       (plugin.transactionHandlers && plugin.transactionHandlers.length > 0) ||
       (plugin.pdfParsers && plugin.pdfParsers.length > 0) ||
       (plugin.rateSources && plugin.rateSources.length > 0) ||
-      (plugin.solanaHandlers && plugin.solanaHandlers.length > 0);
+      (plugin.solanaHandlers && plugin.solanaHandlers.length > 0) ||
+      (plugin.blockchainSources && plugin.blockchainSources.length > 0);
 
     if (!hasContributions) {
       return { success: false, error: "Plugin must provide at least one contribution (csvPresets, cexAdapters, transactionHandlers, pdfParsers, rateSources, or solanaHandlers)." };

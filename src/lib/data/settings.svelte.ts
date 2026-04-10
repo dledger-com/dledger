@@ -64,6 +64,7 @@ export interface AppSettings {
   heliusEnabled?: boolean;  // Enable/disable Helius (Solana) integration
   blockfrostApiKey?: string; // Blockfrost API key for Cardano sync
   moneroLwsUrl?: string;     // Monero Light Wallet Server URL (user-configured, no default)
+  pluginChainConfig?: Record<string, Record<string, string>>;
   onboardingCompleted?: boolean;
   onboardingDismissedChecklist?: boolean;
   dashboardRangePreset?: string;

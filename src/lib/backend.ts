@@ -100,6 +100,16 @@ export interface CurrencyDateRequirement {
 // production.)
 import { DEMO_MODE } from "./demo.js";
 
+export interface GenericBlockchainAccount {
+  id: string;
+  chain: string;
+  address: string;
+  label: string;
+  cursor: string | null;
+  last_sync: string | null;
+  created_at: string;
+}
+
 export interface Backend {
   // Currencies
   listCurrencies(): Promise<Currency[]>;
@@ -406,6 +416,13 @@ export interface Backend {
   updateBitsharesAccountObjectId(id: string, objectId: string): Promise<void>;
   updateBitsharesSyncCursor(id: string, operationId: string): Promise<void>;
   syncBitshares(account: BitsharesAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitsharesSyncResult>;
+
+  // Generic blockchain accounts (plugin chains)
+  listBlockchainAccounts(chain: string): Promise<GenericBlockchainAccount[]>;
+  addBlockchainAccount(account: Omit<GenericBlockchainAccount, "cursor" | "last_sync">): Promise<void>;
+  removeBlockchainAccount(id: string): Promise<void>;
+  updateBlockchainAccountLabel(id: string, label: string): Promise<void>;
+  updateBlockchainAccountCursor(id: string, cursor: string | null): Promise<void>;
 
   // Exchange accounts (CEX)
   listExchangeAccounts(): Promise<ExchangeAccount[]>;
@@ -1168,6 +1185,13 @@ class TauriBackend implements Backend {
     const { syncBitsharesAccount } = await import("./bitshares/sync.js");
     return syncBitsharesAccount(this, account, onProgress, signal);
   }
+
+  // Generic blockchain accounts (plugin chains) — delegate to SqlJsBackend via dynamic import
+  async listBlockchainAccounts(chain: string): Promise<GenericBlockchainAccount[]> { return this.invoke("list_blockchain_accounts", { chain }); }
+  async addBlockchainAccount(account: Omit<GenericBlockchainAccount, "cursor" | "last_sync">): Promise<void> { return this.invoke("add_blockchain_account", { account }); }
+  async removeBlockchainAccount(id: string): Promise<void> { return this.invoke("remove_blockchain_account", { id }); }
+  async updateBlockchainAccountLabel(id: string, label: string): Promise<void> { return this.invoke("update_blockchain_account_label", { id, label }); }
+  async updateBlockchainAccountCursor(id: string, cursor: string | null): Promise<void> { return this.invoke("update_blockchain_account_cursor", { id, cursor }); }
 
   // Exchange accounts (CEX)
   async listExchangeAccounts(): Promise<ExchangeAccount[]> {

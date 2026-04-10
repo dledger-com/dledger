@@ -22,6 +22,7 @@ export interface Plugin {
   pdfParsers?: PdfParserExtension[];
   cexAdapters?: CexAdapter[];
   rateSources?: RateSourceExtension[];
+  blockchainSources?: BlockchainSourceExtension[];
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,64 @@ export interface PdfParserExtension {
   detect(pages: PdfPage[]): number;     // 0-100 confidence
   parse(pages: PdfPage[]): PdfStatement;
   suggestAccount?(statement: PdfStatement): string;
+}
+
+// ---------------------------------------------------------------------------
+// Blockchain source extension (plugin-provided chains)
+// ---------------------------------------------------------------------------
+
+export interface BlockchainSourceExtension {
+  chainId: string;                // unique, e.g. "fantom"
+  chainName: string;              // display: "Fantom"
+  symbol: string;                 // native token: "FTM"
+  coingeckoId?: string;           // for chain icon via CoinGecko API
+  addressRegex: string;           // regex as string (compiled at registration)
+  addressPlaceholder: string;     // "0x..."
+  caseSensitive?: boolean;
+
+  /** Optional config fields the user must provide (e.g. API key). */
+  requiredConfig?: { key: string; label: string; placeholder?: string }[];
+
+  /** Fetch one page of transactions. Framework handles pagination loop + cursor storage. */
+  fetchTransactions(
+    address: string,
+    cursor: string | null,
+    config: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<BlockchainFetchResult>;
+
+  /** Classify one raw tx into journal line items. Return null to skip. */
+  processTransaction(
+    tx: BlockchainRawTransaction,
+    ctx: BlockchainProcessContext,
+  ): BlockchainProcessedTransaction | null;
+}
+
+export interface BlockchainFetchResult {
+  transactions: BlockchainRawTransaction[];
+  nextCursor: string | null;
+}
+
+export interface BlockchainRawTransaction {
+  id: string;              // unique tx identifier (hash, signature, etc.)
+  timestamp: number;       // Unix seconds
+  data: unknown;           // opaque — passed to processTransaction
+}
+
+export interface BlockchainProcessContext {
+  address: string;
+  label: string;
+  chainName: string;
+  symbol: string;
+}
+
+export interface BlockchainProcessedTransaction {
+  source: string;          // dedup key, e.g. "fantom:0xabc..."
+  date: string;            // YYYY-MM-DD
+  description: string;
+  descriptionData?: string; // JSON-stringified DescriptionData
+  items: { account: string; currency: string; amount: string }[];
+  metadata?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------

@@ -1045,6 +1045,8 @@
   "feedback_defi_evm_desc": "Ethereum, Arbitrum, Base, Polygon, Optimism...",
   "feedback_defi_solana": "Solana",
   "feedback_defi_solana_desc": "SPL tokens, Jupiter, Raydium, Marinade...",
+  "feedback_source_blockchain": "Blockchain source",
+  "feedback_source_blockchain_desc": "Add a new blockchain as a data source",
   "feedback_source_pdf": "PDF statement",
   "feedback_source_pdf_desc": "Bank PDF statement parser",
   "feedback_source_human": "Get help from a human",

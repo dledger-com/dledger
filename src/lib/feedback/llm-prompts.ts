@@ -1,6 +1,6 @@
 // LLM prompt templates for plugin creation guidance.
 
-export type SourceType = "csv" | "cex" | "defi" | "pdf";
+export type SourceType = "csv" | "cex" | "defi" | "pdf" | "blockchain";
 export type DefiChainFamily = "evm" | "solana";
 
 const CSV_PRESET_INTERFACE = `interface CsvRecord {
@@ -758,6 +758,177 @@ const handler = {
   },
 };`;
 
+const BLOCKCHAIN_SOURCE_INTERFACE = `// ---- Blockchain Source Plugin ----
+// A blockchain source plugin adds support for a new blockchain as a data source.
+// The framework handles: account CRUD, pagination loop, deduplication, journal posting.
+// Your plugin provides: how to fetch transactions from the chain's API and how to classify them.
+
+interface BlockchainSourceExtension {
+  chainId: string;                // unique identifier, e.g. "my-chain"
+  chainName: string;              // display name, e.g. "My Chain"
+  symbol: string;                 // native token symbol, e.g. "MYC"
+  coingeckoId?: string;           // CoinGecko ID for the chain icon (e.g. "ethereum", "solana")
+  addressRegex: string;           // regex as string to validate addresses
+  addressPlaceholder: string;     // placeholder for the address input field
+  caseSensitive?: boolean;        // whether addresses are case-sensitive (default: false)
+
+  // Optional config the user must provide (shown in Settings)
+  requiredConfig?: { key: string; label: string; placeholder?: string }[];
+
+  // Fetch one page of transactions. Called in a loop until nextCursor is null.
+  fetchTransactions(
+    address: string,
+    cursor: string | null,         // null on first call, then the value from previous nextCursor
+    config: Record<string, string>, // values from requiredConfig (e.g. { apiKey: "..." })
+    signal?: AbortSignal,
+  ): Promise<BlockchainFetchResult>;
+
+  // Process one raw transaction into journal line items. Return null to skip.
+  processTransaction(
+    tx: BlockchainRawTransaction,
+    ctx: BlockchainProcessContext,
+  ): BlockchainProcessedTransaction | null;
+}
+
+interface BlockchainFetchResult {
+  transactions: BlockchainRawTransaction[];
+  nextCursor: string | null;       // null = no more pages
+}
+
+interface BlockchainRawTransaction {
+  id: string;              // unique tx identifier (hash, etc.) — used for logging
+  timestamp: number;       // Unix seconds
+  data: unknown;           // your raw API data — passed to processTransaction as-is
+}
+
+interface BlockchainProcessContext {
+  address: string;         // user's wallet address
+  label: string;           // user's label for this wallet
+  chainName: string;       // from your extension (e.g. "My Chain")
+  symbol: string;          // from your extension (e.g. "MYC")
+}
+
+interface BlockchainProcessedTransaction {
+  source: string;          // dedup key — must be unique per tx, e.g. "my-chain:0xabc..."
+  date: string;            // YYYY-MM-DD
+  description: string;     // human-readable description
+  descriptionData?: string; // optional JSON description_data for UI rendering
+  items: { account: string; currency: string; amount: string }[];
+  // Line items — must sum to zero per currency (double-entry bookkeeping):
+  // - positive amount = debit (asset increase, expense)
+  // - negative amount = credit (asset decrease, income)
+  metadata?: Record<string, string>;
+}
+
+// ---- Account path conventions ----
+// Assets:Crypto:Wallet:{ChainName}:{Label}      — user's wallet
+// Assets:Crypto:Wallet:{ChainName}:External:{Addr} — counterparty
+// Expenses:Crypto:Fees:{ChainName}               — transaction fees
+// Assets:Crypto:Staking:{ChainName}:{Label}      — staked assets
+// Income:Crypto:Staking:{ChainName}               — staking rewards`;
+
+const BLOCKCHAIN_SOURCE_EXAMPLE = `// Complete blockchain source example — a simple account-based chain with REST API
+// The framework handles pagination, dedup, and journal posting. You just fetch and classify.
+
+// Convert raw amount (integer string) to decimal string
+function formatAmount(value, decimals) {
+  if (!value || value === "0") return "0";
+  const s = String(value).padStart(decimals + 1, "0");
+  const whole = s.slice(0, s.length - decimals) || "0";
+  const frac = s.slice(s.length - decimals).replace(/0+$/, "");
+  return frac ? whole + "." + frac : whole;
+}
+
+const chainSource = {
+  chainId: "my-chain",
+  chainName: "My Chain",
+  symbol: "MYC",
+  coingeckoId: "my-chain",
+  addressRegex: "^0x[a-fA-F0-9]{40}$",
+  addressPlaceholder: "0x...",
+  caseSensitive: false,
+
+  // This chain needs an API key to fetch transactions
+  requiredConfig: [
+    { key: "apiKey", label: "API Key", placeholder: "Enter your API key" },
+  ],
+
+  async fetchTransactions(address, cursor, config, signal) {
+    const apiKey = config.apiKey || "";
+    const page = cursor ? parseInt(cursor) : 1;
+    const url = "https://api.my-chain.xyz/v1/account/" + address + "/txs?page=" + page + "&api_key=" + apiKey;
+
+    const resp = await fetch(url, { signal });
+    if (!resp.ok) throw new Error("API error: " + resp.status);
+    const data = await resp.json();
+
+    return {
+      transactions: data.transactions.map(function(tx) {
+        return { id: tx.hash, timestamp: tx.timestamp, data: tx };
+      }),
+      nextCursor: data.hasMore ? String(page + 1) : null,
+    };
+  },
+
+  processTransaction(tx, ctx) {
+    const raw = tx.data;
+    const addr = ctx.address.toLowerCase();
+    const date = new Date(tx.timestamp * 1000).toISOString().slice(0, 10);
+
+    // Skip failed transactions
+    if (raw.status === "failed") return null;
+
+    const items = [];
+    const walletAccount = "Assets:Crypto:Wallet:" + ctx.chainName + ":" + ctx.label;
+
+    // Classify by transaction type
+    if (raw.type === "transfer") {
+      const amount = formatAmount(raw.value, 18);
+      const isSender = raw.from.toLowerCase() === addr;
+      const counterparty = isSender ? raw.to : raw.from;
+      const shortAddr = counterparty.slice(0, 10) + "-" + counterparty.slice(-4);
+      const externalAccount = "Assets:Crypto:Wallet:" + ctx.chainName + ":External:" + shortAddr;
+
+      if (isSender) {
+        items.push({ account: walletAccount, currency: ctx.symbol, amount: "-" + amount });
+        items.push({ account: externalAccount, currency: ctx.symbol, amount: amount });
+      } else {
+        items.push({ account: walletAccount, currency: ctx.symbol, amount: amount });
+        items.push({ account: externalAccount, currency: ctx.symbol, amount: "-" + amount });
+      }
+    } else if (raw.type === "staking_reward") {
+      const amount = formatAmount(raw.reward, 18);
+      items.push({ account: walletAccount, currency: ctx.symbol, amount: amount });
+      items.push({ account: "Income:Crypto:Staking:" + ctx.chainName, currency: ctx.symbol, amount: "-" + amount });
+    }
+
+    // Add transaction fee
+    if (raw.fee && raw.from.toLowerCase() === addr) {
+      const feeAmount = formatAmount(raw.fee, 18);
+      if (feeAmount !== "0") {
+        items.push({ account: "Expenses:Crypto:Fees:" + ctx.chainName, currency: ctx.symbol, amount: feeAmount });
+        items.push({ account: walletAccount, currency: ctx.symbol, amount: "-" + feeAmount });
+      }
+    }
+
+    if (items.length === 0) return null;
+
+    const direction = raw.from?.toLowerCase() === addr ? "sent" : "received";
+
+    return {
+      source: ctx.chainName.toLowerCase().replace(/\\s+/g, "-") + ":" + raw.hash,
+      date: date,
+      description: ctx.chainName + ": " + (raw.type === "staking_reward" ? "Staking reward" : direction === "sent" ? "Sent " + ctx.symbol : "Received " + ctx.symbol),
+      items: items,
+      metadata: {
+        "chain:txhash": raw.hash,
+        "chain:type": raw.type,
+        "chain:direction": direction,
+      },
+    };
+  },
+};`;
+
 const PDF_PARSER_INTERFACE = `// Each text item has x,y coordinates — use x position to distinguish columns
 // (e.g., dates at x < 100, descriptions at 100 < x < 400, amounts at x > 400)
 interface PdfTextItem {
@@ -906,6 +1077,7 @@ function sourceTypeLabel(type: SourceType): string {
     case "cex": return "exchange API";
     case "defi": return "DeFi handler";
     case "pdf": return "PDF parser";
+    case "blockchain": return "blockchain source";
   }
 }
 
@@ -1022,6 +1194,31 @@ export function generateLlmPrompt(type: SourceType, url?: string, defiChain?: De
       parts.push("Please implement a PdfParserExtension that can detect and parse these statements.");
       parts.push("Detection tip: try parsing the PDF and score by transaction count (see example).");
       break;
+
+    case "blockchain":
+      parts.push("## Interfaces to implement");
+      parts.push("```typescript");
+      parts.push(BLOCKCHAIN_SOURCE_INTERFACE);
+      parts.push("```");
+      parts.push("");
+      parts.push("## Complete working example");
+      parts.push("```javascript");
+      parts.push(BLOCKCHAIN_SOURCE_EXAMPLE);
+      parts.push("```");
+      parts.push("");
+      parts.push("## Chain details");
+      parts.push(`The blockchain website: ${url ?? "[URL]"}`);
+      parts.push("The chain name: [NAME]");
+      parts.push("The native token: [SYMBOL]");
+      parts.push("The API documentation: [URL or DESCRIBE]");
+      parts.push("Address format: [DESCRIBE: e.g. starts with 0x, 42 hex chars]");
+      parts.push("");
+      parts.push("Please visit the website above, find the chain name, API docs, and address format, then implement a BlockchainSourceExtension.");
+      parts.push("Follow the example closely — fetchTransactions handles API calls with pagination, processTransaction classifies each transaction into double-entry line items.");
+      parts.push("CRITICAL: The source field in processTransaction must be unique per transaction (e.g. \"my-chain:0xhash...\"). It is used for deduplication.");
+      parts.push("Line items must sum to zero per currency (double-entry bookkeeping). Use the account path conventions from the interface comments.");
+      parts.push("If the chain requires an API key, declare it in requiredConfig — the user will configure it in Settings.");
+      break;
   }
 
   parts.push("");
@@ -1036,6 +1233,17 @@ const plugin = {
   version: "1.0.0",
   description: "Description of what this plugin does",
   solanaHandlers: [{ handler, programIds: ["Proto111..."] }],
+};
+
+exports.plugin = plugin;`);
+  } else if (type === "blockchain") {
+    parts.push(`// Wrap your implementation in a Plugin object:
+const plugin = {
+  id: "com.example.my-chain",   // use reverse-domain naming
+  name: "My Chain Plugin",
+  version: "1.0.0",
+  description: "Description of what this plugin does",
+  blockchainSources: [chainSource],
 };
 
 exports.plugin = plugin;`);
