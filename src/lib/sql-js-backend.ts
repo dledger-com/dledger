@@ -684,7 +684,7 @@ export class SqlJsBackend implements Backend {
       coingecko_id TEXT NOT NULL DEFAULT '',
       dprice_asset_id TEXT NOT NULL DEFAULT ''
     )`);
-    // Generic blockchain account table (v37) — for plugin-provided chains
+    // Generic blockchain account table (v37+) — for all blockchain chains
     db.exec(`CREATE TABLE IF NOT EXISTS blockchain_account (
       id TEXT PRIMARY KEY NOT NULL,
       chain TEXT NOT NULL,
@@ -692,10 +692,11 @@ export class SqlJsBackend implements Backend {
       label TEXT NOT NULL,
       cursor TEXT,
       last_sync TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      extra TEXT
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blockchain_account_chain_addr ON blockchain_account(chain, address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (37)");
+    db.exec("INSERT INTO schema_version (version) VALUES (38)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1604,6 +1605,88 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
           db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blockchain_account_chain_addr ON blockchain_account(chain, address)");
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (37)");
+        }
+        if (currentVersion < 38) {
+          // Add extra column + migrate all per-chain tables into blockchain_account
+          try { db.exec("ALTER TABLE blockchain_account ADD COLUMN extra TEXT"); } catch { /* already exists */ }
+
+          // --- BTC forks (no cursor) ---
+          for (const fork of ["doge", "ltc", "bch", "dash", "bsv", "xec", "grs"]) {
+            try {
+              db.exec(`INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra)
+                SELECT id, '${fork}', address, label, NULL, last_sync, created_at, NULL FROM ${fork}_account`);
+              db.exec(`DROP TABLE IF EXISTS ${fork}_account`);
+            } catch { /* table may not exist */ }
+          }
+
+          // --- Standard string-cursor chains ---
+          const stringCursorChains: [string, string, string][] = [
+            // [chainId, tableName, cursorColumn]
+            ["algorand", "algorand_account", "next_token"],
+            ["hedera", "hedera_account", "last_timestamp"],
+            ["kaspa", "kaspa_account", "last_cursor"],
+            ["near", "near_account", "last_cursor"],
+            ["stellar", "stellar_account", "last_cursor"],
+            ["sui", "sui_account", "last_cursor"],
+            ["ton", "ton_account", "last_lt"],
+            ["tron", "tron_account", "last_fingerprint"],
+            ["xrp", "xrp_account", "last_marker"],
+            ["zcash", "zcash_account", "last_cursor"],
+          ];
+          for (const [chainId, table, cursorCol] of stringCursorChains) {
+            try {
+              db.exec(`INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra)
+                SELECT id, '${chainId}', address, label, ${cursorCol}, last_sync, created_at, NULL FROM ${table}`);
+              db.exec(`DROP TABLE IF EXISTS ${table}`);
+            } catch { /* table may not exist */ }
+          }
+
+          // --- Number-cursor chains (cast to text) ---
+          const numberCursorChains: [string, string, string][] = [
+            ["aptos", "aptos_account", "last_version"],
+            ["bittensor", "bittensor_account", "last_page"],
+            ["cardano", "cardano_account", "last_page"],
+            ["cosmos", "cosmos_account", "last_offset"],
+            ["polkadot", "polkadot_account", "last_page"],
+            ["stacks", "stacks_account", "last_offset"],
+            ["tezos", "tezos_account", "last_id"],
+            ["hl", "hyperliquid_account", "last_sync_time"],
+          ];
+          for (const [chainId, table, cursorCol] of numberCursorChains) {
+            try {
+              db.exec(`INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra)
+                SELECT id, '${chainId}', address, label, CAST(${cursorCol} AS TEXT), last_sync, created_at, NULL FROM ${table}`);
+              db.exec(`DROP TABLE IF EXISTS ${table}`);
+            } catch { /* table may not exist */ }
+          }
+
+          // --- Special chains (with extra fields) ---
+          // Solana: extra = {"network": ...}
+          try {
+            db.exec(`INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra)
+              SELECT id, 'sol', address, label, last_signature, last_sync, created_at,
+                json_object('network', network) FROM solana_account`);
+            db.exec("DROP TABLE IF EXISTS solana_account");
+          } catch { /* table may not exist */ }
+
+          // Monero: extra = {"view_key": ...}
+          try {
+            db.exec(`INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra)
+              SELECT id, 'xmr', address, label, CAST(last_sync_height AS TEXT), last_sync, created_at,
+                json_object('view_key', view_key) FROM monero_account`);
+            db.exec("DROP TABLE IF EXISTS monero_account");
+          } catch { /* table may not exist */ }
+
+          // Bitshares: extra = {"account_object_id": ...}
+          try {
+            db.exec(`INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra)
+              SELECT id, 'bitshares', address, label, last_operation_id, last_sync, created_at,
+                json_object('account_object_id', account_object_id) FROM bitshares_account`);
+            db.exec("DROP TABLE IF EXISTS bitshares_account");
+          } catch { /* table may not exist */ }
+
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (38)");
         }
       }
     }
@@ -4756,7 +4839,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { loadSettings } = await import("./data/settings.svelte.js");
     this.beginTransaction();
     try {
-      const result = await syncSolanaAccount(this, account, loadSettings(), onProgress, signal);
+      const result = await syncSolanaAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, loadSettings(), onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -4817,7 +4900,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncHyperliquidAccount } = await import("./hyperliquid/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncHyperliquidAccount(this, account, onProgress, signal);
+      const result = await syncHyperliquidAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -4871,7 +4954,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncSuiAccount } = await import("./sui/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncSuiAccount(this, account, onProgress, signal);
+      const result = await syncSuiAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -4925,7 +5008,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncAptosAccount } = await import("./aptos/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncAptosAccount(this, account, onProgress, signal);
+      const result = await syncAptosAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -4979,7 +5062,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncTonAccount } = await import("./ton/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncTonAccount(this, account, onProgress, signal);
+      const result = await syncTonAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5033,7 +5116,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncTezosAccount } = await import("./tezos/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncTezosAccount(this, account, onProgress, signal);
+      const result = await syncTezosAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5087,7 +5170,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncCosmosAccount } = await import("./cosmos/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncCosmosAccount(this, account, onProgress, signal);
+      const result = await syncCosmosAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5141,7 +5224,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncPolkadotAccount } = await import("./polkadot/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncPolkadotAccount(this, account, onProgress, signal);
+      const result = await syncPolkadotAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5195,7 +5278,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "doge" }, BTC_FORK_CHAINS.doge, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "doge" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.doge, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5249,7 +5332,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "ltc" }, BTC_FORK_CHAINS.ltc, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "ltc" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.ltc, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5303,7 +5386,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "bch" }, BTC_FORK_CHAINS.bch, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "bch" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.bch, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5357,7 +5440,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "dash" }, BTC_FORK_CHAINS.dash, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "dash" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.dash, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5411,7 +5494,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "bsv" }, BTC_FORK_CHAINS.bsv, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "bsv" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.bsv, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5465,7 +5548,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "xec" }, BTC_FORK_CHAINS.xec, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "xec" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.xec, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5519,7 +5602,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
     this.beginTransaction();
     try {
-      const result = await syncBtcForkAccount(this, { ...account, chain: "grs" }, BTC_FORK_CHAINS.grs, onProgress, signal);
+      const result = await syncBtcForkAccount(this, { ...account, chain: "grs" } as unknown as import("./backend.js").GenericBlockchainAccount, BTC_FORK_CHAINS.grs, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5573,7 +5656,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncXrpAccount } = await import("./xrp/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncXrpAccount(this, account, onProgress, signal);
+      const result = await syncXrpAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5627,7 +5710,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncTronAccount } = await import("./tron/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncTronAccount(this, account, onProgress, signal);
+      const result = await syncTronAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5681,7 +5764,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncStellarAccount } = await import("./stellar/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncStellarAccount(this, account, onProgress, signal);
+      const result = await syncStellarAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5735,7 +5818,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncBittensorAccount } = await import("./bittensor/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncBittensorAccount(this, account, onProgress, signal);
+      const result = await syncBittensorAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5789,7 +5872,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncHederaAccount } = await import("./hedera/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncHederaAccount(this, account, onProgress, signal);
+      const result = await syncHederaAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5843,7 +5926,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncNearAccount } = await import("./near/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncNearAccount(this, account, onProgress, signal);
+      const result = await syncNearAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5897,7 +5980,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncAlgorandAccount } = await import("./algorand/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncAlgorandAccount(this, account, onProgress, signal);
+      const result = await syncAlgorandAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -5951,7 +6034,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncKaspaAccount } = await import("./kaspa/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncKaspaAccount(this, account, onProgress, signal);
+      const result = await syncKaspaAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -6005,7 +6088,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncZcashAccount } = await import("./zcash/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncZcashAccount(this, account, onProgress, signal);
+      const result = await syncZcashAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -6059,7 +6142,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncStacksAccount } = await import("./stacks/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncStacksAccount(this, account, onProgress, signal);
+      const result = await syncStacksAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -6114,7 +6197,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { loadSettings } = await import("./data/settings.svelte.js");
     this.beginTransaction();
     try {
-      const result = await syncCardanoAccount(this, account, loadSettings(), onProgress, signal);
+      const result = await syncCardanoAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, loadSettings(), onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -6169,7 +6252,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { loadSettings } = await import("./data/settings.svelte.js");
     this.beginTransaction();
     try {
-      const result = await syncMoneroAccount(this, account, loadSettings(), onProgress, signal);
+      const result = await syncMoneroAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, loadSettings(), onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -6229,7 +6312,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const { syncBitsharesAccount } = await import("./bitshares/sync.js");
     this.beginTransaction();
     try {
-      const result = await syncBitsharesAccount(this, account, onProgress, signal);
+      const result = await syncBitsharesAccount(this, account as unknown as import("./backend.js").GenericBlockchainAccount, onProgress, signal);
       this.commitTransaction();
       return result;
     } catch (e) {
@@ -6242,20 +6325,22 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
 
   async listBlockchainAccounts(chain: string): Promise<import("./backend.js").GenericBlockchainAccount[]> {
     return this.query(
-      "SELECT id, chain, address, label, cursor, last_sync, created_at FROM blockchain_account WHERE chain = ? ORDER BY created_at",
+      "SELECT id, chain, address, label, cursor, last_sync, created_at, extra FROM blockchain_account WHERE chain = ? ORDER BY created_at",
       [chain],
       (row) => ({
         id: row.id as string, chain: row.chain as string, address: row.address as string,
         label: row.label as string, cursor: (row.cursor as string) ?? null,
         last_sync: (row.last_sync as string) ?? null, created_at: row.created_at as string,
+        extra: row.extra ? JSON.parse(row.extra as string) : null,
       }),
     );
   }
 
-  async addBlockchainAccount(account: Omit<import("./backend.js").GenericBlockchainAccount, "cursor" | "last_sync">): Promise<void> {
+  async addBlockchainAccount(account: Omit<import("./backend.js").GenericBlockchainAccount, "cursor" | "last_sync"> & { extra?: Record<string, string> | null }): Promise<void> {
+    const extraJson = account.extra ? JSON.stringify(account.extra) : null;
     this.run(
-      "INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)",
-      [account.id, account.chain, account.address, account.label, account.created_at],
+      "INSERT INTO blockchain_account (id, chain, address, label, cursor, last_sync, created_at, extra) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)",
+      [account.id, account.chain, account.address, account.label, account.created_at, extraJson],
     );
     this.scheduleSave();
   }

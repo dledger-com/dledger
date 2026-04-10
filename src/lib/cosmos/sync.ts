@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { CosmosAccount, CosmosSyncResult, CosmosTxResponse, CosmosMessage } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { CosmosSyncResult, CosmosTxResponse, CosmosMessage } from "./types.js";
 
 const CHAIN = "Cosmos";
 
@@ -33,7 +34,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncCosmosAccount(
 	backend: Backend,
-	account: CosmosAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<CosmosSyncResult> {
@@ -46,7 +47,7 @@ export async function syncCosmosAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { txs } = await fetchTransactions(account.address, account.last_offset ?? undefined, signal);
+	const { txs } = await fetchTransactions(account.address, account.cursor ? parseInt(account.cursor) : undefined, signal);
 
 	if (txs.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -281,8 +282,8 @@ export async function syncCosmosAccount(
 	}
 
 	// 4. Update cursor
-	const newOffset = (account.last_offset ?? 0) + txs.length;
-	await backend.updateCosmosSyncOffset(account.id, newOffset);
+	const newOffset = (account.cursor ? parseInt(account.cursor) : 0) + txs.length;
+	await backend.updateBlockchainAccountCursor(account.id, String(newOffset));
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);
 	invalidate("journal", "accounts", "reports");

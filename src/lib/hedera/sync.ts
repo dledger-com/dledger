@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { HederaAccount, HederaSyncResult, HederaTransaction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { HederaSyncResult, HederaTransaction } from "./types.js";
 
 const CHAIN = "Hedera";
 const HBAR_DECIMALS = 8; // 1 HBAR = 10^8 tinybar
@@ -28,7 +29,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncHederaAccount(
 	backend: Backend,
-	account: HederaAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<HederaSyncResult> {
@@ -41,7 +42,7 @@ export async function syncHederaAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { transactions, cursor } = await fetchTransactions(account.address, account.last_timestamp ?? undefined, signal);
+	const { transactions, cursor } = await fetchTransactions(account.address, account.cursor ?? undefined, signal);
 
 	if (transactions.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -211,7 +212,7 @@ export async function syncHederaAccount(
 
 	// 4. Update cursor
 	if (cursor) {
-		await backend.updateHederaSyncCursor(account.id, cursor);
+		await backend.updateBlockchainAccountCursor(account.id, cursor);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

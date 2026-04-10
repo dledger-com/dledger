@@ -10,7 +10,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { BtcForkAccount, BtcForkChainConfig, BtcForkSyncResult, NormalizedTx } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { BtcForkChainConfig, BtcForkSyncResult, NormalizedTx } from "./types.js";
 
 function shortAddr(addr: string): string {
 	return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
@@ -27,7 +28,7 @@ function satsToCoins(sats: number, decimals: number): string {
 
 export async function syncBtcForkAccount(
 	backend: Backend,
-	account: BtcForkAccount,
+	account: GenericBlockchainAccount,
 	config: BtcForkChainConfig,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,

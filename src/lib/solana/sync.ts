@@ -12,7 +12,8 @@ import { nativeStakingHandler } from "./handlers/native-staking.js";
 import { raydiumHandler } from "./handlers/raydium.js";
 import { marinadeHandler } from "./handlers/marinade.js";
 import { jitoHandler } from "./handlers/jito.js";
-import type { SolanaAccount, SolanaSyncResult, SolTxGroup } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { SolanaSyncResult, SolTxGroup } from "./types.js";
 import type { SolanaHandlerContext } from "./handlers/types.js";
 
 // Well-known program IDs for handler registration
@@ -46,7 +47,7 @@ function buildDefaultRegistry(): SolanaHandlerRegistry {
  */
 export async function syncSolanaAccount(
   backend: Backend,
-  account: SolanaAccount,
+  account: GenericBlockchainAccount,
   settings: AppSettings,
   onProgress?: (msg: string) => void,
   signal?: AbortSignal,
@@ -70,7 +71,7 @@ export async function syncSolanaAccount(
   let transactions: SolTxGroup[];
   try {
     transactions = await fetchTransactionHistory(account.address, apiKey, {
-      lastSignature: account.last_signature ?? undefined,
+      lastSignature: account.cursor ?? undefined,
       signal,
     });
   } catch (e) {
@@ -180,7 +181,7 @@ export async function syncSolanaAccount(
   }
 
   // 3. Process each transaction
-  let latestSignature = account.last_signature;
+  let latestSignature = account.cursor;
 
   for (let i = 0; i < transactions.length; i++) {
     if (signal?.aborted) throw new Error("Sync aborted");
@@ -291,8 +292,8 @@ export async function syncSolanaAccount(
   }
 
   // 4. Update last_signature cursor
-  if (latestSignature && latestSignature !== account.last_signature) {
-    await backend.updateSolanaLastSignature(account.id, latestSignature);
+  if (latestSignature && latestSignature !== account.cursor) {
+    await backend.updateBlockchainAccountCursor(account.id, latestSignature);
   }
 
   return result;

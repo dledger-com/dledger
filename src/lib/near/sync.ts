@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { NearAccount, NearSyncResult, NearTransaction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { NearSyncResult, NearTransaction } from "./types.js";
 
 const CHAIN = "NEAR";
 const NEAR_DECIMALS = 24; // 1 NEAR = 10^24 yoctoNEAR
@@ -30,7 +31,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncNearAccount(
 	backend: Backend,
-	account: NearAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<NearSyncResult> {
@@ -43,7 +44,7 @@ export async function syncNearAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { txns, cursor } = await fetchTransactions(account.address, account.last_cursor ?? undefined, signal);
+	const { txns, cursor } = await fetchTransactions(account.address, account.cursor ?? undefined, signal);
 
 	if (txns.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -205,7 +206,7 @@ export async function syncNearAccount(
 
 	// 4. Update cursor
 	if (cursor) {
-		await backend.updateNearSyncCursor(account.id, cursor);
+		await backend.updateBlockchainAccountCursor(account.id, cursor);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

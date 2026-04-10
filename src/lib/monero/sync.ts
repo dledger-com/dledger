@@ -11,7 +11,8 @@ import { walletAssets, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { lwsLogin, fetchAddressTransactions } from "./api.js";
-import type { MoneroAccount, MoneroSyncResult, LwsTransaction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { MoneroSyncResult, LwsTransaction } from "./types.js";
 
 const CHAIN = "Monero";
 const XMR_DECIMALS = 12; // 1 XMR = 10^12 piconero
@@ -22,7 +23,7 @@ function piconeroToXmr(piconero: string): string {
 
 export async function syncMoneroAccount(
 	backend: Backend,
-	account: MoneroAccount,
+	account: GenericBlockchainAccount,
 	settings: AppSettings,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
@@ -42,17 +43,17 @@ export async function syncMoneroAccount(
 	// 1. Login to LWS (registers address if first time)
 	onProgress?.("Registering with Light Wallet Server...");
 	try {
-		await lwsLogin(lwsUrl, account.address, account.view_key, signal);
+		await lwsLogin(lwsUrl, account.address, account.extra?.view_key ?? "", signal);
 	} catch (e) {
 		throw new Error(`LWS login failed: ${e instanceof Error ? e.message : String(e)}`);
 	}
 
 	// 2. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const response = await fetchAddressTransactions(lwsUrl, account.address, account.view_key, signal);
+	const response = await fetchAddressTransactions(lwsUrl, account.address, account.extra?.view_key ?? "", signal);
 
 	// Filter to new transactions only (above last sync height, confirmed)
-	const minHeight = account.last_sync_height ?? 0;
+	const minHeight = account.cursor ? parseInt(account.cursor) : 0;
 	const newTxs = response.transactions.filter(
 		(tx: LwsTransaction) => tx.height > minHeight && !tx.mempool,
 	);
@@ -202,7 +203,7 @@ export async function syncMoneroAccount(
 
 	// 5. Update height cursor
 	if (maxHeight > minHeight) {
-		await backend.updateMoneroSyncHeight(account.id, maxHeight);
+		await backend.updateBlockchainAccountCursor(account.id, String(maxHeight));
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

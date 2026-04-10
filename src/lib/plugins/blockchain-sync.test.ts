@@ -13,6 +13,7 @@ function makeAccount(overrides: Partial<GenericBlockchainAccount> = {}): Generic
     cursor: null,
     last_sync: null,
     created_at: "2025-01-01",
+    extra: null,
     ...overrides,
   };
 }
@@ -166,6 +167,7 @@ describe("syncPluginChain", () => {
       address: "0x1234567890abcdef1234567890abcdef12345678",
       label: "MyWallet",
       created_at: "2025-01-01",
+      extra: null,
     });
 
     const ext = makeExt({

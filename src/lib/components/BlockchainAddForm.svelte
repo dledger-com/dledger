@@ -19,6 +19,7 @@
         prefillAddress = "",
         embedded = false,
         pluginChainId = undefined,
+        defaultExtra = undefined,
         onClose,
         onAccountAdded,
     }: {
@@ -27,6 +28,7 @@
         prefillAddress?: string;
         embedded?: boolean;
         pluginChainId?: string;
+        defaultExtra?: Record<string, string>;
         onClose: () => void;
         onAccountAdded: () => Promise<void>;
     } = $props();
@@ -136,7 +138,7 @@
                 for (const { index, addr } of selected.map(s => ({ index: s.index, addr: s.address }))) {
                     const lbl = itemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : shortAddr(addr));
                     if (pluginChainId) {
-                        await backend.addBlockchainAccount({ id: uuidv7(), chain: pluginChainId, address: addr, label: lbl, created_at: new Date().toISOString() });
+                        await backend.addBlockchainAccount({ id: uuidv7(), chain: pluginChainId, address: addr, label: lbl, created_at: new Date().toISOString(), extra: defaultExtra ?? null });
                     } else {
                         await (backend as any)[config.backendAdd]({ id: uuidv7(), address: addr, label: lbl, created_at: new Date().toISOString() });
                     }
@@ -167,6 +169,7 @@
                     address: config.caseSensitive ? input : addr,
                     label: baseLabel || shortAddr(input),
                     created_at: new Date().toISOString(),
+                    extra: defaultExtra ?? null,
                 });
             } else {
                 await (backend as any)[config.backendAdd]({

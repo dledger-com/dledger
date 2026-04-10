@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransfers, fetchRewards } from "./api.js";
-import type { PolkadotAccount, PolkadotSyncResult, SubscanTransfer, SubscanReward } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { PolkadotSyncResult, SubscanTransfer, SubscanReward } from "./types.js";
 
 const CHAIN = "Polkadot";
 const DOT_DECIMALS = 10; // 1 DOT = 10^10 Plancks
@@ -30,7 +31,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncPolkadotAccount(
 	backend: Backend,
-	account: PolkadotAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<PolkadotSyncResult> {
@@ -43,7 +44,7 @@ export async function syncPolkadotAccount(
 
 	// 1. Fetch transfers and rewards
 	onProgress?.("Fetching transfers...");
-	const transfers = await fetchTransfers(account.address, account.last_page ?? undefined, signal);
+	const transfers = await fetchTransfers(account.address, account.cursor ? parseInt(account.cursor) : undefined, signal);
 
 	onProgress?.("Fetching rewards...");
 	const rewards = await fetchRewards(account.address, undefined, signal);
@@ -108,7 +109,7 @@ export async function syncPolkadotAccount(
 	await ensureCurrency("DOT");
 
 	// 3. Process transfers
-	let maxPage = account.last_page ?? 0;
+	let maxPage = account.cursor ? parseInt(account.cursor) : 0;
 
 	for (const tx of transfers) {
 		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -272,8 +273,8 @@ export async function syncPolkadotAccount(
 	}
 
 	// 5. Update page cursor
-	if (maxPage > (account.last_page ?? 0)) {
-		await backend.updatePolkadotSyncPage(account.id, maxPage);
+	if (maxPage > (account.cursor ? parseInt(account.cursor) : 0)) {
+		await backend.updateBlockchainAccountCursor(account.id, String(maxPage));
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

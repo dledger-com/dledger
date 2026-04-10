@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchEvents } from "./api.js";
-import type { TonAccount, TonSyncResult, TonEvent, TonAction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { TonSyncResult, TonEvent, TonAction } from "./types.js";
 
 const CHAIN = "TON";
 const TON_DECIMALS = 9;
@@ -24,7 +25,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncTonAccount(
 	backend: Backend,
-	account: TonAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<TonSyncResult> {
@@ -37,7 +38,7 @@ export async function syncTonAccount(
 
 	// 1. Fetch events
 	onProgress?.("Fetching events...");
-	const { events, cursor } = await fetchEvents(account.address, account.last_lt ?? undefined, signal);
+	const { events, cursor } = await fetchEvents(account.address, account.cursor ?? undefined, signal);
 
 	if (events.length === 0) {
 		onProgress?.("No new events found.");
@@ -269,7 +270,7 @@ export async function syncTonAccount(
 
 	// 4. Update cursor
 	if (cursor) {
-		await backend.updateTonSyncCursor(account.id, cursor);
+		await backend.updateBlockchainAccountCursor(account.id, cursor);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

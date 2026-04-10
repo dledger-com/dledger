@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { TronAccount, TronSyncResult, TronTransaction, TronTransferValue } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { TronSyncResult, TronTransaction, TronTransferValue } from "./types.js";
 
 const CHAIN = "Tron";
 const SUN_PER_TRX = 1_000_000;
@@ -42,7 +43,7 @@ function decodeTrc20Transfer(data: string): { to: string; amount: string } | nul
 
 export async function syncTronAccount(
 	backend: Backend,
-	account: TronAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<TronSyncResult> {
@@ -56,7 +57,7 @@ export async function syncTronAccount(
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
 	const { transactions, fingerprint: newFingerprint } = await fetchTransactions(
-		account.address, account.last_fingerprint ?? undefined, signal,
+		account.address, account.cursor ?? undefined, signal,
 	);
 
 	if (transactions.length === 0) {
@@ -253,7 +254,7 @@ export async function syncTronAccount(
 
 	// 4. Update fingerprint cursor
 	if (newFingerprint) {
-		await backend.updateTronSyncFingerprint(account.id, newFingerprint);
+		await backend.updateBlockchainAccountCursor(account.id, newFingerprint);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

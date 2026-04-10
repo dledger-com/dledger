@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchActivities } from "./api.js";
-import type { AptosAccount, AptosSyncResult, AptosActivity } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { AptosSyncResult, AptosActivity } from "./types.js";
 
 const CHAIN = "Aptos";
 
@@ -31,7 +32,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncAptosAccount(
 	backend: Backend,
-	account: AptosAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<AptosSyncResult> {
@@ -44,7 +45,7 @@ export async function syncAptosAccount(
 
 	// 1. Fetch activities
 	onProgress?.("Fetching activities...");
-	const activities = await fetchActivities(account.address, account.last_version ?? undefined, signal);
+	const activities = await fetchActivities(account.address, account.cursor ? parseInt(account.cursor) : undefined, signal);
 
 	if (activities.length === 0) {
 		onProgress?.("No new activities found.");
@@ -111,7 +112,7 @@ export async function syncAptosAccount(
 		byVersion.set(act.transaction_version, group);
 	}
 
-	let maxVersion = account.last_version ?? 0;
+	let maxVersion = account.cursor ? parseInt(account.cursor) : 0;
 
 	for (const [version, group] of byVersion) {
 		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -211,8 +212,8 @@ export async function syncAptosAccount(
 	}
 
 	// 4. Update version cursor
-	if (maxVersion > (account.last_version ?? 0)) {
-		await backend.updateAptosSyncVersion(account.id, maxVersion);
+	if (maxVersion > (account.cursor ? parseInt(account.cursor) : 0)) {
+		await backend.updateBlockchainAccountCursor(account.id, String(maxVersion));
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { KaspaAccount, KaspaSyncResult, KaspaTransaction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { KaspaSyncResult, KaspaTransaction } from "./types.js";
 
 const CHAIN = "Kaspa";
 const KAS_DECIMALS = 8; // 1 KAS = 10^8 sompi
@@ -37,7 +38,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncKaspaAccount(
 	backend: Backend,
-	account: KaspaAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<KaspaSyncResult> {
@@ -50,7 +51,7 @@ export async function syncKaspaAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { transactions, cursor } = await fetchTransactions(account.address, account.last_cursor ?? undefined, signal);
+	const { transactions, cursor } = await fetchTransactions(account.address, account.cursor ?? undefined, signal);
 
 	if (transactions.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -228,7 +229,7 @@ export async function syncKaspaAccount(
 
 	// 4. Update cursor
 	if (cursor) {
-		await backend.updateKaspaSyncCursor(account.id, cursor);
+		await backend.updateBlockchainAccountCursor(account.id, cursor);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

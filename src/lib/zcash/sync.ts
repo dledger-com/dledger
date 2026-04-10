@@ -9,7 +9,8 @@ import { walletAssets, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { ZcashAccount, ZcashSyncResult } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { ZcashSyncResult } from "./types.js";
 
 const CHAIN = "Zcash";
 const ZEC_DECIMALS = 8; // 1 ZEC = 10^8 zatoshi
@@ -28,7 +29,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncZcashAccount(
 	backend: Backend,
-	account: ZcashAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<ZcashSyncResult> {

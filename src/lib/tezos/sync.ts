@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchOperations, fetchTokenTransfers } from "./api.js";
-import type { TezosAccount, TezosSyncResult, TezosOperation, TezosTokenTransfer } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { TezosSyncResult, TezosOperation, TezosTokenTransfer } from "./types.js";
 
 const CHAIN = "Tezos";
 const MUTEZ_DIVISOR = new Decimal("1000000"); // 10^6
@@ -24,7 +25,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncTezosAccount(
 	backend: Backend,
-	account: TezosAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<TezosSyncResult> {
@@ -37,10 +38,10 @@ export async function syncTezosAccount(
 
 	// 1. Fetch operations and token transfers
 	onProgress?.("Fetching XTZ operations...");
-	const operations = await fetchOperations(account.address, account.last_id ?? undefined, signal);
+	const operations = await fetchOperations(account.address, account.cursor ? parseInt(account.cursor) : undefined, signal);
 
 	onProgress?.("Fetching token transfers...");
-	const tokenTransfers = await fetchTokenTransfers(account.address, account.last_id ?? undefined, signal);
+	const tokenTransfers = await fetchTokenTransfers(account.address, account.cursor ? parseInt(account.cursor) : undefined, signal);
 
 	if (operations.length === 0 && tokenTransfers.length === 0) {
 		onProgress?.("No new activity found.");
@@ -100,7 +101,7 @@ export async function syncTezosAccount(
 	}
 
 	// 3. Process XTZ operations
-	let maxId = account.last_id ?? 0;
+	let maxId = account.cursor ? parseInt(account.cursor) : 0;
 
 	for (const op of operations) {
 		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -292,8 +293,8 @@ export async function syncTezosAccount(
 	}
 
 	// 5. Update cursor
-	if (maxId > (account.last_id ?? 0)) {
-		await backend.updateTezosSyncCursor(account.id, maxId);
+	if (maxId > (account.cursor ? parseInt(account.cursor) : 0)) {
+		await backend.updateBlockchainAccountCursor(account.id, String(maxId));
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

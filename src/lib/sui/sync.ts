@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { SuiAccount, SuiSyncResult, SuiTransactionNode, SuiBalanceChange } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { SuiSyncResult, SuiTransactionNode, SuiBalanceChange } from "./types.js";
 
 const CHAIN = "Sui";
 
@@ -29,7 +30,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncSuiAccount(
 	backend: Backend,
-	account: SuiAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<SuiSyncResult> {
@@ -42,7 +43,7 @@ export async function syncSuiAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { nodes, endCursor } = await fetchTransactions(account.address, account.last_cursor ?? undefined, signal);
+	const { nodes, endCursor } = await fetchTransactions(account.address, account.cursor ?? undefined, signal);
 
 	if (nodes.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -211,7 +212,7 @@ export async function syncSuiAccount(
 
 	// 4. Update cursor
 	if (endCursor) {
-		await backend.updateSuiSyncCursor(account.id, endCursor);
+		await backend.updateBlockchainAccountCursor(account.id, endCursor);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

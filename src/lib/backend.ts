@@ -108,6 +108,7 @@ export interface GenericBlockchainAccount {
   cursor: string | null;
   last_sync: string | null;
   created_at: string;
+  extra: Record<string, string> | null;
 }
 
 export interface Backend {
@@ -419,7 +420,7 @@ export interface Backend {
 
   // Generic blockchain accounts (plugin chains)
   listBlockchainAccounts(chain: string): Promise<GenericBlockchainAccount[]>;
-  addBlockchainAccount(account: Omit<GenericBlockchainAccount, "cursor" | "last_sync">): Promise<void>;
+  addBlockchainAccount(account: Omit<GenericBlockchainAccount, "cursor" | "last_sync"> & { extra?: Record<string, string> | null }): Promise<void>;
   removeBlockchainAccount(id: string): Promise<void>;
   updateBlockchainAccountLabel(id: string, label: string): Promise<void>;
   updateBlockchainAccountCursor(id: string, cursor: string | null): Promise<void>;
@@ -866,7 +867,7 @@ class TauriBackend implements Backend {
   async syncSolana(account: SolanaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SolanaSyncResult> {
     const { syncSolanaAccount } = await import("./solana/sync.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
-    return syncSolanaAccount(this, account, loadSettings(), onProgress, signal);
+    return syncSolanaAccount(this, account as unknown as GenericBlockchainAccount, loadSettings(), onProgress, signal);
   }
 
   // Hyperliquid
@@ -887,7 +888,7 @@ class TauriBackend implements Backend {
   }
   async syncHyperliquid(account: HyperliquidAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HyperliquidSyncResult> {
     const { syncHyperliquidAccount } = await import("./hyperliquid/sync.js");
-    return syncHyperliquidAccount(this, account, onProgress, signal);
+    return syncHyperliquidAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Sui
@@ -898,7 +899,7 @@ class TauriBackend implements Backend {
   async updateSuiSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_sui_sync_cursor", { id, cursor }); }
   async syncSui(account: SuiAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<SuiSyncResult> {
     const { syncSuiAccount } = await import("./sui/sync.js");
-    return syncSuiAccount(this, account, onProgress, signal);
+    return syncSuiAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Aptos
@@ -909,7 +910,7 @@ class TauriBackend implements Backend {
   async updateAptosSyncVersion(id: string, version: number): Promise<void> { return this.invoke("update_aptos_sync_version", { id, version }); }
   async syncAptos(account: AptosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AptosSyncResult> {
     const { syncAptosAccount } = await import("./aptos/sync.js");
-    return syncAptosAccount(this, account, onProgress, signal);
+    return syncAptosAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // TON
@@ -920,7 +921,7 @@ class TauriBackend implements Backend {
   async updateTonSyncCursor(id: string, lt: string): Promise<void> { return this.invoke("update_ton_sync_cursor", { id, lt }); }
   async syncTon(account: TonAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TonSyncResult> {
     const { syncTonAccount } = await import("./ton/sync.js");
-    return syncTonAccount(this, account, onProgress, signal);
+    return syncTonAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Tezos
@@ -931,7 +932,7 @@ class TauriBackend implements Backend {
   async updateTezosSyncCursor(id: string, lastId: number): Promise<void> { return this.invoke("update_tezos_sync_cursor", { id, lastId }); }
   async syncTezos(account: TezosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TezosSyncResult> {
     const { syncTezosAccount } = await import("./tezos/sync.js");
-    return syncTezosAccount(this, account, onProgress, signal);
+    return syncTezosAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Cosmos
@@ -942,7 +943,7 @@ class TauriBackend implements Backend {
   async updateCosmosSyncOffset(id: string, offset: number): Promise<void> { return this.invoke("update_cosmos_sync_offset", { id, offset }); }
   async syncCosmos(account: CosmosAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<CosmosSyncResult> {
     const { syncCosmosAccount } = await import("./cosmos/sync.js");
-    return syncCosmosAccount(this, account, onProgress, signal);
+    return syncCosmosAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Polkadot
@@ -953,7 +954,7 @@ class TauriBackend implements Backend {
   async updatePolkadotSyncPage(id: string, page: number): Promise<void> { return this.invoke("update_polkadot_sync_page", { id, page }); }
   async syncPolkadot(account: PolkadotAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<PolkadotSyncResult> {
     const { syncPolkadotAccount } = await import("./polkadot/sync.js");
-    return syncPolkadotAccount(this, account, onProgress, signal);
+    return syncPolkadotAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Dogecoin
@@ -965,7 +966,7 @@ class TauriBackend implements Backend {
   async syncDoge(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "doge" }, BTC_FORK_CHAINS.doge, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "doge" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.doge, onProgress, signal);
   }
 
   // Litecoin
@@ -977,7 +978,7 @@ class TauriBackend implements Backend {
   async syncLtc(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "ltc" }, BTC_FORK_CHAINS.ltc, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "ltc" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.ltc, onProgress, signal);
   }
 
   // Bitcoin Cash
@@ -989,7 +990,7 @@ class TauriBackend implements Backend {
   async syncBch(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "bch" }, BTC_FORK_CHAINS.bch, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "bch" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.bch, onProgress, signal);
   }
 
   // Dash
@@ -1001,7 +1002,7 @@ class TauriBackend implements Backend {
   async syncDash(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "dash" }, BTC_FORK_CHAINS.dash, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "dash" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.dash, onProgress, signal);
   }
 
   // Bitcoin SV
@@ -1013,7 +1014,7 @@ class TauriBackend implements Backend {
   async syncBsv(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "bsv" }, BTC_FORK_CHAINS.bsv, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "bsv" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.bsv, onProgress, signal);
   }
 
   // eCash
@@ -1025,7 +1026,7 @@ class TauriBackend implements Backend {
   async syncXec(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "xec" }, BTC_FORK_CHAINS.xec, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "xec" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.xec, onProgress, signal);
   }
 
   // Groestlcoin
@@ -1037,7 +1038,7 @@ class TauriBackend implements Backend {
   async syncGrs(account: BtcForkAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BtcForkSyncResult> {
     const { syncBtcForkAccount } = await import("./btc-fork/sync.js");
     const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js");
-    return syncBtcForkAccount(this, { ...account, chain: "grs" }, BTC_FORK_CHAINS.grs, onProgress, signal);
+    return syncBtcForkAccount(this, { ...account, chain: "grs" } as unknown as GenericBlockchainAccount, BTC_FORK_CHAINS.grs, onProgress, signal);
   }
 
   // XRP
@@ -1048,7 +1049,7 @@ class TauriBackend implements Backend {
   async updateXrpSyncMarker(id: string, marker: string): Promise<void> { return this.invoke("update_xrp_sync_marker", { id, marker }); }
   async syncXrp(account: XrpAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<XrpSyncResult> {
     const { syncXrpAccount } = await import("./xrp/sync.js");
-    return syncXrpAccount(this, account, onProgress, signal);
+    return syncXrpAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // TRON
@@ -1059,7 +1060,7 @@ class TauriBackend implements Backend {
   async updateTronSyncFingerprint(id: string, fingerprint: string): Promise<void> { return this.invoke("update_tron_sync_fingerprint", { id, fingerprint }); }
   async syncTron(account: TronAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<TronSyncResult> {
     const { syncTronAccount } = await import("./tron/sync.js");
-    return syncTronAccount(this, account, onProgress, signal);
+    return syncTronAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Stellar
@@ -1070,7 +1071,7 @@ class TauriBackend implements Backend {
   async updateStellarSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_stellar_sync_cursor", { id, cursor }); }
   async syncStellar(account: StellarAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StellarSyncResult> {
     const { syncStellarAccount } = await import("./stellar/sync.js");
-    return syncStellarAccount(this, account, onProgress, signal);
+    return syncStellarAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Bittensor
@@ -1081,7 +1082,7 @@ class TauriBackend implements Backend {
   async updateBittensorSyncPage(id: string, page: number): Promise<void> { return this.invoke("update_bittensor_sync_page", { id, page }); }
   async syncBittensor(account: BittensorAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BittensorSyncResult> {
     const { syncBittensorAccount } = await import("./bittensor/sync.js");
-    return syncBittensorAccount(this, account, onProgress, signal);
+    return syncBittensorAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Hedera
@@ -1092,7 +1093,7 @@ class TauriBackend implements Backend {
   async updateHederaSyncCursor(id: string, timestamp: string): Promise<void> { return this.invoke("update_hedera_sync_cursor", { id, timestamp }); }
   async syncHedera(account: HederaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<HederaSyncResult> {
     const { syncHederaAccount } = await import("./hedera/sync.js");
-    return syncHederaAccount(this, account, onProgress, signal);
+    return syncHederaAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // NEAR
@@ -1103,7 +1104,7 @@ class TauriBackend implements Backend {
   async updateNearSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_near_sync_cursor", { id, cursor }); }
   async syncNear(account: NearAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<NearSyncResult> {
     const { syncNearAccount } = await import("./near/sync.js");
-    return syncNearAccount(this, account, onProgress, signal);
+    return syncNearAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Algorand
@@ -1114,7 +1115,7 @@ class TauriBackend implements Backend {
   async updateAlgorandSyncCursor(id: string, token: string): Promise<void> { return this.invoke("update_algorand_sync_cursor", { id, token }); }
   async syncAlgorand(account: AlgorandAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<AlgorandSyncResult> {
     const { syncAlgorandAccount } = await import("./algorand/sync.js");
-    return syncAlgorandAccount(this, account, onProgress, signal);
+    return syncAlgorandAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Kaspa
@@ -1125,7 +1126,7 @@ class TauriBackend implements Backend {
   async updateKaspaSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_kaspa_sync_cursor", { id, cursor }); }
   async syncKaspa(account: KaspaAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<KaspaSyncResult> {
     const { syncKaspaAccount } = await import("./kaspa/sync.js");
-    return syncKaspaAccount(this, account, onProgress, signal);
+    return syncKaspaAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Zcash
@@ -1136,7 +1137,7 @@ class TauriBackend implements Backend {
   async updateZcashSyncCursor(id: string, cursor: string): Promise<void> { return this.invoke("update_zcash_sync_cursor", { id, cursor }); }
   async syncZcash(account: ZcashAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<ZcashSyncResult> {
     const { syncZcashAccount } = await import("./zcash/sync.js");
-    return syncZcashAccount(this, account, onProgress, signal);
+    return syncZcashAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Stacks
@@ -1147,7 +1148,7 @@ class TauriBackend implements Backend {
   async updateStacksSyncOffset(id: string, offset: number): Promise<void> { return this.invoke("update_stacks_sync_offset", { id, offset }); }
   async syncStacks(account: StacksAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<StacksSyncResult> {
     const { syncStacksAccount } = await import("./stacks/sync.js");
-    return syncStacksAccount(this, account, onProgress, signal);
+    return syncStacksAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Cardano
@@ -1159,7 +1160,7 @@ class TauriBackend implements Backend {
   async syncCardano(account: CardanoAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<CardanoSyncResult> {
     const { syncCardanoAccount } = await import("./cardano/sync.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
-    return syncCardanoAccount(this, account, loadSettings(), onProgress, signal);
+    return syncCardanoAccount(this, account as unknown as GenericBlockchainAccount, loadSettings(), onProgress, signal);
   }
 
   // Monero
@@ -1171,7 +1172,7 @@ class TauriBackend implements Backend {
   async syncMonero(account: MoneroAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<MoneroSyncResult> {
     const { syncMoneroAccount } = await import("./monero/sync.js");
     const { loadSettings } = await import("./data/settings.svelte.js");
-    return syncMoneroAccount(this, account, loadSettings(), onProgress, signal);
+    return syncMoneroAccount(this, account as unknown as GenericBlockchainAccount, loadSettings(), onProgress, signal);
   }
 
   // Bitshares
@@ -1183,7 +1184,7 @@ class TauriBackend implements Backend {
   async updateBitsharesSyncCursor(id: string, operationId: string): Promise<void> { return this.invoke("update_bitshares_sync_cursor", { id, operationId }); }
   async syncBitshares(account: BitsharesAccount, onProgress?: (msg: string) => void, signal?: AbortSignal): Promise<BitsharesSyncResult> {
     const { syncBitsharesAccount } = await import("./bitshares/sync.js");
-    return syncBitsharesAccount(this, account, onProgress, signal);
+    return syncBitsharesAccount(this, account as unknown as GenericBlockchainAccount, onProgress, signal);
   }
 
   // Generic blockchain accounts (plugin chains) — delegate to SqlJsBackend via dynamic import

@@ -43,6 +43,15 @@ export interface BlockchainConfig {
 
 	// Activity checking (undefined = not supported for this chain)
 	checkActivity?: (address: string, signal?: AbortSignal, apiKey?: string) => Promise<boolean | null>;
+
+	// Generic blockchain_account table (true = uses generic CRUD methods instead of per-chain dynamic dispatch)
+	generic?: boolean;
+
+	// Sync function for generic chains (lazy-imported, called directly by Sources page)
+	syncFn?: (backend: import("./backend.js").Backend, account: import("./backend.js").GenericBlockchainAccount, settings: import("./data/settings.svelte.js").AppSettings, onProgress?: (msg: string) => void, signal?: AbortSignal) => Promise<any>;
+
+	// Default extra fields for new accounts (e.g., Solana network)
+	defaultExtra?: Record<string, string>;
 }
 
 import { getActivityChecker } from "./blockchain-activity.js";
@@ -83,6 +92,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateAlgorandAccountLabel", backendSync: "syncAlgorand", syncTaskPrefix: "algorand-sync",
 		detectInput: detectAlgorandInputType, deriveAddresses: deriveAlgorandAddresses,
 		checkActivity: getActivityChecker("algorand") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncAlgorandAccount } = await import("./algorand/sync.js"); return syncAlgorandAccount(b, a, p, s); },
 	},
 	// Aptos
 	{
@@ -93,6 +104,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateAptosAccountLabel", backendSync: "syncAptos", syncTaskPrefix: "aptos-sync",
 		detectInput: detectAptosInputType, deriveAddresses: deriveAptosAddresses,
 		checkActivity: getActivityChecker("aptos") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncAptosAccount } = await import("./aptos/sync.js"); return syncAptosAccount(b, a, p, s); },
 	},
 	// Bitcoin Cash
 	{
@@ -103,6 +116,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateBchAccountLabel", backendSync: "syncBch", syncTaskPrefix: "bch-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.bch, input),
 		deriveAddresses: null, // CashAddr not supported from seed yet
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.bch, p, s); },
 	},
 	// Dash
 	{
@@ -114,6 +129,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.dash, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.dash, m, c, p, s),
 		checkActivity: getActivityChecker("dash") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.dash, p, s); },
 	},
 	// Bitcoin SV
 	{
@@ -124,6 +141,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateBsvAccountLabel", backendSync: "syncBsv", syncTaskPrefix: "bsv-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.bsv, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.bsv, m, c, p, s),
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.bsv, p, s); },
 	},
 	// eCash
 	{
@@ -134,6 +153,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateXecAccountLabel", backendSync: "syncXec", syncTaskPrefix: "xec-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.xec, input),
 		deriveAddresses: null, // CashAddr not supported from seed yet
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.xec, p, s); },
 	},
 	// Groestlcoin
 	{
@@ -144,6 +165,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateGrsAccountLabel", backendSync: "syncGrs", syncTaskPrefix: "grs-sync",
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.grs, input),
 		deriveAddresses: null, // GRS uses Groestl hash, not SHA-256 — needs custom derivation
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.grs, p, s); },
 	},
 	// Bittensor
 	{
@@ -154,6 +177,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateBittensorAccountLabel", backendSync: "syncBittensor", syncTaskPrefix: "bittensor-sync",
 		detectInput: detectBittensorInputType, deriveAddresses: deriveBittensorAddresses,
 		checkActivity: getActivityChecker("bittensor") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBittensorAccount } = await import("./bittensor/sync.js"); return syncBittensorAccount(b, a, p, s); },
 	},
 	// Bitshares
 	{
@@ -164,6 +189,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateBitsharesAccountLabel", backendSync: "syncBitshares", syncTaskPrefix: "bitshares-sync",
 		detectInput: detectBitsharesInputType, deriveAddresses: null,
 		checkActivity: getActivityChecker("bitshares") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBitsharesAccount } = await import("./bitshares/sync.js"); return syncBitsharesAccount(b, a, p, s); },
 	},
 	// Cardano
 	{
@@ -174,6 +201,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateCardanoAccountLabel", backendSync: "syncCardano", syncTaskPrefix: "cardano-sync",
 		detectInput: detectCardanoInputType, deriveAddresses: deriveCardanoAddresses,
 		checkActivity: getActivityChecker("cardano") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncCardanoAccount } = await import("./cardano/sync.js"); return syncCardanoAccount(b, a, st, p, s); },
 	},
 	// Cosmos
 	{
@@ -184,6 +213,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateCosmosAccountLabel", backendSync: "syncCosmos", syncTaskPrefix: "cosmos-sync",
 		detectInput: detectCosmosInputType, deriveAddresses: deriveCosmosAddresses,
 		checkActivity: getActivityChecker("cosmos") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncCosmosAccount } = await import("./cosmos/sync.js"); return syncCosmosAccount(b, a, p, s); },
 	},
 	// Dogecoin
 	{
@@ -195,6 +226,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.doge, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.doge, m, c, p, s),
 		checkActivity: getActivityChecker("doge") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.doge, p, s); },
 	},
 	// Hedera
 	{
@@ -204,6 +237,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listHederaAccounts", backendAdd: "addHederaAccount", backendRemove: "removeHederaAccount",
 		backendUpdateLabel: "updateHederaAccountLabel", backendSync: "syncHedera", syncTaskPrefix: "hedera-sync",
 		detectInput: detectHederaInputType, deriveAddresses: null, // addresses not derivable from seed
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncHederaAccount } = await import("./hedera/sync.js"); return syncHederaAccount(b, a, p, s); },
 	},
 	// Hyperliquid
 	{
@@ -217,6 +252,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 			return { input_type: det.type === "address" ? "address" : det.type === "seed" ? "seed" : "unknown", is_private: det.isPrivate, valid: det.type !== "unknown", word_count: null, description: det.description };
 		},
 		deriveAddresses: (m, c, p, s) => deriveEvmAddressesFromSeed(m, c, p, s),
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncHyperliquidAccount } = await import("./hyperliquid/sync.js"); return syncHyperliquidAccount(b, a, p, s); },
 	},
 	// Kaspa
 	{
@@ -227,6 +264,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateKaspaAccountLabel", backendSync: "syncKaspa", syncTaskPrefix: "kaspa-sync",
 		detectInput: detectKaspaInputType, deriveAddresses: deriveKaspaAddresses,
 		checkActivity: getActivityChecker("kaspa") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncKaspaAccount } = await import("./kaspa/sync.js"); return syncKaspaAccount(b, a, p, s); },
 	},
 	// Litecoin
 	{
@@ -238,6 +277,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		detectInput: (input) => detectBtcForkInputType(BTC_FORK_CHAINS.ltc, input),
 		deriveAddresses: (m, c, p, s) => deriveBtcForkAddresses(BTC_FORK_CHAINS.ltc, m, c, p, s),
 		checkActivity: getActivityChecker("ltc") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncBtcForkAccount } = await import("./btc-fork/sync.js"); const { BTC_FORK_CHAINS } = await import("./btc-fork/types.js"); return syncBtcForkAccount(b, a, BTC_FORK_CHAINS.ltc, p, s); },
 	},
 	// Monero
 	{
@@ -247,6 +288,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendList: "listMoneroAccounts", backendAdd: "addMoneroAccount", backendRemove: "removeMoneroAccount",
 		backendUpdateLabel: "updateMoneroAccountLabel", backendSync: "syncMonero", syncTaskPrefix: "xmr-sync",
 		detectInput: detectMoneroInputType, deriveAddresses: (m, c, p, s) => deriveMoneroAddresses(m, c, p, s),
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncMoneroAccount } = await import("./monero/sync.js"); return syncMoneroAccount(b, a, st, p, s); },
 	},
 	// NEAR
 	{
@@ -257,6 +300,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateNearAccountLabel", backendSync: "syncNear", syncTaskPrefix: "near-sync",
 		detectInput: detectNearInputType, deriveAddresses: deriveNearAddresses,
 		checkActivity: getActivityChecker("near") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncNearAccount } = await import("./near/sync.js"); return syncNearAccount(b, a, p, s); },
 	},
 	// Polkadot
 	{
@@ -267,6 +312,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updatePolkadotAccountLabel", backendSync: "syncPolkadot", syncTaskPrefix: "polkadot-sync",
 		detectInput: detectPolkadotInputType, deriveAddresses: derivePolkadotAddresses,
 		checkActivity: getActivityChecker("polkadot") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncPolkadotAccount } = await import("./polkadot/sync.js"); return syncPolkadotAccount(b, a, p, s); },
 	},
 	// Solana
 	{
@@ -281,6 +328,9 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		},
 		deriveAddresses: deriveSolAddresses,
 		checkActivity: getActivityChecker("sol") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncSolanaAccount } = await import("./solana/sync.js"); return syncSolanaAccount(b, a, st, p, s); },
+		defaultExtra: { network: 'mainnet-beta' },
 	},
 	// Stacks
 	{
@@ -291,6 +341,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateStacksAccountLabel", backendSync: "syncStacks", syncTaskPrefix: "stacks-sync",
 		detectInput: detectStacksInputType, deriveAddresses: deriveStacksAddresses,
 		checkActivity: getActivityChecker("stacks") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncStacksAccount } = await import("./stacks/sync.js"); return syncStacksAccount(b, a, p, s); },
 	},
 	// Stellar
 	{
@@ -301,6 +353,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateStellarAccountLabel", backendSync: "syncStellar", syncTaskPrefix: "stellar-sync",
 		detectInput: detectStellarInputType, deriveAddresses: deriveStellarAddresses,
 		checkActivity: getActivityChecker("stellar") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncStellarAccount } = await import("./stellar/sync.js"); return syncStellarAccount(b, a, p, s); },
 	},
 	// Sui
 	{
@@ -311,6 +365,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateSuiAccountLabel", backendSync: "syncSui", syncTaskPrefix: "sui-sync",
 		detectInput: detectSuiInputType, deriveAddresses: deriveSuiAddresses,
 		checkActivity: getActivityChecker("sui") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncSuiAccount } = await import("./sui/sync.js"); return syncSuiAccount(b, a, p, s); },
 	},
 	// Tezos
 	{
@@ -321,6 +377,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateTezosAccountLabel", backendSync: "syncTezos", syncTaskPrefix: "tezos-sync",
 		detectInput: detectTezosInputType, deriveAddresses: deriveTezosAddresses,
 		checkActivity: getActivityChecker("tezos") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncTezosAccount } = await import("./tezos/sync.js"); return syncTezosAccount(b, a, p, s); },
 	},
 	// TON
 	{
@@ -331,6 +389,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateTonAccountLabel", backendSync: "syncTon", syncTaskPrefix: "ton-sync",
 		detectInput: detectTonInputType, deriveAddresses: deriveTonAddresses,
 		checkActivity: getActivityChecker("ton") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncTonAccount } = await import("./ton/sync.js"); return syncTonAccount(b, a, p, s); },
 	},
 	// TRON
 	{
@@ -341,6 +401,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateTronAccountLabel", backendSync: "syncTron", syncTaskPrefix: "tron-sync",
 		detectInput: detectTronInputType, deriveAddresses: deriveTronAddresses,
 		checkActivity: getActivityChecker("tron") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncTronAccount } = await import("./tron/sync.js"); return syncTronAccount(b, a, p, s); },
 	},
 	// XRP
 	{
@@ -351,6 +413,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateXrpAccountLabel", backendSync: "syncXrp", syncTaskPrefix: "xrp-sync",
 		detectInput: detectXrpInputType, deriveAddresses: deriveXrpAddresses,
 		checkActivity: getActivityChecker("xrp") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncXrpAccount } = await import("./xrp/sync.js"); return syncXrpAccount(b, a, p, s); },
 	},
 	// Zcash
 	{
@@ -361,6 +425,8 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		backendUpdateLabel: "updateZcashAccountLabel", backendSync: "syncZcash", syncTaskPrefix: "zcash-sync",
 		detectInput: detectZcashInputType, deriveAddresses: deriveZcashAddresses,
 		checkActivity: getActivityChecker("zcash") ?? undefined,
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncZcashAccount } = await import("./zcash/sync.js"); return syncZcashAccount(b, a, p, s); },
 	},
 ];
 

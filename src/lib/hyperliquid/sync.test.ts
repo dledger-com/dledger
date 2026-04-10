@@ -27,11 +27,13 @@ describe("syncHyperliquidAccount", () => {
 	let backend: SqlJsBackend;
 	const account = {
 		id: "test-hl-1",
+		chain: "hl",
 		address: "0x1234567890abcdef1234567890abcdef12345678",
 		label: "Test HL",
-		last_sync_time: null,
-		last_sync: null,
+		cursor: null as string | null,
+		last_sync: null as string | null,
 		created_at: "2024-01-01T00:00:00Z",
+		extra: null as Record<string, string> | null,
 	};
 
 	beforeEach(async () => {

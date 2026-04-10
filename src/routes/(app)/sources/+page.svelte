@@ -227,10 +227,14 @@
                 await getBackend().updateBlockchainAccountLabel(editingRowId, label);
                 await loadPluginChainAccounts(chainId);
             } else {
-                // Generic blockchain chain
+                // Built-in blockchain chain
                 const config = getBlockchainConfig(kind);
                 if (config) {
-                    await (getBackend() as any)[config.backendUpdateLabel](editingRowId, label);
+                    if (config.generic) {
+                        await getBackend().updateBlockchainAccountLabel(editingRowId, label);
+                    } else {
+                        await (getBackend() as any)[config.backendUpdateLabel](editingRowId, label);
+                    }
                     await loadChainAccounts(config);
                 }
             }
@@ -463,7 +467,9 @@
     async function loadChainAccounts(config: BlockchainConfig) {
         try {
             const backend = getBackend();
-            const accounts = await (backend as any)[config.backendList]();
+            const accounts = config.generic
+                ? await backend.listBlockchainAccounts(config.id)
+                : await (backend as any)[config.backendList]();
             const state = chainStates.get(config.id);
             if (state) { chainStates.set(config.id, { ...state, accounts }); chainStates = new Map(chainStates); }
         } catch {
@@ -531,11 +537,17 @@
             label: `Sync ${account.label} (${config.name})`,
             concurrencyGroup: config.syncTaskPrefix,
             async run(ctx) {
-                const r = await (getBackend() as any)[config.backendSync](
-                    account,
-                    (msg: string) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
-                    ctx.signal,
-                );
+                const r = config.generic && config.syncFn
+                    ? await config.syncFn(
+                        getBackend(), account, settings.settings,
+                        (msg: string) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                        ctx.signal,
+                    )
+                    : await (getBackend() as any)[config.backendSync](
+                        account,
+                        (msg: string) => ctx.reportProgress({ current: 0, total: 0, message: msg }),
+                        ctx.signal,
+                    );
                 await loadChainAccounts(config);
                 const imported = r.transactions_imported ?? r.fills_imported ?? 0;
                 const skipped = r.transactions_skipped ?? 0;
@@ -550,7 +562,11 @@
 
     async function removeChainAccount(config: BlockchainConfig, id: string) {
         try {
-            await (getBackend() as any)[config.backendRemove](id);
+            if (config.generic) {
+                await getBackend().removeBlockchainAccount(id);
+            } else {
+                await (getBackend() as any)[config.backendRemove](id);
+            }
             await loadChainAccounts(config);
             toast.success(`${config.name} account removed`);
         } catch (err) {

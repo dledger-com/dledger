@@ -10,7 +10,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchAddressTransactions, fetchTxUtxos, fetchTxInfo } from "./api.js";
-import type { CardanoAccount, CardanoSyncResult, BlockfrostAddressTx } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { CardanoSyncResult, BlockfrostAddressTx } from "./types.js";
 
 const CHAIN = "Cardano";
 const ADA_DECIMALS = 6; // 1 ADA = 10^6 lovelace
@@ -29,7 +30,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncCardanoAccount(
 	backend: Backend,
-	account: CardanoAccount,
+	account: GenericBlockchainAccount,
 	settings: AppSettings,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
@@ -49,7 +50,7 @@ export async function syncCardanoAccount(
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
 	const { transactions, nextPage } = await fetchAddressTransactions(
-		account.address, apiKey, account.last_page ?? undefined, signal,
+		account.address, apiKey, account.cursor ? parseInt(account.cursor) : undefined, signal,
 	);
 
 	if (transactions.length === 0) {
@@ -262,7 +263,7 @@ export async function syncCardanoAccount(
 
 	// 4. Update page cursor
 	if (nextPage !== null) {
-		await backend.updateCardanoSyncPage(account.id, nextPage);
+		await backend.updateBlockchainAccountCursor(account.id, String(nextPage));
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

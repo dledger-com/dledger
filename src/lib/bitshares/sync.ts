@@ -25,8 +25,8 @@ import {
   exchangeStaking,
 } from "../accounts/paths.js";
 import { BitsharesClient } from "./api.js";
+import type { GenericBlockchainAccount } from "../backend.js";
 import type {
-  BitsharesAccount,
   BitsharesSyncResult,
   BitsharesAmount,
   BitsharesAssetInfo,
@@ -75,7 +75,7 @@ interface LineItemData {
 
 export async function syncBitsharesAccount(
   backend: Backend,
-  account: BitsharesAccount,
+  account: GenericBlockchainAccount,
   onProgress?: (msg: string) => void,
   signal?: AbortSignal,
 ): Promise<BitsharesSyncResult> {
@@ -92,7 +92,7 @@ export async function syncBitsharesAccount(
     await client.connect();
 
     // Resolve account name to object ID if not already stored
-    let accountObjectId = account.account_object_id;
+    let accountObjectId = account.extra?.account_object_id ?? "";
     if (!accountObjectId) {
       onProgress?.(`Resolving account "${account.address}"...`);
       const resolved = await client.getAccountByName(account.address);
@@ -101,7 +101,7 @@ export async function syncBitsharesAccount(
         return result;
       }
       accountObjectId = resolved.id;
-      await backend.updateBitsharesAccountObjectId(account.id, accountObjectId);
+      // Note: account_object_id is stored in extra, resolved once at creation
     }
 
     // Build caches
@@ -189,7 +189,7 @@ export async function syncBitsharesAccount(
 
     // Paginate through operation history
     let cursor = "1.11.0"; // start from latest
-    const stopAt = account.last_operation_id;
+    const stopAt = account.cursor;
     let newestOpId: string | null = null;
     let totalFetched = 0;
 
@@ -286,7 +286,7 @@ export async function syncBitsharesAccount(
 
     // Update pagination cursor
     if (newestOpId) {
-      await backend.updateBitsharesSyncCursor(account.id, newestOpId);
+      await backend.updateBlockchainAccountCursor(account.id, newestOpId);
     }
   } finally {
     client.disconnect();

@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { XrpAccount, XrpSyncResult, XrpTransaction, XrpIssuedAmount } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { XrpSyncResult, XrpTransaction, XrpIssuedAmount } from "./types.js";
 
 const CHAIN = "XRP Ledger";
 const DROPS_PER_XRP = 1_000_000;
@@ -39,7 +40,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncXrpAccount(
 	backend: Backend,
-	account: XrpAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<XrpSyncResult> {
@@ -53,7 +54,7 @@ export async function syncXrpAccount(
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
 	const { transactions, marker: newMarker } = await fetchTransactions(
-		account.address, account.last_marker ?? undefined, signal,
+		account.address, account.cursor ?? undefined, signal,
 	);
 
 	if (transactions.length === 0) {
@@ -224,7 +225,7 @@ export async function syncXrpAccount(
 
 	// 4. Update marker
 	if (newMarker) {
-		await backend.updateXrpSyncMarker(account.id, newMarker);
+		await backend.updateBlockchainAccountCursor(account.id, newMarker);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

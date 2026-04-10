@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { StacksAccount, StacksSyncResult, StacksTransaction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { StacksSyncResult, StacksTransaction } from "./types.js";
 
 const CHAIN = "Stacks";
 const STX_DECIMALS = 6; // 1 STX = 10^6 microSTX
@@ -28,7 +29,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncStacksAccount(
 	backend: Backend,
-	account: StacksAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<StacksSyncResult> {
@@ -41,7 +42,7 @@ export async function syncStacksAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { transactions, nextOffset } = await fetchTransactions(account.address, account.last_offset ?? undefined, signal);
+	const { transactions, nextOffset } = await fetchTransactions(account.address, account.cursor ? parseInt(account.cursor) : undefined, signal);
 
 	if (transactions.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -210,7 +211,7 @@ export async function syncStacksAccount(
 
 	// 4. Update offset cursor
 	if (nextOffset !== null) {
-		await backend.updateStacksSyncOffset(account.id, nextOffset);
+		await backend.updateBlockchainAccountCursor(account.id, String(nextOffset));
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

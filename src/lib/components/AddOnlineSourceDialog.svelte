@@ -1136,6 +1136,8 @@
                     config={activeChainConfig}
                     existingAddresses={existingAddrs}
                     embedded
+                    pluginChainId={activeChainConfig.generic ? activeChainConfig.id : undefined}
+                    defaultExtra={activeChainConfig.defaultExtra}
                     onClose={() => { addSourceMode = "idle"; }}
                     onAccountAdded={async () => { onAccountAdded(); open = false; }}
                 />

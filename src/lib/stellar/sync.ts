@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchOperations } from "./api.js";
-import type { StellarAccount, StellarSyncResult, StellarOperation } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { StellarSyncResult, StellarOperation } from "./types.js";
 
 const CHAIN = "Stellar";
 
@@ -29,7 +30,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncStellarAccount(
 	backend: Backend,
-	account: StellarAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<StellarSyncResult> {
@@ -43,7 +44,7 @@ export async function syncStellarAccount(
 	// 1. Fetch operations
 	onProgress?.("Fetching operations...");
 	const { operations, endCursor } = await fetchOperations(
-		account.address, account.last_cursor ?? undefined, signal,
+		account.address, account.cursor ?? undefined, signal,
 	);
 
 	if (operations.length === 0) {
@@ -232,7 +233,7 @@ export async function syncStellarAccount(
 
 	// 4. Update cursor
 	if (endCursor) {
-		await backend.updateStellarSyncCursor(account.id, endCursor);
+		await backend.updateBlockchainAccountCursor(account.id, endCursor);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);

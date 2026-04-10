@@ -11,8 +11,8 @@ import { ensureCurrencyExists } from "../currency-type.js";
 import { deriveAndRecordTradeRate, type TradeRateItem } from "../utils/derive-trade-rate.js";
 import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
 import type { HlSpotMeta } from "./api.js";
+import type { GenericBlockchainAccount } from "../backend.js";
 import type {
-	HyperliquidAccount,
 	HyperliquidSyncResult,
 	HlFill,
 	HlFundingDelta,
@@ -37,7 +37,7 @@ const hlExternal = () => `Equity:Crypto:DeFi:${PROTOCOL}:External`;
  */
 export async function syncHyperliquidAccount(
 	backend: Backend,
-	account: HyperliquidAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<HyperliquidSyncResult> {
@@ -50,7 +50,7 @@ export async function syncHyperliquidAccount(
 		warnings: [],
 	};
 
-	const startTime = account.last_sync_time ? account.last_sync_time + 1 : undefined;
+	const startTime = account.cursor ? parseInt(account.cursor) + 1 : undefined;
 
 	// 1. Fetch data streams
 	onProgress?.("Fetching trade fills...");
@@ -241,7 +241,7 @@ export async function syncHyperliquidAccount(
 	}
 
 	// Track max timestamp for cursor update
-	let maxTime = account.last_sync_time ?? 0;
+	let maxTime = account.cursor ? parseInt(account.cursor) : 0;
 	function trackTime(t: number): void {
 		if (t > maxTime) maxTime = t;
 	}
@@ -512,8 +512,8 @@ export async function syncHyperliquidAccount(
 	}
 
 	// 6. Update sync cursor
-	if (maxTime > (account.last_sync_time ?? 0)) {
-		await backend.updateHyperliquidSyncCursor(account.id, maxTime);
+	if (maxTime > (account.cursor ? parseInt(account.cursor) : 0)) {
+		await backend.updateBlockchainAccountCursor(account.id, String(maxTime));
 	}
 
 	onProgress?.(`Done: ${result.fills_imported} fills, ${result.funding_imported} funding, ${result.ledger_imported} ledger.`);

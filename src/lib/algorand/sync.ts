@@ -9,7 +9,8 @@ import { walletAssets, chainFees, walletExternal } from "../accounts/paths.js";
 import { invalidate } from "../data/invalidation.js";
 import { ensureCurrencyExists } from "../currency-type.js";
 import { fetchTransactions } from "./api.js";
-import type { AlgorandAccount, AlgorandSyncResult, AlgorandTransaction } from "./types.js";
+import type { GenericBlockchainAccount } from "../backend.js";
+import type { AlgorandSyncResult, AlgorandTransaction } from "./types.js";
 
 const CHAIN = "Algorand";
 const ALGO_DECIMALS = 6; // 1 ALGO = 10^6 microAlgo
@@ -28,7 +29,7 @@ function accountPathAddr(addr: string): string {
 
 export async function syncAlgorandAccount(
 	backend: Backend,
-	account: AlgorandAccount,
+	account: GenericBlockchainAccount,
 	onProgress?: (msg: string) => void,
 	signal?: AbortSignal,
 ): Promise<AlgorandSyncResult> {
@@ -41,7 +42,7 @@ export async function syncAlgorandAccount(
 
 	// 1. Fetch transactions
 	onProgress?.("Fetching transactions...");
-	const { transactions, nextToken } = await fetchTransactions(account.address, account.next_token ?? undefined, signal);
+	const { transactions, nextToken } = await fetchTransactions(account.address, account.cursor ?? undefined, signal);
 
 	if (transactions.length === 0) {
 		onProgress?.("No new transactions found.");
@@ -205,7 +206,7 @@ export async function syncAlgorandAccount(
 
 	// 4. Update cursor
 	if (nextToken) {
-		await backend.updateAlgorandSyncCursor(account.id, nextToken);
+		await backend.updateBlockchainAccountCursor(account.id, nextToken);
 	}
 
 	onProgress?.(`Done: ${result.transactions_imported} imported, ${result.transactions_skipped} skipped.`);
