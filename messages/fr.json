@@ -110,6 +110,8 @@
   "settings_fiscal_year_start": "Début de l'année fiscale",
   "settings_language": "Langue",
   "settings_language_description": "Change la langue de l'interface. L'application sera rechargée lors du changement.",
+  "settings_plugin_chains": "Config blockchain plugins",
+  "settings_plugin_chains_desc": "Configuration des sources blockchain fournies par des plugins",
   "settings_account_paths": "Chemins de comptes",
   "settings_currency_asset_types": "Types d'actifs des devises",
   "settings_default_accounts": "Comptes par défaut",

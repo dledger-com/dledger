@@ -9,6 +9,7 @@
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Tabs from "$lib/components/ui/tabs/index.js";
     import { SettingsStore } from "$lib/data/settings.svelte.js";
+    import { getPluginManager } from "$lib/plugins/manager.js";
     import { getBackend } from "$lib/backend.js";
     import { DEMO_MODE } from "$lib/demo.js";
     import { reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
@@ -1811,6 +1812,39 @@
             </Tabs.Root>
         </Card.Content>
     </Card.Root>
+
+    <!-- Plugin Blockchain Config -->
+    {#if getPluginManager().blockchainSources.getAll().some(ext => ext.requiredConfig && ext.requiredConfig.length > 0)}
+    <Card.Root>
+        <Card.Header>
+            <Card.Title>{msg.settings_plugin_chains()}</Card.Title>
+            <Card.Description>{msg.settings_plugin_chains_desc()}</Card.Description>
+        </Card.Header>
+        <Card.Content class="space-y-4">
+            {#each getPluginManager().blockchainSources.getAll().filter(ext => ext.requiredConfig && ext.requiredConfig.length > 0) as ext}
+                <div class="space-y-2">
+                    <h4 class="text-sm font-medium">{ext.chainName}</h4>
+                    {#each ext.requiredConfig ?? [] as field}
+                        <div class="space-y-1">
+                            <label for="plugin-config-{ext.chainId}-{field.key}" class="text-xs font-medium text-muted-foreground">{field.label}</label>
+                            <Input
+                                id="plugin-config-{ext.chainId}-{field.key}"
+                                type="password"
+                                placeholder={field.placeholder ?? ""}
+                                value={settings.settings.pluginChainConfig?.[ext.chainId]?.[field.key] ?? ""}
+                                oninput={(e: Event) => {
+                                    const current = settings.settings.pluginChainConfig ?? {};
+                                    const chainConfig = { ...(current[ext.chainId] ?? {}), [field.key]: (e.target as HTMLInputElement).value };
+                                    settings.update({ pluginChainConfig: { ...current, [ext.chainId]: chainConfig } });
+                                }}
+                            />
+                        </div>
+                    {/each}
+                </div>
+            {/each}
+        </Card.Content>
+    </Card.Root>
+    {/if}
 
     <!-- Account Paths -->
     <Card.Root>

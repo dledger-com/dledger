@@ -110,6 +110,8 @@
   "settings_fiscal_year_start": "Fiscal Year Start",
   "settings_language": "Language",
   "settings_language_description": "Changes the interface language. The app will reload when you switch.",
+  "settings_plugin_chains": "Plugin Blockchain Config",
+  "settings_plugin_chains_desc": "Configuration for plugin-provided blockchain sources",
   "settings_account_paths": "Account Paths",
   "settings_currency_asset_types": "Currency Asset Types",
   "settings_default_accounts": "Default Accounts",
