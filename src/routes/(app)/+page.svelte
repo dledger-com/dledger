@@ -201,26 +201,18 @@
     // 1b. Load source count for onboarding checklist
     try {
       const backend = getBackend();
-      const [eth, btc, sol, hl, sui, apt, ton, tez, cos, dot, doge, ltc, bch, dash, bsv, xec, grs, xrp, tron, stellar, bittensor, hedera, near, algorand, kaspa, zcash, stacks, cardano, monero, bitshares, cex] = await Promise.all([
+      const genericChains = [
+        "solana", "hyperliquid", "sui", "aptos", "ton", "tezos", "cosmos", "polkadot",
+        "doge", "ltc", "bch", "dash", "bsv", "xec", "grs",
+        "xrp", "tron", "stellar", "bittensor", "hedera", "near", "algorand", "kaspa", "zcash", "stacks",
+        "cardano", "monero", "bitshares",
+      ];
+      const [eth, btc, ...genericResults] = await Promise.all([
         backend.listEtherscanAccounts(), backend.listBitcoinAccounts(),
-        backend.listSolanaAccounts(), backend.listHyperliquidAccounts(),
-        backend.listSuiAccounts(), backend.listAptosAccounts(),
-        backend.listTonAccounts(), backend.listTezosAccounts(),
-        backend.listCosmosAccounts(), backend.listPolkadotAccounts(),
-        backend.listDogeAccounts(), backend.listLtcAccounts(),
-        backend.listBchAccounts(), backend.listDashAccounts(),
-        backend.listBsvAccounts(), backend.listXecAccounts(),
-        backend.listGrsAccounts(), backend.listXrpAccounts(),
-        backend.listTronAccounts(), backend.listStellarAccounts(),
-        backend.listBittensorAccounts(), backend.listHederaAccounts(),
-        backend.listNearAccounts(), backend.listAlgorandAccounts(),
-        backend.listKaspaAccounts(), backend.listZcashAccounts(),
-        backend.listStacksAccounts(),
-        backend.listCardanoAccounts(), backend.listMoneroAccounts(),
-        backend.listBitsharesAccounts(),
-        backend.listExchangeAccounts(),
+        ...genericChains.map(chain => backend.listBlockchainAccounts(chain)),
       ]);
-      sourceCount = eth.length + btc.length + sol.length + hl.length + sui.length + apt.length + ton.length + tez.length + cos.length + dot.length + doge.length + ltc.length + bch.length + dash.length + bsv.length + xec.length + grs.length + xrp.length + tron.length + stellar.length + bittensor.length + hedera.length + near.length + algorand.length + kaspa.length + zcash.length + stacks.length + cardano.length + monero.length + bitshares.length + cex.length;
+      const cex = await backend.listExchangeAccounts();
+      sourceCount = eth.length + btc.length + genericResults.reduce((sum, arr) => sum + arr.length, 0) + cex.length;
     } catch { /* non-critical */ }
 
     // 2. Yield to guarantee browser paints skeleton/cached state before heavy queries.

@@ -214,31 +214,17 @@ export async function importData(
 			const sources = JSON.parse(strFromU8(files["sources.json"]));
 			for (const acc of sources.etherscan ?? []) { try { await backend.addEtherscanAccount(acc.address, acc.chain_id, acc.label); } catch { /* skip */ } }
 			for (const acc of sources.bitcoin ?? []) { try { await backend.addBitcoinAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.solana ?? []) { try { await backend.addSolanaAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.hyperliquid ?? []) { try { await backend.addHyperliquidAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.sui ?? []) { try { await backend.addSuiAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.aptos ?? []) { try { await backend.addAptosAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.ton ?? []) { try { await backend.addTonAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.tezos ?? []) { try { await backend.addTezosAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.cosmos ?? []) { try { await backend.addCosmosAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.polkadot ?? []) { try { await backend.addPolkadotAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.doge ?? []) { try { await backend.addDogeAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.ltc ?? []) { try { await backend.addLtcAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.bch ?? []) { try { await backend.addBchAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.dash ?? []) { try { await backend.addDashAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.bsv ?? []) { try { await backend.addBsvAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.xec ?? []) { try { await backend.addXecAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.grs ?? []) { try { await backend.addGrsAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.xrp ?? []) { try { await backend.addXrpAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.tron ?? []) { try { await backend.addTronAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.stellar ?? []) { try { await backend.addStellarAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.bittensor ?? []) { try { await backend.addBittensorAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.hedera ?? []) { try { await backend.addHederaAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.near ?? []) { try { await backend.addNearAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.algorand ?? []) { try { await backend.addAlgorandAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.kaspa ?? []) { try { await backend.addKaspaAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.zcash ?? []) { try { await backend.addZcashAccount(acc); } catch { /* skip */ } }
-			for (const acc of sources.stacks ?? []) { try { await backend.addStacksAccount(acc); } catch { /* skip */ } }
+			const genericChains = [
+				"solana", "hyperliquid", "sui", "aptos", "ton", "tezos", "cosmos", "polkadot",
+				"doge", "ltc", "bch", "dash", "bsv", "xec", "grs",
+				"xrp", "tron", "stellar", "bittensor", "hedera", "near", "algorand", "kaspa", "zcash", "stacks",
+				"cardano", "monero", "bitshares",
+			];
+			for (const chain of genericChains) {
+				for (const acc of sources[chain] ?? []) {
+					try { await backend.addBlockchainAccount({ id: acc.id, chain, address: acc.address, label: acc.label, created_at: acc.created_at, extra: acc.extra ?? null }); } catch { /* skip */ }
+				}
+			}
 			for (const acc of sources.cex ?? []) { try { await backend.addExchangeAccount(acc); } catch { /* skip */ } }
 		} catch (e) {
 			result.warnings.push(`sources: ${e instanceof Error ? e.message : String(e)}`);
