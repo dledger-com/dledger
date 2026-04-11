@@ -5,8 +5,10 @@
 import { INSTITUTION_REGISTRY, type InstitutionInfo } from "$lib/cex/institution-registry.js";
 import { getExchangeIconUrl } from "$lib/data/exchange-icons.js";
 import { CHAIN_ICONS, NAMED_CHAIN_ICONS } from "$lib/data/chain-icons.js";
+import { getCoinIconUrl } from "$lib/data/coin-icons.svelte.js";
 import { SUPPORTED_CHAINS } from "$lib/types/index.js";
 import { BLOCKCHAIN_CHAINS } from "$lib/blockchain-registry.js";
+import { getPluginManager } from "$lib/plugins/manager.js";
 
 export interface ParsedSource {
   type: "cex" | "csv" | "etherscan" | "thegraph" | "btc" | "chain" | "manual" | "system" | "unknown";
@@ -131,6 +133,11 @@ export function parseSourceId(source: string): ParsedSource {
     if (INSTITUTION_REGISTRY[prefix]) {
       return { type: "cex", institutionId: prefix };
     }
+
+    // Plugin blockchain sources: "waves:txid", etc.
+    if (getPluginManager().blockchainSources.has(prefix)) {
+      return { type: "chain", institutionId: null, chainName: prefix };
+    }
   }
 
   return { type: "unknown", institutionId: null };
@@ -158,7 +165,17 @@ export function getSourceIconUrl(source: string): string | null {
   if (parsed.type === "etherscan" && parsed.chainId) return CHAIN_ICONS[parsed.chainId] ?? null;
   if (parsed.type === "thegraph" && parsed.chainId) return CHAIN_ICONS[parsed.chainId] ?? null;
   if (parsed.type === "btc") return NAMED_CHAIN_ICONS["bitcoin"] ?? null;
-  if (parsed.type === "chain" && parsed.chainName) return NAMED_CHAIN_ICONS[parsed.chainName] ?? null;
+  if (parsed.type === "chain" && parsed.chainName) {
+    const named = NAMED_CHAIN_ICONS[parsed.chainName];
+    if (named) return named;
+    // Fallback for plugin chains: use native token's coin icon
+    const ext = getPluginManager().blockchainSources.get(parsed.chainName);
+    if (ext) {
+      const coinUrl = getCoinIconUrl(ext.symbol);
+      if (coinUrl) return coinUrl;
+    }
+    return null;
+  }
 
   return null;
 }
