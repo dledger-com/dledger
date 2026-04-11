@@ -689,16 +689,8 @@
                 onSelectCardano={() => startAddChain("cardano")}
                 onSelectMonero={() => startAddChain("xmr")}
                 onSelectBitshares={() => startAddChain("bitshares")}
+                onSelectPluginChain={(chainId) => { addSourceMode = `plugin:${chainId}`; }}
             />
-            {#if getPluginManager().blockchainSources.getAll().length > 0}
-                <div class="flex flex-wrap gap-2">
-                    {#each getPluginManager().blockchainSources.getAll() as ext}
-                        <Button variant="outline" size="sm" onclick={() => { addSourceMode = `plugin:${ext.chainId}`; }}>
-                            <Plus class="mr-1 h-3 w-3" />{ext.chainName}
-                        </Button>
-                    {/each}
-                </div>
-            {/if}
             <button
               type="button"
               class="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"

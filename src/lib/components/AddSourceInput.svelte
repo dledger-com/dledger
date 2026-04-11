@@ -7,7 +7,9 @@
   import { getAllCexAdapters } from "$lib/cex/index.js";
   import ExchangeIcon from "$lib/components/ExchangeIcon.svelte";
   import ChainIcon from "$lib/components/ChainIcon.svelte";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { SUPPORTED_CHAINS } from "$lib/types/index.js";
+  import { getPluginManager } from "$lib/plugins/manager.js";
 
   let {
     onSelectCex,
@@ -37,6 +39,7 @@
     onSelectCardano,
     onSelectMonero,
     onSelectBitshares,
+    onSelectPluginChain,
     disabled = false,
   }: {
     onSelectCex: (exchangeId: ExchangeId) => void;
@@ -66,6 +69,7 @@
     onSelectCardano?: (prefillAddress?: string) => void;
     onSelectMonero?: (prefillAddress?: string) => void;
     onSelectBitshares?: (prefillAddress?: string) => void;
+    onSelectPluginChain?: (chainId: string, prefillAddress?: string) => void;
     disabled?: boolean;
   } = $props();
 
@@ -183,6 +187,14 @@
   const detectedBitsharesAccount = $derived.by(() => {
     const s = search.trim();
     return /^[a-z][a-z0-9.-]{2,62}$/.test(s) ? s : null;
+  });
+
+  const detectedPluginChainAddress = $derived.by(() => {
+    const s = search.trim();
+    if (!s) return [];
+    return getPluginManager().blockchainSources.getAll()
+      .filter(ext => ext.compiledRegex.test(s))
+      .map(ext => ({ ext, address: s }));
   });
 
   const detectedSolAddress = $derived.by(() => {
@@ -352,6 +364,12 @@
     open = false;
     search = "";
     onSelectBitshares?.(prefillAddress);
+  }
+
+  function selectPluginChain(chainId: string, prefillAddress?: string) {
+    open = false;
+    search = "";
+    onSelectPluginChain?.(chainId, prefillAddress);
   }
 </script>
 
@@ -556,6 +574,19 @@
             </Command.Item>
           </Command.Group>
         {/if}
+        {#each detectedPluginChainAddress as { ext, address }}
+          <Command.Group heading="Detected {ext.chainName} Address">
+            <Command.Item
+              value="detected-plugin-{ext.chainId}-{address}"
+              keywords={[ext.chainId, ext.symbol.toLowerCase()]}
+              onSelect={() => selectPluginChain(ext.chainId, address)}
+              class="font-mono text-xs"
+            >
+              Add {address.slice(0, 8)}...{address.slice(-4)} as {ext.chainName} address
+              <Badge variant="outline" class="ml-auto text-[10px]">Plugin</Badge>
+            </Command.Item>
+          </Command.Group>
+        {/each}
         <Command.Group heading="Blockchain">
           {#if onSelectAlgorand}
             <Command.Item value="Algorand" keywords={["algorand", "algo"]} onSelect={() => selectAlgorand()}>
@@ -685,6 +716,16 @@
               <ChainIcon chainName="zcash" size={16} />Zcash
             </Command.Item>
           {/if}
+          {#each getPluginManager().blockchainSources.getAll() as ext}
+            <Command.Item
+              value={ext.chainName}
+              keywords={[ext.chainId, ext.symbol.toLowerCase()]}
+              onSelect={() => selectPluginChain(ext.chainId)}
+            >
+              <ChainIcon chainName={ext.chainId} size={16} />{ext.chainName}
+              <Badge variant="outline" class="ml-auto text-[10px]">Plugin</Badge>
+            </Command.Item>
+          {/each}
         </Command.Group>
         <Command.Group heading="Exchanges">
           {#each EXCHANGES as exchange}
