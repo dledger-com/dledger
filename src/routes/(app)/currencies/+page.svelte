@@ -240,7 +240,13 @@
                   </Collapsible.Trigger>
                   <span class="text-amber-400 dark:text-amber-600">|</span>
                   <button
-                    onclick={async () => { await markCurrencyHidden(getBackend(), code); await loadCurrencies(); }}
+                    onclick={async () => {
+                      await markCurrencyHidden(getBackend(), code);
+                      await loadCurrencies();
+                      rateHealth.missingCurrencies = rateHealth.missingCurrencies.filter(c => c !== code);
+                      delete rateHealth.missingDatesByCode[code];
+                      if (rateHealth.missingCurrencies.length === 0) rateHealth.status = "ok";
+                    }}
                     class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 cursor-pointer"
                   >{m.btn_hide()}</button>
                   <span class="text-amber-400 dark:text-amber-600">|</span>
