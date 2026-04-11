@@ -7,6 +7,7 @@ import { v7 as uuidv7 } from "uuid";
 import type { Backend } from "./backend.js";
 import type { Account } from "./types/index.js";
 import { ensureCurrencyExists } from "./currency-type.js";
+import { normalizeAccountSegment } from "./accounts/paths.js";
 
 /**
  * Ensure an account hierarchy exists, creating missing ancestors.
@@ -19,6 +20,9 @@ export async function ensureAccountHierarchy(
   accountMap: Map<string, Account>,
   counters: { accounts_created: number },
 ): Promise<string> {
+  // Normalize each segment to valid Beancount-compatible form (CamelCase, no spaces)
+  fullName = fullName.split(":").map(normalizeAccountSegment).join(":");
+
   const existing = accountMap.get(fullName);
   if (existing) return existing.id;
 
