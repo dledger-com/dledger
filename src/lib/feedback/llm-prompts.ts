@@ -827,23 +827,62 @@ interface BlockchainProcessedTransaction {
 // Assets:Crypto:Wallet:{ChainName}:External:{Addr} — counterparty
 // Expenses:Crypto:Fees:{ChainName}               — transaction fees
 // Assets:Crypto:Staking:{ChainName}:{Label}      — staked assets
-// Income:Crypto:Staking:{ChainName}               — staking rewards`;
+// Income:Crypto:Staking:{ChainName}               — staking rewards
+// Expenses:Crypto:Burn:{ChainName}                — token burns
+// IMPORTANT: Account path segments must NOT contain spaces. Use PascalCase or dashes.
+//   Good: "Assets:Crypto:Wallet:MyChain:MainWallet"
+//   Bad:  "Assets:Crypto:Wallet:My Chain:Main Wallet"
 
-const BLOCKCHAIN_SOURCE_EXAMPLE = `// Complete blockchain source example — a simple account-based chain with REST API
+// ---- Currency codes ----
+// Use short human-readable symbols (e.g. "WAVES", "USDT"), NOT raw contract/asset IDs.
+// If the chain API provides token names or symbols, prefer those.
+// If only a raw asset ID is available (hash, base58, etc.), shorten it to ~10 chars
+// (e.g. assetId.slice(0,6) + ".." + assetId.slice(-4)) so the UI remains readable.
+
+// ---- Token decimals ----
+// Different tokens on the same chain may have different decimal places.
+// The native token usually has a fixed number (e.g. 18 for ETH, 8 for BTC).
+// For custom/issued tokens, check if the API includes decimal info in the transaction data.
+// If not, you can fetch asset metadata from a separate endpoint, or default to the chain's
+// native decimals and document this limitation.
+
+// ---- Swap / exchange / DEX transactions ----
+// When handling trades or exchanges, compute the TOTAL cost, not just the price-per-unit.
+// Example: if a user buys 100 TOKEN_A at 0.5 TOKEN_B each, the items must be:
+//   +100 TOKEN_A (received)
+//   -50  TOKEN_B (paid = quantity × price)
+// Common mistake: using the raw price field directly as the amount — this gives price-per-unit
+// instead of the total cost, causing the entry to be unbalanced.
+// Use BigInt arithmetic for precision: BigInt(amount) * BigInt(price) / BigInt(10**priceDecimals)`;
+
+const BLOCKCHAIN_SOURCE_EXAMPLE = `// Complete blockchain source example — a chain with transfers, swaps, and staking
 // The framework handles pagination, dedup, and journal posting. You just fetch and classify.
 
-// Convert raw amount (integer string) to decimal string
+// Convert raw integer amount to decimal string. Handles negative values.
 function formatAmount(value, decimals) {
-  if (!value || value === "0") return "0";
-  const s = String(value).padStart(decimals + 1, "0");
-  const whole = s.slice(0, s.length - decimals) || "0";
-  const frac = s.slice(s.length - decimals).replace(/0+$/, "");
-  return frac ? whole + "." + frac : whole;
+  if (!value && value !== 0) return "0";
+  var s = String(value);
+  if (s === "0") return "0";
+  var neg = s.charAt(0) === "-";
+  if (neg) s = s.slice(1);
+  s = s.padStart(decimals + 1, "0");
+  var whole = s.slice(0, s.length - decimals) || "0";
+  var frac = s.slice(s.length - decimals).replace(/0+$/, "");
+  var result = frac ? whole + "." + frac : whole;
+  return neg ? "-" + result : result;
 }
 
-const chainSource = {
+// Shorten address for account paths (no spaces allowed in paths!)
+function shortAddr(addr) {
+  if (!addr || addr.length <= 14) return addr || "unknown";
+  return addr.slice(0, 8) + "-" + addr.slice(-4);
+}
+
+var NATIVE_DECIMALS = 18;
+
+var chainSource = {
   chainId: "my-chain",
-  chainName: "My Chain",
+  chainName: "MyChain",   // No spaces — used in account paths
   symbol: "MYC",
   coingeckoId: "my-chain",
   website: "https://my-chain.xyz",
@@ -851,83 +890,92 @@ const chainSource = {
   addressPlaceholder: "0x...",
   caseSensitive: false,
 
-  // This chain needs an API key to fetch transactions
   requiredConfig: [
     { key: "apiKey", label: "API Key", placeholder: "Enter your API key" },
   ],
 
-  async fetchTransactions(address, cursor, config, signal) {
-    const apiKey = config.apiKey || "";
-    const page = cursor ? parseInt(cursor) : 1;
-    const url = "https://api.my-chain.xyz/v1/account/" + address + "/txs?page=" + page + "&api_key=" + apiKey;
+  fetchTransactions: function(address, cursor, config, signal) {
+    var apiKey = config.apiKey || "";
+    var page = cursor ? parseInt(cursor) : 1;
+    var url = "https://api.my-chain.xyz/v1/account/" + address + "/txs?page=" + page + "&api_key=" + apiKey;
 
-    const resp = await fetch(url, { signal });
-    if (!resp.ok) throw new Error("API error: " + resp.status);
-    const data = await resp.json();
-
-    return {
-      transactions: data.transactions.map(function(tx) {
-        return { id: tx.hash, timestamp: tx.timestamp, data: tx };
-      }),
-      nextCursor: data.hasMore ? String(page + 1) : null,
-    };
+    return fetch(url, { signal: signal }).then(function(resp) {
+      if (!resp.ok) throw new Error("API error: " + resp.status);
+      return resp.json();
+    }).then(function(data) {
+      return {
+        transactions: data.transactions.map(function(tx) {
+          return { id: tx.hash, timestamp: tx.timestamp, data: tx };
+        }),
+        nextCursor: data.hasMore ? String(page + 1) : null,
+      };
+    });
   },
 
-  processTransaction(tx, ctx) {
-    const raw = tx.data;
-    const addr = ctx.address.toLowerCase();
-    const date = new Date(tx.timestamp * 1000).toISOString().slice(0, 10);
+  processTransaction: function(tx, ctx) {
+    var raw = tx.data;
+    var addr = ctx.address.toLowerCase();
+    var date = new Date(tx.timestamp * 1000).toISOString().slice(0, 10);
 
-    // Skip failed transactions
     if (raw.status === "failed") return null;
 
-    const items = [];
-    const walletAccount = "Assets:Crypto:Wallet:" + ctx.chainName + ":" + ctx.label;
+    var items = [];
+    var walletAccount = "Assets:Crypto:Wallet:" + ctx.chainName + ":" + ctx.label;
+    var feeAccount = "Expenses:Crypto:Fees:" + ctx.chainName;
 
-    // Classify by transaction type
+    // --- Transfer ---
     if (raw.type === "transfer") {
-      const amount = formatAmount(raw.value, 18);
-      const isSender = raw.from.toLowerCase() === addr;
-      const counterparty = isSender ? raw.to : raw.from;
-      const shortAddr = counterparty.slice(0, 10) + "-" + counterparty.slice(-4);
-      const externalAccount = "Assets:Crypto:Wallet:" + ctx.chainName + ":External:" + shortAddr;
+      var amount = formatAmount(raw.value, NATIVE_DECIMALS);
+      var isSender = raw.from.toLowerCase() === addr;
+      var counterparty = isSender ? raw.to : raw.from;
+      var extAccount = "Assets:Crypto:Wallet:" + ctx.chainName + ":External:" + shortAddr(counterparty);
 
       if (isSender) {
         items.push({ account: walletAccount, currency: ctx.symbol, amount: "-" + amount });
-        items.push({ account: externalAccount, currency: ctx.symbol, amount: amount });
+        items.push({ account: extAccount, currency: ctx.symbol, amount: amount });
       } else {
         items.push({ account: walletAccount, currency: ctx.symbol, amount: amount });
-        items.push({ account: externalAccount, currency: ctx.symbol, amount: "-" + amount });
+        items.push({ account: extAccount, currency: ctx.symbol, amount: "-" + amount });
       }
-    } else if (raw.type === "staking_reward") {
-      const amount = formatAmount(raw.reward, 18);
+    }
+
+    // --- Swap / DEX trade ---
+    // IMPORTANT: compute the TOTAL cost (quantity × price), not just the price field!
+    else if (raw.type === "swap") {
+      var soldSymbol = raw.soldToken.symbol || raw.soldToken.address.slice(0, 6) + ".." + raw.soldToken.address.slice(-4);
+      var boughtSymbol = raw.boughtToken.symbol || raw.boughtToken.address.slice(0, 6) + ".." + raw.boughtToken.address.slice(-4);
+      // Use BigInt for precise integer arithmetic on raw amounts
+      var soldTotal = formatAmount(raw.soldAmount, raw.soldToken.decimals || NATIVE_DECIMALS);
+      var boughtTotal = formatAmount(raw.boughtAmount, raw.boughtToken.decimals || NATIVE_DECIMALS);
+
+      items.push({ account: walletAccount, currency: soldSymbol, amount: "-" + soldTotal });
+      items.push({ account: walletAccount, currency: boughtSymbol, amount: boughtTotal });
+    }
+
+    // --- Staking reward ---
+    else if (raw.type === "staking_reward") {
+      var amount = formatAmount(raw.reward, NATIVE_DECIMALS);
       items.push({ account: walletAccount, currency: ctx.symbol, amount: amount });
       items.push({ account: "Income:Crypto:Staking:" + ctx.chainName, currency: ctx.symbol, amount: "-" + amount });
     }
 
-    // Add transaction fee
-    if (raw.fee && raw.from.toLowerCase() === addr) {
-      const feeAmount = formatAmount(raw.fee, 18);
+    // --- Fee (always paid by sender) ---
+    if (raw.fee && raw.from && raw.from.toLowerCase() === addr) {
+      var feeAmount = formatAmount(raw.fee, NATIVE_DECIMALS);
       if (feeAmount !== "0") {
-        items.push({ account: "Expenses:Crypto:Fees:" + ctx.chainName, currency: ctx.symbol, amount: feeAmount });
+        items.push({ account: feeAccount, currency: ctx.symbol, amount: feeAmount });
         items.push({ account: walletAccount, currency: ctx.symbol, amount: "-" + feeAmount });
       }
     }
 
     if (items.length === 0) return null;
 
-    const direction = raw.from?.toLowerCase() === addr ? "sent" : "received";
-
     return {
-      source: ctx.chainName.toLowerCase().replace(/\\s+/g, "-") + ":" + raw.hash,
+      source: "my-chain:" + raw.hash,
       date: date,
-      description: ctx.chainName + ": " + (raw.type === "staking_reward" ? "Staking reward" : direction === "sent" ? "Sent " + ctx.symbol : "Received " + ctx.symbol),
+      description: ctx.chainName + ": " + raw.type,
       items: items,
-      metadata: {
-        "chain:txhash": raw.hash,
-        "chain:type": raw.type,
-        "chain:direction": direction,
-      },
+      metadata: { "chain:txhash": raw.hash, "chain:type": raw.type },
     };
   },
 };`;
@@ -1218,9 +1266,15 @@ export function generateLlmPrompt(type: SourceType, url?: string, defiChain?: De
       parts.push("");
       parts.push("Please visit the website above, find the chain name, API docs, and address format, then implement a BlockchainSourceExtension.");
       parts.push("Follow the example closely — fetchTransactions handles API calls with pagination, processTransaction classifies each transaction into double-entry line items.");
-      parts.push("CRITICAL: The source field in processTransaction must be unique per transaction (e.g. \"my-chain:0xhash...\"). It is used for deduplication.");
-      parts.push("Line items must sum to zero per currency (double-entry bookkeeping). Use the account path conventions from the interface comments.");
-      parts.push("If the chain requires an API key, declare it in requiredConfig — the user will configure it in Settings.");
+      parts.push("");
+      parts.push("CRITICAL rules:");
+      parts.push("- The source field must be unique per transaction (e.g. \"my-chain:txhash\"). Used for deduplication.");
+      parts.push("- Line items must sum to zero per currency (double-entry). For swaps: use the TOTAL amount paid (quantity × price), not the price-per-unit.");
+      parts.push("- Account path segments must NOT contain spaces. Use PascalCase or dashes (e.g. \"MyChain\", not \"My Chain\").");
+      parts.push("- Prefer readable currency symbols (e.g. \"USDT\") over raw asset IDs. If only a hash is available, shorten it (e.g. id.slice(0,6) + \"..\" + id.slice(-4)).");
+      parts.push("- Check if token decimals vary per asset on this chain. Use the API's decimal info when available, document when defaulting to native decimals.");
+      parts.push("- Use the plugin ID namespace \"com.example.*\" (e.g. \"com.example.waves\"), not \"com.dledger.*\".");
+      parts.push("- If the chain requires an API key, declare it in requiredConfig — the user will configure it in Settings.");
       break;
   }
 
