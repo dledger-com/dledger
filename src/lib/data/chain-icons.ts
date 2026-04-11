@@ -69,3 +69,8 @@ export function getChainIconUrl(chainId: number): string | null {
 export function getNamedChainIconUrl(chainName: string): string | null {
   return NAMED_CHAIN_ICONS[chainName.toLowerCase()] || null;
 }
+
+/** Register a dynamic chain icon URL at runtime (used by plugin blockchain sources). */
+export function registerChainIcon(chainId: string, url: string): void {
+  NAMED_CHAIN_ICONS[chainId.toLowerCase()] = url;
+}

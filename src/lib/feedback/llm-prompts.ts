@@ -767,7 +767,9 @@ interface BlockchainSourceExtension {
   chainId: string;                // unique identifier, e.g. "my-chain"
   chainName: string;              // display name, e.g. "My Chain"
   symbol: string;                 // native token symbol, e.g. "MYC"
-  coingeckoId?: string;           // CoinGecko ID for the chain icon (e.g. "ethereum", "solana")
+  coingeckoId?: string;           // CoinGecko ID for native token icon (e.g. "ethereum", "solana")
+  iconUrl?: string;               // direct chain icon URL (optional, highest priority)
+  website?: string;               // protocol website URL — favicon used as fallback icon
   addressRegex: string;           // regex as string to validate addresses
   addressPlaceholder: string;     // placeholder for the address input field
   caseSensitive?: boolean;        // whether addresses are case-sensitive (default: false)
@@ -844,6 +846,7 @@ const chainSource = {
   chainName: "My Chain",
   symbol: "MYC",
   coingeckoId: "my-chain",
+  website: "https://my-chain.xyz",
   addressRegex: "^0x[a-fA-F0-9]{40}$",
   addressPlaceholder: "0x...",
   caseSensitive: false,

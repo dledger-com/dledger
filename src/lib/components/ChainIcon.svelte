@@ -1,6 +1,7 @@
 <script lang="ts">
     import { getChainIconUrl, getNamedChainIconUrl } from "$lib/data/chain-icons.js";
-    import { cacheExternalIcon, onCoinIconsChanged } from "$lib/data/coin-icons.svelte.js";
+    import { cacheExternalIcon, getCoinIconUrl, onCoinIconsChanged } from "$lib/data/coin-icons.svelte.js";
+    import { getPluginManager } from "$lib/plugins/manager.js";
 
     let { chainId, chainName, size = 16 }: { chainId?: number; chainName?: string; size?: number } = $props();
 
@@ -16,7 +17,13 @@
 
     const externalUrl = $derived.by(() => {
         if (chainId != null) return getChainIconUrl(chainId);
-        if (chainName) return getNamedChainIconUrl(chainName);
+        if (chainName) {
+            const named = getNamedChainIconUrl(chainName);
+            if (named) return named;
+            // Fallback for plugin chains: use the native token's coin icon (fetched via CoinGecko)
+            const ext = getPluginManager().blockchainSources.get(chainName);
+            if (ext) return getCoinIconUrl(ext.symbol) ?? null;
+        }
         return null;
     });
 

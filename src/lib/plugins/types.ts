@@ -67,7 +67,9 @@ export interface BlockchainSourceExtension {
   chainId: string;                // unique, e.g. "fantom"
   chainName: string;              // display: "Fantom"
   symbol: string;                 // native token: "FTM"
-  coingeckoId?: string;           // for chain icon via CoinGecko API
+  coingeckoId?: string;           // for native token icon via CoinGecko API (also used as chain icon)
+  iconUrl?: string;               // direct chain icon URL (highest priority)
+  website?: string;               // protocol website — favicon used as fallback icon
   addressRegex: string;           // regex as string (compiled at registration)
   addressPlaceholder: string;     // "0x..."
   caseSensitive?: boolean;
