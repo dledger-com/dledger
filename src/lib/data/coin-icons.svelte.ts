@@ -5,18 +5,11 @@
  */
 
 import { cexFetch } from "$lib/cex/fetch.js";
+import { COINGECKO_IDS as BASE_COINGECKO_IDS } from "$lib/coingecko-ids.js";
 
-// Well-known CoinGecko IDs for common currencies (uppercase symbol → coingecko id)
+// Well-known CoinGecko IDs for icon resolution (extends the base map with more coins)
 const COINGECKO_IDS: Record<string, string> = {
-  BTC: "bitcoin", ETH: "ethereum", SOL: "solana", BNB: "binancecoin",
-  XRP: "ripple", ADA: "cardano", DOGE: "dogecoin", DOT: "polkadot",
-  AVAX: "avalanche-2", MATIC: "matic-network", POL: "matic-network",
-  LINK: "chainlink", UNI: "uniswap", ATOM: "cosmos", LTC: "litecoin",
-  NEAR: "near", APT: "aptos", ARB: "arbitrum", OP: "optimism",
-  FIL: "filecoin", AAVE: "aave", MKR: "maker", SNX: "havven",
-  COMP: "compound-governance-token", CRV: "curve-dao-token",
-  SHIB: "shiba-inu", PEPE: "pepe", SUI: "sui", SEI: "sei-network",
-  TIA: "celestia", USDT: "tether", USDC: "usd-coin", DAI: "dai",
+  ...BASE_COINGECKO_IDS,
   ALGO: "algorand", XMR: "monero", ZEC: "zcash", XLM: "stellar",
   HBAR: "hedera-hashgraph", TAO: "bittensor", XTZ: "tezos",
   KAS: "kaspa", STX: "blockstack", TRX: "tron", TON: "the-open-network",

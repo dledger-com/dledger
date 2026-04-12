@@ -6,7 +6,7 @@ import { createDpriceClient } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
 import { setRateHealthSyncing, updateRateHealth } from "./data/rate-health.svelte.js";
 import * as m from "$paraglide/messages.js";
-
+import { COINGECKO_IDS, resolveGeckoId, hasGeckoId } from "./coingecko-ids.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -15,19 +15,6 @@ const FRANKFURTER_FIAT = new Set([
   "JPY", "KRW", "MXN", "MYR", "NOK", "NZD", "PHP", "PLN",
   "RON", "SEK", "SGD", "THB", "TRY", "USD", "ZAR",
 ]);
-
-// Common crypto ticker → CoinGecko ID mapping
-const COINGECKO_IDS: Record<string, string> = {
-  BTC: "bitcoin", ETH: "ethereum", SOL: "solana", BNB: "binancecoin",
-  XRP: "ripple", ADA: "cardano", DOGE: "dogecoin", DOT: "polkadot",
-  AVAX: "avalanche-2", MATIC: "matic-network", POL: "matic-network",
-  LINK: "chainlink", UNI: "uniswap", ATOM: "cosmos", LTC: "litecoin",
-  NEAR: "near", APT: "aptos", ARB: "arbitrum", OP: "optimism",
-  FIL: "filecoin", AAVE: "aave", MKR: "maker", SNX: "havven",
-  COMP: "compound-governance-token", CRV: "curve-dao-token",
-  SHIB: "shiba-inu", PEPE: "pepe", SUI: "sui", SEI: "sei-network",
-  TIA: "celestia", USDT: "tether", USDC: "usd-coin", DAI: "dai",
-};
 
 // ---- Chain ID → DefiLlama chain name mapping ----
 
@@ -114,6 +101,7 @@ function classifySource(
   tokenAddressCurrencies?: Set<string>,
   dpriceAssets?: Set<string>,
   disabledSources?: Set<string>,
+  geckoIdMap?: Map<string, string>,
 ): SourceName | null {
   // 1. When dprice is active and asset is available, prefer it (unless user override)
   if (dpriceAssets?.has(currency)) {
@@ -142,15 +130,15 @@ function classifySource(
   }
   if (assetType === "crypto") {
     // Trust the "crypto" classification — try crypto sources even for non-hardcoded tokens
-    return pickCryptoSource(!!COINGECKO_IDS[currency]);
+    return pickCryptoSource(hasGeckoId(currency, geckoIdMap));
   }
   if (assetType === "stock" || assetType === "commodity" || assetType === "index" || assetType === "bond") return null;
   // 4. Unclassified fallback: existing heuristics
   if (FRANKFURTER_FIAT.has(currency) && FRANKFURTER_FIAT.has(baseCurrency)) {
     return disabledSources?.has("frankfurter") ? null : "frankfurter";
   }
-  if (tokenAddressCurrencies?.has(currency) || COINGECKO_IDS[currency]) {
-    return pickCryptoSource(!!COINGECKO_IDS[currency]);
+  if (tokenAddressCurrencies?.has(currency) || hasGeckoId(currency, geckoIdMap)) {
+    return pickCryptoSource(hasGeckoId(currency, geckoIdMap));
   }
   // Last resort: try defillama for any unclassified currency
   if (!disabledSources?.has("defillama")) return "defillama";
@@ -199,6 +187,9 @@ export async function findMissingRates(
     (await backend.listCurrencies()).map((c) => [c.code, c.asset_type]),
   );
 
+  // Load dynamic CoinGecko ID map for better source classification
+  const geckoIdMap = await backend.listCryptoAssetInfo();
+
   // Check which rates are missing — batch if available
   const missing = new Map<string, { currency: string; dates: string[]; source: SourceName }>();
 
@@ -211,7 +202,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources, geckoIdMap);
       if (!source) {
         const stored = rateSourceMap.get(currency);
         if (!(stored?.set_by === "user" && stored?.rate_source === "none")) {
@@ -231,7 +222,7 @@ export async function findMissingRates(
       const key = `${currency}:${date}`;
       if (existenceMap.get(key)) continue;
 
-      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources, geckoIdMap);
       if (!source) {
         const stored = rateSourceMap.get(currency);
         if (!(stored?.set_by === "user" && stored?.rate_source === "none")) {
@@ -250,7 +241,7 @@ export async function findMissingRates(
       const rate = await backend.getExchangeRate(currency, baseCurrency, date);
       if (rate !== null) continue;
 
-      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources);
+      const source = classifySource(currency, currencyTypeMap.get(currency) ?? "", baseCurrency, rateSourceMap, tokenAddrCurrencies, dpriceAssets, disabledSources, geckoIdMap);
       if (!source) {
         const stored = rateSourceMap.get(currency);
         if (!(stored?.set_by === "user" && stored?.rate_source === "none")) {
@@ -369,12 +360,13 @@ export async function fetchHistoricalRates(
       const allCurrenciesList = await backend.listCurrencies();
       const currencyTypeMap = new Map<string, string>();
       for (const c of allCurrenciesList) currencyTypeMap.set(c.code, c.asset_type);
+      const fallbackGeckoIdMap = await backend.listCryptoAssetInfo();
 
       const failedDprice = requests.filter((r) => failedAfterPrimary.has(r.currency) && r.source === "dprice");
       if (failedDprice.length > 0) {
         const fallbackBySource = new Map<SourceName, HistoricalRateRequest[]>();
         for (const req of failedDprice) {
-          const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined, config.disabledSources);
+          const fallback = classifySource(req.currency, currencyTypeMap.get(req.currency) ?? "", config.baseCurrency, rateSourceMap, tokenAddrCurrencies, undefined, config.disabledSources, fallbackGeckoIdMap);
           if (!fallback || fallback === "dprice") continue;
           if (!fallbackBySource.has(fallback)) fallbackBySource.set(fallback, []);
           fallbackBySource.get(fallback)!.push({ ...req, source: fallback });
@@ -541,14 +533,16 @@ async function fetchCoinGeckoHistorical(
   successCurrencies: Set<string>,
   onDateDone: () => void,
 ): Promise<void> {
-  const geckoFetch = new RateLimitedFetcher({ maxRequests: 25, intervalMs: 60_000 });
+  const geckoFetch = new RateLimitedFetcher({ maxRequests: config.coingeckoPro ? 80 : 25, intervalMs: 60_000 });
   const onAbort = () => geckoFetch.dispose();
   config.signal?.addEventListener("abort", onAbort, { once: true });
   const rateBatch: import("./types/index.js").ExchangeRate[] = [];
+  // Load dynamic CoinGecko ID map for better coverage
+  const geckoIdMap = await backend.listCryptoAssetInfo();
   try {
     for (const req of requests) {
       if (config.signal?.aborted) break;
-      const geckoId = COINGECKO_IDS[req.currency] ?? req.currency.toLowerCase();
+      const geckoId = resolveGeckoId(req.currency, geckoIdMap);
       const sortedDates = [...req.dates].sort();
       const neededDates = new Set(sortedDates);
 
@@ -558,8 +552,8 @@ async function fetchCoinGeckoHistorical(
 
       try {
         const url = config.coingeckoPro
-          ? `https://pro-api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}`
-          : `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}`;
+          ? `https://pro-api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}&interval=daily`
+          : `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart/range?vs_currency=${vsBase}&from=${fromUnix}&to=${toUnix}&interval=daily`;
         const headers: Record<string, string> = config.coingeckoPro
           ? { "x-cg-pro-api-key": config.coingeckoApiKey }
           : { "x-cg-demo-api-key": config.coingeckoApiKey };
@@ -581,7 +575,7 @@ async function fetchCoinGeckoHistorical(
         await ensureCurrency(backend, config.baseCurrency);
 
         for (const date of neededDates) {
-          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 1);
+          const price = dateMap.get(date) ?? findNearestPrice(dateMap, date, 2);
           if (price != null) {
             successCurrencies.add(req.currency);
             rateBatch.push({
@@ -734,6 +728,8 @@ async function fetchDefiLlamaHistorical(
   // Load token addresses for coin ID resolution
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+  // Load dynamic CoinGecko ID map for DefiLlama's coingecko: prefix lookups
+  const llamaGeckoIdMap = await backend.listCryptoAssetInfo();
 
   // Resolve coin IDs and build a date→coins index for batching
   const coinIdByCurrency = new Map<string, string>();
@@ -744,8 +740,8 @@ async function fetchDefiLlamaHistorical(
     let coinId: string;
     if (ta) {
       coinId = `${ta.chain}:${ta.contract_address}`;
-    } else if (COINGECKO_IDS[req.currency]) {
-      coinId = `coingecko:${COINGECKO_IDS[req.currency]}`;
+    } else if (hasGeckoId(req.currency, llamaGeckoIdMap)) {
+      coinId = `coingecko:${resolveGeckoId(req.currency, llamaGeckoIdMap)}`;
     } else {
       result.errors.push(`DefiLlama: no token address or CoinGecko mapping for ${req.currency}`);
       for (const _d of req.dates) onDateDone();

@@ -3,6 +3,8 @@ import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateOverride } from "./backend.js";
 import { createDpriceClient, type DpriceClient, type DpriceAssetFilter, type DpriceAssetType } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
+import { COINGECKO_IDS, resolveGeckoId, isValidGeckoId, hasGeckoId, CHAIN_TO_PLATFORM } from "./coingecko-ids.js";
+import { getSupportedVsCurrencies, isVsCurrencySupported } from "./coingecko-vs-currencies.js";
 
 // ECB/Frankfurter supported fiat currency codes
 const FRANKFURTER_FIAT = new Set([
@@ -11,43 +13,6 @@ const FRANKFURTER_FIAT = new Set([
   "JPY", "KRW", "MXN", "MYR", "NOK", "NZD", "PHP", "PLN",
   "RON", "SEK", "SGD", "THB", "TRY", "USD", "ZAR",
 ]);
-
-// Common crypto ticker → CoinGecko ID mapping
-const COINGECKO_IDS: Record<string, string> = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  SOL: "solana",
-  BNB: "binancecoin",
-  XRP: "ripple",
-  ADA: "cardano",
-  DOGE: "dogecoin",
-  DOT: "polkadot",
-  AVAX: "avalanche-2",
-  MATIC: "matic-network",
-  POL: "matic-network",
-  LINK: "chainlink",
-  UNI: "uniswap",
-  ATOM: "cosmos",
-  LTC: "litecoin",
-  NEAR: "near",
-  APT: "aptos",
-  ARB: "arbitrum",
-  OP: "optimism",
-  FIL: "filecoin",
-  AAVE: "aave",
-  MKR: "maker",
-  SNX: "havven",
-  COMP: "compound-governance-token",
-  CRV: "curve-dao-token",
-  SHIB: "shiba-inu",
-  PEPE: "pepe",
-  SUI: "sui",
-  SEI: "sei-network",
-  TIA: "celestia",
-  USDT: "tether",
-  USDC: "usd-coin",
-  DAI: "dai",
-};
 
 export interface ExchangeRateSyncResult {
   rates_fetched: number;
@@ -80,6 +45,7 @@ function autoDetectSource(
   hasTokenAddress: boolean,
   dpriceAssets?: Set<string>,
   disabledSources?: Set<string>,
+  geckoIdMap?: Map<string, string>,
 ): SourceName | "none" {
   // When dprice is enabled and the asset is available locally, prefer it
   if (dpriceAssets && dpriceAssets.has(code)) return "dprice";
@@ -91,7 +57,7 @@ function autoDetectSource(
     // Trust the "crypto" classification — try all crypto sources even for unknown symbols.
     // DefiLlama accepts arbitrary symbols (searches by symbol), so it can handle non-hardcoded tokens.
     if (!disabledSources?.has("defillama")) return "defillama";
-    if ((hasTokenAddress || COINGECKO_IDS[code]) && !disabledSources?.has("coingecko")) return "coingecko";
+    if ((hasTokenAddress || hasGeckoId(code, geckoIdMap)) && !disabledSources?.has("coingecko")) return "coingecko";
     if (!disabledSources?.has("binance")) return "binance";
     return "none";
   }
@@ -101,7 +67,7 @@ function autoDetectSource(
   if (FRANKFURTER_FIAT.has(code) && FRANKFURTER_FIAT.has(baseCurrency)) {
     return disabledSources?.has("frankfurter") ? "none" : "frankfurter";
   }
-  if (hasTokenAddress || COINGECKO_IDS[code]) {
+  if (hasTokenAddress || hasGeckoId(code, geckoIdMap)) {
     if (!disabledSources?.has("defillama")) return "defillama";
     if (!disabledSources?.has("coingecko")) return "coingecko";
     if (!disabledSources?.has("binance")) return "binance";
@@ -358,9 +324,13 @@ export async function syncExchangeRates(
     sourceMap.set(src.currency, src);
   }
 
-  // Load token addresses for auto-detection
+  // Load token addresses for auto-detection and CoinGecko token_price lookups
   const tokenAddresses = await backend.getCurrencyTokenAddresses();
   const tokenAddrSet = new Set(tokenAddresses.map((t) => t.currency));
+  const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
+
+  // Load dynamic CoinGecko ID map from crypto_asset_info (populated by dprice resolution)
+  const geckoIdMap = await backend.listCryptoAssetInfo();
 
   // Build code → asset_type lookup for source detection
   const currencyTypeMap = new Map<string, string>();
@@ -501,7 +471,7 @@ export async function syncExchangeRates(
       else if (stored.rate_source === "dprice") dpriceCodes.push(code);
     } else {
       // No stored source → auto-detect
-      const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets, disabledSources);
+      const detected = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), dpriceAssets, disabledSources, geckoIdMap);
       if (detected === "none") continue; // No known pricing path — skip
       if (detected === "frankfurter") frankfurterCodes.push(code);
       else if (detected === "coingecko") coingeckoCodes.push(code);
@@ -527,7 +497,7 @@ export async function syncExchangeRates(
   // If dprice-first pass failed entirely (dpriceAssets still undefined), re-route dpriceCodes to fallback sources
   if (dpriceCodes.length > 0 && dpriceAssets === undefined) {
     for (const code of dpriceCodes) {
-      const fallback = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), undefined, disabledSources);
+      const fallback = autoDetectSource(code, currencyTypeMap.get(code) ?? "", baseCurrency, tokenAddrSet.has(code), undefined, disabledSources, geckoIdMap);
       if (fallback === "none" || fallback === "dprice") continue;
       if (fallback === "frankfurter") frankfurterCodes.push(code);
       else if (fallback === "coingecko") coingeckoCodes.push(code);
@@ -598,33 +568,58 @@ export async function syncExchangeRates(
         allFailed.add(code);
       }
     } else {
-      const geckoFetch = new RateLimitedFetcher({ maxRequests: 30, intervalMs: 60_000 });
+      // Validate that baseCurrency is supported as a CoinGecko vs_currency
+      const supportedVs = await getSupportedVsCurrencies(coingeckoApiKey, coingeckoPro);
+      if (!isVsCurrencySupported(baseCurrency, supportedVs)) {
+        result.errors.push(`CoinGecko: base currency "${baseCurrency}" is not supported as a vs_currency; skipping ${coingeckoCodes.length} rate(s)`);
+        for (const code of coingeckoCodes) {
+          if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+          allFailed.add(code);
+        }
+      } else {
+      const geckoFetch = new RateLimitedFetcher({ maxRequests: coingeckoPro ? 100 : 30, intervalMs: 60_000 });
       try {
+        const vsBase = baseCurrency.toLowerCase();
+        const geckoHeaders: Record<string, string> = coingeckoPro
+          ? { "x-cg-pro-api-key": coingeckoApiKey }
+          : { "x-cg-demo-api-key": coingeckoApiKey };
+        const geckoBase = coingeckoPro
+          ? "https://pro-api.coingecko.com/api/v3"
+          : "https://api.coingecko.com/api/v3";
+
+        // Separate tokens: those with a known gecko ID use /simple/price,
+        // those with only a contract address use /simple/token_price/{platform}
         const idMap = new Map<string, string>(); // geckoId → ticker
         const geckoIds: string[] = [];
+        const tokenPriceCodes: Array<{ code: string; chain: string; address: string }> = [];
+
         for (const code of coingeckoCodes) {
-          const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
-          // Only send IDs that look valid for CoinGecko (lowercase alphanumeric + hyphens)
-          if (!/^[a-z0-9][a-z0-9-]*$/.test(geckoId)) {
-            result.errors.push(`CoinGecko: skipping invalid ID for ${code}`);
-            if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
-            allFailed.add(code);
-            continue;
+          const geckoId = resolveGeckoId(code, geckoIdMap);
+          if (isValidGeckoId(geckoId) && (hasGeckoId(code, geckoIdMap) || geckoId !== code.toLowerCase())) {
+            idMap.set(geckoId, code);
+            geckoIds.push(geckoId);
+          } else {
+            // No known gecko ID — try contract address for token_price endpoint
+            const tokenAddr = tokenAddrMap.get(code);
+            if (tokenAddr && CHAIN_TO_PLATFORM[tokenAddr.chain]) {
+              tokenPriceCodes.push({ code, chain: tokenAddr.chain, address: tokenAddr.contract_address });
+            } else if (isValidGeckoId(geckoId)) {
+              // Last resort: try lowercase code as gecko ID
+              idMap.set(geckoId, code);
+              geckoIds.push(geckoId);
+            } else {
+              result.errors.push(`CoinGecko: skipping invalid ID for ${code}`);
+              if (autoDetectCodes.includes(code)) autoDetectFailed.add(code);
+              allFailed.add(code);
+            }
           }
-          idMap.set(geckoId, code);
-          geckoIds.push(geckoId);
         }
 
+        // Fetch prices by CoinGecko ID (batch all into one call)
         if (geckoIds.length > 0) {
           const ids = geckoIds.join(",");
-          const vsBase = baseCurrency.toLowerCase();
-          const url = coingeckoPro
-            ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}`
-            : `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vsBase}`;
-          const headers: Record<string, string> = coingeckoPro
-            ? { "x-cg-pro-api-key": coingeckoApiKey }
-            : { "x-cg-demo-api-key": coingeckoApiKey };
-          const resp = await geckoFetch.fetch(url, { headers });
+          const url = `${geckoBase}/simple/price?ids=${ids}&vs_currencies=${vsBase}`;
+          const resp = await geckoFetch.fetch(url, { headers: geckoHeaders });
 
           if (!resp.ok) {
             result.errors.push(`CoinGecko HTTP ${resp.status}: ${resp.statusText}`);
@@ -659,10 +654,61 @@ export async function syncExchangeRates(
             }
           }
         }
+
+        // Fetch token prices by contract address (grouped by platform)
+        if (tokenPriceCodes.length > 0) {
+          const chainGroups = new Map<string, Array<{ code: string; address: string }>>();
+          for (const t of tokenPriceCodes) {
+            let group = chainGroups.get(t.chain);
+            if (!group) { group = []; chainGroups.set(t.chain, group); }
+            group.push({ code: t.code, address: t.address });
+          }
+          for (const [chain, tokens] of chainGroups) {
+            const platform = CHAIN_TO_PLATFORM[chain];
+            if (!platform) continue;
+            const addresses = tokens.map((t) => t.address).join(",");
+            const url = `${geckoBase}/simple/token_price/${platform}?contract_addresses=${addresses}&vs_currencies=${vsBase}`;
+            try {
+              const resp = await geckoFetch.fetch(url, { headers: geckoHeaders });
+              if (!resp.ok) {
+                result.errors.push(`CoinGecko token_price HTTP ${resp.status} for ${chain}`);
+                for (const t of tokens) {
+                  if (autoDetectCodes.includes(t.code)) autoDetectFailed.add(t.code);
+                  allFailed.add(t.code);
+                }
+                continue;
+              }
+              const data: Record<string, Record<string, number>> = await resp.json();
+              for (const t of tokens) {
+                const priceData = data[t.address];
+                if (!priceData || priceData[vsBase] == null) {
+                  result.errors.push(`CoinGecko: no token price for ${t.code} (${chain}:${t.address})`);
+                  if (autoDetectCodes.includes(t.code)) autoDetectFailed.add(t.code);
+                  allFailed.add(t.code);
+                  continue;
+                }
+                if (autoDetectCodes.includes(t.code)) autoDetectSuccess.add(t.code);
+                allSucceeded.add(t.code);
+                await backend.recordExchangeRate({
+                  id: uuidv7(),
+                  date: today,
+                  from_currency: t.code,
+                  to_currency: baseCurrency,
+                  rate: priceData[vsBase].toString(),
+                  source: "coingecko",
+                });
+                result.rates_fetched++;
+              }
+            } catch (err) {
+              result.errors.push(`CoinGecko token_price ${chain}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
       } catch (err) {
         result.errors.push(`CoinGecko: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         geckoFetch.dispose();
+      }
       }
     }
   }
@@ -784,8 +830,8 @@ export async function syncExchangeRates(
         let coinId: string;
         if (ta) {
           coinId = `${ta.chain}:${ta.contract_address}`;
-        } else if (COINGECKO_IDS[code]) {
-          coinId = `coingecko:${COINGECKO_IDS[code]}`;
+        } else if (hasGeckoId(code, geckoIdMap)) {
+          coinId = `coingecko:${resolveGeckoId(code, geckoIdMap)}`;
         } else {
           // No token address and no CoinGecko mapping — skip to avoid garbage API calls
           continue;
@@ -950,6 +996,7 @@ export async function fetchSingleRate(
   dpriceApiKey?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const today = todayISO();
+  const geckoIdMap = await backend.listCryptoAssetInfo();
 
   switch (source) {
     case "frankfurter": {
@@ -978,7 +1025,7 @@ export async function fetchSingleRate(
     case "coingecko": {
       if (!coingeckoApiKey) return { success: false, error: "CoinGecko API key is required" };
       try {
-        const geckoId = COINGECKO_IDS[code] ?? code.toLowerCase();
+        const geckoId = resolveGeckoId(code, geckoIdMap);
         const vsBase = baseCurrency.toLowerCase();
         const url = coingeckoPro
           ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=${vsBase}`
@@ -1034,8 +1081,8 @@ export async function fetchSingleRate(
         let coinId: string;
         if (tokenAddr) {
           coinId = `${tokenAddr.chain}:${tokenAddr.contract_address}`;
-        } else if (COINGECKO_IDS[code]) {
-          coinId = `coingecko:${COINGECKO_IDS[code]}`;
+        } else if (hasGeckoId(code, geckoIdMap)) {
+          coinId = `coingecko:${resolveGeckoId(code, geckoIdMap)}`;
         } else {
           return { success: false, error: `DefiLlama: no token address or CoinGecko mapping for ${code}` };
         }

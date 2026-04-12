@@ -753,6 +753,8 @@
   "settings_finnhub_hint": "Get a free key at <a href=\"https://finnhub.io\" target=\"_blank\" class=\"underline hover:text-foreground\">finnhub.io</a>. Required for stock prices (AAPL, GOOG, etc.).",
   "settings_coingecko_pro_hint": "Using Pro endpoint (<a href=\"https://www.coingecko.com/en/api/pricing\" target=\"_blank\" class=\"underline hover:text-foreground\">pro-api.coingecko.com</a>). 500 req/min.",
   "settings_coingecko_demo_hint": "Get a free demo key at <a href=\"https://www.coingecko.com/en/api\" target=\"_blank\" class=\"underline hover:text-foreground\">coingecko.com</a>. Required for crypto rates. Fiat rates work without a key.",
+  "settings_coingecko_plan": "Plan: {plan} · {rateLimit} req/min",
+  "settings_coingecko_monthly_usage": "Monthly: {used} / {total} calls ({remaining} remaining)",
   "settings_cryptocompare_hint": "Get a free key at <a href=\"https://www.cryptocompare.com/cryptopian/api-keys\" target=\"_blank\" class=\"underline hover:text-foreground\">cryptocompare.com</a>. Optional fallback for crypto historical rates.",
   "settings_defillama_no_key": "Default crypto rate source (no key required)",
   "settings_binance_no_key": "Crypto rates via public API (no key required)",

@@ -64,6 +64,35 @@ export async function testCoinGecko(apiKey: string, pro?: boolean): Promise<Test
   }
 }
 
+export interface CoinGeckoKeyInfo {
+  plan: string;
+  rateLimit: number;
+  monthlyCredit: number;
+  monthlyUsed: number;
+  monthlyRemaining: number;
+}
+
+export async function getCoinGeckoKeyInfo(apiKey: string, pro?: boolean): Promise<CoinGeckoKeyInfo | null> {
+  if (!apiKey) return null;
+  try {
+    const url = pro
+      ? "https://pro-api.coingecko.com/api/v3/key"
+      : "https://api.coingecko.com/api/v3/key";
+    const headers: Record<string, string> = pro
+      ? { "x-cg-pro-api-key": apiKey }
+      : { "x-cg-demo-api-key": apiKey };
+    const resp = await safeFetch(url, { headers });
+    const data = await resp.json();
+    return {
+      plan: data.plan ?? "Unknown",
+      rateLimit: data.rate_limit_request_per_minute ?? 0,
+      monthlyCredit: data.monthly_call_credit ?? 0,
+      monthlyUsed: data.current_total_monthly_calls ?? 0,
+      monthlyRemaining: data.current_remaining_monthly_calls ?? 0,
+    };
+  } catch { return null; }
+}
+
 export async function testCryptoCompare(apiKey: string): Promise<TestResult> {
   if (!apiKey) return { ok: false, error: "API key required" };
   try {

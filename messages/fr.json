@@ -753,6 +753,8 @@
   "settings_finnhub_hint": "Obtenez une clé gratuite sur <a href=\"https://finnhub.io\" target=\"_blank\" class=\"underline hover:text-foreground\">finnhub.io</a>. Requis pour les cours boursiers (AAPL, GOOG, etc.).",
   "settings_coingecko_pro_hint": "Utilisation du point de terminaison Pro (<a href=\"https://www.coingecko.com/en/api/pricing\" target=\"_blank\" class=\"underline hover:text-foreground\">pro-api.coingecko.com</a>). 500 req/min.",
   "settings_coingecko_demo_hint": "Obtenez une clé démo gratuite sur <a href=\"https://www.coingecko.com/en/api\" target=\"_blank\" class=\"underline hover:text-foreground\">coingecko.com</a>. Requis pour les taux crypto. Les taux fiat fonctionnent sans clé.",
+  "settings_coingecko_plan": "Plan : {plan} · {rateLimit} req/min",
+  "settings_coingecko_monthly_usage": "Mensuel : {used} / {total} appels ({remaining} restants)",
   "settings_cryptocompare_hint": "Obtenez une clé gratuite sur <a href=\"https://www.cryptocompare.com/cryptopian/api-keys\" target=\"_blank\" class=\"underline hover:text-foreground\">cryptocompare.com</a>. Source alternative optionnelle pour les taux crypto historiques.",
   "settings_defillama_no_key": "Source de taux crypto par défaut (aucune clé requise)",
   "settings_binance_no_key": "Taux crypto via API publique (aucune clé requise)",

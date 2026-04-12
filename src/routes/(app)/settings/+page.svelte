@@ -61,7 +61,9 @@
         testTheGraph,
         testHelius,
         testDprice,
+        getCoinGeckoKeyInfo,
         type TestResult,
+        type CoinGeckoKeyInfo,
     } from "$lib/service-test.js";
     import * as msg from "$paraglide/messages.js";
     import { setLocale } from "$paraglide/runtime.js";
@@ -188,6 +190,7 @@
 
     // Service test state
     let testResults = $state<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>>({});
+    let cgKeyInfo = $state<CoinGeckoKeyInfo | null>(null);
 
     async function handleTest(service: string, testFn: () => Promise<TestResult>) {
         testResults = { ...testResults, [service]: { status: 'testing' } };
@@ -1486,7 +1489,13 @@
                                 />
                                 <Button variant="outline" size="sm"
                                     disabled={testResults.coingecko?.status === 'testing'}
-                                    onclick={() => handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey, settings.settings.coingeckoPro))}>
+                                    onclick={async () => {
+                                        await handleTest('coingecko', () => testCoinGecko(settings.coingeckoApiKey, settings.settings.coingeckoPro));
+                                        if (testResults.coingecko?.status === 'success') {
+                                            getCoinGeckoKeyInfo(settings.coingeckoApiKey, settings.settings.coingeckoPro)
+                                                .then(info => { cgKeyInfo = info; });
+                                        }
+                                    }}>
                                     {testResults.coingecko?.status === 'testing' ? msg.state_testing() : msg.btn_test()}
                                 </Button>
                             </div>
@@ -1502,6 +1511,12 @@
                                 <span class="text-xs text-positive">{testResults.coingecko.message ?? 'OK'}</span>
                             {:else if testResults.coingecko?.status === 'error'}
                                 <span class="text-xs text-destructive">{testResults.coingecko.message}</span>
+                            {/if}
+                            {#if cgKeyInfo}
+                                <div class="text-xs text-muted-foreground space-y-0.5">
+                                    <div>{msg.settings_coingecko_plan({ plan: cgKeyInfo.plan, rateLimit: cgKeyInfo.rateLimit.toString() })}</div>
+                                    <div>{msg.settings_coingecko_monthly_usage({ used: cgKeyInfo.monthlyUsed.toLocaleString(), total: cgKeyInfo.monthlyCredit.toLocaleString(), remaining: cgKeyInfo.monthlyRemaining.toLocaleString() })}</div>
+                                </div>
                             {/if}
                             <p class="text-xs text-muted-foreground">
                                 {#if settings.settings.coingeckoPro}
