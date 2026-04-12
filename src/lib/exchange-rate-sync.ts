@@ -3,7 +3,7 @@ import { RateLimitedFetcher } from "./utils/rate-limited-fetch.js";
 import type { Backend, CurrencyRateOverride } from "./backend.js";
 import { createDpriceClient, type DpriceClient, type DpriceAssetFilter, type DpriceAssetType } from "./dprice-client.js";
 import { isDpriceActive, type DpriceMode } from "./data/settings.svelte.js";
-import { COINGECKO_IDS, resolveGeckoId, isValidGeckoId, hasGeckoId, CHAIN_TO_PLATFORM } from "./coingecko-ids.js";
+import { COINGECKO_IDS, resolveGeckoId, isValidGeckoId, hasGeckoId, CHAIN_TO_PLATFORM, refreshCoinGeckoIds } from "./coingecko-ids.js";
 import { getSupportedVsCurrencies, isVsCurrencySupported } from "./coingecko-vs-currencies.js";
 
 // ECB/Frankfurter supported fiat currency codes
@@ -330,7 +330,25 @@ export async function syncExchangeRates(
   const tokenAddrMap = new Map(tokenAddresses.map((t) => [t.currency, t]));
 
   // Load dynamic CoinGecko ID map from crypto_asset_info (populated by dprice resolution)
-  const geckoIdMap = await backend.listCryptoAssetInfo();
+  let geckoIdMap = await backend.listCryptoAssetInfo();
+
+  // Refresh CoinGecko coin list (at most once per 24h) to resolve unknown symbols
+  if (coingeckoApiKey) {
+    try {
+      const userCodes = new Set(codes);
+      const freshMap = await refreshCoinGeckoIds(
+        userCodes,
+        (code, id) => backend.setCryptoAssetCoingeckoId(code, id),
+        coingeckoApiKey,
+        coingeckoPro,
+      );
+      // Merge freshly resolved IDs into geckoIdMap
+      for (const code of userCodes) {
+        const id = freshMap.get(code);
+        if (id && !geckoIdMap.has(code)) geckoIdMap.set(code, id);
+      }
+    } catch { /* non-critical — continue with existing map */ }
+  }
 
   // Build code → asset_type lookup for source detection
   const currencyTypeMap = new Map<string, string>();

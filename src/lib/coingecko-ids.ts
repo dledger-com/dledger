@@ -37,7 +37,7 @@ export const COINGECKO_IDS: Record<string, string> = {
 
 /**
  * Resolve a currency code to a CoinGecko ID.
- * Priority: 1) crypto_asset_info DB  2) hardcoded map  3) code.toLowerCase()
+ * Priority: 1) crypto_asset_info DB  2) hardcoded map  3) coins/list cache  4) code.toLowerCase()
  */
 export function resolveGeckoId(
   code: string,
@@ -46,6 +46,8 @@ export function resolveGeckoId(
   const dbId = dynamicMap?.get(code);
   if (dbId) return dbId;
   if (COINGECKO_IDS[code]) return COINGECKO_IDS[code];
+  const cached = _coinListCache?.get(code);
+  if (cached) return cached;
   return code.toLowerCase();
 }
 
@@ -54,9 +56,77 @@ export function isValidGeckoId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]*$/.test(id);
 }
 
-/** Check if a currency has a known CoinGecko ID (hardcoded or dynamic) */
+/** Check if a currency has a known CoinGecko ID (hardcoded, dynamic, or cached) */
 export function hasGeckoId(code: string, dynamicMap?: Map<string, string>): boolean {
-  return !!(dynamicMap?.get(code) || COINGECKO_IDS[code]);
+  return !!(dynamicMap?.get(code) || COINGECKO_IDS[code] || _coinListCache?.get(code));
+}
+
+// ---- Dynamic coin list refresh ----
+
+/** In-memory cache of the full CoinGecko coin list (symbol → gecko ID) */
+let _coinListCache: Map<string, string> | null = null;
+let _coinListTime = 0;
+const COIN_LIST_TTL = 24 * 60 * 60 * 1000; // 24h
+
+/**
+ * Fetch the full CoinGecko coin list and persist IDs for the user's currencies.
+ * The full list (~15k coins) is cached in memory for the session; only currencies
+ * the user actually has are persisted to the crypto_asset_info table.
+ *
+ * @param userCurrencies - set of currency codes the user has in their ledger
+ * @param persistFn - function to persist a (code, geckoId) pair to the DB
+ */
+export async function refreshCoinGeckoIds(
+  userCurrencies: Set<string>,
+  persistFn: (code: string, geckoId: string) => Promise<void>,
+  apiKey?: string,
+  pro?: boolean,
+): Promise<Map<string, string>> {
+  // Return cached list if still fresh
+  if (_coinListCache && Date.now() - _coinListTime < COIN_LIST_TTL) {
+    return _coinListCache;
+  }
+
+  const base = pro ? "https://pro-api.coingecko.com/api/v3" : "https://api.coingecko.com/api/v3";
+  const headers: Record<string, string> = apiKey
+    ? (pro ? { "x-cg-pro-api-key": apiKey } : { "x-cg-demo-api-key": apiKey })
+    : {};
+  const resp = await fetch(`${base}/coins/list`, {
+    headers,
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!resp.ok) throw new Error(`CoinGecko coins/list HTTP ${resp.status}`);
+  const coins: Array<{ id: string; symbol: string; name: string }> = await resp.json();
+
+  // Build symbol → id map. For duplicate symbols, prefer the one matching our
+  // hardcoded map (known good IDs), otherwise keep the first occurrence
+  // (coins/list is alphabetical, but popular coins tend to have shorter IDs).
+  const symbolToId = new Map<string, string>();
+  for (const coin of coins) {
+    const sym = coin.symbol.toUpperCase();
+    if (!symbolToId.has(sym) || COINGECKO_IDS[sym] === coin.id) {
+      symbolToId.set(sym, coin.id);
+    }
+  }
+
+  _coinListCache = symbolToId;
+  _coinListTime = Date.now();
+
+  // Persist only the user's currencies to the DB (avoid writing 15k+ rows)
+  for (const code of userCurrencies) {
+    const geckoId = symbolToId.get(code);
+    if (geckoId) {
+      try { await persistFn(code, geckoId); } catch { /* non-critical */ }
+    }
+  }
+
+  return symbolToId;
+}
+
+/** Clear the in-memory coin list cache (for testing) */
+export function clearCoinListCache(): void {
+  _coinListCache = null;
+  _coinListTime = 0;
 }
 
 // CoinGecko asset platform IDs for token_price endpoint
