@@ -24,6 +24,7 @@
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
   import { DEMO_MODE } from "$lib/demo.js";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
+  import CoinGeckoSearchDialog from "$lib/components/CoinGeckoSearchDialog.svelte";
 
   const settings = new SettingsStore();
   const code = $derived(page.params.code ?? "");
@@ -32,6 +33,7 @@
   let rateSource = $state<CurrencyRateOverride | null>(null);
   let exchangeRates = $state<ExchangeRate[]>([]);
   let loading = $state(true);
+  let cgSearchOpen = $state(false);
 
   // Chart state
   let chartData = $state<{ date: Date; value: number }[]>([]);
@@ -210,6 +212,13 @@
     }
   }
 
+  // Reload rate source when CoinGecko search dialog closes (after selection)
+  let prevCgSearchOpen = false;
+  $effect(() => {
+    if (prevCgSearchOpen && !cgSearchOpen) loadRateSource();
+    prevCgSearchOpen = cgSearchOpen;
+  });
+
   async function handleSourceChange(newSource: string) {
     if (!code) return;
     if (newSource === "auto") {
@@ -354,18 +363,31 @@
             {#if code === settings.currency}
               <span class="text-muted-foreground text-sm">N/A (base currency)</span>
             {:else}
-              <Select.Root type="single" value={rateSource?.rate_source ?? "auto"} onValueChange={handleSourceChange} disabled={taskQueue.isActive(`rate-refetch:${code}`)}>
-                <Select.Trigger>
-                  {rateSource?.rate_source === "none" ? "suppressed" : rateSource?.rate_source ?? "auto (cascade)"}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="auto">auto (cascade)</Select.Item>
-                  <Select.Item value="none">suppressed</Select.Item>
-                </Select.Content>
-              </Select.Root>
-              {#if rateSource?.set_by}
-                <span class="text-xs text-muted-foreground ml-2">set by {rateSource.set_by}</span>
-              {/if}
+              <div class="flex items-center gap-2">
+                <Select.Root type="single" value={rateSource?.rate_source ?? "auto"} onValueChange={(v) => {
+                  if (v === "coingecko-search") { cgSearchOpen = true; return; }
+                  handleSourceChange(v);
+                }} disabled={taskQueue.isActive(`rate-refetch:${code}`)}>
+                  <Select.Trigger>
+                    {rateSource?.rate_source === "none" ? "suppressed" : rateSource?.rate_source ?? "auto (cascade)"}
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="auto">auto (cascade)</Select.Item>
+                    <Select.Item value="frankfurter">frankfurter</Select.Item>
+                    <Select.Item value="coingecko">coingecko</Select.Item>
+                    <Select.Item value="coingecko-search">coingecko (search...)</Select.Item>
+                    <Select.Item value="defillama">defillama</Select.Item>
+                    <Select.Item value="binance">binance</Select.Item>
+                    <Select.Item value="cryptocompare">cryptocompare</Select.Item>
+                    <Select.Item value="finnhub">finnhub</Select.Item>
+                    <Select.Item value="dprice">dprice</Select.Item>
+                    <Select.Item value="none">suppressed</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+                {#if rateSource?.set_by}
+                  <span class="text-xs text-muted-foreground">set by {rateSource.set_by}</span>
+                {/if}
+              </div>
             {/if}
           </Card.Title>
         </Card.Header>
@@ -564,3 +586,5 @@
     </Card.Root>
   {/if}
 </div>
+
+<CoinGeckoSearchDialog currencyCode={code} bind:open={cgSearchOpen} />
