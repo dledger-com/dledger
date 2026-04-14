@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { pushState, replaceState } from "$app/navigation";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -26,6 +27,8 @@
   import ConversionDebugDialog from "$lib/components/ConversionDebugDialog.svelte";
   import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
   import OnboardingChecklist from "$lib/components/OnboardingChecklist.svelte";
+  import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
+  import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
   import { DEMO_MODE } from "$lib/demo.js";
   import CoinIcon from "$lib/components/CoinIcon.svelte";
   import AmountWithIcon from "$lib/components/AmountWithIcon.svelte";
@@ -79,6 +82,32 @@
   let recentEntries = $state<[JournalEntry, LineItem[]][]>(_cachedRecent.entries);
   let entryTags = $state<Map<string, string[]>>(new Map());
   let entryLinks = $state<Map<string, string[]>>(new Map());
+
+  // Entry drawer / edit dialog state
+  let drawerOpen = $state(false);
+  let drawerEntryId = $state<string | null>(null);
+  let dialogOpen = $state(false);
+  let dialogEntryId = $state<string | null>(null);
+
+  function openEntryDrawer(entryId: string) {
+    drawerEntryId = entryId;
+    drawerOpen = true;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("entry") !== entryId) {
+      url.searchParams.set("entry", entryId);
+      pushState(url, {});
+    }
+  }
+
+  function closeEntryDrawer() {
+    drawerOpen = false;
+    drawerEntryId = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("entry")) {
+      url.searchParams.delete("entry");
+      replaceState(url, {});
+    }
+  }
 
   // Onboarding state
   let sourceCount = $state(0);
@@ -186,9 +215,28 @@
 
   let loadController: AbortController | undefined;
 
+  function handleDrawerPopstate() {
+    const id = new URL(window.location.href).searchParams.get("entry");
+    if (id && !drawerOpen) {
+      drawerEntryId = id;
+      drawerOpen = true;
+    } else if (!id && drawerOpen) {
+      drawerOpen = false;
+      drawerEntryId = null;
+    }
+  }
+
   onMount(async () => {
     loadController = new AbortController();
     const signal = loadController.signal;
+
+    // Restore drawer state from URL (deep-link or forward-nav)
+    const entryIdFromUrl = new URL(window.location.href).searchParams.get("entry");
+    if (entryIdFromUrl) {
+      drawerEntryId = entryIdFromUrl;
+      drawerOpen = true;
+    }
+    window.addEventListener("popstate", handleDrawerPopstate);
 
     // 1. Dynamic import of heavy chart libraries (truly async, non-blocking)
     Promise.all([import("layerchart"), import("d3-scale")]).then(([lc, d3]) => {
@@ -375,6 +423,9 @@
     unsubJournal();
     unsubAccounts();
     unsubReports();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("popstate", handleDrawerPopstate);
+    }
   });
 
   async function selectRange(preset: RangePreset) {
@@ -604,7 +655,7 @@
             <Table.Row class="sm:hidden {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
               <Table.Cell colspan={4} class="py-2 px-3">
                 {@const acct = mainCounterpartyShort(items, accountIdToName)}
-                <a href="/journal/{entry.id}" class="block">
+                <button type="button" class="block w-full text-left" onclick={() => openEntryDrawer(entry.id)}>
                   <div class="flex items-baseline justify-between gap-2">
                     <div class="flex items-center gap-1 min-w-0 text-xs text-muted-foreground">
                       <span>{entry.date}</span>
@@ -631,16 +682,16 @@
                       <LinkDisplay links={entryLinks.get(entry.id)!} class="shrink-0" />
                     {/if}
                   </div>
-                </a>
+                </button>
               </Table.Cell>
             </Table.Row>
             <!-- Desktop: standard 4-column layout -->
-            <Table.Row class="hidden sm:table-row {entry.status === 'voided' ? 'line-through opacity-50' : ''}">
+            <Table.Row class="hidden sm:table-row cursor-pointer {entry.status === 'voided' ? 'line-through opacity-50' : ''}" onclick={() => openEntryDrawer(entry.id)}>
               <Table.Cell class="text-muted-foreground text-sm">{entry.date}</Table.Cell>
               <Table.Cell class="max-w-[300px] whitespace-nowrap">
                 <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
                   <SourceIcon source={entry.source} descriptionData={entry.description_data} size={14} />
-                  <a href="/journal/{entry.id}" class="font-medium hover:underline overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</a>
+                  <span class="font-medium overflow-clip text-ellipsis whitespace-nowrap" title={entry.description}>{entry.description}</span>
                   {#if entryTags.get(entry.id)?.length}
                     <TagDisplay tags={entryTags.get(entry.id)!} class="shrink-0" />
                   {/if}
@@ -669,3 +720,24 @@
     </Card.Root>
   {/if}
 </div>
+
+<JournalEntryDrawer
+  bind:open={drawerOpen}
+  bind:entryId={drawerEntryId}
+  onedit={() => { drawerOpen = false; dialogEntryId = drawerEntryId; dialogOpen = true; }}
+  onclose={closeEntryDrawer}
+  onsaved={(newId) => {
+    drawerEntryId = newId;
+    const url = new URL(window.location.href);
+    url.searchParams.set("entry", newId);
+    replaceState(url, {});
+  }}
+/>
+
+<JournalEntryDialog
+  bind:open={dialogOpen}
+  mode="edit"
+  bind:entryId={dialogEntryId}
+  onsaved={(newId) => { dialogOpen = false; openEntryDrawer(newId); }}
+  onclose={() => { dialogOpen = false; }}
+/>
