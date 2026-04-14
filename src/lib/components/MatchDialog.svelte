@@ -17,9 +17,10 @@
     matches: MatchCandidate[];
     accountMap: Map<string, Account>;
     onMerged?: () => void;
+    onViewEntry?: (entryId: string) => void;
   }
 
-  let { open = $bindable(), matches, accountMap, onMerged }: Props = $props();
+  let { open = $bindable(), matches, accountMap, onMerged, onViewEntry }: Props = $props();
 
   let mergingId = $state<string | null>(null);
   let mergingAll = $state(false);
@@ -171,9 +172,15 @@
             <div class="flex items-center justify-between text-sm rounded px-2 py-1.5 bg-muted/30">
               <div class="flex items-center gap-3">
                 <span class="text-muted-foreground w-24">{match.movementA.entry.date}</span>
-                <a href="/journal/{match.movementA.entry.id}" class="hover:underline truncate max-w-[300px]" title={match.movementA.entry.description}>
-                  {match.movementA.entry.description}
-                </a>
+                {#if onViewEntry}
+                  <button type="button" class="hover:underline truncate max-w-[300px] bg-transparent border-0 p-0 text-left cursor-pointer" title={match.movementA.entry.description} onclick={() => onViewEntry?.(match.movementA.entry.id)}>
+                    {match.movementA.entry.description}
+                  </button>
+                {:else}
+                  <a href="/journal/{match.movementA.entry.id}" class="hover:underline truncate max-w-[300px]" title={match.movementA.entry.description}>
+                    {match.movementA.entry.description}
+                  </a>
+                {/if}
               </div>
               <div class="flex items-center gap-2">
                 <span class="font-mono text-xs">{formatCurrency(match.movementA.amount, match.matchedCurrency)}</span>
@@ -185,9 +192,15 @@
             <div class="flex items-center justify-between text-sm rounded px-2 py-1.5 bg-muted/30">
               <div class="flex items-center gap-3">
                 <span class="text-muted-foreground w-24">{match.movementB.entry.date}</span>
-                <a href="/journal/{match.movementB.entry.id}" class="hover:underline truncate max-w-[300px]" title={match.movementB.entry.description}>
-                  {match.movementB.entry.description}
-                </a>
+                {#if onViewEntry}
+                  <button type="button" class="hover:underline truncate max-w-[300px] bg-transparent border-0 p-0 text-left cursor-pointer" title={match.movementB.entry.description} onclick={() => onViewEntry?.(match.movementB.entry.id)}>
+                    {match.movementB.entry.description}
+                  </button>
+                {:else}
+                  <a href="/journal/{match.movementB.entry.id}" class="hover:underline truncate max-w-[300px]" title={match.movementB.entry.description}>
+                    {match.movementB.entry.description}
+                  </a>
+                {/if}
               </div>
               <div class="flex items-center gap-2">
                 <span class="font-mono text-xs">{formatCurrency(match.movementB.amount, match.matchedCurrency)}</span>

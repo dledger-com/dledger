@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
+  import { pushState, replaceState } from "$app/navigation";
   import * as m from "$paraglide/messages.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
@@ -22,6 +23,8 @@
   import { v7 as uuidv7 } from "uuid";
   import type { Account, CurrencyBalance } from "$lib/types/index.js";
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from "$lib/data/breadcrumb.svelte.js";
+  import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
+  import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
 
   const accountId = $derived(page.params.accountId);
   let account = $state<Account | null>(null);
@@ -53,6 +56,43 @@
 
   // Existing reconciled balance for this account+currency
   let existingBalance = $state("0");
+
+  // Entry drawer / edit dialog state
+  let drawerOpen = $state(false);
+  let drawerEntryId = $state<string | null>(null);
+  let dialogOpen = $state(false);
+  let dialogEntryId = $state<string | null>(null);
+
+  function openEntryDrawer(entryId: string) {
+    drawerEntryId = entryId;
+    drawerOpen = true;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("entry") !== entryId) {
+      url.searchParams.set("entry", entryId);
+      pushState(url, {});
+    }
+  }
+
+  function closeEntryDrawer() {
+    drawerOpen = false;
+    drawerEntryId = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("entry")) {
+      url.searchParams.delete("entry");
+      replaceState(url, {});
+    }
+  }
+
+  function handleDrawerPopstate() {
+    const id = new URL(window.location.href).searchParams.get("entry");
+    if (id && !drawerOpen) {
+      drawerEntryId = id;
+      drawerOpen = true;
+    } else if (!id && drawerOpen) {
+      drawerOpen = false;
+      drawerEntryId = null;
+    }
+  }
 
   const difference = $derived(
     statementBalance && items.length > 0
@@ -137,6 +177,13 @@
     } finally {
       loading = false;
     }
+
+    const entryIdFromUrl = new URL(window.location.href).searchParams.get("entry");
+    if (entryIdFromUrl) {
+      drawerEntryId = entryIdFromUrl;
+      drawerOpen = true;
+    }
+    window.addEventListener("popstate", handleDrawerPopstate);
   });
 
   $effect(() => {
@@ -155,6 +202,9 @@
   onDestroy(() => {
     if (accountId) clearBreadcrumbOverride(accountId);
     unsubJournal();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("popstate", handleDrawerPopstate);
+    }
   });
 </script>
 
@@ -244,7 +294,7 @@
                   </Table.Cell>
                   <Table.Cell class="text-muted-foreground">{item.entry_date}</Table.Cell>
                   <Table.Cell>
-                    <a href="/journal/{item.entry_id}" class="hover:underline">{item.entry_description}</a>
+                    <button type="button" class="hover:underline text-left bg-transparent border-0 p-0 cursor-pointer" onclick={() => openEntryDrawer(item.entry_id)}>{item.entry_description}</button>
                   </Table.Cell>
                   <Table.Cell class="text-right font-mono">
                     {@const amt = parseFloat(item.amount)}
@@ -316,3 +366,24 @@
     {/if}
   {/if}
 </div>
+
+<JournalEntryDrawer
+  bind:open={drawerOpen}
+  bind:entryId={drawerEntryId}
+  onedit={() => { drawerOpen = false; dialogEntryId = drawerEntryId; dialogOpen = true; }}
+  onclose={closeEntryDrawer}
+  onsaved={(newId) => {
+    drawerEntryId = newId;
+    const url = new URL(window.location.href);
+    url.searchParams.set("entry", newId);
+    replaceState(url, {});
+  }}
+/>
+
+<JournalEntryDialog
+  bind:open={dialogOpen}
+  mode="edit"
+  bind:entryId={dialogEntryId}
+  onsaved={(newId) => { dialogOpen = false; openEntryDrawer(newId); }}
+  onclose={() => { dialogOpen = false; }}
+/>

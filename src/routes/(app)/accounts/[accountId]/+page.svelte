@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/state";
+  import { pushState, replaceState } from "$app/navigation";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -32,6 +33,8 @@
   import { onInvalidate } from "$lib/data/invalidation.js";
   import ListFilter from "$lib/components/ListFilter.svelte";
   import EmptyState from "$lib/components/EmptyState.svelte";
+  import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
+  import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
 
   type AssertionSortKey = "date" | "currency" | "expected" | "actual" | "status";
   const assertionSort = createSortState<AssertionSortKey>();
@@ -67,6 +70,44 @@
   let editingOpenedAt = $state(false);
   let openedAtValue = $state("");
   let searchTerm = $state("");
+
+  // Entry drawer / edit dialog state
+  let drawerOpen = $state(false);
+  let drawerEntryId = $state<string | null>(null);
+  let dialogOpen = $state(false);
+  let dialogEntryId = $state<string | null>(null);
+
+  function openEntryDrawer(entryId: string) {
+    drawerEntryId = entryId;
+    drawerOpen = true;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("entry") !== entryId) {
+      url.searchParams.set("entry", entryId);
+      pushState(url, {});
+    }
+  }
+
+  function closeEntryDrawer() {
+    drawerOpen = false;
+    drawerEntryId = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("entry")) {
+      url.searchParams.delete("entry");
+      replaceState(url, {});
+    }
+  }
+
+  function handleDrawerPopstate() {
+    const id = new URL(window.location.href).searchParams.get("entry");
+    if (id && !drawerOpen) {
+      drawerEntryId = id;
+      drawerOpen = true;
+    } else if (!id && drawerOpen) {
+      drawerOpen = false;
+      drawerEntryId = null;
+    }
+  }
+
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const filteredEntries = $derived(filterHiddenEntries(journalStore.withItems, hidden));
   const filteredBalances = $derived(filterHiddenBalances(balances, hidden));
@@ -211,6 +252,13 @@
     loading = true;
     await reloadData();
     loading = false;
+
+    const entryIdFromUrl = new URL(window.location.href).searchParams.get("entry");
+    if (entryIdFromUrl) {
+      drawerEntryId = entryIdFromUrl;
+      drawerOpen = true;
+    }
+    window.addEventListener("popstate", handleDrawerPopstate);
   });
 
   $effect(() => {
@@ -234,6 +282,9 @@
     clearTopBarActions();
     unsubJournal();
     unsubAccounts();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("popstate", handleDrawerPopstate);
+    }
   });
 </script>
 
@@ -525,10 +576,10 @@
               {#each txVirtualItems as row (row.key)}
                 {@const { entry: [entry, items], running } = sortedFilteredEntries[row.index]}
                 {@const relevantItems = items.filter((i: LineItem) => i.account_id === accountId)}
-                <Table.Row>
+                <Table.Row class="cursor-pointer" onclick={() => openEntryDrawer(entry.id)}>
                   <Table.Cell class="text-muted-foreground">{entry.date}</Table.Cell>
                   <Table.Cell>
-                    <a href="/journal/{entry.id}" class="hover:underline">{entry.description}</a>
+                    <span>{entry.description}</span>
                   </Table.Cell>
                   <Table.Cell class="hidden md:table-cell">
                     <Badge variant={entry.status === "confirmed" ? "default" : "secondary"}>
@@ -565,3 +616,24 @@
     </Card.Root>
   {/if}
 </div>
+
+<JournalEntryDrawer
+  bind:open={drawerOpen}
+  bind:entryId={drawerEntryId}
+  onedit={() => { drawerOpen = false; dialogEntryId = drawerEntryId; dialogOpen = true; }}
+  onclose={closeEntryDrawer}
+  onsaved={(newId) => {
+    drawerEntryId = newId;
+    const url = new URL(window.location.href);
+    url.searchParams.set("entry", newId);
+    replaceState(url, {});
+  }}
+/>
+
+<JournalEntryDialog
+  bind:open={dialogOpen}
+  mode="edit"
+  bind:entryId={dialogEntryId}
+  onsaved={(newId) => { dialogOpen = false; openEntryDrawer(newId); }}
+  onclose={() => { dialogOpen = false; }}
+/>

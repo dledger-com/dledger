@@ -1,17 +1,66 @@
 <svelte:head><title>{m.report_integrity()} · dLedger</title></svelte:head>
 
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { pushState, replaceState } from "$app/navigation";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { getBackend } from "$lib/backend.js";
   import { runIntegrityChecks, type IntegrityIssue } from "$lib/utils/integrity-check.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import JournalEntryDrawer from "$lib/components/JournalEntryDrawer.svelte";
+  import JournalEntryDialog from "$lib/components/JournalEntryDialog.svelte";
   import * as m from "$paraglide/messages.js";
 
   let running = $state(false);
   let issues = $state<IntegrityIssue[] | null>(null);
+
+  // Entry drawer / edit dialog state
+  let drawerOpen = $state(false);
+  let drawerEntryId = $state<string | null>(null);
+  let dialogOpen = $state(false);
+  let dialogEntryId = $state<string | null>(null);
+
+  function openEntryDrawer(entryId: string) {
+    drawerEntryId = entryId;
+    drawerOpen = true;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("entry") !== entryId) {
+      url.searchParams.set("entry", entryId);
+      pushState(url, {});
+    }
+  }
+
+  function closeEntryDrawer() {
+    drawerOpen = false;
+    drawerEntryId = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("entry")) {
+      url.searchParams.delete("entry");
+      replaceState(url, {});
+    }
+  }
+
+  function handleDrawerPopstate() {
+    const id = new URL(window.location.href).searchParams.get("entry");
+    if (id && !drawerOpen) {
+      drawerEntryId = id;
+      drawerOpen = true;
+    } else if (!id && drawerOpen) {
+      drawerOpen = false;
+      drawerEntryId = null;
+    }
+  }
+
+  onMount(() => {
+    const entryIdFromUrl = new URL(window.location.href).searchParams.get("entry");
+    if (entryIdFromUrl) {
+      drawerEntryId = entryIdFromUrl;
+      drawerOpen = true;
+    }
+    window.addEventListener("popstate", handleDrawerPopstate);
+  });
 
   const errors = $derived(issues?.filter((i) => i.severity === "error") ?? []);
   const warnings = $derived(issues?.filter((i) => i.severity === "warning") ?? []);
@@ -40,6 +89,9 @@
 
   onDestroy(() => {
     clearTopBarActions();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("popstate", handleDrawerPopstate);
+    }
   });
 </script>
 
@@ -99,10 +151,17 @@
                   <div class="flex-1 min-w-0">
                     <p class="text-sm">{issue.message}</p>
                     {#if issue.entityType && issue.entityId}
-                      <a href="/{issue.entityType === 'journal_entry' ? 'journal' : 'accounts'}/{issue.entityId}"
-                         class="text-xs text-muted-foreground hover:underline mt-1 block">
-                        {m.report_view_entity({ entityType: issue.entityType })}
-                      </a>
+                      {#if issue.entityType === 'journal_entry'}
+                        <button type="button" class="text-xs text-muted-foreground hover:underline mt-1 block bg-transparent border-0 p-0 text-left cursor-pointer"
+                                onclick={() => openEntryDrawer(issue.entityId!)}>
+                          {m.report_view_entity({ entityType: issue.entityType })}
+                        </button>
+                      {:else}
+                        <a href="/accounts/{issue.entityId}"
+                           class="text-xs text-muted-foreground hover:underline mt-1 block">
+                          {m.report_view_entity({ entityType: issue.entityType })}
+                        </a>
+                      {/if}
                     {/if}
                   </div>
                 </div>
@@ -141,3 +200,24 @@
     </Card.Root>
   {/if}
 </div>
+
+<JournalEntryDrawer
+  bind:open={drawerOpen}
+  bind:entryId={drawerEntryId}
+  onedit={() => { drawerOpen = false; dialogEntryId = drawerEntryId; dialogOpen = true; }}
+  onclose={closeEntryDrawer}
+  onsaved={(newId) => {
+    drawerEntryId = newId;
+    const url = new URL(window.location.href);
+    url.searchParams.set("entry", newId);
+    replaceState(url, {});
+  }}
+/>
+
+<JournalEntryDialog
+  bind:open={dialogOpen}
+  mode="edit"
+  bind:entryId={dialogEntryId}
+  onsaved={(newId) => { dialogOpen = false; openEntryDrawer(newId); }}
+  onclose={() => { dialogOpen = false; }}
+/>

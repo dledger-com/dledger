@@ -2878,6 +2878,7 @@
     matches={matchCandidates}
     accountMap={matchAccountMap}
     onMerged={() => store.load()}
+    onViewEntry={(id) => openEntryDrawer("view", id)}
 />
 
 <!-- Duplicate Detection Dialog -->
