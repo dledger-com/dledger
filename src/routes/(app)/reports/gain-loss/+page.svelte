@@ -151,19 +151,19 @@
       </Card.Root>
     {:else}
       <Card.Root>
-        <Table.Root>
+        <Table.Root class="table-fixed">
           <Table.Header>
             <Table.Row>
               <SortableHeader active={sort.key === "currency"} direction={sort.direction} onclick={() => sort.toggle("currency")}>{m.label_currency()}</SortableHeader>
               {#if hasProtocols}
                 <SortableHeader active={sort.key === "protocol"} direction={sort.direction} onclick={() => sort.toggle("protocol")}>{m.report_protocol()}</SortableHeader>
               {/if}
-              <SortableHeader active={sort.key === "acquired"} direction={sort.direction} onclick={() => sort.toggle("acquired")} class="hidden lg:table-cell">{m.report_acquired()}</SortableHeader>
-              <SortableHeader active={sort.key === "disposed"} direction={sort.direction} onclick={() => sort.toggle("disposed")} class="hidden lg:table-cell">{m.report_disposed()}</SortableHeader>
-              <SortableHeader active={sort.key === "quantity"} direction={sort.direction} onclick={() => sort.toggle("quantity")} class="text-right hidden md:table-cell">{m.report_quantity()}</SortableHeader>
-              <SortableHeader active={sort.key === "costBasis"} direction={sort.direction} onclick={() => sort.toggle("costBasis")} class="text-right hidden sm:table-cell">{m.report_cost_basis()}</SortableHeader>
-              <SortableHeader active={sort.key === "proceeds"} direction={sort.direction} onclick={() => sort.toggle("proceeds")} class="text-right hidden sm:table-cell">{m.report_proceeds()}</SortableHeader>
-              <SortableHeader active={sort.key === "gainLoss"} direction={sort.direction} onclick={() => sort.toggle("gainLoss")} class="text-right">{m.report_gain_loss_col()}</SortableHeader>
+              <SortableHeader active={sort.key === "acquired"} direction={sort.direction} onclick={() => sort.toggle("acquired")} class="hidden lg:table-cell w-28">{m.report_acquired()}</SortableHeader>
+              <SortableHeader active={sort.key === "disposed"} direction={sort.direction} onclick={() => sort.toggle("disposed")} class="hidden lg:table-cell w-28">{m.report_disposed()}</SortableHeader>
+              <SortableHeader active={sort.key === "quantity"} direction={sort.direction} onclick={() => sort.toggle("quantity")} class="text-right hidden md:table-cell w-24">{m.report_quantity()}</SortableHeader>
+              <SortableHeader active={sort.key === "costBasis"} direction={sort.direction} onclick={() => sort.toggle("costBasis")} class="text-right hidden sm:table-cell w-28">{m.report_cost_basis()}</SortableHeader>
+              <SortableHeader active={sort.key === "proceeds"} direction={sort.direction} onclick={() => sort.toggle("proceeds")} class="text-right hidden sm:table-cell w-28">{m.report_proceeds()}</SortableHeader>
+              <SortableHeader active={sort.key === "gainLoss"} direction={sort.direction} onclick={() => sort.toggle("gainLoss")} class="text-right w-28 sm:w-32">{m.report_gain_loss_col()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -172,10 +172,12 @@
               {@const gl = parseFloat(line.gain_loss)}
               <Table.Row>
                 <Table.Cell>
-                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
+                  <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={line.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={line.currency}>{line.currency}</Badge></span>
                 </Table.Cell>
                 {#if hasProtocols}
-                  <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>
+                  <Table.Cell class="text-sm text-muted-foreground">
+                    <span class="block truncate" title={line.source_handler || ""}>{line.source_handler || ""}</span>
+                  </Table.Cell>
                 {/if}
                 <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.acquired_date}</Table.Cell>
                 <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.disposed_date}</Table.Cell>

@@ -47,8 +47,7 @@
         <Card.Title>{m.report_french_tax_2086_section_title()}</Card.Title>
         <Card.Description>{m.report_french_tax_2086_section_desc()}</Card.Description>
       </Card.Header>
-      <div class="overflow-x-auto">
-        <Table.Root>
+      <Table.Root>
           <Table.Header>
             <Table.Row>
               <Table.Head class="w-10">#</Table.Head>
@@ -140,7 +139,6 @@
             </Table.Row>
           </Table.Footer>
         </Table.Root>
-      </div>
     </Card.Root>
   {:else}
     <Card.Root>
@@ -166,8 +164,7 @@
           </Card.Header>
         </Collapsible.Trigger>
         <Collapsible.Content>
-          <div class="overflow-x-auto">
-            <Table.Root>
+          <Table.Root>
               <Table.Header>
                 <Table.Row>
                   <SortableHeader active={sortAcq.key === "date"} direction={sortAcq.direction} onclick={() => sortAcq.toggle("date")}>{m.label_date()}</SortableHeader>
@@ -192,7 +189,6 @@
                 {/each}
               </Table.Body>
             </Table.Root>
-          </div>
         </Collapsible.Content>
       </Card.Root>
     </Collapsible.Root>

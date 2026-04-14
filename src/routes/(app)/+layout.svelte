@@ -156,12 +156,12 @@
 
 <Sidebar.Provider>
   <AppSidebar onfeedback={() => { feedbackWizard.openDefault(); }} onbackupinfo={() => { backupInfoOpen = true; }} />
-  <Sidebar.Inset>
+  <Sidebar.Inset class="min-w-0">
     {#if DEMO_MODE}
       <DemoBanner />
     {/if}
     <TopBar showSidebarTrigger={isDesktop.current} />
-    <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4">
+    <main class="flex-1 flex flex-col overflow-auto p-4 pb-20 md:pb-4 min-w-0">
       {@render children?.()}
     </main>
   </Sidebar.Inset>

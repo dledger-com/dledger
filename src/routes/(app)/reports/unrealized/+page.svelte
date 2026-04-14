@@ -178,19 +178,19 @@
       </Card.Root>
     {:else}
       <Card.Root>
-        <Table.Root>
+        <Table.Root class="table-fixed">
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortU.key === "currency"} direction={sortU.direction} onclick={() => sortU.toggle("currency")}>{m.label_currency()}</SortableHeader>
+              <SortableHeader active={sortU.key === "currency"} direction={sortU.direction} onclick={() => sortU.toggle("currency")} class="w-28 sm:w-32">{m.label_currency()}</SortableHeader>
               {#if hasProtocols}
-                <SortableHeader active={sortU.key === "protocol"} direction={sortU.direction} onclick={() => sortU.toggle("protocol")}>{m.report_protocol()}</SortableHeader>
+                <SortableHeader active={sortU.key === "protocol"} direction={sortU.direction} onclick={() => sortU.toggle("protocol")} class="w-28">{m.report_protocol()}</SortableHeader>
               {/if}
               <SortableHeader active={sortU.key === "account"} direction={sortU.direction} onclick={() => sortU.toggle("account")} class="hidden md:table-cell">{m.label_account()}</SortableHeader>
-              <SortableHeader active={sortU.key === "acquired"} direction={sortU.direction} onclick={() => sortU.toggle("acquired")} class="hidden lg:table-cell">{m.report_acquired()}</SortableHeader>
-              <SortableHeader active={sortU.key === "quantity"} direction={sortU.direction} onclick={() => sortU.toggle("quantity")} class="text-right hidden md:table-cell">{m.report_quantity()}</SortableHeader>
-              <SortableHeader active={sortU.key === "costUnit"} direction={sortU.direction} onclick={() => sortU.toggle("costUnit")} class="text-right hidden sm:table-cell">{m.report_cost_per_unit()}</SortableHeader>
-              <SortableHeader active={sortU.key === "currentValue"} direction={sortU.direction} onclick={() => sortU.toggle("currentValue")} class="text-right hidden sm:table-cell">{m.report_current_value()}</SortableHeader>
-              <SortableHeader active={sortU.key === "unrealizedGL"} direction={sortU.direction} onclick={() => sortU.toggle("unrealizedGL")} class="text-right">{m.report_unrealized_gl()}</SortableHeader>
+              <SortableHeader active={sortU.key === "acquired"} direction={sortU.direction} onclick={() => sortU.toggle("acquired")} class="hidden lg:table-cell w-28">{m.report_acquired()}</SortableHeader>
+              <SortableHeader active={sortU.key === "quantity"} direction={sortU.direction} onclick={() => sortU.toggle("quantity")} class="text-right hidden md:table-cell w-24">{m.report_quantity()}</SortableHeader>
+              <SortableHeader active={sortU.key === "costUnit"} direction={sortU.direction} onclick={() => sortU.toggle("costUnit")} class="text-right hidden sm:table-cell w-28">{m.report_cost_per_unit()}</SortableHeader>
+              <SortableHeader active={sortU.key === "currentValue"} direction={sortU.direction} onclick={() => sortU.toggle("currentValue")} class="text-right hidden sm:table-cell w-28">{m.report_current_value()}</SortableHeader>
+              <SortableHeader active={sortU.key === "unrealizedGL"} direction={sortU.direction} onclick={() => sortU.toggle("unrealizedGL")} class="text-right w-28 sm:w-32">{m.report_unrealized_gl()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -199,12 +199,16 @@
               {@const gl = parseFloat(line.unrealized_gain_loss)}
               <Table.Row>
                 <Table.Cell>
-                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
+                  <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={line.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={line.currency}>{line.currency}</Badge></span>
                 </Table.Cell>
                 {#if hasProtocols}
-                  <Table.Cell class="text-sm text-muted-foreground">{line.source_handler || ""}</Table.Cell>
+                  <Table.Cell class="text-sm text-muted-foreground">
+                    <span class="block truncate" title={line.source_handler || ""}>{line.source_handler || ""}</span>
+                  </Table.Cell>
                 {/if}
-                <Table.Cell class="text-sm hidden md:table-cell">{line.account_name}</Table.Cell>
+                <Table.Cell class="text-sm hidden md:table-cell">
+                  <span class="block truncate" title={line.account_name}>{line.account_name}</span>
+                </Table.Cell>
                 <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.acquired_date}</Table.Cell>
                 <Table.Cell class="text-right font-mono hidden md:table-cell">{line.quantity}</Table.Cell>
                 <Table.Cell class="text-right font-mono hidden sm:table-cell">

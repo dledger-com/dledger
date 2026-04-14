@@ -80,13 +80,13 @@
     {@const filteredDebits = filterHiddenBalances(store.trialBalance.total_debits, hidden)}
     {@const filteredCredits = filterHiddenBalances(store.trialBalance.total_credits, hidden)}
     <Card.Root>
-      <Table.Root>
+      <Table.Root class="table-fixed">
         <Table.Header>
           <Table.Row>
             <SortableHeader active={sort.key === "account"} direction={sort.direction} onclick={() => sort.toggle("account")}>{m.label_account()}</SortableHeader>
-            <SortableHeader active={sort.key === "type"} direction={sort.direction} onclick={() => sort.toggle("type")}>{m.label_type()}</SortableHeader>
-            <SortableHeader active={sort.key === "debit"} direction={sort.direction} onclick={() => sort.toggle("debit")} class="text-right">{m.label_debit()}</SortableHeader>
-            <SortableHeader active={sort.key === "credit"} direction={sort.direction} onclick={() => sort.toggle("credit")} class="text-right">{m.label_credit()}</SortableHeader>
+            <SortableHeader active={sort.key === "type"} direction={sort.direction} onclick={() => sort.toggle("type")} class="hidden sm:table-cell w-28">{m.label_type()}</SortableHeader>
+            <SortableHeader active={sort.key === "debit"} direction={sort.direction} onclick={() => sort.toggle("debit")} class="text-right w-1/4 sm:w-1/5">{m.label_debit()}</SortableHeader>
+            <SortableHeader active={sort.key === "credit"} direction={sort.direction} onclick={() => sort.toggle("credit")} class="text-right w-1/4 sm:w-1/5">{m.label_credit()}</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -94,15 +94,15 @@
           {#each sortedLines as line (line.account_id)}
             <Table.Row>
               <Table.Cell>
-                <a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a>
+                <a href="/accounts/{line.account_id}" class="block truncate hover:underline" title={line.account_name}>{line.account_name}</a>
               </Table.Cell>
-              <Table.Cell><AccountTypeBadge type={line.account_type} /></Table.Cell>
-              <Table.Cell class="text-right font-mono">
+              <Table.Cell class="hidden sm:table-cell"><AccountTypeBadge type={line.account_type} /></Table.Cell>
+              <Table.Cell class="text-right font-mono whitespace-normal break-words">
                 {#each line.balances.filter(b => parseFloat(b.amount) > 0) as b}
                   {formatCurrency(b.amount, b.currency)}
                 {/each}
               </Table.Cell>
-              <Table.Cell class="text-right font-mono">
+              <Table.Cell class="text-right font-mono whitespace-normal break-words">
                 {#each line.balances.filter(b => parseFloat(b.amount) < 0) as b}
                   {formatCurrency(Math.abs(parseFloat(b.amount)), b.currency)}
                 {/each}
@@ -113,12 +113,12 @@
         <Table.Footer>
           <Table.Row class="font-bold">
             <Table.Cell colspan={2}>{m.report_totals()}</Table.Cell>
-            <Table.Cell class="text-right font-mono">
+            <Table.Cell class="text-right font-mono whitespace-normal break-words">
               {#each filteredDebits as b}
                 {formatCurrency(b.amount, b.currency)}
               {/each}
             </Table.Cell>
-            <Table.Cell class="text-right font-mono">
+            <Table.Cell class="text-right font-mono whitespace-normal break-words">
               {#each filteredCredits as b}
                 {formatCurrency(b.amount, b.currency)}
               {/each}

@@ -218,17 +218,17 @@
         <Card.Header>
           <Card.Title>{m.report_realized_gl_details()}</Card.Title>
         </Card.Header>
-        <Table.Root>
+        <Table.Root class="table-fixed">
           <Table.Header>
             <Table.Row>
-              <SortableHeader active={sortGL.key === "type"} direction={sortGL.direction} onclick={() => sortGL.toggle("type")}>{m.label_type()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "type"} direction={sortGL.direction} onclick={() => sortGL.toggle("type")} class="w-16 sm:w-20">{m.label_type()}</SortableHeader>
               <SortableHeader active={sortGL.key === "currency"} direction={sortGL.direction} onclick={() => sortGL.toggle("currency")}>{m.label_currency()}</SortableHeader>
-              <SortableHeader active={sortGL.key === "acquired"} direction={sortGL.direction} onclick={() => sortGL.toggle("acquired")}>{m.report_acquired()}</SortableHeader>
-              <SortableHeader active={sortGL.key === "disposed"} direction={sortGL.direction} onclick={() => sortGL.toggle("disposed")}>{m.report_disposed()}</SortableHeader>
-              <SortableHeader active={sortGL.key === "quantity"} direction={sortGL.direction} onclick={() => sortGL.toggle("quantity")} class="text-right">{m.report_quantity()}</SortableHeader>
-              <SortableHeader active={sortGL.key === "costBasis"} direction={sortGL.direction} onclick={() => sortGL.toggle("costBasis")} class="text-right">{m.report_cost_basis()}</SortableHeader>
-              <SortableHeader active={sortGL.key === "proceeds"} direction={sortGL.direction} onclick={() => sortGL.toggle("proceeds")} class="text-right">{m.report_proceeds()}</SortableHeader>
-              <SortableHeader active={sortGL.key === "gainLoss"} direction={sortGL.direction} onclick={() => sortGL.toggle("gainLoss")} class="text-right">{m.report_gain_loss_col()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "acquired"} direction={sortGL.direction} onclick={() => sortGL.toggle("acquired")} class="hidden lg:table-cell w-28">{m.report_acquired()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "disposed"} direction={sortGL.direction} onclick={() => sortGL.toggle("disposed")} class="hidden lg:table-cell w-28">{m.report_disposed()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "quantity"} direction={sortGL.direction} onclick={() => sortGL.toggle("quantity")} class="text-right hidden md:table-cell w-24">{m.report_quantity()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "costBasis"} direction={sortGL.direction} onclick={() => sortGL.toggle("costBasis")} class="text-right hidden sm:table-cell w-28">{m.report_cost_basis()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "proceeds"} direction={sortGL.direction} onclick={() => sortGL.toggle("proceeds")} class="text-right hidden sm:table-cell w-28">{m.report_proceeds()}</SortableHeader>
+              <SortableHeader active={sortGL.key === "gainLoss"} direction={sortGL.direction} onclick={() => sortGL.toggle("gainLoss")} class="text-right w-28 sm:w-32">{m.report_gain_loss_col()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -242,13 +242,13 @@
                   </Badge>
                 </Table.Cell>
                 <Table.Cell>
-                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
+                  <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={line.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={line.currency}>{line.currency}</Badge></span>
                 </Table.Cell>
-                <Table.Cell class="text-muted-foreground">{line.acquired_date}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{line.disposed_date}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{line.quantity}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{formatCurrency(line.cost_basis, settings.currency)}</Table.Cell>
-                <Table.Cell class="text-right font-mono">{formatCurrency(line.proceeds, settings.currency)}</Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.acquired_date}</Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden lg:table-cell">{line.disposed_date}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden md:table-cell">{line.quantity}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden sm:table-cell">{formatCurrency(line.cost_basis, settings.currency)}</Table.Cell>
+                <Table.Cell class="text-right font-mono hidden sm:table-cell">{formatCurrency(line.proceeds, settings.currency)}</Table.Cell>
                 <Table.Cell class="text-right font-mono {gl >= 0 ? 'text-positive' : 'text-negative'}">
                   {gl >= 0 ? "+" : ""}{formatCurrency(gl, settings.currency)}
                 </Table.Cell>
@@ -273,23 +273,25 @@
         <Card.Header>
           <Card.Title>{m.report_income_by_account()}</Card.Title>
         </Card.Header>
-        <Table.Root>
+        <Table.Root class="table-fixed">
           <Table.Header>
             <Table.Row>
               <SortableHeader active={sortInc.key === "account"} direction={sortInc.direction} onclick={() => sortInc.toggle("account")}>{m.label_account()}</SortableHeader>
-              <SortableHeader active={sortInc.key === "currency"} direction={sortInc.direction} onclick={() => sortInc.toggle("currency")}>{m.label_currency()}</SortableHeader>
-              <SortableHeader active={sortInc.key === "amount"} direction={sortInc.direction} onclick={() => sortInc.toggle("amount")} class="text-right">{m.label_amount()}</SortableHeader>
+              <SortableHeader active={sortInc.key === "currency"} direction={sortInc.direction} onclick={() => sortInc.toggle("currency")} class="w-28 sm:w-40">{m.label_currency()}</SortableHeader>
+              <SortableHeader active={sortInc.key === "amount"} direction={sortInc.direction} onclick={() => sortInc.toggle("amount")} class="text-right w-28 sm:w-40">{m.label_amount()}</SortableHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {@const sortedInc = sortInc.key && sortInc.direction ? sortItems(summary.income_by_account, incAccessors[sortInc.key], sortInc.direction) : summary.income_by_account}
             {#each sortedInc as inc}
               <Table.Row>
-                <Table.Cell>{inc.account_name}</Table.Cell>
                 <Table.Cell>
-                  <span class="inline-flex items-center gap-1"><CoinIcon code={inc.currency} size={14} /><Badge variant="outline">{inc.currency}</Badge></span>
+                  <span class="block truncate" title={inc.account_name}>{inc.account_name}</span>
                 </Table.Cell>
-                <Table.Cell class="text-right font-mono">{formatCurrency(inc.amount, inc.currency)}</Table.Cell>
+                <Table.Cell>
+                  <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={inc.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={inc.currency}>{inc.currency}</Badge></span>
+                </Table.Cell>
+                <Table.Cell class="text-right font-mono whitespace-normal break-words">{formatCurrency(inc.amount, inc.currency)}</Table.Cell>
               </Table.Row>
             {/each}
           </Table.Body>

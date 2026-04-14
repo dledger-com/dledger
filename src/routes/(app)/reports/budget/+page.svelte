@@ -117,16 +117,16 @@
     </Card.Root>
   {:else if report && report.comparisons.length > 0}
     <Card.Root>
-      <Table.Root>
+      <Table.Root class="table-fixed">
         <Table.Header>
           <Table.Row>
             <SortableHeader active={sort.key === "accountPattern"} direction={sort.direction} onclick={() => sort.toggle("accountPattern")}>{m.label_account_pattern()}</SortableHeader>
-            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")}>{m.label_period()}</SortableHeader>
-            <SortableHeader active={sort.key === "budget"} direction={sort.direction} onclick={() => sort.toggle("budget")} class="text-right">{m.report_budget()}</SortableHeader>
-            <SortableHeader active={sort.key === "actual"} direction={sort.direction} onclick={() => sort.toggle("actual")} class="text-right">{m.label_actual()}</SortableHeader>
-            <SortableHeader active={sort.key === "remaining"} direction={sort.direction} onclick={() => sort.toggle("remaining")} class="text-right">{m.label_remaining()}</SortableHeader>
-            <Table.Head class="w-48">{m.report_progress()}</Table.Head>
-            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")}>{m.label_status()}</SortableHeader>
+            <SortableHeader active={sort.key === "period"} direction={sort.direction} onclick={() => sort.toggle("period")} class="hidden sm:table-cell w-24">{m.label_period()}</SortableHeader>
+            <SortableHeader active={sort.key === "budget"} direction={sort.direction} onclick={() => sort.toggle("budget")} class="text-right hidden md:table-cell w-28">{m.report_budget()}</SortableHeader>
+            <SortableHeader active={sort.key === "actual"} direction={sort.direction} onclick={() => sort.toggle("actual")} class="text-right w-28 sm:w-32">{m.label_actual()}</SortableHeader>
+            <SortableHeader active={sort.key === "remaining"} direction={sort.direction} onclick={() => sort.toggle("remaining")} class="text-right hidden md:table-cell w-28">{m.label_remaining()}</SortableHeader>
+            <Table.Head class="w-48 hidden lg:table-cell">{m.report_progress()}</Table.Head>
+            <SortableHeader active={sort.key === "status"} direction={sort.direction} onclick={() => sort.toggle("status")} class="w-24">{m.label_status()}</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -134,20 +134,22 @@
           {#each sortedComps as comp (comp.budget.id)}
             {@const status = statusBadge(comp.percent_used)}
             <Table.Row>
-              <Table.Cell class="font-mono text-sm">{comp.budget.account_pattern}</Table.Cell>
-              <Table.Cell>
+              <Table.Cell class="font-mono text-sm">
+                <span class="block truncate" title={comp.budget.account_pattern}>{comp.budget.account_pattern}</span>
+              </Table.Cell>
+              <Table.Cell class="hidden sm:table-cell">
                 <Badge variant="secondary">{comp.budget.period_type}</Badge>
               </Table.Cell>
-              <Table.Cell class="text-right font-mono">
+              <Table.Cell class="text-right font-mono hidden md:table-cell">
                 {formatCurrency(parseFloat(comp.budget.amount), comp.budget.currency)}
               </Table.Cell>
               <Table.Cell class="text-right font-mono">
                 {formatCurrency(comp.actual, comp.budget.currency)}
               </Table.Cell>
-              <Table.Cell class="text-right font-mono {comp.remaining < 0 ? 'text-negative' : ''}">
+              <Table.Cell class="text-right font-mono hidden md:table-cell {comp.remaining < 0 ? 'text-negative' : ''}">
                 {formatCurrency(comp.remaining, comp.budget.currency)}
               </Table.Cell>
-              <Table.Cell>
+              <Table.Cell class="hidden lg:table-cell">
                 <div class="flex items-center gap-2">
                   <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
                     <div

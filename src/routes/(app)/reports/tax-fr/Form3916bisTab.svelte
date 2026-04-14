@@ -95,57 +95,59 @@
             CSV
           </Button>
         </Card.Header>
-        <div class="overflow-x-auto">
-          <Table.Root>
-            <Table.Header>
-              <Table.Row>
-                <Table.Head>{m.label_legal_entity()}</Table.Head>
-                <Table.Head>{m.label_label()}</Table.Head>
-                <Table.Head>{m.label_country()}</Table.Head>
-                <Table.Head>{m.label_url()}</Table.Head>
-                <Table.Head class="text-right">{m.label_status()}</Table.Head>
+        <Table.Root class="table-fixed">
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>{m.label_legal_entity()}</Table.Head>
+              <Table.Head class="hidden sm:table-cell">{m.label_label()}</Table.Head>
+              <Table.Head class="hidden md:table-cell w-24">{m.label_country()}</Table.Head>
+              <Table.Head class="hidden lg:table-cell">{m.label_url()}</Table.Head>
+              <Table.Head class="text-right w-40 sm:w-48">{m.label_status()}</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each foreignAccounts as account (account.id)}
+              {@const info = getInstitution(account.exchange)}
+              {@const expanded = expandedRows.has(account.id)}
+              <Table.Row class="cursor-pointer" onclick={() => toggleRow(account.id)}>
+                <Table.Cell class="font-medium">
+                  <div class="flex items-center gap-1 min-w-0">
+                    <ChevronDown class="h-3 w-3 text-muted-foreground transition-transform shrink-0 {expanded ? '' : '-rotate-90'}" />
+                    <span class="truncate" title={info?.legalEntity || account.exchange}>{info?.legalEntity || account.exchange}</span>
+                  </div>
+                </Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden sm:table-cell">
+                  <span class="block truncate" title={account.label}>{account.label}</span>
+                </Table.Cell>
+                <Table.Cell class="hidden md:table-cell">{info?.country ?? m.label_unknown()}</Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden lg:table-cell">
+                  <span class="block truncate" title={info?.url ?? ""}>{info?.url ?? ""}</span>
+                </Table.Cell>
+                <Table.Cell class="text-right whitespace-normal break-words">
+                  <Badge variant="destructive">{m.report_french_tax_3916bis_badge_must_declare()}</Badge>
+                  {#if account.closed_at && parseInt(account.closed_at.slice(0, 4), 10) < taxYear}
+                    <Badge variant="outline" class="ml-1">{m.report_french_tax_3916bis_badge_closed()}</Badge>
+                  {:else if info?.closedDate}
+                    <Badge variant="outline" class="ml-1">{m.report_french_tax_3916bis_badge_closed()}</Badge>
+                  {/if}
+                  {#if account.opened_at}
+                    <span class="ml-1 text-xs text-muted-foreground">{m.report_french_tax_3916bis_since({ year: account.opened_at.slice(0, 4) })}</span>
+                  {/if}
+                </Table.Cell>
               </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#each foreignAccounts as account (account.id)}
-                {@const info = getInstitution(account.exchange)}
-                {@const expanded = expandedRows.has(account.id)}
-                <Table.Row class="cursor-pointer" onclick={() => toggleRow(account.id)}>
-                  <Table.Cell class="font-medium">
-                    <div class="flex items-center gap-1">
-                      <ChevronDown class="h-3 w-3 text-muted-foreground transition-transform {expanded ? '' : '-rotate-90'}" />
-                      {info?.legalEntity || account.exchange}
-                    </div>
-                  </Table.Cell>
-                  <Table.Cell class="text-muted-foreground">{account.label}</Table.Cell>
-                  <Table.Cell>{info?.country ?? m.label_unknown()}</Table.Cell>
-                  <Table.Cell class="text-muted-foreground">{info?.url ?? ""}</Table.Cell>
-                  <Table.Cell class="text-right">
-                    <Badge variant="destructive">{m.report_french_tax_3916bis_badge_must_declare()}</Badge>
-                    {#if account.closed_at && parseInt(account.closed_at.slice(0, 4), 10) < taxYear}
-                      <Badge variant="outline" class="ml-1">{m.report_french_tax_3916bis_badge_closed()}</Badge>
-                    {:else if info?.closedDate}
-                      <Badge variant="outline" class="ml-1">{m.report_french_tax_3916bis_badge_closed()}</Badge>
-                    {/if}
-                    {#if account.opened_at}
-                      <span class="ml-1 text-xs text-muted-foreground">{m.report_french_tax_3916bis_since({ year: account.opened_at.slice(0, 4) })}</span>
+              {#if expanded && info?.address}
+                <Table.Row>
+                  <Table.Cell colspan={5} class="bg-muted/30 py-2 pl-8 text-sm text-muted-foreground whitespace-normal">
+                    <span class="font-medium">{m.report_french_tax_3916bis_address_label()}</span> {info.address}
+                    {#if info.note}
+                      <span class="ml-3 text-xs opacity-70">— {info.note}</span>
                     {/if}
                   </Table.Cell>
                 </Table.Row>
-                {#if expanded && info?.address}
-                  <Table.Row>
-                    <Table.Cell colspan={5} class="bg-muted/30 py-2 pl-8 text-sm text-muted-foreground">
-                      <span class="font-medium">{m.report_french_tax_3916bis_address_label()}</span> {info.address}
-                      {#if info.note}
-                        <span class="ml-3 text-xs opacity-70">— {info.note}</span>
-                      {/if}
-                    </Table.Cell>
-                  </Table.Row>
-                {/if}
-              {/each}
-            </Table.Body>
-          </Table.Root>
-        </div>
+              {/if}
+            {/each}
+          </Table.Body>
+        </Table.Root>
       </Card.Root>
     {/if}
 
@@ -156,31 +158,33 @@
           <Card.Title>{m.report_french_tax_3916bis_exempt_card_title()}</Card.Title>
           <Card.Description>{m.report_french_tax_3916bis_exempt_card_desc({ year: String(taxYear) })}</Card.Description>
         </Card.Header>
-        <div class="overflow-x-auto">
-          <Table.Root>
-            <Table.Header>
+        <Table.Root class="table-fixed">
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>{m.label_legal_entity()}</Table.Head>
+              <Table.Head class="hidden sm:table-cell">{m.label_label()}</Table.Head>
+              <Table.Head class="hidden md:table-cell w-24">{m.label_country()}</Table.Head>
+              <Table.Head class="text-right w-40 sm:w-48">{m.label_status()}</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each exemptAccounts as account (account.id)}
+              {@const info = getInstitution(account.exchange)}
               <Table.Row>
-                <Table.Head>{m.label_legal_entity()}</Table.Head>
-                <Table.Head>{m.label_label()}</Table.Head>
-                <Table.Head>{m.label_country()}</Table.Head>
-                <Table.Head class="text-right">{m.label_status()}</Table.Head>
+                <Table.Cell class="font-medium">
+                  <span class="block truncate" title={info?.legalEntity || account.exchange}>{info?.legalEntity || account.exchange}</span>
+                </Table.Cell>
+                <Table.Cell class="text-muted-foreground hidden sm:table-cell">
+                  <span class="block truncate" title={account.label}>{account.label}</span>
+                </Table.Cell>
+                <Table.Cell class="hidden md:table-cell">{info?.country ?? m.label_unknown()}</Table.Cell>
+                <Table.Cell class="text-right whitespace-normal break-words">
+                  <Badge variant="secondary">{m.report_french_tax_3916bis_badge_french_exempt()}</Badge>
+                </Table.Cell>
               </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#each exemptAccounts as account (account.id)}
-                {@const info = getInstitution(account.exchange)}
-                <Table.Row>
-                  <Table.Cell class="font-medium">{info?.legalEntity || account.exchange}</Table.Cell>
-                  <Table.Cell class="text-muted-foreground">{account.label}</Table.Cell>
-                  <Table.Cell>{info?.country ?? m.label_unknown()}</Table.Cell>
-                  <Table.Cell class="text-right">
-                    <Badge variant="secondary">{m.report_french_tax_3916bis_badge_french_exempt()}</Badge>
-                  </Table.Cell>
-                </Table.Row>
-              {/each}
-            </Table.Body>
-          </Table.Root>
-        </div>
+            {/each}
+          </Table.Body>
+        </Table.Root>
       </Card.Root>
     {/if}
   {/if}
@@ -200,46 +204,48 @@
       </div>
     </Card.Header>
     {#if showReferenceTable}
-      <div class="overflow-x-auto">
-        <Table.Root>
-          <Table.Header>
+      <Table.Root class="table-fixed">
+        <Table.Header>
+          <Table.Row>
+            <Table.Head>{m.label_legal_entity()}</Table.Head>
+            <Table.Head class="hidden md:table-cell">{m.label_address()}</Table.Head>
+            <Table.Head class="hidden sm:table-cell w-24">{m.label_country()}</Table.Head>
+            <Table.Head class="hidden lg:table-cell">{m.label_url()}</Table.Head>
+            <Table.Head class="text-right w-32 sm:w-40">{m.report_french_tax_3916bis_col_status_year({ year: String(taxYear) })}</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {#each otherInstitutions as [id, info] (id)}
             <Table.Row>
-              <Table.Head>{m.label_legal_entity()}</Table.Head>
-              <Table.Head>{m.label_address()}</Table.Head>
-              <Table.Head>{m.label_country()}</Table.Head>
-              <Table.Head>{m.label_url()}</Table.Head>
-              <Table.Head class="text-right">{m.report_french_tax_3916bis_col_status_year({ year: String(taxYear) })}</Table.Head>
+              <Table.Cell class="font-medium">
+                <span class="block truncate" title={info.legalEntity || id}>{info.legalEntity || id}</span>
+                {#if info.note}
+                  <span class="block text-xs text-muted-foreground truncate" title={info.note}>{info.note}</span>
+                {/if}
+              </Table.Cell>
+              <Table.Cell class="text-sm text-muted-foreground hidden md:table-cell">
+                <span class="block truncate" title={info.address || ""}>{info.address || "—"}</span>
+              </Table.Cell>
+              <Table.Cell class="hidden sm:table-cell">{info.country || "—"}</Table.Cell>
+              <Table.Cell class="text-muted-foreground hidden lg:table-cell">
+                <span class="block truncate" title={info.url || ""}>{info.url || "—"}</span>
+              </Table.Cell>
+              <Table.Cell class="text-right whitespace-normal break-words">
+                {#if info.nonCustodial}
+                  <Badge variant="outline">{m.report_french_tax_3916bis_badge_non_custodial()}</Badge>
+                {:else if info.foreign}
+                  <Badge variant="destructive">{m.report_french_tax_3916bis_badge_foreign()}</Badge>
+                {:else}
+                  <Badge variant="secondary">{m.report_french_tax_3916bis_badge_french_exempt()}</Badge>
+                {/if}
+                {#if info.closedDate}
+                  <Badge variant="outline" class="ml-1">{m.report_french_tax_3916bis_badge_closed()}</Badge>
+                {/if}
+              </Table.Cell>
             </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#each otherInstitutions as [id, info] (id)}
-              <Table.Row>
-                <Table.Cell class="font-medium">
-                  {info.legalEntity || id}
-                  {#if info.note}
-                    <span class="block text-xs text-muted-foreground">{info.note}</span>
-                  {/if}
-                </Table.Cell>
-                <Table.Cell class="text-sm text-muted-foreground max-w-xs">{info.address || "—"}</Table.Cell>
-                <Table.Cell>{info.country || "—"}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{info.url || "—"}</Table.Cell>
-                <Table.Cell class="text-right">
-                  {#if info.nonCustodial}
-                    <Badge variant="outline">{m.report_french_tax_3916bis_badge_non_custodial()}</Badge>
-                  {:else if info.foreign}
-                    <Badge variant="destructive">{m.report_french_tax_3916bis_badge_foreign()}</Badge>
-                  {:else}
-                    <Badge variant="secondary">{m.report_french_tax_3916bis_badge_french_exempt()}</Badge>
-                  {/if}
-                  {#if info.closedDate}
-                    <Badge variant="outline" class="ml-1">{m.report_french_tax_3916bis_badge_closed()}</Badge>
-                  {/if}
-                </Table.Cell>
-              </Table.Row>
-            {/each}
-          </Table.Body>
-        </Table.Root>
-      </div>
+          {/each}
+        </Table.Body>
+      </Table.Root>
     {/if}
   </Card.Root>
 

@@ -94,14 +94,14 @@
           {#if hasSupplies}
             <div>
               <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.report_supplies()}</h3>
-              <Table.Root>
+              <Table.Root class="table-fixed">
                 <Table.Header>
                   <Table.Row>
-                    <Table.Head>{m.label_currency()}</Table.Head>
+                    <Table.Head class="w-28 sm:w-40">{m.label_currency()}</Table.Head>
                     <Table.Head>{m.label_account()}</Table.Head>
-                    <Table.Head class="text-right">{m.label_balance()}</Table.Head>
+                    <Table.Head class="text-right w-24 sm:w-32">{m.label_balance()}</Table.Head>
                     {#if proto.supplies.some((p) => p.baseValue !== undefined)}
-                      <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
+                      <Table.Head class="text-right w-28 sm:w-36">{m.report_value_in({ currency: settings.currency })}</Table.Head>
                     {/if}
                   </Table.Row>
                 </Table.Header>
@@ -109,9 +109,11 @@
                   {#each proto.supplies as pos}
                     <Table.Row>
                       <Table.Cell>
-                        <span class="inline-flex items-center gap-1"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline">{pos.currency}</Badge></span>
+                        <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={pos.currency}>{pos.currency}</Badge></span>
                       </Table.Cell>
-                      <Table.Cell class="text-sm">{pos.account}</Table.Cell>
+                      <Table.Cell class="text-sm">
+                        <span class="block truncate" title={pos.account}>{pos.account}</span>
+                      </Table.Cell>
                       <Table.Cell class="text-right font-mono">{pos.balance}</Table.Cell>
                       {#if proto.supplies.some((p) => p.baseValue !== undefined)}
                         <Table.Cell class="text-right font-mono">
@@ -128,14 +130,14 @@
           {#if hasBorrows}
             <div>
               <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.report_borrows()}</h3>
-              <Table.Root>
+              <Table.Root class="table-fixed">
                 <Table.Header>
                   <Table.Row>
-                    <Table.Head>{m.label_currency()}</Table.Head>
+                    <Table.Head class="w-28 sm:w-40">{m.label_currency()}</Table.Head>
                     <Table.Head>{m.label_account()}</Table.Head>
-                    <Table.Head class="text-right">{m.label_balance()}</Table.Head>
+                    <Table.Head class="text-right w-24 sm:w-32">{m.label_balance()}</Table.Head>
                     {#if proto.borrows.some((p) => p.baseValue !== undefined)}
-                      <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
+                      <Table.Head class="text-right w-28 sm:w-36">{m.report_value_in({ currency: settings.currency })}</Table.Head>
                     {/if}
                   </Table.Row>
                 </Table.Header>
@@ -143,9 +145,11 @@
                   {#each proto.borrows as pos}
                     <Table.Row>
                       <Table.Cell>
-                        <span class="inline-flex items-center gap-1"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline">{pos.currency}</Badge></span>
+                        <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={pos.currency}>{pos.currency}</Badge></span>
                       </Table.Cell>
-                      <Table.Cell class="text-sm">{pos.account}</Table.Cell>
+                      <Table.Cell class="text-sm">
+                        <span class="block truncate" title={pos.account}>{pos.account}</span>
+                      </Table.Cell>
                       <Table.Cell class="text-right font-mono text-negative">{pos.balance}</Table.Cell>
                       {#if proto.borrows.some((p) => p.baseValue !== undefined)}
                         <Table.Cell class="text-right font-mono text-negative">
@@ -162,14 +166,14 @@
           {#if hasRewards}
             <div>
               <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.report_rewards()}</h3>
-              <Table.Root>
+              <Table.Root class="table-fixed">
                 <Table.Header>
                   <Table.Row>
-                    <Table.Head>{m.label_currency()}</Table.Head>
+                    <Table.Head class="w-28 sm:w-40">{m.label_currency()}</Table.Head>
                     <Table.Head>{m.label_account()}</Table.Head>
-                    <Table.Head class="text-right">{m.label_balance()}</Table.Head>
+                    <Table.Head class="text-right w-24 sm:w-32">{m.label_balance()}</Table.Head>
                     {#if proto.rewards.some((p) => p.baseValue !== undefined)}
-                      <Table.Head class="text-right">{m.report_value_in({ currency: settings.currency })}</Table.Head>
+                      <Table.Head class="text-right w-28 sm:w-36">{m.report_value_in({ currency: settings.currency })}</Table.Head>
                     {/if}
                   </Table.Row>
                 </Table.Header>
@@ -177,9 +181,11 @@
                   {#each proto.rewards as pos}
                     <Table.Row>
                       <Table.Cell>
-                        <span class="inline-flex items-center gap-1"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline">{pos.currency}</Badge></span>
+                        <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={pos.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={pos.currency}>{pos.currency}</Badge></span>
                       </Table.Cell>
-                      <Table.Cell class="text-sm">{pos.account}</Table.Cell>
+                      <Table.Cell class="text-sm">
+                        <span class="block truncate" title={pos.account}>{pos.account}</span>
+                      </Table.Cell>
                       <Table.Cell class="text-right font-mono text-positive">{pos.balance}</Table.Cell>
                       {#if proto.rewards.some((p) => p.baseValue !== undefined)}
                         <Table.Cell class="text-right font-mono text-positive">

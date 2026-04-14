@@ -144,11 +144,11 @@
     {@const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet()}
     <Card.Root>
       <Card.Header><Card.Title>{m.report_revenue()}</Card.Title></Card.Header>
-      <Table.Root>
+      <Table.Root class="table-fixed">
         <Table.Header>
           <Table.Row>
             <SortableHeader active={isSort.key === "account"} direction={isSort.direction} onclick={() => isSort.toggle("account")}>{m.label_account()}</SortableHeader>
-            <SortableHeader active={isSort.key === "balance"} direction={isSort.direction} onclick={() => isSort.toggle("balance")} class="text-right">{m.label_amount()}</SortableHeader>
+            <SortableHeader active={isSort.key === "balance"} direction={isSort.direction} onclick={() => isSort.toggle("balance")} class="text-right w-2/5 sm:w-1/3">{m.label_amount()}</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -156,8 +156,10 @@
           {@const sortedLines = isSort.key && isSort.direction ? sortItems(lines, isSort.key === "account" ? (l) => l.account_name : (l) => Math.abs(parseFloat(l.balances[0]?.amount ?? "0")), isSort.direction) : lines}
           {#each sortedLines as line (line.account_id)}
             <Table.Row>
-              <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
-              <Table.Cell class="text-right font-mono">
+              <Table.Cell>
+                <a href="/accounts/{line.account_id}" class="block truncate hover:underline" title={line.account_name}>{line.account_name}</a>
+              </Table.Cell>
+              <Table.Cell class="text-right font-mono whitespace-normal break-words">
                 {line.balances.map((b) => formatCurrency(Math.abs(parseFloat(b.amount)), b.currency)).join(", ")}
               </Table.Cell>
             </Table.Row>
@@ -165,8 +167,8 @@
         </Table.Body>
         <Table.Footer>
           <Table.Row class="font-bold">
-            <Table.Cell>{m.report_total_revenue()}</Table.Cell>
-            <Table.Cell class="text-right font-mono">
+            <Table.Cell class="truncate">{m.report_total_revenue()}</Table.Cell>
+            <Table.Cell class="text-right font-mono whitespace-normal break-words">
               {renderTotals(report.revenue)}
               {#if convertToBase && revenueSummary}
                 <span class="ml-2 text-primary">({renderConvertedTotal(revenueSummary)})</span>
@@ -182,11 +184,11 @@
 
     <Card.Root>
       <Card.Header><Card.Title>{m.report_expenses()}</Card.Title></Card.Header>
-      <Table.Root>
+      <Table.Root class="table-fixed">
         <Table.Header>
           <Table.Row>
             <SortableHeader active={isSort.key === "account"} direction={isSort.direction} onclick={() => isSort.toggle("account")}>{m.label_account()}</SortableHeader>
-            <SortableHeader active={isSort.key === "balance"} direction={isSort.direction} onclick={() => isSort.toggle("balance")} class="text-right">{m.label_amount()}</SortableHeader>
+            <SortableHeader active={isSort.key === "balance"} direction={isSort.direction} onclick={() => isSort.toggle("balance")} class="text-right w-2/5 sm:w-1/3">{m.label_amount()}</SortableHeader>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -194,8 +196,10 @@
           {@const sortedLines = isSort.key && isSort.direction ? sortItems(lines, isSort.key === "account" ? (l) => l.account_name : (l) => Math.abs(parseFloat(l.balances[0]?.amount ?? "0")), isSort.direction) : lines}
           {#each sortedLines as line (line.account_id)}
             <Table.Row>
-              <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
-              <Table.Cell class="text-right font-mono">
+              <Table.Cell>
+                <a href="/accounts/{line.account_id}" class="block truncate hover:underline" title={line.account_name}>{line.account_name}</a>
+              </Table.Cell>
+              <Table.Cell class="text-right font-mono whitespace-normal break-words">
                 {line.balances.map((b) => formatCurrency(Math.abs(parseFloat(b.amount)), b.currency)).join(", ")}
               </Table.Cell>
             </Table.Row>
@@ -203,8 +207,8 @@
         </Table.Body>
         <Table.Footer>
           <Table.Row class="font-bold">
-            <Table.Cell>{m.report_total_expenses()}</Table.Cell>
-            <Table.Cell class="text-right font-mono">
+            <Table.Cell class="truncate">{m.report_total_expenses()}</Table.Cell>
+            <Table.Cell class="text-right font-mono whitespace-normal break-words">
               {renderTotals(report.expenses)}
               {#if convertToBase && expensesSummary}
                 <span class="ml-2 text-primary">({renderConvertedTotal(expensesSummary)})</span>

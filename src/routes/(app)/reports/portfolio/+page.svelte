@@ -139,28 +139,28 @@
     {#each report.wallets as wallet}
       <Card.Root>
         <Card.Header>
-          <div class="flex items-center justify-between">
-            <div>
-              <Card.Title>{wallet.label}</Card.Title>
-              <Card.Description class="font-mono text-xs mt-1">
-                {wallet.address}
-                <Badge variant="outline" class="ml-2">{chainName(wallet.chainId)}</Badge>
+          <div class="flex items-center justify-between gap-3 min-w-0">
+            <div class="min-w-0 flex-1">
+              <Card.Title class="truncate" title={wallet.label}>{wallet.label}</Card.Title>
+              <Card.Description class="font-mono text-xs mt-1 flex items-center gap-2 min-w-0">
+                <span class="truncate" title={wallet.address}>{wallet.address}</span>
+                <Badge variant="outline" class="shrink-0">{chainName(wallet.chainId)}</Badge>
               </Card.Description>
             </div>
             {#if wallet.totalBaseValue !== null}
-              <span class="text-lg font-semibold">
+              <span class="text-lg font-semibold shrink-0 whitespace-nowrap">
                 {formatCurrency(parseFloat(wallet.totalBaseValue), settings.currency)}
               </span>
             {/if}
           </div>
         </Card.Header>
         <Card.Content>
-          <Table.Root>
+          <Table.Root class="table-fixed">
             <Table.Header>
               <Table.Row>
                 <SortableHeader active={portSort.key === "currency"} direction={portSort.direction} onclick={() => portSort.toggle("currency")}>{m.label_currency()}</SortableHeader>
-                <SortableHeader active={portSort.key === "amount"} direction={portSort.direction} onclick={() => portSort.toggle("amount")} class="text-right">{m.label_amount()}</SortableHeader>
-                <SortableHeader active={portSort.key === "value"} direction={portSort.direction} onclick={() => portSort.toggle("value")} class="text-right">{m.report_value_in({ currency: settings.currency })}</SortableHeader>
+                <SortableHeader active={portSort.key === "amount"} direction={portSort.direction} onclick={() => portSort.toggle("amount")} class="text-right w-28 sm:w-40">{m.label_amount()}</SortableHeader>
+                <SortableHeader active={portSort.key === "value"} direction={portSort.direction} onclick={() => portSort.toggle("value")} class="text-right w-28 sm:w-40">{m.report_value_in({ currency: settings.currency })}</SortableHeader>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -168,7 +168,7 @@
               {#each sortedHoldings as holding}
                 <Table.Row>
                   <Table.Cell>
-                    <span class="inline-flex items-center gap-1"><CoinIcon code={holding.currency} size={14} /><Badge variant="outline">{holding.currency}</Badge></span>
+                    <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={holding.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={holding.currency}>{holding.currency}</Badge></span>
                   </Table.Cell>
                   <Table.Cell class="text-right font-mono">{holding.amount}</Table.Cell>
                   <Table.Cell class="text-right font-mono">

@@ -91,12 +91,12 @@
           </Card.Title>
         </Card.Header>
 
-        <Table.Root>
+        <Table.Root class="table-fixed">
           <Table.Header>
             <Table.Row>
-              <Table.Head>{m.label_type()}</Table.Head>
+              <Table.Head class="w-28 sm:w-32">{m.label_type()}</Table.Head>
               <Table.Head>{m.label_currency()}</Table.Head>
-              <Table.Head class="text-right">{m.label_amount()}</Table.Head>
+              <Table.Head class="text-right w-32 sm:w-40">{m.label_amount()}</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -106,7 +106,7 @@
                   <Badge variant="outline" class="text-positive border-green-300 dark:border-green-700">{m.report_revenue()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
-                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
+                  <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={line.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={line.currency}>{line.currency}</Badge></span>
                 </Table.Cell>
                 <Table.Cell class="text-right font-mono text-positive">
                   +{formatCurrency(parseFloat(line.amount), line.currency)}
@@ -119,7 +119,7 @@
                   <Badge variant="outline" class="text-negative border-red-300 dark:border-red-700">{m.report_expense()}</Badge>
                 </Table.Cell>
                 <Table.Cell>
-                  <span class="inline-flex items-center gap-1"><CoinIcon code={line.currency} size={14} /><Badge variant="outline">{line.currency}</Badge></span>
+                  <span class="inline-flex items-center gap-1 min-w-0 max-w-full"><CoinIcon code={line.currency} size={14} /><Badge variant="outline" class="truncate max-w-full" title={line.currency}>{line.currency}</Badge></span>
                 </Table.Cell>
                 <Table.Cell class="text-right font-mono text-negative">
                   -{formatCurrency(parseFloat(line.amount), line.currency)}

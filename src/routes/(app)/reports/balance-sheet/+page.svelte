@@ -169,19 +169,21 @@
             <EmptyState message={m.empty_no_accounts()} />
           </Card.Content>
         {:else}
-          <Table.Root>
+          <Table.Root class="table-fixed">
             <Table.Header>
               <Table.Row>
                 <SortableHeader active={bsSort.key === "account"} direction={bsSort.direction} onclick={() => bsSort.toggle("account")}>{m.label_account()}</SortableHeader>
-                <SortableHeader active={bsSort.key === "balance"} direction={bsSort.direction} onclick={() => bsSort.toggle("balance")} class="text-right">{m.label_balance()}</SortableHeader>
+                <SortableHeader active={bsSort.key === "balance"} direction={bsSort.direction} onclick={() => bsSort.toggle("balance")} class="text-right w-2/5 sm:w-1/3">{m.label_balance()}</SortableHeader>
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {@const sortedLines = bsSort.key && bsSort.direction ? sortItems(filteredLines, bsSort.key === "account" ? (l) => l.account_name : (l) => parseFloat(l.balances[0]?.amount ?? "0"), bsSort.direction) : filteredLines}
               {#each sortedLines as line (line.account_id)}
                 <Table.Row>
-                  <Table.Cell><a href="/accounts/{line.account_id}" class="hover:underline">{line.account_name}</a></Table.Cell>
-                  <Table.Cell class="text-right font-mono">
+                  <Table.Cell>
+                    <a href="/accounts/{line.account_id}" class="block truncate hover:underline" title={line.account_name}>{line.account_name}</a>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono whitespace-normal break-words">
                     {(negate ? negateCurrencyBalances(line.balances) : line.balances).map((b) => formatCurrency(b.amount, b.currency)).join(", ")}
                   </Table.Cell>
                 </Table.Row>
@@ -189,8 +191,8 @@
             </Table.Body>
             <Table.Footer>
               <Table.Row class="font-bold">
-                <Table.Cell>{m.report_total()} {section.title}</Table.Cell>
-                <Table.Cell class="text-right font-mono">
+                <Table.Cell class="truncate" title="{m.report_total()} {section.title}">{m.report_total()} {section.title}</Table.Cell>
+                <Table.Cell class="text-right font-mono whitespace-normal break-words">
                   {renderTotals(section, negate)}
                   {#if convertToBase && summary}
                     <span class="ml-2 text-primary">({renderConvertedTotal(summary, negate)})</span>
