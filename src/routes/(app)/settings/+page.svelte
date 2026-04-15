@@ -35,7 +35,8 @@
     import { mode, setMode } from "mode-watcher";
     import * as Select from "$lib/components/ui/select/index.js";
     import ListFilter from "$lib/components/ListFilter.svelte";
-    import { getFiatFlagUrl, clearIconCache } from "$lib/data/coin-icons.svelte.js";
+    import { clearIconCache } from "$lib/data/coin-icons.svelte.js";
+    import CoinIcon from "$lib/components/CoinIcon.svelte";
     import { COMMON_CURRENCIES } from "$lib/data/common-currencies.js";
     import { invalidate } from "$lib/data/invalidation.js";
     import {
@@ -876,18 +877,16 @@
                     {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
                         <Select.Trigger class="w-full">
                             {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
-                            {@const flagUrl = getFiatFlagUrl(settings.currency)}
                             <span class="inline-flex items-center gap-2">
-                                {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                <CoinIcon code={settings.currency} size={16} />
                                 {cur ? `${cur.code} — ${cur.name}` : settings.currency}
                             </span>
                         </Select.Trigger>
                         <Select.Content>
                             {#each baseCurrencyOptions as c (c.code)}
-                                {@const flagUrl = getFiatFlagUrl(c.code)}
                                 <Select.Item value={c.code}>
                                     <span class="inline-flex items-center gap-2">
-                                        {#if flagUrl}<img src={flagUrl} alt="" class="size-4 rounded-full" />{/if}
+                                        <CoinIcon code={c.code} size={16} />
                                         {c.code} — {c.name}
                                     </span>
                                 </Select.Item>
