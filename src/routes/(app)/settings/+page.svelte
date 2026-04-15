@@ -1035,12 +1035,12 @@
                     </p>
                 </div>
                 <Switch
-                    checked={settings.settings.mlClassificationEnabled ?? false}
+                    checked={settings.settings.mlClassificationEnabled ?? true}
                     onCheckedChange={(v) =>
                         settings.update({ mlClassificationEnabled: v })}
                 />
             </div>
-            {#if settings.settings.mlClassificationEnabled}
+            {#if settings.settings.mlClassificationEnabled ?? true}
                 <Separator />
                 <div class="space-y-2">
                     <label for="ml-threshold" class="text-sm font-medium">

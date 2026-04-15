@@ -90,6 +90,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   handlers: { "generic-etherscan": { enabled: true } },
   dpriceMode: "http",
   dpriceUrl: DEFAULT_DPRICE_URL,
+  mlClassificationEnabled: true,
 };
 
 /**

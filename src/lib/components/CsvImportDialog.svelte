@@ -122,7 +122,7 @@
   let mlSuggestions = $state<Map<number, ClassificationResult>>(new Map());
   let mlAccepted = $state<Set<number>>(new Set());
   let mlClassifying = $state(false);
-  let mlEnabled = $derived(settings.settings.mlClassificationEnabled ?? false);
+  let mlEnabled = $derived(settings.settings.mlClassificationEnabled ?? true);
   let mlThreshold = $derived(settings.settings.mlConfidenceThreshold ?? 0.5);
 
   // -- Account list for inline editing --
