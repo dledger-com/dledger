@@ -12,7 +12,7 @@
     import { getPluginManager } from "$lib/plugins/manager.js";
     import { getBackend } from "$lib/backend.js";
     import { DEMO_MODE } from "$lib/demo.js";
-    import { reloadHiddenCurrencies } from "$lib/data/hidden-currencies.svelte.js";
+    import { reloadHiddenCurrencies, getHiddenCurrencySet } from "$lib/data/hidden-currencies.svelte.js";
     import type { Currency } from "$lib/types/index.js";
     import type { CurrencyAssetType } from "$lib/types/account.js";
     import { toast } from "svelte-sonner";
@@ -34,6 +34,9 @@
     import * as Collapsible from "$lib/components/ui/collapsible/index.js";
     import { mode, setMode } from "mode-watcher";
     import * as Select from "$lib/components/ui/select/index.js";
+    import * as Popover from "$lib/components/ui/popover/index.js";
+    import * as Command from "$lib/components/ui/command/index.js";
+    import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
     import ListFilter from "$lib/components/ListFilter.svelte";
     import { clearIconCache } from "$lib/data/coin-icons.svelte.js";
     import CoinIcon from "$lib/components/CoinIcon.svelte";
@@ -514,9 +517,26 @@
 
     let pendingCurrency = $state("");
     let confirmCurrencyOpen = $state(false);
-    let currencySelectKey = $state(0);
+    let baseCurrencyPopoverOpen = $state(false);
+    let baseCurrencySearch = $state("");
+
+    // Base currency options, excluding hidden currencies (unless they're the current
+    // selection or the user has opted in to showing hidden currencies globally).
+    const visibleBaseCurrencyOptions = $derived.by(() => {
+        const hidden = settings.showHidden ? new Set<string>() : getHiddenCurrencySet();
+        return baseCurrencyOptions.filter(
+            (c) => !hidden.has(c.code) || c.code === settings.currency,
+        );
+    });
+
+    const selectedBaseCurrencyOption = $derived(
+        baseCurrencyOptions.find((c) => c.code === settings.currency),
+    );
 
     function handleCurrencyChange(val: string) {
+        baseCurrencyPopoverOpen = false;
+        baseCurrencySearch = "";
+        if (val === settings.currency) return;
         // If the currency already exists in the database (or we're in demo mode), just switch
         if (currencies.some((c) => c.code === val) || DEMO_MODE) {
             settings.update({ currency: val });
@@ -528,8 +548,6 @@
 
     function cancelCurrencyChange() {
         confirmCurrencyOpen = false;
-        // Force Select to re-render with the original value
-        currencySelectKey++;
     }
 
     async function applyBaseCurrencyChange() {
@@ -874,25 +892,46 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="space-y-2">
                     <span class="text-sm font-medium">{msg.settings_base_currency()}</span>
-                    {#key currencySelectKey}<Select.Root type="single" value={settings.currency} onValueChange={handleCurrencyChange}>
-                        <Select.Trigger class="w-full">
-                            {@const cur = baseCurrencyOptions.find((c) => c.code === settings.currency)}
-                            <span class="inline-flex items-center gap-2">
+                    <Popover.Root
+                        bind:open={baseCurrencyPopoverOpen}
+                        onOpenChange={(v) => { if (!v) baseCurrencySearch = ""; }}
+                    >
+                        <Popover.Trigger
+                            class="border-input dark:bg-input/30 dark:hover:bg-input/50 flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        >
+                            <span class="inline-flex items-center gap-2 truncate">
                                 <CoinIcon code={settings.currency} size={16} />
-                                {cur ? `${cur.code} — ${cur.name}` : settings.currency}
+                                <span class="truncate">
+                                    {selectedBaseCurrencyOption
+                                        ? `${selectedBaseCurrencyOption.code} — ${selectedBaseCurrencyOption.name}`
+                                        : settings.currency}
+                                </span>
                             </span>
-                        </Select.Trigger>
-                        <Select.Content>
-                            {#each baseCurrencyOptions as c (c.code)}
-                                <Select.Item value={c.code}>
-                                    <span class="inline-flex items-center gap-2">
-                                        <CoinIcon code={c.code} size={16} />
-                                        {c.code} — {c.name}
-                                    </span>
-                                </Select.Item>
-                            {/each}
-                        </Select.Content>
-                    </Select.Root>{/key}
+                            <ChevronDownIcon class="size-4 opacity-50 shrink-0" />
+                        </Popover.Trigger>
+                        <Popover.Content class="w-[var(--bits-popover-anchor-width)] p-0" align="start">
+                            <Command.Root shouldFilter={true}>
+                                <Command.Input
+                                    placeholder={msg.placeholder_filter_currencies()}
+                                    bind:value={baseCurrencySearch}
+                                />
+                                <Command.List class="max-h-[280px]">
+                                    <Command.Empty>{msg.empty_no_currencies_match({ search: baseCurrencySearch })}</Command.Empty>
+                                    {#each visibleBaseCurrencyOptions as c (c.code)}
+                                        <Command.Item
+                                            value="{c.code} {c.name}"
+                                            onSelect={() => handleCurrencyChange(c.code)}
+                                        >
+                                            <span class="inline-flex items-center gap-2">
+                                                <CoinIcon code={c.code} size={16} />
+                                                {c.code} — {c.name}
+                                            </span>
+                                        </Command.Item>
+                                    {/each}
+                                </Command.List>
+                            </Command.Root>
+                        </Popover.Content>
+                    </Popover.Root>
                 </div>
 
                 <div class="space-y-2">
