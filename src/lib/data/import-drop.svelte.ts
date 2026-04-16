@@ -19,6 +19,10 @@ class ImportDropStore {
     ofxContent = $state("");
     ofxFileName = $state("");
 
+    qifOpen = $state(false);
+    qifContent = $state("");
+    qifFileName = $state("");
+
     pdfOpen = $state(false);
     pdfFile = $state<File | null>(null);
     pdfFileName = $state("");
@@ -50,7 +54,7 @@ class ImportDropStore {
     }
 
     get anyDialogOpen(): boolean {
-        return this.csvOpen || this.ofxOpen || this.pdfOpen || this.ledgerOpen || this.dledgerOpen;
+        return this.csvOpen || this.ofxOpen || this.qifOpen || this.pdfOpen || this.ledgerOpen || this.dledgerOpen;
     }
 
     /**
@@ -87,6 +91,11 @@ class ImportDropStore {
                 this.ofxContent = result.text ?? (await readFileAsText(file));
                 this.ofxFileName = file.name;
                 this.ofxOpen = true;
+                return true;
+            case "qif":
+                this.qifContent = result.text ?? (await readFileAsText(file));
+                this.qifFileName = file.name;
+                this.qifOpen = true;
                 return true;
             case "pdf":
                 this.pdfFile = file;
@@ -329,6 +338,7 @@ class ImportDropStore {
     closeCurrentDialog(): void {
         if (this.csvOpen) this.csvOpen = false;
         else if (this.ofxOpen) this.ofxOpen = false;
+        else if (this.qifOpen) this.qifOpen = false;
         else if (this.pdfOpen) this.pdfOpen = false;
         else if (this.ledgerOpen) this.ledgerOpen = false;
         else if (this.dledgerOpen) this.dledgerOpen = false;

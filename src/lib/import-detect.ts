@@ -1,6 +1,6 @@
 import { gunzipSync } from "fflate";
 
-export type ImportTarget = "csv" | "ofx" | "pdf" | "ledger" | "dledger";
+export type ImportTarget = "csv" | "ofx" | "qif" | "pdf" | "ledger" | "dledger";
 
 export interface DetectResult {
   target: ImportTarget;
@@ -14,6 +14,7 @@ const EXTENSION_MAP: Record<string, ImportTarget> = {
   ".ofx": "ofx",
   ".qfx": "ofx",
   ".qbo": "ofx",
+  ".qif": "qif",
   ".pdf": "pdf",
   ".ledger": "ledger",
   ".beancount": "ledger",
@@ -52,6 +53,11 @@ export function detectFromContent(
   const head = text.slice(0, 500);
   if (/OFXHEADER:/i.test(head) || /<OFX>/i.test(head)) {
     return "ofx";
+  }
+
+  // QIF: check for QIF section headers
+  if (/^!Type:/m.test(head) || /^!Account/m.test(head)) {
+    return "qif";
   }
 
   // Ledger: score first ~30 non-empty lines for ledger-like patterns

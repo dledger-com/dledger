@@ -10,6 +10,7 @@
   import { DEMO_MODE } from "$lib/demo.js";
   const CsvImportDialog = () => import("$lib/components/CsvImportDialog.svelte");
   const OfxImportDialog = () => import("$lib/components/OfxImportDialog.svelte");
+  const QifImportDialog = () => import("$lib/components/QifImportDialog.svelte");
   const PdfImportDialog = () => import("$lib/components/PdfImportDialog.svelte");
   const LedgerImportDialog = () => import("$lib/components/LedgerImportDialog.svelte");
   const DledgerImportDialog = () => import("$lib/components/DledgerImportDialog.svelte");
@@ -133,6 +134,13 @@
     }
   });
   $effect(() => {
+    if (!importDrop.qifOpen) {
+      importDrop.qifContent = "";
+      importDrop.qifFileName = "";
+      untrack(() => importDrop.scheduleAdvance());
+    }
+  });
+  $effect(() => {
     if (!importDrop.pdfOpen) {
       importDrop.pdfFile = null;
       importDrop.pdfFileName = "";
@@ -196,6 +204,15 @@
         bind:open={importDrop.ofxOpen}
         initialContent={importDrop.ofxContent}
         initialFileName={importDrop.ofxFileName}
+      />
+    {/await}
+  {/if}
+  {#if importDrop.qifOpen}
+    {#await QifImportDialog() then mod}
+      <mod.default
+        bind:open={importDrop.qifOpen}
+        initialContent={importDrop.qifContent}
+        initialFileName={importDrop.qifFileName}
       />
     {/await}
   {/if}
