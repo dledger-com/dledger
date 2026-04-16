@@ -709,7 +709,7 @@
                 <div class="flex flex-wrap gap-2">
                     <Input
                         class="w-full sm:flex-1"
-                        type="password"
+                        type="text"
                         placeholder={addSourceExchangeId === "coinbase"
                             ? m.sources_api_key_name()
                             : addSourceExchangeId === "volet"

@@ -1284,7 +1284,7 @@
                                     >
                                     <Input
                                         id="dprice-api-key"
-                                        type="password"
+                                        type="text"
                                         value={settings.settings.dpriceApiKey ?? ""}
                                         oninput={(e) =>
                                             settings.update({
@@ -1467,7 +1467,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="finnhub-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder="Finnhub API key (optional)"
                                     value={settings.finnhubApiKey}
                                     oninput={(e) =>
@@ -1515,7 +1515,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="coingecko-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder={settings.settings.coingeckoPro ? "CoinGecko Pro API key" : "CoinGecko demo API key (optional)"}
                                     value={settings.coingeckoApiKey}
                                     oninput={(e) =>
@@ -1588,7 +1588,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="cryptocompare-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder="CryptoCompare API key (optional)"
                                     value={settings.cryptoCompareApiKey}
                                     oninput={(e) =>
@@ -1696,7 +1696,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="etherscan-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder="Etherscan API key"
                                     value={settings.etherscanApiKey}
                                     oninput={(e) =>
@@ -1745,7 +1745,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="routescan-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder="Routescan API key"
                                     value={settings.settings.routescanApiKey}
                                     oninput={(e) =>
@@ -1793,7 +1793,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="thegraph-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder="The Graph API key (optional)"
                                     value={settings.theGraphApiKey}
                                     oninput={(e) =>
@@ -1840,7 +1840,7 @@
                             <div class="flex items-center gap-2">
                                 <Input
                                     id="helius-api-key"
-                                    type="password"
+                                    type="text"
                                     placeholder="Helius API key"
                                     value={settings.settings.heliusApiKey ?? ""}
                                     oninput={(e: Event) => settings.update({ heliusApiKey: (e.target as HTMLInputElement).value })}
@@ -1882,7 +1882,7 @@
                             <label for="plugin-config-{ext.chainId}-{field.key}" class="text-xs font-medium text-muted-foreground">{field.label}</label>
                             <Input
                                 id="plugin-config-{ext.chainId}-{field.key}"
-                                type="password"
+                                type="text"
                                 placeholder={field.placeholder ?? ""}
                                 value={settings.settings.pluginChainConfig?.[ext.chainId]?.[field.key] ?? ""}
                                 oninput={(e: Event) => {
