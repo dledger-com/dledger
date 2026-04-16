@@ -13,6 +13,7 @@ export { setBankStatementRules } from "./presets/bank-statement.js";
 export { setRevolutRules } from "./presets/revolut.js";
 export { setLaBanquePostaleRules } from "./presets/la-banque-postale.js";
 export { setN26Rules } from "./presets/n26.js";
+export { setWiseRules } from "./presets/wise.js";
 
 /**
  * Get the default CSV preset registry backed by the PluginManager.

@@ -24,6 +24,7 @@ import {
   celsiusPreset,
   hyperliquidPreset,
   ledgerLivePreset,
+  wisePreset,
 } from "../../csv-presets/presets/index.js";
 
 export const builtinCsvPresets: CsvPreset[] = [
@@ -49,6 +50,7 @@ export const builtinCsvPresets: CsvPreset[] = [
   celsiusPreset,
   hyperliquidPreset,
   ledgerLivePreset,
+  wisePreset,
   revolutPreset,
   bankStatementPreset, // lowest priority (score 40-60)
 ];

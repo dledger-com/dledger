@@ -22,3 +22,4 @@ export { voletPreset } from "./volet.js";
 export { celsiusPreset } from "./celsius.js";
 export { hyperliquidPreset } from "./hyperliquid.js";
 export { ledgerLivePreset } from "./ledger-live.js";
+export { wisePreset, setWiseRules } from "./wise.js";

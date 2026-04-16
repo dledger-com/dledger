@@ -27,6 +27,7 @@
     setRevolutRules,
     setLaBanquePostaleRules,
     setN26Rules,
+    setWiseRules,
     type DateFormatId,
     type ColumnDetection,
     type PresetDetectionResult,
@@ -240,6 +241,7 @@
     setRevolutRules(rules);
     setLaBanquePostaleRules(rules);
     setN26Rules(rules);
+    setWiseRules(rules);
   }
 
   async function handleFileChange(e: Event) {
@@ -276,6 +278,7 @@
     setBankStatementRules(rules);
     setRevolutRules(rules);
     setLaBanquePostaleRules(rules);
+    setWiseRules(rules);
     presetResults = presetRegistry.detectAll(headers, sampleRows);
     bestPreset = presetResults.length > 0 && presetResults[0].confidence >= 50
       ? presetResults[0]
