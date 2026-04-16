@@ -346,8 +346,97 @@ export const INSTITUTION_REGISTRY: Record<string, InstitutionInfo> = {
     note: "Liquidation Jul 1, 2024",
   },
 
+  // ── CSV Preset Aliases (preset ID ≠ exchange ID) ─────────────────────
+  // These mirror the parent institution so that csv-import:{presetId}:…
+  // sources resolve to the correct favicon and 3916-bis declaration.
+
+  "kraken-ledger": {
+    legalEntity: "Payward Europe Solutions Limited",
+    address: "70 Sir John Rogerson's Quay, Dublin 2, D02 R296",
+    country: "Ireland",
+    url: "kraken.com",
+    foreign: true,
+    note: "MiCA via Central Bank of Ireland",
+  },
+  "binance-trade": {
+    legalEntity: "Binance France SAS",
+    address: "1 rue de Stockholm, 75008 Paris",
+    country: "France",
+    url: "binance.com",
+    foreign: false,
+    foreignBefore: "2022-05-04",
+    note: "PSAN E2022-037. Before May 2022: Binance Holdings Ltd, Cayman Islands",
+  },
+  "coinbase-transactions": {
+    legalEntity: "Coinbase Europe Limited",
+    address: "70 Sir John Rogerson's Quay, Dublin 2, D02 R296",
+    country: "Ireland",
+    url: "coinbase.com",
+    foreign: true,
+    note: "PSAN E2023-110 but Irish entity",
+  },
+  "bybit-trade": {
+    legalEntity: "Bybit Fintech FZE",
+    address: "One Central, Dubai World Trade Centre, Dubai",
+    country: "UAE",
+    url: "bybit.com",
+    foreign: true,
+    note: "AMF blacklisted May 2022",
+  },
+  "crypto-com-app": {
+    legalEntity: "Foris DAX MT Limited",
+    address: "Level 7, Spinola Park, Triq Mikiel Ang Borg, St. Julians SPK 1000",
+    country: "Malta",
+    url: "crypto.com",
+    foreign: true,
+    note: "PSAN registered (Maltese entity). MiCA via MFSA",
+  },
+  "crypto-com-exchange": {
+    legalEntity: "Foris DAX MT Limited",
+    address: "Level 7, Spinola Park, Triq Mikiel Ang Borg, St. Julians SPK 1000",
+    country: "Malta",
+    url: "crypto.com",
+    foreign: true,
+    note: "PSAN registered (Maltese entity). MiCA via MFSA",
+  },
+  celsius: {
+    legalEntity: "Celsius Network LLC",
+    address: "121 River Street, Suite 1609, Hoboken, NJ 07030",
+    country: "USA",
+    url: "celsius.network",
+    foreign: true,
+    closedDate: "2023-01-05",
+    note: "Bankruptcy filed Jul 13, 2022. Plan effective Jan 5, 2023",
+  },
+  hyperliquid: {
+    legalEntity: "",
+    address: "",
+    country: "",
+    url: "hyperliquid.xyz",
+    foreign: true,
+    nonCustodial: true,
+    note: "Non-custodial perps DEX",
+  },
+  "ledger-live": {
+    legalEntity: "Ledger SAS",
+    address: "1 rue du Mail, 75002 Paris",
+    country: "France",
+    url: "ledger.com",
+    foreign: false,
+    nonCustodial: true,
+    note: "Hardware wallet, non-custodial",
+  },
+
   // ── Banks / Neobanks ────────────────────────────────────────────────
 
+  wise: {
+    legalEntity: "Wise Payments Limited",
+    address: "6th Floor, Tea Building, 56 Shoreditch High Street, London E1 6JJ",
+    country: "United Kingdom",
+    url: "wise.com",
+    foreign: true,
+    note: "UK-based, FCA regulated",
+  },
   n26: {
     legalEntity: "N26 Bank SE",
     address: "Voltairestrasse 8, 10179 Berlin",
