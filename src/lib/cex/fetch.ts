@@ -47,9 +47,9 @@ export async function cexFetch(
       body: typeof init?.body === "string" ? init.body : null,
     });
   }
-  // Browser mode: rewrite URL to use Vite proxy
-  const proxyUrl = url.replace(baseUrl, proxyPrefix);
-  const resp = await fetch(proxyUrl, { ...init, signal });
+  // Browser mode: use Vite proxy in dev, direct URL in production
+  const fetchUrl = import.meta.env.DEV ? url.replace(baseUrl, proxyPrefix) : url;
+  const resp = await fetch(fetchUrl, { ...init, signal });
   return { status: resp.status, body: await resp.text() };
 }
 
