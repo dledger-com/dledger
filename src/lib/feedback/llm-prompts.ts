@@ -4,90 +4,282 @@ export type SourceType = "csv" | "cex" | "defi" | "pdf" | "blockchain";
 export type DefiChainFamily = "evm" | "solana";
 
 const CSV_PRESET_INTERFACE = `interface CsvRecord {
-  date: string;           // YYYY-MM-DD
-  description: string;
-  descriptionData?: DescriptionData;  // structured description for UI rendering (optional)
+  date: string;           // YYYY-MM-DD (must be normalized to this format)
+  description: string;    // human-readable, rendered as: "BankName: description text"
+  descriptionData?: DescriptionData;  // structured description for UI rendering
   lines: { account: string; currency: string; amount: string }[];
-  groupKey?: string;      // rows with the same groupKey are merged into one journal entry (e.g. trade legs)
+  // Lines are double-entry: positive = debit, negative = credit.
+  // Lines MUST balance: sum of amounts per currency should equal zero.
+  // Minimum 2 lines per record (main account + counter-account).
+  groupKey?: string;      // rows with the same groupKey are merged into one journal entry
   sourceKey?: string;     // unique dedup key — prevents re-importing the same record (e.g. transaction ID)
-  metadata?: Record<string, string>;
+  metadata?: Record<string, string>;  // values MUST be strings
 }
 
-// DescriptionData for bank imports:
-// { type: "bank"; bank: string; text: string }
-// Rendered as: "MyBank: Payment to X"
+// DescriptionData for bank/neobank imports:
+//   { type: "bank", bank: "MyBank", text: "Payment to X", reference: "REF123" }
+//   The "description" field should be: bank + ": " + text (e.g. "MyBank: Payment to X")
+//
+// DescriptionData for exchange imports:
+//   Trade:    { type: "cex-trade", exchange: "MyExchange", spent: "100 EUR", received: "0.0025 BTC" }
+//   Transfer: { type: "cex-transfer", exchange: "MyExchange", direction: "deposit"|"withdrawal", currency: "BTC" }
+//   Reward:   { type: "cex-reward", exchange: "MyExchange", kind: "staking", currency: "ETH" }
+//   Other:    { type: "cex-operation", exchange: "MyExchange", operation: "conversion", currency: "EUR" }
 
 interface CsvImportOptions {
   delimiter?: string;           // default ","
   dateColumn: string;           // column header name
   descriptionColumn?: string;   // column header name
   dateFormat?: string;          // "YYYY-MM-DD" (default), "MM/DD/YYYY", "DD/MM/YYYY", "ISO8601"
-  lines: CsvColumnMapping[];    // each maps columns → a line item (UI-configured, rarely set by preset)
-}
-
-interface CsvFileHeader {
-  mainAccount?: string;
-  accountMetadata?: Record<string, string>;
-  balanceDate?: string;
-  balanceAmount?: string;
-  balanceCurrency?: string;
 }
 
 interface CsvPreset {
-  id: string;
-  name: string;
+  id: string;              // lowercase kebab-case identifier (e.g. "my-bank")
+  name: string;            // display name (e.g. "My Bank")
   description: string;
-  suggestedMainAccount?: string;
+  suggestedMainAccount?: string;   // e.g. "Assets:Bank:MyBank"
   detect(headers: string[], sampleRows: string[][]): number;  // 0-100 confidence
-  getDefaultMapping(headers: string[]): Partial<CsvImportOptions>;  // pre-populate UI mapping
+  getDefaultMapping(headers: string[]): Partial<CsvImportOptions>;
   transform(headers: string[], rows: string[][]): CsvRecord[] | null;
-  parseFileHeader?(headers: string[], rows: string[][]): CsvFileHeader | null;  // optional: extract metadata from CSV preamble
-}`;
+}
 
-const CSV_EXAMPLE = `// CSV preset example — a bank import
-const preset = {
+// ---- Account path conventions ----
+// Banks:     Assets:Bank:{BankName}           (single currency)
+//            Assets:Bank:{BankName}:{Currency} (multi-currency, e.g. Assets:Bank:Wise:EUR)
+// Fees:      Expenses:Bank:Fees:{BankName}
+// Exchanges: Assets:Crypto:Exchange:{Name}:{Currency}
+// Ex. Fees:  Expenses:Crypto:Fees:Trading:{Name}
+// Counter:   Expenses:Uncategorized (for debits/expenses)
+//            Income:Uncategorized   (for credits/income)
+// Trading:   Equity:Trading         (balancing account for currency conversions/trades)
+//
+// Account paths must use PascalCase segments (e.g. "MyBank", not "my-bank" or "my bank").
+
+// ---- Amount conventions ----
+// Amounts are strings for precision. Positive = debit, negative = credit.
+// Parse amounts robustly: handle comma thousands separators ("1,234.56"),
+// European format ("1.234,56"), parentheses for negatives ("(100.00)"),
+// and currency symbols/prefixes ("EUR 100", "$50", "-€10.00").
+// Never use bare Number() or parseFloat() on raw CSV values — strip symbols first.
+
+// ---- Fee handling ----
+// Fees should be separate line items (not just metadata). Pattern:
+//   { account: "Expenses:Bank:Fees:MyBank", currency: "EUR", amount: "1.50" },  // fee expense
+//   { account: "Assets:Bank:MyBank:EUR",    currency: "EUR", amount: "-1.50" },  // deducted from account
+
+// ---- Currency conversion / FX trade pattern ----
+// When a bank converts between currencies (e.g. 100 EUR → 85 GBP):
+//   { account: "Assets:Bank:MyBank:EUR", currency: "EUR", amount: "-100" },   // EUR leaves
+//   { account: "Assets:Bank:MyBank:GBP", currency: "GBP", amount: "85" },     // GBP arrives
+//   { account: "Equity:Trading",         currency: "EUR", amount: "100" },     // equity balancing
+//   { account: "Equity:Trading",         currency: "GBP", amount: "-85" },     // equity balancing
+// This is the standard double-entry multi-currency trade pattern.
+
+// ---- Date parsing ----
+// Dates must be normalized to YYYY-MM-DD. Common CSV formats:
+//   DD-MM-YYYY, DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, DD.MM.YYYY
+// Write a helper function that validates and converts. Reject invalid dates.
+
+// ---- Detection guidelines ----
+// Score 85-90: bank/exchange-specific header (e.g. "TransferWise ID")
+// Score 80: strong header combination match
+// Score 0: if required headers are missing (never return low non-zero scores)
+// Use exact header name matching, not substring matching, for specificity.`;
+
+const CSV_EXAMPLE = `// ---- Reusable helpers (include these in your plugin) ----
+
+// Case-insensitive column index lookup
+function col(headers, name) {
+  var lower = headers.map(function(h) { return h.trim().toLowerCase(); });
+  var idx = lower.indexOf(name.toLowerCase());
+  return idx >= 0 ? idx : -1;
+}
+
+// Parse amount string robustly: handles "1,234.56", "(100.00)", "-€50", "EUR 100"
+function parseAmount(raw) {
+  var v = raw.trim();
+  if (!v) return null;
+  var neg = v.startsWith("(") && v.endsWith(")");
+  if (neg) v = v.slice(1, -1).trim();
+  if (v.startsWith("-")) { neg = true; v = v.slice(1).trim(); }
+  v = v.replace(/^[A-Z]{2,4}\\s*/i, "");  // strip currency prefix
+  v = v.replace(/[$€£¥\\s]/g, "");         // strip symbols
+  // Detect European format: "1.234,56" (dot before comma)
+  if (/\\d\\.\\d{3},/.test(v)) {
+    v = v.replace(/\\./g, "").replace(",", ".");  // European → standard
+  } else {
+    v = v.replace(/,/g, "");  // strip thousand separators
+  }
+  var num = parseFloat(v);
+  if (!isFinite(num)) return null;
+  return neg ? -num : num;
+}
+
+// Parse DD-MM-YYYY or DD/MM/YYYY to YYYY-MM-DD (adjust regex for your bank's format)
+function parseDate(raw) {
+  var m = raw.trim().match(/^(\\d{2})[-/](\\d{2})[-/](\\d{4})$/);
+  if (!m) return null;
+  var d = parseInt(m[1]), mo = parseInt(m[2]), y = parseInt(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return m[3] + "-" + m[2] + "-" + m[1];
+}
+
+// ---- CSV preset example — a multi-currency bank with fees and conversions ----
+
+var BANK = "MyBank";
+
+var preset = {
   id: "my-bank",
   name: "My Bank",
-  description: "Import CSV from My Bank",
-  suggestedMainAccount: "Assets:Bank:MyBank",
+  description: "Import CSV from My Bank with support for card payments, transfers, conversions, and fees.",
+  suggestedMainAccount: "Assets:Bank:" + BANK,
 
-  detect(headers, sampleRows) {
-    // Return 0-100 based on how well headers match this bank's format
-    const hasDate = headers.some(h => h.toLowerCase().includes("date"));
-    const hasAmount = headers.some(h => h.toLowerCase().includes("amount"));
-    const hasBankSpecific = headers.some(h => h === "Transaction Reference");
-    return hasDate && hasAmount && hasBankSpecific ? 85 : 0;
+  detect: function(headers) {
+    // Use exact header names unique to this bank for high confidence
+    var lower = headers.map(function(h) { return h.trim().toLowerCase(); });
+    var hasMyBankId = lower.includes("mybank transaction id");
+    var hasAmount = lower.includes("amount");
+    var hasCurrency = lower.includes("currency");
+    var hasType = lower.includes("transaction type");
+    return hasMyBankId && hasAmount && hasCurrency && hasType ? 90 : 0;
   },
 
-  getDefaultMapping(headers) {
-    // Pre-populate the mapping UI with detected columns
-    return {
-      dateColumn: "Date",
-      descriptionColumn: "Description",
-      dateFormat: "DD/MM/YYYY",
-    };
+  getDefaultMapping: function(headers) {
+    return { dateColumn: "Date", descriptionColumn: "Description" };
   },
 
-  transform(headers, rows) {
-    const dateIdx = headers.indexOf("Date");
-    const descIdx = headers.indexOf("Description");
-    const amountIdx = headers.indexOf("Amount");
-    if (dateIdx < 0 || amountIdx < 0) return null;
+  transform: function(headers, rows) {
+    var dateIdx      = col(headers, "Date");
+    var amtIdx       = col(headers, "Amount");
+    var currIdx      = col(headers, "Currency");
+    var descIdx      = col(headers, "Description");
+    var typeIdx      = col(headers, "Transaction Type");
+    var idIdx        = col(headers, "MyBank Transaction ID");
+    var feeIdx       = col(headers, "Fee");
+    var statusIdx    = col(headers, "Status");
+    var exchFromIdx  = col(headers, "Exchange From");
+    var exchToIdx    = col(headers, "Exchange To");
+    var exchRateIdx  = col(headers, "Exchange Rate");
+    var exchAmtIdx   = col(headers, "Exchange Amount");
+    var merchantIdx  = col(headers, "Merchant");
+    var refIdx       = col(headers, "Reference");
 
-    return rows.map(row => {
-      const description = row[descIdx] || "";
-      return {
-        date: row[dateIdx],
-        description,
-        descriptionData: { type: "bank", bank: "My Bank", text: description },
-        lines: [
-          { account: "Assets:Bank:MyBank", currency: "EUR", amount: row[amountIdx] },
-          { account: "Expenses:Uncategorized", currency: "EUR",
-            amount: String(-Number(row[amountIdx])) },
-        ],
-        sourceKey: row[headers.indexOf("Transaction Reference")] || undefined,
-      };
-    });
+    if (dateIdx === -1 || amtIdx === -1 || currIdx === -1) return null;
+
+    var records = [];
+
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (row.length <= 1 && (row[0] || "") === "") continue;
+
+      // Filter out non-completed transactions
+      if (statusIdx >= 0) {
+        var status = (row[statusIdx] || "").trim().toUpperCase();
+        if (status && status !== "COMPLETED" && status !== "SETTLED") continue;
+      }
+
+      var date = parseDate(row[dateIdx] || "");
+      if (!date) continue;
+
+      var amount = parseAmount(row[amtIdx] || "");
+      if (amount === null || amount === 0) continue;
+
+      var currency = (row[currIdx] || "").trim().toUpperCase();
+      if (!currency) continue;
+
+      var desc = descIdx >= 0 ? (row[descIdx] || "").trim() : "";
+      var type = typeIdx >= 0 ? (row[typeIdx] || "").trim().toUpperCase() : "";
+      var sourceKey = idIdx >= 0 ? (row[idIdx] || "").trim() : undefined;
+      var ref = refIdx >= 0 ? (row[refIdx] || "").trim() : "";
+
+      var mainAccount = "Assets:Bank:" + BANK + ":" + currency;
+      var lines = [];
+      var descText = desc;
+      var metadata = {};
+
+      if (ref) metadata["reference"] = ref;
+
+      // ---- Currency conversion ----
+      if (type === "CONVERSION" || type === "FX") {
+        var exchFrom = exchFromIdx >= 0 ? (row[exchFromIdx] || "").trim().toUpperCase() : "";
+        var exchTo   = exchToIdx >= 0   ? (row[exchToIdx] || "").trim().toUpperCase() : "";
+        var exchRate = exchRateIdx >= 0 ? parseFloat(row[exchRateIdx] || "") : NaN;
+        var exchAmt  = exchAmtIdx >= 0  ? parseAmount(row[exchAmtIdx] || "") : null;
+
+        if (exchFrom && exchTo && exchAmt !== null && exchAmt > 0) {
+          var fromCurr, fromAmt, toCurr, toAmt;
+          if (amount < 0) {
+            // Outflow: selling this currency
+            fromCurr = currency; fromAmt = Math.abs(amount);
+            toCurr = exchTo; toAmt = exchAmt;
+          } else {
+            // Inflow: bought this currency
+            toCurr = currency; toAmt = amount;
+            fromCurr = exchFrom;
+            fromAmt = isFinite(exchRate) && exchRate > 0 ? toAmt / exchRate : exchAmt;
+          }
+
+          // Multi-currency trade with equity balancing
+          lines = [
+            { account: "Assets:Bank:" + BANK + ":" + fromCurr, currency: fromCurr, amount: String(-fromAmt) },
+            { account: "Assets:Bank:" + BANK + ":" + toCurr,   currency: toCurr,   amount: String(toAmt) },
+            { account: "Equity:Trading", currency: fromCurr, amount: String(fromAmt) },
+            { account: "Equity:Trading", currency: toCurr,   amount: String(-toAmt) },
+          ];
+          descText = "Convert " + fromCurr + " \\u2192 " + toCurr;
+          metadata["exchange-from"] = exchFrom;
+          metadata["exchange-to"] = exchTo;
+        } else {
+          continue;  // skip incomplete conversion rows
+        }
+
+      // ---- Card payment ----
+      } else if (type === "CARD" || type === "POS") {
+        var merchant = merchantIdx >= 0 ? (row[merchantIdx] || "").trim() : "";
+        descText = merchant || desc || "Card payment";
+        var counterAccount = amount < 0 ? "Expenses:Uncategorized" : "Income:Uncategorized";
+        lines = [
+          { account: mainAccount, currency: currency, amount: String(amount) },
+          { account: counterAccount, currency: currency, amount: String(-amount) },
+        ];
+
+      // ---- Transfer and all other types ----
+      } else {
+        descText = desc || BANK + " transaction";
+        var counterAccount = amount < 0 ? "Expenses:Uncategorized" : "Income:Uncategorized";
+        lines = [
+          { account: mainAccount, currency: currency, amount: String(amount) },
+          { account: counterAccount, currency: currency, amount: String(-amount) },
+        ];
+      }
+
+      // ---- Fee handling (separate line items, not just metadata) ----
+      if (feeIdx >= 0) {
+        var fee = parseAmount(row[feeIdx] || "");
+        if (fee !== null && fee > 0) {
+          lines.push(
+            { account: "Expenses:Bank:Fees:" + BANK, currency: currency, amount: String(fee) },
+            { account: mainAccount, currency: currency, amount: String(-fee) }
+          );
+          metadata["total-fees"] = (row[feeIdx] || "").trim();
+        }
+      }
+
+      // Build description: "MyBank: description text"
+      var descData = { type: "bank", bank: BANK, text: descText };
+      if (ref) descData.reference = ref;
+
+      records.push({
+        date: date,
+        description: BANK + ": " + descText,
+        descriptionData: descData,
+        lines: lines,
+        sourceKey: sourceKey || undefined,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      });
+    }
+
+    return records;
   },
 };`;
 
@@ -1140,13 +1332,23 @@ export function generateLlmPrompt(type: SourceType, url?: string, defiChain?: De
 
   switch (type) {
     case "csv":
-      parts.push("## Interfaces to implement");
+      parts.push("## Interfaces and conventions");
       parts.push("```typescript");
       parts.push(CSV_PRESET_INTERFACE);
       parts.push("```");
       parts.push("");
-      parts.push("## Example");
-      parts.push("```typescript");
+      parts.push("## Complete working example");
+      parts.push("Study this example carefully — it demonstrates all the patterns you need:");
+      parts.push("- Robust date and amount parsing helpers");
+      parts.push("- Case-insensitive column lookup");
+      parts.push("- Transaction type routing (card, transfer, conversion)");
+      parts.push("- Multi-currency accounts (Assets:Bank:Name:Currency)");
+      parts.push("- Fee handling as separate line items");
+      parts.push("- Currency conversion with Equity:Trading balancing");
+      parts.push("- Proper descriptionData construction");
+      parts.push("- Status filtering (skip pending/cancelled)");
+      parts.push("- sourceKey for dedup, metadata for context");
+      parts.push("```javascript");
       parts.push(CSV_EXAMPLE);
       parts.push("```");
       parts.push("");
@@ -1157,10 +1359,20 @@ export function generateLlmPrompt(type: SourceType, url?: string, defiChain?: De
       parts.push("```");
       parts.push("");
       parts.push("The bank/exchange name is: [NAME]");
-      parts.push("The currency is: [CURRENCY CODE, e.g. EUR, USD]");
-      parts.push("The main account should be: [e.g. Assets:Bank:MyBank]");
+      parts.push("The currency is: [CURRENCY CODE, e.g. EUR, USD] (or multi-currency if applicable)");
+      parts.push("The main account should be: [e.g. Assets:Bank:MyBank or Assets:Bank:MyBank:EUR for multi-currency]");
       parts.push("");
-      parts.push("Please implement a CsvPreset that can detect and parse this CSV format.");
+      parts.push("## Requirements");
+      parts.push("Implement a CsvPreset following the example above. Key rules:");
+      parts.push("- Include the parseAmount() and parseDate() helpers from the example (adjust the date regex for your bank's format)");
+      parts.push("- Use case-insensitive column lookup via the col() helper");
+      parts.push("- For multi-currency banks: use per-currency sub-accounts (Assets:Bank:Name:EUR, Assets:Bank:Name:USD)");
+      parts.push("- Handle fees as separate line items with Expenses:Bank:Fees:{BankName}");
+      parts.push("- For currency conversions: use the Equity:Trading balancing pattern shown in the example");
+      parts.push("- Build descriptionData as { type: \"bank\", bank: \"Name\", text: descText } and set description to \"Name: descText\"");
+      parts.push("- Use sourceKey from unique transaction IDs for dedup");
+      parts.push("- Filter out non-completed/pending/cancelled transactions when a status column exists");
+      parts.push("- Use var (not const/let) for ES5 compatibility in the sandbox");
       break;
 
     case "cex":
