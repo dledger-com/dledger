@@ -61,6 +61,7 @@ function openIDB(): Promise<IDBDatabase> {
 }
 
 async function saveToIndexedDB(data: Uint8Array): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
   const db = await openIDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(IDB_STORE, "readwrite");
@@ -77,6 +78,7 @@ async function saveToIndexedDB(data: Uint8Array): Promise<void> {
 }
 
 async function loadFromIndexedDB(): Promise<Uint8Array | null> {
+  if (typeof indexedDB === "undefined") return null;
   const db = await openIDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(IDB_STORE, "readonly");
