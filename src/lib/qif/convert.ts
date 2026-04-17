@@ -14,6 +14,7 @@ import { parseQifDate, isTransfer } from "./parse-qif.js";
 
 export interface QifConvertOptions {
   mainAccount: string;
+  currency: string;
   rules: CsvCategorizationRule[];
   bankName?: string;
   dateFormat: QifDateFormat;
@@ -102,6 +103,7 @@ export function convertQifToRecords(
   const unmappedSet = new Set<string>();
   const bank = options.bankName ?? bankNameFromAccount(options.mainAccount);
   const european = options.europeanNumbers ?? false;
+  const currency = options.currency;
 
   for (const tx of section.transactions) {
     const date = parseQifDate(tx.date, options.dateFormat);
@@ -125,7 +127,7 @@ export function convertQifToRecords(
     if (tx.splits.length > 0) {
       // Split transaction: main account line + one line per split
       const lines: CsvRecord["lines"] = [
-        { account: options.mainAccount, currency: "", amount: amount.toString() },
+        { account: options.mainAccount, currency, amount: amount.toString() },
       ];
 
       let splitSum = 0;
@@ -146,7 +148,7 @@ export function convertQifToRecords(
 
         lines.push({
           account: splitAccount,
-          currency: "",
+          currency,
           amount: (-splitAmount).toString(),
         });
       }
@@ -159,7 +161,7 @@ export function convertQifToRecords(
         const balanceAccount = amount > 0 ? INCOME_UNCATEGORIZED : EXPENSES_UNCATEGORIZED;
         lines.push({
           account: balanceAccount,
-          currency: "",
+          currency,
           amount: balanceAmount.toString(),
         });
         warnings.push(
@@ -197,8 +199,8 @@ export function convertQifToRecords(
         description: renderDescription(descData),
         descriptionData: descData,
         lines: [
-          { account: options.mainAccount, currency: "", amount: amount.toString() },
-          { account: counterAccount, currency: "", amount: (-amount).toString() },
+          { account: options.mainAccount, currency, amount: amount.toString() },
+          { account: counterAccount, currency, amount: (-amount).toString() },
         ],
         sourceKey,
       });
@@ -225,15 +227,15 @@ export function suggestQifMainAccount(section: QifSection): string {
 
   switch (section.type) {
     case "CCard":
-      return creditCard(name ?? "QIF");
+      return creditCard(name ?? "Import");
     case "Bank":
     case "Cash":
-      return bankAssets(name ?? "QIF");
+      return bankAssets(name ?? "Import");
     case "Oth A":
       return name ? `Assets:Other:${name}` : "Assets:Other";
     case "Oth L":
       return name ? `Liabilities:Other:${name}` : "Liabilities:Other";
     default:
-      return bankAssets(name ?? "QIF");
+      return bankAssets(name ?? "Import");
   }
 }

@@ -2,6 +2,8 @@ import type { TransactionHandler, HandlerContext } from "../handlers/types.js";
 import type { CsvPreset } from "../csv-presets/types.js";
 import type { CexAdapter } from "../cex/types.js";
 import type { PdfPage, PdfStatement } from "../pdf/types.js";
+import type { QifParseResult, QifSection } from "../qif/parse-qif.js";
+import type { CsvRecord } from "../csv-presets/types.js";
 import type { ChainInfo } from "../types/index.js";
 import type { SolanaHandler } from "../solana/handlers/types.js";
 
@@ -20,6 +22,7 @@ export interface Plugin {
   solanaHandlers?: SolanaHandlerExtension[];
   csvPresets?: CsvPreset[];
   pdfParsers?: PdfParserExtension[];
+  qifProfiles?: QifProfileExtension[];
   cexAdapters?: CexAdapter[];
   rateSources?: RateSourceExtension[];
   blockchainSources?: BlockchainSourceExtension[];
@@ -57,6 +60,26 @@ export interface PdfParserExtension {
   detect(pages: PdfPage[]): number;     // 0-100 confidence
   parse(pages: PdfPage[]): PdfStatement;
   suggestAccount?(statement: PdfStatement): string;
+}
+
+// ---------------------------------------------------------------------------
+// QIF bank profile extension
+// ---------------------------------------------------------------------------
+
+export interface QifProfileExtension {
+  id: string;                           // "qif-wise"
+  name: string;                         // "Wise (TransferWise)"
+  presetId: string;                     // for source-based dedup
+  /** Detect from filename (0-100 confidence). */
+  detectFilename?(filename: string): number;
+  /** Detect from parsed QIF content (0-100 confidence). */
+  detectContent?(result: QifParseResult): number;
+  /** Extract currency code from filename. */
+  extractCurrency?(filename: string): string | null;
+  /** Suggest main account for the section. */
+  suggestAccount?(section: QifSection, filename: string): string;
+  /** Transform records after generic conversion (e.g., parse multi-currency trades). */
+  transformRecords?(records: CsvRecord[], section: QifSection): CsvRecord[];
 }
 
 // ---------------------------------------------------------------------------

@@ -38,6 +38,8 @@
   import { TransactionClassifier, type ClassificationResult } from "$lib/ml/classifier.js";
   import { classifyTransactions } from "$lib/csv-presets/categorize.js";
   import { ASSETS_BANK_IMPORT } from "$lib/accounts/paths.js";
+  import { getPluginManager } from "$lib/plugins/manager.js";
+  import type { QifProfileExtension } from "$lib/plugins/types.js";
   import * as m from "$paraglide/messages.js";
   import AccountCombobox from "./AccountCombobox.svelte";
   import TagInput from "./TagInput.svelte";
@@ -78,6 +80,7 @@
   let dateFormatOverride = $state<"auto" | QifDateFormat>("auto");
   let detectedDateFormat = $state<QifDateFormat>("MM/DD/YY");
   let europeanNumbers = $state(false);
+  let currency = $state("EUR");
   let transferMapping = $state<Map<string, string>>(new Map());
 
   let effectiveDateFormat = $derived<QifDateFormat>(
@@ -105,6 +108,9 @@
   let mlClassifying = $state(false);
   let mlEnabled = $derived(settings.settings.mlClassificationEnabled ?? true);
   let mlThreshold = $derived(settings.settings.mlConfidenceThreshold ?? 0.5);
+
+  // -- Detected bank profile --
+  let detectedProfile = $state<QifProfileExtension | null>(null);
 
   // -- Account list for inline editing --
   let accountPaths = $state<string[]>([]);
@@ -249,7 +255,24 @@
 
     // Auto-select first section
     selectedSection = parseResult.sections[0];
-    mainAccount = suggestQifMainAccount(selectedSection);
+
+    // Detect bank profile from filename and content
+    const pm = getPluginManager();
+    const detection = pm.qifProfiles.detectBest(fileName, parseResult);
+    detectedProfile = detection?.profile ?? null;
+
+    // Extract currency from profile (e.g., Wise filename) or fall back to default
+    if (detectedProfile?.extractCurrency) {
+      const extracted = detectedProfile.extractCurrency(fileName);
+      if (extracted) currency = extracted;
+    }
+
+    // Suggest account from profile or fall back to generic
+    if (detectedProfile?.suggestAccount) {
+      mainAccount = detectedProfile.suggestAccount(selectedSection, fileName);
+    } else {
+      mainAccount = suggestQifMainAccount(selectedSection);
+    }
 
     // Auto-detect date format from all transactions across sections
     const allTx = parseResult.sections.flatMap((s) => s.transactions);
@@ -285,13 +308,19 @@
 
     const result = convertQifToRecords(selectedSection, {
       mainAccount,
+      currency,
       rules,
       dateFormat: effectiveDateFormat,
       europeanNumbers,
       accountMapping: transferMapping,
     });
 
-    previewRecords = result.records;
+    // Apply bank profile transformations (e.g., Wise currency conversions)
+    const transformed = detectedProfile?.transformRecords
+      ? detectedProfile.transformRecords(result.records, selectedSection)
+      : result.records;
+
+    previewRecords = transformed;
     previewWarnings = result.warnings;
     fileHeader = result.fileHeader;
     unmappedAccounts = result.unmappedAccounts;
@@ -332,16 +361,18 @@
   }
 
   async function detectDuplicates(records: CsvRecord[]) {
+    const preset = detectedProfile?.presetId ?? "qif-import";
     try {
       const backend = getBackend();
-      const index = await buildDedupIndex(backend, records, "qif-import");
-      duplicateFlags = markDuplicates(records, "qif-import", index);
+      const index = await buildDedupIndex(backend, records, preset);
+      duplicateFlags = markDuplicates(records, preset, index);
     } catch {
       duplicateFlags = records.map(() => false);
     }
   }
 
   function doImport() {
+    const preset = detectedProfile?.presetId ?? "qif-import";
     const recordsSnapshot = [...previewRecords];
     if (importTags.length > 0) {
       for (const rec of recordsSnapshot) {
@@ -356,7 +387,7 @@
       key: "qif-import",
       label: m.qif_task_label(),
       records: recordsSnapshot,
-      presetId: "qif-import",
+      presetId: preset,
       rateConfig: settings.buildRateConfig(),
       hiddenCurrencies: getHiddenCurrencySet(),
     });
@@ -378,6 +409,8 @@
     dateFormatOverride = "auto";
     detectedDateFormat = "MM/DD/YY";
     europeanNumbers = false;
+    currency = "EUR";
+    detectedProfile = null;
     transferMapping = new Map();
     fileHeader = null;
     previewRecords = [];
@@ -456,6 +489,12 @@
           <div class="rounded-md border bg-muted/30 p-3 space-y-2">
             <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{m.import_statement_info()}</h4>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              {#if detectedProfile}
+                <div>
+                  <span class="text-xs text-muted-foreground">{m.label_bank()}</span>
+                  <p class="font-mono text-xs">{detectedProfile.name}</p>
+                </div>
+              {/if}
               {#if selectedSection.account?.name}
                 <div>
                   <span class="text-xs text-muted-foreground">{m.label_name()}</span>
@@ -504,6 +543,12 @@
           <div class="space-y-1">
             <label for="qif-mainAcct" class="text-sm font-medium">{m.label_main_account()}</label>
             <Input id="qif-mainAcct" bind:value={mainAccount} placeholder={m.placeholder_bank_account()} />
+          </div>
+
+          <!-- Currency -->
+          <div class="space-y-1">
+            <label for="qif-currency" class="text-sm font-medium">{m.label_currency()}</label>
+            <Input id="qif-currency" bind:value={currency} placeholder="EUR" class="w-32" />
           </div>
 
           <!-- Date Format Selector -->

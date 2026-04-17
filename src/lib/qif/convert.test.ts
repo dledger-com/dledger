@@ -61,6 +61,7 @@ describe("convertQifToRecords", () => {
     const section = makeSection();
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -82,15 +83,33 @@ describe("convertQifToRecords", () => {
     expect(rec2.lines[1].account).toBe("Income:Uncategorized");
   });
 
+  it("sets currency on all line items", () => {
+    const section = makeSection();
+    const result = convertQifToRecords(section, {
+      mainAccount: "Assets:Bank:Checking",
+      currency: "USD",
+      rules: [],
+      dateFormat: "MM/DD/YY",
+    });
+
+    for (const rec of result.records) {
+      for (const line of rec.lines) {
+        expect(line.currency).toBe("USD");
+      }
+    }
+  });
+
   it("generates deterministic sourceKeys", () => {
     const section = makeSection();
     const result1 = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
     const result2 = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -103,6 +122,7 @@ describe("convertQifToRecords", () => {
     const section = makeSection();
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -115,6 +135,7 @@ describe("convertQifToRecords", () => {
     const section = makeSection();
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [{ id: "r1", pattern: "Grocery", account: "Expenses:Food:Groceries" }],
       dateFormat: "MM/DD/YY",
     });
@@ -141,6 +162,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -172,6 +194,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -197,6 +220,7 @@ describe("convertQifToRecords", () => {
     const mapping = new Map([["Savings", "Assets:Bank:Savings"]]);
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
       accountMapping: mapping,
@@ -221,6 +245,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -244,6 +269,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "DD/MM/YY",
       europeanNumbers: false,
@@ -267,6 +293,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -283,6 +310,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -300,6 +328,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -323,6 +352,7 @@ describe("convertQifToRecords", () => {
 
     const result = convertQifToRecords(section, {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
     });
@@ -353,9 +383,9 @@ describe("suggestQifMainAccount", () => {
     expect(acct).toBe("Liabilities:Other:Mortgage");
   });
 
-  it("uses QIF as fallback name when no account header", () => {
+  it("uses Import as fallback name when no account header", () => {
     const acct = suggestQifMainAccount({ type: "Bank", transactions: [] });
-    expect(acct).toContain("QIF");
+    expect(acct).toContain("Import");
   });
 });
 
@@ -387,6 +417,7 @@ LIncome:Salary
 
     const result = convertQifToRecords(parsed.sections[0], {
       mainAccount: "Assets:Bank:Checking",
+      currency: "EUR",
       rules: [],
       dateFormat: "MM/DD/YY",
       accountMapping: new Map([["Savings", "Assets:Bank:Savings"]]),

@@ -2,6 +2,7 @@ import type { Plugin } from "./types.js";
 import { IndexedHandlerRegistry } from "./indexed-handler-registry.js";
 import { CsvPresetRegistry } from "../csv-presets/registry.js";
 import { PdfParserRegistry } from "./pdf-parser-registry.js";
+import { QifProfileRegistry } from "./qif-profile-registry.js";
 import { CexAdapterRegistry } from "./cex-adapter-registry.js";
 import { RateSourceRegistry } from "./rate-source-registry.js";
 import { BlockchainSourceRegistry } from "./blockchain-source-registry.js";
@@ -11,6 +12,7 @@ import { builtinHandlerExtensions } from "./builtin/handlers.js";
 import { builtinCsvPresets } from "./builtin/csv-presets.js";
 import { builtinPdfParsers } from "./builtin/pdf-parsers.js";
 import { builtinCexAdapters } from "./builtin/cex-adapters.js";
+import { builtinQifProfiles } from "./builtin/qif-profiles.js";
 import { builtinSolanaHandlerExtensions } from "./builtin/solana-handlers.js";
 
 export class PluginManager {
@@ -20,6 +22,7 @@ export class PluginManager {
   readonly solanaHandlers: SolanaHandlerRegistry;
   readonly csvPresets: CsvPresetRegistry;
   readonly pdfParsers: PdfParserRegistry;
+  readonly qifProfiles: QifProfileRegistry;
   readonly cexAdapters: CexAdapterRegistry;
   readonly rateSources: RateSourceRegistry;
   readonly blockchainSources: BlockchainSourceRegistry;
@@ -29,6 +32,7 @@ export class PluginManager {
     this.solanaHandlers = new SolanaHandlerRegistry();
     this.csvPresets = new CsvPresetRegistry();
     this.pdfParsers = new PdfParserRegistry();
+    this.qifProfiles = new QifProfileRegistry();
     this.cexAdapters = new CexAdapterRegistry();
     this.rateSources = new RateSourceRegistry();
     this.blockchainSources = new BlockchainSourceRegistry();
@@ -67,6 +71,12 @@ export class PluginManager {
     if (plugin.pdfParsers) {
       for (const parser of plugin.pdfParsers) {
         this.pdfParsers.register(parser);
+      }
+    }
+
+    if (plugin.qifProfiles) {
+      for (const profile of plugin.qifProfiles) {
+        this.qifProfiles.register(profile);
       }
     }
 
@@ -135,6 +145,7 @@ export function getPluginManager(): PluginManager {
     solanaHandlers: builtinSolanaHandlerExtensions,
     csvPresets: builtinCsvPresets,
     pdfParsers: builtinPdfParsers,
+    qifProfiles: builtinQifProfiles,
     cexAdapters: builtinCexAdapters,
   });
 

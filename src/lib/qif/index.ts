@@ -11,3 +11,5 @@ export type {
 
 export { convertQifToRecords, suggestQifMainAccount, parseQifAmount } from "./convert.js";
 export type { QifConvertOptions, QifConvertResult } from "./convert.js";
+
+export { wiseQifProfile } from "./profiles/wise.js";
