@@ -6,6 +6,10 @@
  */
 import type { RequestHandler } from "./$types";
 
+// Prevent SvelteKit from redirecting trailing-slash URLs (e.g. /api/bitstamp/api/v2/foo/)
+// which would cause 301 redirects upstream that convert POST → GET.
+export const trailingSlash = "ignore";
+
 const PROXY_TARGETS: Record<string, string> = {
   // Market data
   coingecko: "https://api.coingecko.com",
@@ -85,8 +89,12 @@ const STRIPPED_REQUEST_HEADERS = new Set([
   "transfer-encoding",
 ]);
 
-async function handleProxy({ request, params }: { request: Request; params: { path: string } }) {
-  const fullPath = params.path;
+async function handleProxy({ request }: { request: Request; params: { path: string } }) {
+  // Extract path from request URL directly to preserve trailing slashes
+  // (params.path may have them stripped by SvelteKit routing)
+  const url = new URL(request.url);
+  const fullPath = url.pathname.replace(/^\/api\//, "");
+
   // Extract service name: first segment (may contain hyphens like "binance-tr")
   const slashIdx = fullPath.indexOf("/");
   const service = slashIdx === -1 ? fullPath : fullPath.slice(0, slashIdx);
@@ -100,7 +108,6 @@ async function handleProxy({ request, params }: { request: Request; params: { pa
     });
   }
 
-  const url = new URL(request.url);
   const targetUrl = `${target}${remainingPath}${url.search}`;
 
   // Forward request headers, stripping browser/proxy-specific ones
