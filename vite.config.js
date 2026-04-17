@@ -315,6 +315,21 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/whitebit/, ''),
       },
+      '/api/hitbtc': {
+        target: 'https://api.hitbtc.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/hitbtc/, ''),
+      },
+      '/api/bitpanda': {
+        target: 'https://api.bitpanda.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bitpanda/, ''),
+      },
+      '/api/bitfinex': {
+        target: 'https://api.bitfinex.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/bitfinex/, ''),
+      },
     },
   },
 }));
