@@ -16,7 +16,8 @@ vi.mock("../data/invalidation.js", () => ({
 
 import { fetchUserFills, fetchUserFunding, fetchUserLedgerUpdates, fetchSpotMeta } from "./api.js";
 import { syncHyperliquidAccount } from "./sync.js";
-import { SqlJsBackend } from "../sql-js-backend.js";
+import { createTestBackend } from "../../test/helpers.js";
+import type { SqlJsBackend } from "../sql-js-backend.js";
 
 const mockedFills = vi.mocked(fetchUserFills);
 const mockedFunding = vi.mocked(fetchUserFunding);
@@ -38,7 +39,7 @@ describe("syncHyperliquidAccount", () => {
 
 	beforeEach(async () => {
 		vi.clearAllMocks();
-		backend = await SqlJsBackend.createInMemory();
+		backend = await createTestBackend();
 	});
 
 	it("returns zeros when no activity", async () => {

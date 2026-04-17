@@ -1694,6 +1694,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
   private scheduleSave(): void {
     if (this.disposed) return;
     if (this.inTransaction) return;
+    if (typeof indexedDB === "undefined") return;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       const data = this.db.export();

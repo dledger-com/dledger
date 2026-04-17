@@ -1,9 +1,24 @@
+import { afterAll } from "vitest";
 import { v7 as uuidv7 } from "uuid";
 import { SqlJsBackend } from "$lib/sql-js-backend.js";
 import type { Account, Currency, JournalEntry, LineItem } from "$lib/types/index.js";
 
+// ── Auto-close tracking ───────────────────────────────────────────
+// sql.js WASM holds internal handles that keep the Node.js event loop alive.
+// Track all backends created during tests and close them after each test file.
+const _openBackends: SqlJsBackend[] = [];
+
+afterAll(() => {
+  for (const b of _openBackends) {
+    try { b.close(); } catch { /* already closed */ }
+  }
+  _openBackends.length = 0;
+});
+
 export async function createTestBackend(): Promise<SqlJsBackend> {
-  return SqlJsBackend.createInMemory();
+  const backend = await SqlJsBackend.createInMemory();
+  _openBackends.push(backend);
+  return backend;
 }
 
 export interface SeededLedger {
