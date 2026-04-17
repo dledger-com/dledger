@@ -153,7 +153,7 @@ impl ScenarioGenerator for CryptoGenerator {
             entries.push(entry);
         }
 
-        entries.sort_by(|a, b| a.date.cmp(&b.date));
+        entries.sort_by_key(|a| a.date);
 
         let prices = if with_prices {
             price_sim.generate_prices(rng, start, end, "EUR")

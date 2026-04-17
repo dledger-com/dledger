@@ -362,7 +362,7 @@ pub fn export_ledger_with_format(engine: &LedgerEngine, format: LedgerFormat) ->
         .map_err(|e| e.to_string())?;
 
     let mut sorted_entries = entries;
-    sorted_entries.sort_by(|a, b| a.0.date.cmp(&b.0.date));
+    sorted_entries.sort_by_key(|a| a.0.date);
 
     for (entry, items) in &sorted_entries {
         if entry.status == JournalEntryStatus::Voided {
@@ -405,7 +405,7 @@ pub fn export_ledger_with_format(engine: &LedgerEngine, format: LedgerFormat) ->
     // Exchange rates
     let rates = engine.list_exchange_rates(None, None).map_err(|e| e.to_string())?;
     let mut sorted_rates = rates;
-    sorted_rates.sort_by(|a, b| a.date.cmp(&b.date));
+    sorted_rates.sort_by_key(|a| a.date);
     for rate in &sorted_rates {
         out.push_str(&format!(
             "P {} {} {} {}\n",

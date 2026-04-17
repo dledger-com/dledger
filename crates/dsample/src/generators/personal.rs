@@ -221,7 +221,7 @@ impl ScenarioGenerator for PersonalGenerator {
             entries.push(entry);
         }
 
-        entries.sort_by(|a, b| a.date.cmp(&b.date));
+        entries.sort_by_key(|a| a.date);
 
         SampleData {
             commodities: currencies::fiat_currencies(),

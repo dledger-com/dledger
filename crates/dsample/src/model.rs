@@ -56,7 +56,7 @@ impl SampleData {
     }
 
     pub fn sort_by_date(&mut self) {
-        self.entries.sort_by(|a, b| a.date.cmp(&b.date));
-        self.prices.sort_by(|a, b| a.date.cmp(&b.date));
+        self.entries.sort_by_key(|a| a.date);
+        self.prices.sort_by_key(|a| a.date);
     }
 }
