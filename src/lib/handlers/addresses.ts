@@ -530,3 +530,62 @@ export function isDydxContract(addr: string): boolean {
   const lower = addr.toLowerCase();
   return lower === DYDX.STARKEX_BRIDGE || lower === DYDX.DYDX_TOKEN || lower === DYDX.SAFETY_MODULE;
 }
+
+/**
+ * Dolomite — margin trading & lending.
+ * Docs: https://docs.dolomite.io/smart-contract-addresses
+ * Chains: Arbitrum (42161), Berachain (80094), Ethereum (1), Base (8453).
+ * Positions are tracked as subaccount state inside DolomiteMargin — no
+ * wallet-visible receipt tokens (unlike Aave's aTokens).
+ */
+export const DOLOMITE = {
+  /** Core DolomiteMargin contract by chain ID. */
+  MARGIN_BY_CHAIN: {
+    1:     "0x003ca23fd5f0ca87d01f6ec6cd14a8ae60c2b97d",
+    42161: "0x6bd780e7fdf01d77e4d475c821f1e7ae05409072",
+    8453:  "0x003ca23fd5f0ca87d01f6ec6cd14a8ae60c2b97d",
+    80094: "0x003ca23fd5f0ca87d01f6ec6cd14a8ae60c2b97d",
+  } as Record<number, string>,
+  /** Routers — same address across every chain. */
+  BORROW_POSITION_ROUTER: "0xf579b345cda0860668b857de10abd62442133d0f",
+  DEPOSIT_WITHDRAWAL_ROUTER: "0xf8b2c637a68cf6a17b1df9f8992eebeff63d2dff",
+  GENERIC_TRADER_ROUTER: "0x7b61cba306cfdb02493b94757143132b1b72bc6b",
+  /** Arbitrum-specific proxies (pre-router era). */
+  ARB_DEPOSIT_WITHDRAWAL_PROXY: "0xadb9d68c613df4aa363b42161e1282117c7b9594",
+  ARB_BORROW_POSITION_PROXY_V2: "0x38e49a617305101216ec6306e3a18065d14bf3a7",
+  ARB_GENERIC_TRADER_PROXY_V1: "0x905f3add52f01a9069218c8d1c11e240aff61d2b",
+  /** Berachain-specific proxies. */
+  BERA_DEPOSIT_WITHDRAWAL_PROXY: "0xd6a31b6aea4d26a19bf479b5032d9ddc481187e6",
+  BERA_BORROW_POSITION_PROXY_V2: "0xc06271eb97d960f4034ddf953e16271ccb2b10bd",
+  BERA_GENERIC_TRADER_PROXY_V1: "0xb50bcdfc914e0afb484dee621f49010862fb928d",
+  /** Governance token (same address on Arbitrum, Ethereum, Berachain). */
+  DOLO_TOKEN: "0x0f81001ef0a83ecce5ccebf63eb302c70a39a654",
+  /** Berachain-only. */
+  VE_DOLO: "0xcb86b75ee6133d179a12d550b09fb3cdb1e141d4",
+  O_DOLO: "0x02e513b5b54ee216bf836ceb471507488fc89543",
+} as const;
+
+const DOLOMITE_ROUTERS: Set<string> = new Set([
+  DOLOMITE.BORROW_POSITION_ROUTER,
+  DOLOMITE.DEPOSIT_WITHDRAWAL_ROUTER,
+  DOLOMITE.GENERIC_TRADER_ROUTER,
+  DOLOMITE.ARB_DEPOSIT_WITHDRAWAL_PROXY,
+  DOLOMITE.ARB_BORROW_POSITION_PROXY_V2,
+  DOLOMITE.ARB_GENERIC_TRADER_PROXY_V1,
+  DOLOMITE.BERA_DEPOSIT_WITHDRAWAL_PROXY,
+  DOLOMITE.BERA_BORROW_POSITION_PROXY_V2,
+  DOLOMITE.BERA_GENERIC_TRADER_PROXY_V1,
+]);
+
+export function isDolomiteContract(addr: string, chainId?: number): boolean {
+  const lower = addr.toLowerCase();
+  if (DOLOMITE_ROUTERS.has(lower)) return true;
+  if (chainId !== undefined) {
+    return DOLOMITE.MARGIN_BY_CHAIN[chainId] === lower;
+  }
+  // No chain supplied — match any known Margin address.
+  for (const margin of Object.values(DOLOMITE.MARGIN_BY_CHAIN)) {
+    if (margin === lower) return true;
+  }
+  return false;
+}

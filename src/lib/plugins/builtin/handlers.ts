@@ -26,6 +26,7 @@ import { originHandler } from "../../handlers/origin.js";
 import { notionalHandler } from "../../handlers/notional.js";
 import { synthetixHandler } from "../../handlers/synthetix.js";
 import { dydxBridgeHandler } from "../../handlers/dydx-bridge.js";
+import { dolomiteHandler } from "../../handlers/dolomite.js";
 import {
   UNISWAP,
   UNISWAP_FORKS,
@@ -54,6 +55,7 @@ import {
   NOTIONAL,
   SYNTHETIX,
   DYDX,
+  DOLOMITE,
 } from "../../handlers/addresses.js";
 
 // Pendle addresses (not exported from addresses.ts — inlined from pendle.ts)
@@ -386,6 +388,27 @@ export const builtinHandlerExtensions: TransactionHandlerExtension[] = [
         DYDX.SAFETY_MODULE,
       ],
       tokenSymbols: ["DYDX"],
+    },
+  },
+
+  // Dolomite (score 55 — margin + lending on Arbitrum/Berachain/Ethereum/Base)
+  {
+    handler: dolomiteHandler,
+    hints: {
+      addresses: [
+        ...Object.values(DOLOMITE.MARGIN_BY_CHAIN),
+        DOLOMITE.BORROW_POSITION_ROUTER,
+        DOLOMITE.DEPOSIT_WITHDRAWAL_ROUTER,
+        DOLOMITE.GENERIC_TRADER_ROUTER,
+        DOLOMITE.ARB_DEPOSIT_WITHDRAWAL_PROXY,
+        DOLOMITE.ARB_BORROW_POSITION_PROXY_V2,
+        DOLOMITE.ARB_GENERIC_TRADER_PROXY_V1,
+        DOLOMITE.BERA_DEPOSIT_WITHDRAWAL_PROXY,
+        DOLOMITE.BERA_BORROW_POSITION_PROXY_V2,
+        DOLOMITE.BERA_GENERIC_TRADER_PROXY_V1,
+        DOLOMITE.DOLO_TOKEN,
+      ],
+      tokenSymbols: ["DOLO", "veDOLO", "oDOLO"],
     },
   },
 ];
