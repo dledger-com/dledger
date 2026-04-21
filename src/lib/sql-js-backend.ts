@@ -1833,7 +1833,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const rows = this.queryChunked(
       accountIds,
       (ph) => {
-        let sql = `SELECT li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE li.account_id IN (${ph})`;
+        let sql = `SELECT li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE li.account_id IN (${ph}) AND je.status != 'voided' AND je.source != 'system:void'`;
         if (beforeDate) sql += " AND je.date < ?";
         return sql;
       },
@@ -1868,9 +1868,9 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
   ): Promise<Map<string, CurrencyBalance[]>> {
     const params: unknown[] = [];
     let sql =
-      "SELECT li.account_id, li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id";
+      "SELECT li.account_id, li.currency, li.amount FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.status != 'voided' AND je.source != 'system:void'";
     if (beforeDate) {
-      sql += " WHERE je.date < ?";
+      sql += " AND je.date < ?";
       params.push(beforeDate);
     }
 
@@ -3095,7 +3095,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
         THEN ABS(CAST(li.amount AS REAL)) ELSE 0 END) as expense
       FROM journal_entry je${filterJoin}${liJoin}
       JOIN account a ON a.id = li.account_id
-      ${whereClause ? whereClause + " AND je.status != 'voided'" : "WHERE je.status != 'voided'"}
+      ${whereClause ? whereClause + " AND je.status != 'voided' AND je.source != 'system:void'" : "WHERE je.status != 'voided' AND je.source != 'system:void'"}
       GROUP BY je.date ORDER BY je.date`;
 
     return this.query(sql, params, (row) => ({
@@ -3266,7 +3266,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     const [earlier, later] = date1 < date2 ? [date1, date2] : [date2, date1];
 
     const sql =
-      "SELECT li.account_id, li.currency, li.amount, je.date FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.date < ? ORDER BY je.date ASC";
+      "SELECT li.account_id, li.currency, li.amount, je.date FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.date < ? AND je.status != 'voided' AND je.source != 'system:void' ORDER BY je.date ASC";
     const stmt = this.db.prepare(sql);
     stmt.bind([later]);
 
@@ -3504,7 +3504,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
 
     // Single scan of all line items up to the max date, ordered chronologically
     const sql =
-      "SELECT li.account_id, li.currency, li.amount, je.date FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.date < ? ORDER BY je.date ASC";
+      "SELECT li.account_id, li.currency, li.amount, je.date FROM line_item li JOIN journal_entry je ON je.id = li.journal_entry_id WHERE je.date < ? AND je.status != 'voided' AND je.source != 'system:void' ORDER BY je.date ASC";
     const stmt = this.db.prepare(sql);
     stmt.bind([maxDate]);
 
@@ -4101,7 +4101,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
        FROM line_item li
        JOIN journal_entry je ON je.id = li.journal_entry_id
        JOIN account a ON a.id = li.account_id
-       WHERE je.status != 'voided' AND li.currency != ?
+       WHERE je.status != 'voided' AND je.source != 'system:void' AND li.currency != ?
        GROUP BY li.currency, a.account_type`,
       [baseCurrency],
       (row) => ({
@@ -4343,7 +4343,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     return this.query(
       `SELECT el.journal_entry_id FROM entry_link el
        JOIN journal_entry je ON je.id = el.journal_entry_id
-       WHERE el.link_name = ? AND je.status != 'voided'
+       WHERE el.link_name = ? AND je.status != 'voided' AND je.source != 'system:void'
        ORDER BY je.date DESC`,
       [linkName],
       (row) => row.journal_entry_id as string,
@@ -4363,7 +4363,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
       `SELECT el.link_name, COUNT(DISTINCT el.journal_entry_id) as entry_count
        FROM entry_link el
        JOIN journal_entry je ON je.id = el.journal_entry_id
-       WHERE je.status != 'voided'
+       WHERE je.status != 'voided' AND je.source != 'system:void'
        GROUP BY el.link_name
        ORDER BY el.link_name`,
       [],
@@ -4403,7 +4403,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
       `SELECT DISTINCT m.journal_entry_id
        FROM journal_entry_metadata m
        JOIN journal_entry je ON je.id = m.journal_entry_id
-       WHERE m.key = ? AND m.value = ? AND je.status != 'voided'
+       WHERE m.key = ? AND m.value = ? AND je.status != 'voided' AND je.source != 'system:void'
        ORDER BY je.date DESC`,
       [key, value],
       (row) => row.journal_entry_id as string,
@@ -4730,7 +4730,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
          END AS origin
        FROM line_item li
        JOIN journal_entry je ON li.journal_entry_id = je.id
-       WHERE je.status != 'voided'`,
+       WHERE je.status != 'voided' AND je.source != 'system:void'`,
       [],
       (row) => ({
         currency: row.currency as string,
@@ -4962,7 +4962,7 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
                FROM line_item li
                JOIN journal_entry je ON je.id = li.journal_entry_id
                WHERE li.account_id = ? AND li.currency = ? AND li.is_reconciled = 0
-                 AND je.status != 'voided'`;
+                 AND je.status != 'voided' AND je.source != 'system:void'`;
     const params: unknown[] = [accountId, currency];
     if (upToDate) {
       sql += " AND je.date <= ?";

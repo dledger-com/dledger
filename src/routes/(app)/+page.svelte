@@ -276,10 +276,13 @@
 
     // Stream 1: Recent entries (independent, fast single query)
     getBackend()
-      .queryJournalEntries({ limit: 25, order_by: "date", order_direction: "desc" })
+      .queryJournalEntries({ limit: 50, order_by: "date", order_direction: "desc" })
       .then((entries) => {
         if (signal.aborted) return;
-        const filtered = filterHiddenEntries(entries, hidden).slice(0, 10);
+        const visible = entries.filter(
+          ([e]) => e.status !== "voided" && e.source !== "system:void",
+        );
+        const filtered = filterHiddenEntries(visible, hidden).slice(0, 10);
         recentEntries = filtered;
         recentLoaded = true;
         loadStepsCompleted++;

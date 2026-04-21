@@ -849,7 +849,7 @@ impl Storage for TestStorage {
         let mut sql = format!(
             "SELECT li.currency, li.amount FROM line_item li
              JOIN journal_entry je ON je.id = li.journal_entry_id
-             WHERE li.account_id IN ({}) ",
+             WHERE li.account_id IN ({}) AND je.status != 'voided' AND je.source != 'system:void' ",
             placeholders.join(", ")
         );
         let mut param_values: Vec<String> =
@@ -1157,7 +1157,7 @@ impl Storage for TestStorage {
             "SELECT DISTINCT li.currency,
                CASE WHEN je.source LIKE 'etherscan:%' THEN 'etherscan' ELSE je.source END AS origin
              FROM line_item li JOIN journal_entry je ON li.journal_entry_id = je.id
-             WHERE je.status != 'voided'",
+             WHERE je.status != 'voided' AND je.source != 'system:void'",
         ).map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))

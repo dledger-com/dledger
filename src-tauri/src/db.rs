@@ -1051,12 +1051,13 @@ impl Storage for SqliteStorage {
             .collect();
 
         // Fetch raw amounts and sum with Decimal in Rust for precision
-        // Note: voided entries are NOT excluded - the reversing entry handles the correction
+        // Exclude both the voided original AND its reversal (source='system:void') so
+        // aggregations don't expose void activity while keeping totals balanced.
         let mut sql = format!(
             "SELECT li.currency, li.amount
              FROM line_item li
              JOIN journal_entry je ON je.id = li.journal_entry_id
-             WHERE li.account_id IN ({})",
+             WHERE li.account_id IN ({}) AND je.status != 'voided' AND je.source != 'system:void'",
             placeholders.join(", ")
         );
 
@@ -1233,7 +1234,7 @@ impl Storage for SqliteStorage {
                 "SELECT DISTINCT m.journal_entry_id
                  FROM journal_entry_metadata m
                  JOIN journal_entry je ON je.id = m.journal_entry_id
-                 WHERE m.key = ?1 AND m.value = ?2 AND je.status != 'voided'
+                 WHERE m.key = ?1 AND m.value = ?2 AND je.status != 'voided' AND je.source != 'system:void'
                  ORDER BY je.date DESC",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1297,7 +1298,7 @@ impl Storage for SqliteStorage {
             .prepare(
                 "SELECT el.journal_entry_id FROM entry_link el
                  JOIN journal_entry je ON je.id = el.journal_entry_id
-                 WHERE el.link_name = ?1 AND je.status != 'voided'
+                 WHERE el.link_name = ?1 AND je.status != 'voided' AND je.source != 'system:void'
                  ORDER BY je.date DESC",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
@@ -1334,7 +1335,7 @@ impl Storage for SqliteStorage {
                 "SELECT el.link_name, COUNT(DISTINCT el.journal_entry_id) as cnt
                  FROM entry_link el
                  JOIN journal_entry je ON je.id = el.journal_entry_id
-                 WHERE je.status != 'voided'
+                 WHERE je.status != 'voided' AND je.source != 'system:void'
                  GROUP BY el.link_name
                  ORDER BY el.link_name",
             )
@@ -1549,7 +1550,7 @@ impl Storage for SqliteStorage {
                    END AS origin
                  FROM line_item li
                  JOIN journal_entry je ON li.journal_entry_id = je.id
-                 WHERE je.status != 'voided'",
+                 WHERE je.status != 'voided' AND je.source != 'system:void'",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
         let rows = stmt
@@ -1764,7 +1765,7 @@ impl Storage for SqliteStorage {
             "SELECT li.id, je.id, je.date, je.description, li.account_id, li.currency, li.amount, li.is_reconciled
              FROM line_item li
              JOIN journal_entry je ON je.id = li.journal_entry_id
-             WHERE li.account_id = ?1 AND li.currency = ?2 AND je.status != 'voided' AND li.is_reconciled = 0{}
+             WHERE li.account_id = ?1 AND li.currency = ?2 AND je.status != 'voided' AND je.source != 'system:void' AND li.is_reconciled = 0{}
              ORDER BY je.date, je.id",
             date_clause
         );
