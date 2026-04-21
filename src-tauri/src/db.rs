@@ -837,10 +837,9 @@ impl Storage for SqliteStorage {
                  FROM journal_entry WHERE id = ?1",
             )
             .map_err(|e| StorageError::Internal(e.to_string()))?;
-        let refreshed = refreshed_stmt
+        refreshed_stmt
             .query_row(params![id.to_string()], |row| Ok(row_to_journal_entry(row)))
-            .map_err(|e| StorageError::Internal(e.to_string()))?;
-        refreshed
+            .map_err(|e| StorageError::Internal(e.to_string()))?
     }
 
     // -- Lots --
