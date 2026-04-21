@@ -538,8 +538,6 @@
   "import_accept_suggestions": "Accept {count} suggestions",
   "import_tags_for_all": "Tags for all:",
   "import_dup_badge": "dup",
-  "import_more_lines": "+{count} more",
-  "import_more_entries": "... and {count} more entries",
   "import_n_entries": "Import {count} entries",
   "import_select_placeholder": "-- select --",
   "import_none_placeholder": "-- none --",

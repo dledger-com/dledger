@@ -40,6 +40,7 @@
   import CategorizationRulesEditor from "./CategorizationRulesEditor.svelte";
   import * as m from "$paraglide/messages.js";
   import { serializeTags, parseTags, TAGS_META_KEY, tagColor } from "$lib/utils/tags.js";
+  import { createVirtualizer, measureItem } from "$lib/utils/virtual.svelte.js";
   import Upload from "lucide-svelte/icons/upload";
   import FileText from "lucide-svelte/icons/file-text";
   import Check from "lucide-svelte/icons/check";
@@ -94,6 +95,23 @@
 
   // -- Account list for inline editing --
   let accountPaths = $state<string[]>([]);
+
+  // -- Preview virtualizer: render all records, scroll instead of truncate --
+  let previewScrollEl = $state<HTMLDivElement | null>(null);
+  const previewVirtualizer = createVirtualizer(() => ({
+    count: previewRecords.length,
+    getScrollElement: () => previewScrollEl,
+    estimateSize: () => 80,
+    overscan: 8,
+  }));
+  const previewVirtualItems = $derived(previewVirtualizer.getVirtualItems());
+  const previewTotalSize = $derived(previewVirtualizer.getTotalSize());
+  const previewPaddingTop = $derived(previewVirtualItems.length > 0 ? previewVirtualItems[0].start : 0);
+  const previewPaddingBottom = $derived(
+    previewVirtualItems.length > 0
+      ? previewTotalSize - previewVirtualItems[previewVirtualItems.length - 1].end
+      : 0,
+  );
 
   async function fetchAccountPaths() {
     try {
@@ -571,10 +589,10 @@
             </details>
           {/if}
 
-          <!-- Entry preview table -->
-          <div class="overflow-x-auto">
+          <!-- Entry preview table (virtualized so every row is reachable) -->
+          <div bind:this={previewScrollEl} class="overflow-y-auto overflow-x-auto max-h-[60vh] [&_[data-slot=table-container]]:overflow-visible">
             <Table.Root>
-              <Table.Header>
+              <Table.Header class="sticky top-0 z-10 bg-background">
                 <Table.Row>
                   <Table.Head class="w-24">{m.label_date()}</Table.Head>
                   <Table.Head>{m.label_description()}</Table.Head>
@@ -583,16 +601,24 @@
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {#each previewRecords.slice(0, 50) as rec, recIdx}
+                {#if previewPaddingTop > 0}
+                  <tr><td style="height: {previewPaddingTop}px;" colspan="4"></td></tr>
+                {/if}
+                {#each previewVirtualItems as vi (vi.key)}
+                  {@const recIdx = vi.index}
+                  {@const rec = previewRecords[recIdx]}
                   {@const sum = rec.lines.reduce((s, l) => s + parseFloat(l.amount), 0)}
                   {@const balanced = Math.abs(sum) < 0.0001}
                   {@const dup = duplicateFlags[recIdx] ?? false}
                   {@const mlSuggestion = mlSuggestions.get(recIdx)}
                   {@const mlIsAccepted = mlAccepted.has(recIdx)}
                   {@const recTags = parseTags(rec.metadata?.[TAGS_META_KEY])}
-                  <Table.Row class={dup ? "opacity-40" : ""}>
-                    <Table.Cell class="font-mono text-xs">{rec.date}</Table.Cell>
-                    <Table.Cell class="text-xs max-w-[250px] whitespace-normal">
+                  <tr
+                    use:measureItem={{ virtualizer: previewVirtualizer, index: recIdx }}
+                    class="border-b transition-colors hover:bg-muted/50 {dup ? 'opacity-40' : ''}"
+                  >
+                    <td class="p-2 align-middle font-mono text-xs">{rec.date}</td>
+                    <td class="p-2 align-middle text-xs max-w-[250px] whitespace-normal">
                       <span>{rec.description}</span>
                       {#if rec.metadata?.["bank-category"]}<span class="text-muted-foreground ml-1">• {rec.metadata["bank-category"]}</span>{/if}
                       {#if rec.metadata?.["transaction-type"]}<Badge variant="secondary" class="ml-1 text-[10px] px-1 py-0 h-4">{rec.metadata["transaction-type"]}</Badge>{/if}
@@ -604,9 +630,9 @@
                           {/each}
                         </div>
                       {/if}
-                    </Table.Cell>
-                    <Table.Cell class="text-xs whitespace-normal">
-                      {#each rec.lines.slice(0, 4) as line, lineIdx}
+                    </td>
+                    <td class="p-2 align-middle text-xs whitespace-normal">
+                      {#each rec.lines as line, lineIdx}
                         <div class="flex gap-1 items-center">
                           <AccountCombobox
                             value={line.account}
@@ -618,9 +644,6 @@
                           </span>
                         </div>
                       {/each}
-                      {#if rec.lines.length > 4}
-                        <span class="text-muted-foreground text-xs">{m.import_more_lines({ count: String(rec.lines.length - 4) })}</span>
-                      {/if}
                       {#if mlSuggestion}
                         <button
                           class="flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs cursor-pointer {mlIsAccepted ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-muted text-muted-foreground line-through'}"
@@ -639,22 +662,18 @@
                           </div>
                         {/if}
                       {/if}
-                    </Table.Cell>
-                    <Table.Cell class="text-center">
+                    </td>
+                    <td class="p-2 align-middle text-center">
                       {#if balanced}
                         <Check class="h-4 w-4 text-green-500 mx-auto" />
                       {:else}
                         <CircleAlert class="h-4 w-4 text-red-500 mx-auto" />
                       {/if}
-                    </Table.Cell>
-                  </Table.Row>
+                    </td>
+                  </tr>
                 {/each}
-                {#if previewRecords.length > 50}
-                  <Table.Row>
-                    <Table.Cell colspan={4} class="text-center text-xs text-muted-foreground py-2">
-                      {m.import_more_entries({ count: String(previewRecords.length - 50) })}
-                    </Table.Cell>
-                  </Table.Row>
+                {#if previewPaddingBottom > 0}
+                  <tr><td style="height: {previewPaddingBottom}px;" colspan="4"></td></tr>
                 {/if}
               </Table.Body>
             </Table.Root>

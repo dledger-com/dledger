@@ -54,3 +54,22 @@ export function createVirtualizer(opts: () => Omit<Options, "observeElementOffse
     },
   });
 }
+
+/**
+ * Svelte action: wire a rendered row element into the virtualizer so it
+ * reports its true height (needed when row heights vary). TanStack uses
+ * the `data-index` attribute to associate the element with a virtual row.
+ */
+export function measureItem(
+  el: HTMLElement,
+  params: { virtualizer: Virtualizer<HTMLElement, Element>; index: number },
+) {
+  el.dataset.index = String(params.index);
+  params.virtualizer.measureElement(el);
+  return {
+    update(next: { virtualizer: Virtualizer<HTMLElement, Element>; index: number }) {
+      el.dataset.index = String(next.index);
+      next.virtualizer.measureElement(el);
+    },
+  };
+}
