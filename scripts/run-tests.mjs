@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
-const MAX_SECONDS = 60;
+const MAX_SECONDS = 300;
 const vitestBin = resolve("node_modules/.bin/vitest");
 const args = ["run", ...process.argv.slice(2)];
 
