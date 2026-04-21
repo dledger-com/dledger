@@ -159,6 +159,21 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/stellar/, ''),
       },
+      '/api/waves': {
+        target: 'https://nodes.wavesnodes.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/waves/, ''),
+      },
+      '/api/wanchain-rpc': {
+        target: 'https://gwan-ssl.wandevs.org:56891',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/wanchain-rpc/, ''),
+      },
+      '/api/wanchain-tokenview': {
+        target: 'https://services.tokenview.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/wanchain-tokenview/, ''),
+      },
       '/api/bittensor': {
         target: 'https://bittensor.api.subscan.io',
         changeOrigin: true,

@@ -171,10 +171,15 @@ describe("syncPluginChain", () => {
     });
 
     const ext = makeExt({
-      fetchTransactions: async () => ({
-        transactions: [{ id: "tx1", timestamp: 1704067200, data: {} }],
-        nextCursor: "cursor-after-page1",
-      }),
+      fetchTransactions: async (_addr, cursor) => {
+        if (!cursor) {
+          return {
+            transactions: [{ id: "tx1", timestamp: 1704067200, data: {} }],
+            nextCursor: "cursor-after-page1",
+          };
+        }
+        return { transactions: [], nextCursor: null };
+      },
       processTransaction: (tx) => ({
         source: `test-chain:${tx.id}`,
         date: "2025-01-01",

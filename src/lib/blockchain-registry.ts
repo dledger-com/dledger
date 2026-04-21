@@ -81,6 +81,8 @@ import { detectStacksInputType, deriveStacksAddresses } from "./stacks/derive-js
 import { detectCardanoInputType, deriveCardanoAddresses } from "./cardano/derive-js.js";
 import { detectMoneroInputType, deriveMoneroAddresses } from "./monero/derive-js.js";
 import { detectBitsharesInputType } from "./bitshares/derive-js.js";
+import { detectWavesInputType } from "./waves/derive-js.js";
+import { detectWanchainInputType } from "./wanchain/derive-js.js";
 
 export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 	// Algorand
@@ -403,6 +405,29 @@ export const BLOCKCHAIN_CHAINS: BlockchainConfig[] = [
 		checkActivity: getActivityChecker("tron") ?? undefined,
 		generic: true,
 		syncFn: async (b, a, st, p, s) => { const { syncTronAccount } = await import("./tron/sync.js"); return syncTronAccount(b, a, p, s); },
+	},
+	// Wanchain (EVM-compatible L1, chainId 888 — not Etherscan V2 compatible)
+	{
+		id: "wanchain", name: "Wanchain", symbol: "WAN",
+		addressRegex: /^0x[a-fA-F0-9]{40}$/,
+		addressPlaceholder: "0x...", addressSlicePrefix: 6, addressSliceSuffix: 4, caseSensitive: false,
+		backendList: "listWanchainAccounts", backendAdd: "addWanchainAccount", backendRemove: "removeWanchainAccount",
+		backendUpdateLabel: "updateWanchainAccountLabel", backendSync: "syncWanchain", syncTaskPrefix: "wanchain-sync",
+		detectInput: detectWanchainInputType,
+		deriveAddresses: (m, c, p, s) => deriveEvmAddressesFromSeed(m, c, p, s),
+		generic: true,
+		syncFn: async (b, a, st, p, s) => { const { syncWanchainAccount } = await import("./wanchain/sync.js"); return syncWanchainAccount(b, a, st, p, s); },
+	},
+	// Waves
+	{
+		id: "waves", name: "Waves", symbol: "WAVES",
+		addressRegex: /^3P[1-9A-HJ-NP-Za-km-z]{33}$/,
+		addressPlaceholder: "3P...", addressSlicePrefix: 8, addressSliceSuffix: 4, caseSensitive: true,
+		backendList: "listWavesAccounts", backendAdd: "addWavesAccount", backendRemove: "removeWavesAccount",
+		backendUpdateLabel: "updateWavesAccountLabel", backendSync: "syncWaves", syncTaskPrefix: "waves-sync",
+		detectInput: detectWavesInputType, deriveAddresses: null,
+		generic: true,
+		syncFn: async (b, a, _st, p, s) => { const { syncWavesAccount } = await import("./waves/sync.js"); return syncWavesAccount(b, a, p, s); },
 	},
 	// XRP
 	{
