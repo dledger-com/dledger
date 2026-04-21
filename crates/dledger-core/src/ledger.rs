@@ -718,6 +718,25 @@ impl LedgerEngine {
         Ok(())
     }
 
+    // --- ML reference examples ---
+
+    pub fn list_ml_reference_examples(&self) -> LedgerResult<Vec<MlReferenceExample>> {
+        Ok(self.storage.list_ml_reference_examples()?)
+    }
+
+    pub fn upsert_ml_reference_examples(
+        &self,
+        examples: &[MlReferenceExample],
+    ) -> LedgerResult<()> {
+        self.storage.upsert_ml_reference_examples(examples)?;
+        Ok(())
+    }
+
+    pub fn clear_ml_reference_examples(&self) -> LedgerResult<()> {
+        self.storage.clear_ml_reference_examples()?;
+        Ok(())
+    }
+
     // --- Budgets ---
 
     pub fn create_budget(&self, budget: &Budget) -> LedgerResult<()> {

@@ -1,6 +1,6 @@
 /// SQL schema for dledger. Shared between native (rusqlite) and browser (wa-sqlite).
 /// All decimal amounts stored as TEXT. UUID v7 primary keys stored as TEXT.
-pub const SCHEMA_VERSION: u32 = 20;
+pub const SCHEMA_VERSION: u32 = 21;
 
 pub const SCHEMA_SQL: &str = r#"
 -- Schema version tracking
@@ -279,6 +279,19 @@ CREATE TABLE IF NOT EXISTS french_tax_report (
     report_json TEXT NOT NULL
 );
 
+-- ML classification reference examples (v21) — distilled (description → account)
+-- mappings used by the classifier alongside live history. Portable across ledgers.
+CREATE TABLE IF NOT EXISTS ml_reference_example (
+    id TEXT PRIMARY KEY NOT NULL,
+    description TEXT NOT NULL,
+    account_path TEXT NOT NULL,
+    tags TEXT,
+    source TEXT NOT NULL DEFAULT 'imported',
+    created_at TEXT NOT NULL,
+    UNIQUE(description, account_path)
+);
+CREATE INDEX IF NOT EXISTS idx_ml_ref_account ON ml_reference_example(account_path);
+
 -- Enable WAL mode and foreign keys
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -301,6 +314,21 @@ CREATE INDEX IF NOT EXISTS idx_metadata_key_value ON journal_entry_metadata(key,
 pub const MIGRATION_V20: &str = r#"
 ALTER TABLE exchange_account ADD COLUMN opened_at TEXT;
 ALTER TABLE exchange_account ADD COLUMN closed_at TEXT;
+"#;
+
+/// Migration v21: add ml_reference_example table for portable ML
+/// classification signal (distilled description → account mappings).
+pub const MIGRATION_V21: &str = r#"
+CREATE TABLE IF NOT EXISTS ml_reference_example (
+    id TEXT PRIMARY KEY NOT NULL,
+    description TEXT NOT NULL,
+    account_path TEXT NOT NULL,
+    tags TEXT,
+    source TEXT NOT NULL DEFAULT 'imported',
+    created_at TEXT NOT NULL,
+    UNIQUE(description, account_path)
+);
+CREATE INDEX IF NOT EXISTS idx_ml_ref_account ON ml_reference_example(account_path);
 "#;
 
 pub const MIGRATION_V19: &str = r#"

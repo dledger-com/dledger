@@ -728,6 +728,37 @@ pub fn delete_budget(state: State<'_, AppState>, id: Uuid) -> Result<(), String>
     state.engine.delete_budget(&id).map_err(|e| e.to_string())
 }
 
+// -- ML reference example commands --
+
+#[tauri::command]
+pub fn list_ml_reference_examples(
+    state: State<'_, AppState>,
+) -> Result<Vec<MlReferenceExample>, String> {
+    state
+        .engine
+        .list_ml_reference_examples()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn upsert_ml_reference_examples(
+    state: State<'_, AppState>,
+    examples: Vec<MlReferenceExample>,
+) -> Result<(), String> {
+    state
+        .engine
+        .upsert_ml_reference_examples(&examples)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_ml_reference_examples(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .engine
+        .clear_ml_reference_examples()
+        .map_err(|e| e.to_string())
+}
+
 // -- Reconciliation commands --
 
 #[tauri::command]

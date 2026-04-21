@@ -1098,6 +1098,11 @@ impl Storage for TestStorage {
     fn list_french_tax_report_years(&self) -> StorageResult<Vec<i32>> { Ok(vec![]) }
     fn delete_french_tax_report(&self, _tax_year: i32) -> StorageResult<()> { Ok(()) }
     fn repair_database(&self) -> StorageResult<Vec<String>> { Ok(vec![]) }
+
+    // -- ML reference examples (stub) --
+    fn list_ml_reference_examples(&self) -> StorageResult<Vec<MlReferenceExample>> { Ok(vec![]) }
+    fn upsert_ml_reference_examples(&self, _examples: &[MlReferenceExample]) -> StorageResult<()> { Ok(()) }
+    fn clear_ml_reference_examples(&self) -> StorageResult<()> { Ok(()) }
 }
 
 // ============================================================================

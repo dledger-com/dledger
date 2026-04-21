@@ -18,6 +18,7 @@ import type {
   BalanceAssertionResult,
   OpenLot,
   Budget,
+  MlReferenceExample,
 } from "./types/index.js";
 import type { BitcoinAccount, BitcoinSyncResult } from "./bitcoin/types.js";
 import type { ExchangeAccount } from "./cex/types.js";
@@ -298,6 +299,12 @@ export interface Backend {
   saveCustomPlugin(plugin: CustomPluginRecord): Promise<void>;
   deleteCustomPlugin(id: string): Promise<void>;
   setCustomPluginEnabled(id: string, enabled: boolean): Promise<void>;
+
+  // ML reference examples — distilled (description → account) mappings
+  // used by the classifier alongside live journal history. Portable across ledgers.
+  listMlReferenceExamples(): Promise<MlReferenceExample[]>;
+  upsertMlReferenceExamples(examples: MlReferenceExample[]): Promise<void>;
+  clearMlReferenceExamples(): Promise<void>;
 
   // Database repair
   repairDatabase(): Promise<string[]>;
@@ -799,6 +806,17 @@ class TauriBackend implements Backend {
   async saveCustomPlugin(_plugin: CustomPluginRecord): Promise<void> { /* noop */ }
   async deleteCustomPlugin(_id: string): Promise<void> { /* noop */ }
   async setCustomPluginEnabled(_id: string, _enabled: boolean): Promise<void> { /* noop */ }
+
+  // ML reference examples
+  async listMlReferenceExamples(): Promise<MlReferenceExample[]> {
+    return this.invoke("list_ml_reference_examples");
+  }
+  async upsertMlReferenceExamples(examples: MlReferenceExample[]): Promise<void> {
+    return this.invoke("upsert_ml_reference_examples", { examples });
+  }
+  async clearMlReferenceExamples(): Promise<void> {
+    return this.invoke("clear_ml_reference_examples");
+  }
 }
 
 // Store backend on globalThis so it survives Vite HMR module replacement.

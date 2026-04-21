@@ -1,13 +1,21 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { getBackend } from "$lib/backend.js";
   import { importData } from "$lib/export/import.js";
   import { deserializeExport } from "$lib/export/format.js";
-  import type { ExportHeader, ExportManifest, ImportMode, ImportProgress } from "$lib/export/types.js";
+  import {
+    defaultImportSelection,
+    type ExportHeader,
+    type ExportManifest,
+    type ImportMode,
+    type ImportProgress,
+    type ImportSelection,
+  } from "$lib/export/types.js";
   import { toast } from "svelte-sonner";
   import { invalidate } from "$lib/data/invalidation.js";
   import Upload from "lucide-svelte/icons/upload";
@@ -16,6 +24,8 @@
   import EyeOff from "lucide-svelte/icons/eye-off";
   import Loader from "lucide-svelte/icons/loader";
   import CircleAlert from "lucide-svelte/icons/circle-alert";
+  import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import ChevronRight from "lucide-svelte/icons/chevron-right";
   import { unzipSync, strFromU8 } from "fflate";
   import { decrypt } from "$lib/export/encrypt.js";
 
@@ -30,19 +40,18 @@
   // Steps: "select" | "passphrase" | "preview" | "importing"
   let step = $state<"select" | "passphrase" | "preview" | "importing">("select");
 
-  // File state
   let fileName = $state("");
   let fileBytes = $state<Uint8Array | null>(null);
   let header = $state<ExportHeader | null>(null);
   let manifest = $state<ExportManifest | null>(null);
+  let archiveFiles = $state<Record<string, Uint8Array> | null>(null);
 
-  // Options
   let passphrase = $state("");
   let showPassphrase = $state(false);
   let mode = $state<ImportMode>("replace");
-  let importSettings = $state(true);
+  let selection = $state<ImportSelection>(defaultImportSelection());
+  let advancedOpen = $state(false);
 
-  // Progress
   let importing = $state(false);
   let progress = $state<ImportProgress | null>(null);
   let error = $state("");
@@ -53,10 +62,12 @@
     fileBytes = null;
     header = null;
     manifest = null;
+    archiveFiles = null;
     passphrase = "";
     showPassphrase = false;
     mode = "replace";
-    importSettings = true;
+    selection = defaultImportSelection();
+    advancedOpen = false;
     importing = false;
     progress = null;
     error = "";
@@ -90,8 +101,8 @@
       if (header.encrypted) {
         step = "passphrase";
       } else {
-        // Extract manifest directly from unencrypted payload
-        await extractManifest(result.payload);
+        await extractArchive(result.payload);
+        applyManifestToSelection();
         step = "preview";
       }
     } catch (e) {
@@ -99,15 +110,39 @@
     }
   }
 
-  async function extractManifest(zipBytes: Uint8Array) {
+  async function extractArchive(zipBytes: Uint8Array) {
     try {
       const files = unzipSync(zipBytes);
+      archiveFiles = files;
       if (files["manifest.json"]) {
         manifest = JSON.parse(strFromU8(files["manifest.json"]));
       }
     } catch {
       error = "Failed to extract manifest from archive.";
     }
+  }
+
+  /** Disable selection flags whose category isn't present in the archive. */
+  function applyManifestToSelection() {
+    if (!archiveFiles) return;
+    const next = defaultImportSelection();
+    next.accounts = !!archiveFiles["accounts.json"];
+    next.journal = !!archiveFiles["journal.json"];
+    next.currencies = !!archiveFiles["currencies.json"];
+    next.exchangeRates = !!archiveFiles["exchange-rates.json"];
+    next.budgets = !!archiveFiles["budgets.json"];
+    next.reconciliations = !!archiveFiles["reconciliations.json"];
+    next.sources = !!archiveFiles["sources.json"];
+    next.rawTransactions = !!archiveFiles["raw-transactions.json"];
+    next.plugins = !!archiveFiles["plugins.json"];
+    next.settings = !!archiveFiles["settings.json"];
+    next.mlExamples = !!archiveFiles["ml-reference.json"];
+    next.mlClassification = next.mlExamples || next.settings;
+    // mlRules / mlSettings ride inside settings.json
+    next.mlRules = next.settings;
+    next.mlSettings = next.settings;
+    next.apiKeys = false; // never auto-enable secrets
+    selection = next;
   }
 
   async function handleDecryptAndPreview() {
@@ -122,7 +157,8 @@
         header.encryption.saltBase64,
         header.encryption.ivBase64,
       );
-      await extractManifest(zipBytes);
+      await extractArchive(zipBytes);
+      applyManifestToSelection();
       step = "preview";
     } catch {
       error = "Decryption failed. Wrong passphrase?";
@@ -143,7 +179,7 @@
         {
           passphrase: passphrase || undefined,
           mode,
-          importSettings,
+          selection,
         },
         (p) => { progress = { ...p }; },
       );
@@ -156,6 +192,7 @@
       if (result.currencies_imported > 0) parts.push(`${result.currencies_imported} currencies`);
       if (result.rates_imported > 0) parts.push(`${result.rates_imported} rates`);
       if (result.plugins_imported > 0) parts.push(`${result.plugins_imported} plugins`);
+      if (result.ml_references_imported > 0) parts.push(`${result.ml_references_imported} ML refs`);
       const summary = parts.length > 0 ? `Imported ${parts.join(", ")}` : "Import complete (no new data)";
       if (result.skipped > 0) {
         toast.success(`${summary}. ${result.skipped} skipped.`);
@@ -190,10 +227,25 @@
       ? Math.round((progress.current / progress.total) * 100)
       : 0,
   );
+
+  // Availability: disable checkboxes whose artifact isn't in the archive.
+  let avail = $derived(() => ({
+    accounts: !!archiveFiles?.["accounts.json"],
+    journal: !!archiveFiles?.["journal.json"],
+    currencies: !!archiveFiles?.["currencies.json"],
+    exchangeRates: !!archiveFiles?.["exchange-rates.json"],
+    budgets: !!archiveFiles?.["budgets.json"],
+    reconciliations: !!archiveFiles?.["reconciliations.json"],
+    sources: !!archiveFiles?.["sources.json"],
+    rawTransactions: !!archiveFiles?.["raw-transactions.json"],
+    plugins: !!archiveFiles?.["plugins.json"],
+    settings: !!archiveFiles?.["settings.json"],
+    mlExamples: !!archiveFiles?.["ml-reference.json"],
+  }));
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-[520px]">
+  <Dialog.Content class="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>Import .dledger file</Dialog.Title>
       <Dialog.Description>
@@ -290,7 +342,6 @@
           {/if}
         </div>
 
-        <!-- Manifest summary -->
         {#if manifest}
           <div class="rounded-md border bg-muted/30 p-3 space-y-2">
             <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contents</h4>
@@ -315,14 +366,14 @@
             <Button
               size="sm"
               variant={mode === "replace" ? "default" : "outline"}
-              onclick={() => { mode = "replace"; importSettings = true; }}
+              onclick={() => { mode = "replace"; }}
             >
               Replace all data
             </Button>
             <Button
               size="sm"
               variant={mode === "merge-skip" ? "default" : "outline"}
-              onclick={() => { mode = "merge-skip"; importSettings = false; }}
+              onclick={() => { mode = "merge-skip"; }}
             >
               Merge (skip conflicts)
             </Button>
@@ -334,11 +385,103 @@
           {/if}
         </div>
 
-        <!-- Import settings checkbox -->
-        <label class="flex items-center gap-2 text-sm">
-          <Checkbox bind:checked={importSettings} />
-          Import settings
-        </label>
+        <!-- Primary toggles -->
+        <div class="space-y-3">
+          <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().settings}>
+            <Checkbox bind:checked={selection.settings} disabled={!avail().settings} />
+            <span>Import settings</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().mlExamples && !avail().settings}>
+            <Checkbox
+              bind:checked={selection.mlClassification}
+              disabled={!avail().mlExamples && !avail().settings}
+            />
+            <span>Import ML classification data</span>
+          </label>
+        </div>
+
+        <!-- Advanced -->
+        <Collapsible.Root bind:open={advancedOpen}>
+          <Collapsible.Trigger
+            class="flex w-full items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            {#if advancedOpen}
+              <ChevronDown class="h-4 w-4" />
+            {:else}
+              <ChevronRight class="h-4 w-4" />
+            {/if}
+            Advanced
+          </Collapsible.Trigger>
+          <Collapsible.Content class="pt-3">
+            <div class="space-y-4 border-l-2 border-muted pl-4">
+              <div class="space-y-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ledger data</p>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().accounts}>
+                  <Checkbox bind:checked={selection.accounts} disabled={!avail().accounts} /> Accounts
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().journal}>
+                  <Checkbox bind:checked={selection.journal} disabled={!avail().journal} /> Journal entries
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().currencies}>
+                  <Checkbox bind:checked={selection.currencies} disabled={!avail().currencies} /> Currencies
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().exchangeRates}>
+                  <Checkbox bind:checked={selection.exchangeRates} disabled={!avail().exchangeRates} /> Exchange rates
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().budgets}>
+                  <Checkbox bind:checked={selection.budgets} disabled={!avail().budgets} /> Budgets
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().reconciliations}>
+                  <Checkbox bind:checked={selection.reconciliations} disabled={!avail().reconciliations} /> Reconciliations
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().sources}>
+                  <Checkbox bind:checked={selection.sources} disabled={!avail().sources} /> Sources
+                </label>
+              </div>
+
+              <div class="space-y-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Optional</p>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().rawTransactions}>
+                  <Checkbox bind:checked={selection.rawTransactions} disabled={!avail().rawTransactions} /> Raw transaction data
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().plugins}>
+                  <Checkbox bind:checked={selection.plugins} disabled={!avail().plugins} /> Custom plugins
+                </label>
+                <label class="flex items-center gap-2 text-sm" class:opacity-50={!avail().settings}>
+                  <Checkbox bind:checked={selection.apiKeys} disabled={!avail().settings} /> Import API keys
+                </label>
+              </div>
+
+              <div class="space-y-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ML classification</p>
+                <label class="flex items-center gap-2 text-sm"
+                  class:opacity-50={!selection.mlClassification || !avail().settings}>
+                  <Checkbox
+                    bind:checked={selection.mlRules}
+                    disabled={!selection.mlClassification || !avail().settings}
+                  />
+                  Categorization rules
+                </label>
+                <label class="flex items-center gap-2 text-sm"
+                  class:opacity-50={!selection.mlClassification || !avail().mlExamples}>
+                  <Checkbox
+                    bind:checked={selection.mlExamples}
+                    disabled={!selection.mlClassification || !avail().mlExamples}
+                  />
+                  Distilled historical examples & tags
+                </label>
+                <label class="flex items-center gap-2 text-sm"
+                  class:opacity-50={!selection.mlClassification || !avail().settings}>
+                  <Checkbox
+                    bind:checked={selection.mlSettings}
+                    disabled={!selection.mlClassification || !avail().settings}
+                  />
+                  ML settings
+                </label>
+              </div>
+            </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
 
         {#if error}
           <div class="flex items-center gap-2 text-sm text-destructive">
@@ -367,7 +510,6 @@
           <span>{progress ? formatPhase(progress) : "Starting import..."}</span>
         </div>
 
-        <!-- Progress bar -->
         <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
           <div
             class="h-full bg-primary transition-all duration-300"

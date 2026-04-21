@@ -27,6 +27,7 @@ import type {
   CurrencyOrigin,
   BalanceAssertion,
   BalanceAssertionResult,
+  MlReferenceExample,
 } from "./types/index.js";
 import type { Backend, CurrencyRateOverride, RateFetchFailure, Reconciliation, UnreconciledLineItem } from "./backend.js";
 import type { PersistedFrenchTaxReport, FrenchTaxReport } from "./utils/french-tax.js";
@@ -517,7 +518,20 @@ export class SqlJsBackend implements Backend {
       extra TEXT
     )`);
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blockchain_account_chain_addr ON blockchain_account(chain, address)");
-    db.exec("INSERT INTO schema_version (version) VALUES (38)");
+    // ML classification reference examples (v39) — distilled description→account
+    // mappings independent of journal entries. Feeds the classifier alongside
+    // live history so the signal can be exported/imported without transactions.
+    db.exec(`CREATE TABLE IF NOT EXISTS ml_reference_example (
+      id TEXT PRIMARY KEY NOT NULL,
+      description TEXT NOT NULL,
+      account_path TEXT NOT NULL,
+      tags TEXT,
+      source TEXT NOT NULL DEFAULT 'imported',
+      created_at TEXT NOT NULL,
+      UNIQUE(description, account_path)
+    )`);
+    db.exec("CREATE INDEX IF NOT EXISTS idx_ml_ref_account ON ml_reference_example(account_path)");
+    db.exec("INSERT INTO schema_version (version) VALUES (39)");
   }
 
   static async createInMemory(): Promise<SqlJsBackend> {
@@ -1508,6 +1522,20 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
 
           db.exec("DELETE FROM schema_version");
           db.exec("INSERT INTO schema_version (version) VALUES (38)");
+        }
+        if (currentVersion < 39) {
+          db.exec(`CREATE TABLE IF NOT EXISTS ml_reference_example (
+            id TEXT PRIMARY KEY NOT NULL,
+            description TEXT NOT NULL,
+            account_path TEXT NOT NULL,
+            tags TEXT,
+            source TEXT NOT NULL DEFAULT 'imported',
+            created_at TEXT NOT NULL,
+            UNIQUE(description, account_path)
+          )`);
+          db.exec("CREATE INDEX IF NOT EXISTS idx_ml_ref_account ON ml_reference_example(account_path)");
+          db.exec("DELETE FROM schema_version");
+          db.exec("INSERT INTO schema_version (version) VALUES (39)");
         }
       }
     }
@@ -5448,6 +5476,58 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
       "UPDATE custom_plugin SET enabled = ?, updated_at = ? WHERE id = ?",
       [enabled ? 1 : 0, new Date().toISOString(), id],
     );
+    this.scheduleSave();
+  }
+
+  // ML reference examples — distilled (description → account) mappings
+  // used by the classifier in addition to live journal history. Export/import
+  // carries these so the ML signal can survive a ledger wipe.
+  async listMlReferenceExamples(): Promise<MlReferenceExample[]> {
+    return this.query(
+      "SELECT id, description, account_path, tags, source, created_at FROM ml_reference_example ORDER BY account_path, description",
+      [],
+      (row) => {
+        const rawTags = row.tags as string | null;
+        let tags: string[] | null = null;
+        if (rawTags) {
+          try { tags = JSON.parse(rawTags) as string[]; } catch { tags = null; }
+        }
+        return {
+          id: row.id as string,
+          description: row.description as string,
+          account_path: row.account_path as string,
+          tags,
+          source: (row.source as "imported" | "user") ?? "imported",
+          created_at: row.created_at as string,
+        };
+      },
+    );
+  }
+
+  async upsertMlReferenceExamples(examples: MlReferenceExample[]): Promise<void> {
+    if (examples.length === 0) return;
+    const stmt = this.db.prepare(
+      `INSERT INTO ml_reference_example (id, description, account_path, tags, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(description, account_path) DO UPDATE SET
+         tags = excluded.tags,
+         source = excluded.source`,
+    );
+    try {
+      for (const ex of examples) {
+        const tagsJson = ex.tags && ex.tags.length > 0 ? JSON.stringify(ex.tags) : null;
+        stmt.bind([ex.id, ex.description, ex.account_path, tagsJson, ex.source, ex.created_at]);
+        stmt.step();
+        stmt.reset();
+      }
+    } finally {
+      stmt.free();
+    }
+    this.scheduleSave();
+  }
+
+  async clearMlReferenceExamples(): Promise<void> {
+    this.run("DELETE FROM ml_reference_example", []);
     this.scheduleSave();
   }
 }

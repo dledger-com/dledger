@@ -40,8 +40,9 @@ export function applyRuleTags(records: CsvRecord[], rules: CsvCategorizationRule
 }
 
 /**
- * Build historical tag examples from past confirmed journal entries.
- * Returns entries that have tags, with their description and tags array.
+ * Build historical tag examples from past confirmed journal entries,
+ * merged with ml_reference_example rows that carry tags. Reference rows
+ * survive ledger wipes and cross-ledger imports; entries do not.
  */
 export async function buildHistoricalTagExamples(
   backend: Backend,
@@ -52,7 +53,9 @@ export async function buildHistoricalTagExamples(
     limit: maxEntries,
   });
 
+  const seen = new Set<string>();
   const results: { description: string; tags: string[] }[] = [];
+
   for (const [entry] of entries) {
     if (!entry.description) continue;
     const meta = await backend.getMetadata(entry.id);
@@ -60,9 +63,21 @@ export async function buildHistoricalTagExamples(
     if (!tagValue) continue;
     const tags = parseTags(tagValue);
     if (tags.length > 0) {
+      seen.add(entry.description);
       results.push({ description: entry.description, tags });
     }
   }
+
+  try {
+    const refs = await backend.listMlReferenceExamples();
+    for (const ref of refs) {
+      if (!ref.tags || ref.tags.length === 0) continue;
+      if (seen.has(ref.description)) continue;
+      seen.add(ref.description);
+      results.push({ description: ref.description, tags: ref.tags });
+    }
+  } catch { /* backend without ML reference support — ignore */ }
+
   return results;
 }
 
@@ -110,6 +125,23 @@ export async function buildHistoricalExamples(
       }
     }
   }
+
+  // Merge ml_reference_example rows: each distilled (description → account)
+  // pair counts just like a real historical posting. Respects maxPerAccount.
+  try {
+    const refs = await backend.listMlReferenceExamples();
+    for (const ref of refs) {
+      if (!ref.description || !ref.account_path) continue;
+      let descs = descsByAccount.get(ref.account_path);
+      if (!descs) {
+        descs = new Set<string>();
+        descsByAccount.set(ref.account_path, descs);
+      }
+      if (descs.size < maxPerAccount) {
+        descs.add(ref.description);
+      }
+    }
+  } catch { /* backend without ML reference support — ignore */ }
 
   const result: HistoricalExample[] = [];
   for (const [account, descs] of descsByAccount) {

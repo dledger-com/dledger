@@ -385,3 +385,19 @@ pub struct RecurringTemplate {
     pub line_items_json: String,
     pub created_at: NaiveDate,
 }
+
+/// ML classification reference example — a distilled (description → account)
+/// mapping independent of any journal entry. Feeds the classifier alongside
+/// live journal history so the signal can be exported/imported without
+/// transactions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MlReferenceExample {
+    pub id: Uuid,
+    pub description: String,
+    pub account_path: String,
+    /// JSON-encoded array of tag strings, or None.
+    pub tags: Option<Vec<String>>,
+    /// "imported" | "user"
+    pub source: String,
+    pub created_at: String,
+}

@@ -292,6 +292,12 @@ pub trait Storage: Send + Sync {
     fn get_currency_token_addresses(&self) -> StorageResult<Vec<(String, String, String)>>; // (currency, chain, contract_address)
     fn get_currency_token_address(&self, currency: &str) -> StorageResult<Option<(String, String)>>; // (chain, contract_address)
 
+    // -- ML reference examples --
+
+    fn list_ml_reference_examples(&self) -> StorageResult<Vec<MlReferenceExample>>;
+    fn upsert_ml_reference_examples(&self, examples: &[MlReferenceExample]) -> StorageResult<()>;
+    fn clear_ml_reference_examples(&self) -> StorageResult<()>;
+
     // -- Schema --
 
     fn execute_sql(&self, sql: &str) -> StorageResult<()>;

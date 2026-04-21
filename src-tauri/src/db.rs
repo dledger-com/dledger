@@ -10,7 +10,7 @@ use uuid::Uuid;
 static SAVEPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use dledger_core::models::*;
-use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, MIGRATION_V18, MIGRATION_V19, MIGRATION_V20, SCHEMA_SQL, SCHEMA_VERSION};
+use dledger_core::schema::{MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V13, MIGRATION_V14, MIGRATION_V15, MIGRATION_V16, MIGRATION_V17, MIGRATION_V18, MIGRATION_V19, MIGRATION_V20, MIGRATION_V21, SCHEMA_SQL, SCHEMA_VERSION};
 use dledger_core::storage::*;
 
 pub struct SqliteStorage {
@@ -2600,6 +2600,86 @@ impl Storage for SqliteStorage {
         .map_err(|e| StorageError::Internal(e.to_string()))?;
         Ok(())
     }
+
+    fn list_ml_reference_examples(&self) -> StorageResult<Vec<MlReferenceExample>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, description, account_path, tags, source, created_at \
+                 FROM ml_reference_example ORDER BY account_path, description",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                let id_str: String = row.get(0)?;
+                let description: String = row.get(1)?;
+                let account_path: String = row.get(2)?;
+                let tags_json: Option<String> = row.get(3)?;
+                let source: String = row.get(4)?;
+                let created_at: String = row.get(5)?;
+                Ok((id_str, description, account_path, tags_json, source, created_at))
+            })
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            let (id_str, description, account_path, tags_json, source, created_at) =
+                row.map_err(|e| StorageError::Internal(e.to_string()))?;
+            let id = Uuid::parse_str(&id_str)
+                .map_err(|e| StorageError::Internal(format!("bad uuid: {e}")))?;
+            let tags: Option<Vec<String>> = match tags_json {
+                Some(s) if !s.is_empty() => serde_json::from_str(&s).ok(),
+                _ => None,
+            };
+            out.push(MlReferenceExample {
+                id,
+                description,
+                account_path,
+                tags,
+                source,
+                created_at,
+            });
+        }
+        Ok(out)
+    }
+
+    fn upsert_ml_reference_examples(&self, examples: &[MlReferenceExample]) -> StorageResult<()> {
+        if examples.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn.borrow();
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO ml_reference_example (id, description, account_path, tags, source, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
+                 ON CONFLICT(description, account_path) DO UPDATE SET \
+                   tags = excluded.tags, source = excluded.source",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        for ex in examples {
+            let tags_json: Option<String> = match &ex.tags {
+                Some(v) if !v.is_empty() => serde_json::to_string(v).ok(),
+                _ => None,
+            };
+            stmt.execute(params![
+                ex.id.to_string(),
+                ex.description,
+                ex.account_path,
+                tags_json,
+                ex.source,
+                ex.created_at,
+            ])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    fn clear_ml_reference_examples(&self) -> StorageResult<()> {
+        let conn = self.conn.borrow();
+        conn.execute("DELETE FROM ml_reference_example", [])
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        Ok(())
+    }
 }
 
 /// Apply migrations to the database.
@@ -2716,6 +2796,10 @@ pub fn apply_migrations(storage: &SqliteStorage) -> StorageResult<()> {
         if current < 20 {
             let _ = storage.execute_sql(MIGRATION_V20);
             storage.set_schema_version(20)?;
+        }
+        if current < 21 {
+            let _ = storage.execute_sql(MIGRATION_V21);
+            storage.set_schema_version(21)?;
         }
     }
     Ok(())

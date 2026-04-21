@@ -194,3 +194,12 @@ export interface BudgetReport {
   to_date: string;
   comparisons: BudgetComparison[];
 }
+
+export interface MlReferenceExample {
+  id: string;
+  description: string;
+  account_path: string;
+  tags: string[] | null;
+  source: "imported" | "user";
+  created_at: string;
+}

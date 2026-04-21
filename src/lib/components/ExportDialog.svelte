@@ -1,16 +1,23 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { getBackend } from "$lib/backend.js";
   import { exportData, downloadExport } from "$lib/export/export.js";
+  import {
+    defaultExportSelection,
+    type ExportSelection,
+  } from "$lib/export/types.js";
   import { toast } from "svelte-sonner";
   import { loadSettings, saveToStorage } from "$lib/data/settings.svelte.js";
   import Download from "lucide-svelte/icons/download";
   import Eye from "lucide-svelte/icons/eye";
   import EyeOff from "lucide-svelte/icons/eye-off";
   import Loader from "lucide-svelte/icons/loader";
+  import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import ChevronRight from "lucide-svelte/icons/chevron-right";
 
   let {
     open = $bindable(false),
@@ -21,36 +28,43 @@
   let passphrase = $state("");
   let confirmPassphrase = $state("");
   let showPassphrase = $state(false);
-  let includeRaw = $state(true);
-  let includeApiKeys = $state(false);
-  let includeSettings = $state(true);
-  let includePlugins = $state(true);
+  let selection = $state<ExportSelection>(defaultExportSelection());
+  let advancedOpen = $state(false);
   let exporting = $state(false);
   let progressMessage = $state("");
 
   let passphraseMatch = $derived(
     !passphrase || passphrase === confirmPassphrase,
   );
+  let nothingSelected = $derived(
+    !selection.settings &&
+      !selection.mlClassification &&
+      !selection.accounts &&
+      !selection.journal &&
+      !selection.currencies &&
+      !selection.exchangeRates &&
+      !selection.budgets &&
+      !selection.reconciliations &&
+      !selection.sources &&
+      !selection.rawTransactions &&
+      !selection.plugins,
+  );
   let canExport = $derived(
-    !exporting && (!passphrase || passphraseMatch),
+    !exporting && (!passphrase || passphraseMatch) && !nothingSelected,
   );
 
   function resetDialog() {
     passphrase = "";
     confirmPassphrase = "";
     showPassphrase = false;
-    includeRaw = true;
-    includeApiKeys = false;
-    includeSettings = true;
-    includePlugins = true;
+    selection = defaultExportSelection();
+    advancedOpen = false;
     exporting = false;
     progressMessage = "";
   }
 
   $effect(() => {
-    if (open) {
-      resetDialog();
-    }
+    if (open) resetDialog();
   });
 
   async function handleExport() {
@@ -62,10 +76,7 @@
         backend,
         {
           passphrase: passphrase || undefined,
-          includeRawTransactions: includeRaw,
-          includeApiKeys,
-          includeSettings,
-          includePlugins,
+          selection,
         },
         (msg) => { progressMessage = msg; },
       );
@@ -85,11 +96,11 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-[480px]">
+  <Dialog.Content class="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>Export data</Dialog.Title>
       <Dialog.Description>
-        Export all your data to a .dledger file. Optionally encrypt with a passphrase.
+        Export your data to a .dledger file. Optionally encrypt with a passphrase.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -129,37 +140,110 @@
         {/if}
       </div>
 
-      <!-- Options -->
+      <!-- Primary toggles -->
       <div class="space-y-3">
         <label class="flex items-center gap-2 text-sm">
-          <Checkbox bind:checked={includeSettings} />
-          Include settings
+          <Checkbox bind:checked={selection.settings} />
+          <span>Include settings</span>
         </label>
 
         <label class="flex items-center gap-2 text-sm">
-          <Checkbox bind:checked={includeApiKeys} />
-          Include API keys
+          <Checkbox bind:checked={selection.mlClassification} />
+          <span>Include ML classification data</span>
         </label>
-
-        <label class="flex items-center gap-2 text-sm">
-          <Checkbox bind:checked={includePlugins} />
-          Include custom plugins
-        </label>
-
-        <div>
-          <label class="flex items-center gap-2 text-sm">
-            <Checkbox bind:checked={includeRaw} />
-            Include raw transaction data
-          </label>
-          {#if includeRaw}
-            <p class="text-xs text-muted-foreground ml-6 mt-1">
-              Warning: raw transaction data can significantly increase file size.
-            </p>
-          {/if}
-        </div>
+        {#if selection.mlClassification}
+          <p class="text-xs text-muted-foreground ml-6 -mt-1">
+            Carries categorization rules + distilled historical examples so future
+            imports can classify like they had full history, even without transactions.
+          </p>
+        {/if}
       </div>
 
-      <!-- Progress -->
+      <!-- Advanced -->
+      <Collapsible.Root bind:open={advancedOpen}>
+        <Collapsible.Trigger
+          class="flex w-full items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+        >
+          {#if advancedOpen}
+            <ChevronDown class="h-4 w-4" />
+          {:else}
+            <ChevronRight class="h-4 w-4" />
+          {/if}
+          Advanced
+        </Collapsible.Trigger>
+        <Collapsible.Content class="pt-3">
+          <div class="space-y-4 border-l-2 border-muted pl-4">
+            <!-- Ledger data -->
+            <div class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ledger data</p>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.accounts} /> Accounts
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.journal} /> Journal entries
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.currencies} /> Currencies
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.exchangeRates} /> Exchange rates
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.budgets} /> Budgets
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.reconciliations} /> Reconciliations
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.sources} /> Sources (etherscan / bitcoin / CEX / chains)
+              </label>
+            </div>
+
+            <!-- Optional -->
+            <div class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Optional</p>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.rawTransactions} /> Raw transaction data
+              </label>
+              {#if selection.rawTransactions}
+                <p class="text-xs text-muted-foreground ml-6 -mt-1">
+                  Warning: can significantly increase file size.
+                </p>
+              {/if}
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.plugins} /> Custom plugins
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox bind:checked={selection.apiKeys} /> API keys (⚠ secrets)
+              </label>
+            </div>
+
+            <!-- ML classification sub-toggles -->
+            <div class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ML classification</p>
+              <label class="flex items-center gap-2 text-sm" class:opacity-50={!selection.mlClassification}>
+                <Checkbox bind:checked={selection.mlRules} disabled={!selection.mlClassification} />
+                Categorization rules
+              </label>
+              <label class="flex items-center gap-2 text-sm" class:opacity-50={!selection.mlClassification}>
+                <Checkbox bind:checked={selection.mlExamples} disabled={!selection.mlClassification} />
+                Distilled historical examples & tags
+              </label>
+              <label class="flex items-center gap-2 text-sm" class:opacity-50={!selection.mlClassification}>
+                <Checkbox bind:checked={selection.mlSettings} disabled={!selection.mlClassification} />
+                ML settings (threshold, enabled flag)
+              </label>
+            </div>
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
+
+      {#if nothingSelected}
+        <p class="text-xs text-destructive">
+          Nothing selected — enable at least one category to export.
+        </p>
+      {/if}
+
       {#if exporting}
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader class="h-4 w-4 animate-spin" />

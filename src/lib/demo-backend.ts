@@ -84,6 +84,8 @@ const READ_METHODS: ReadonlySet<string> = new Set([
   "getFrenchTaxReport",
   // Plugins
   "listCustomPlugins",
+  // ML classification reference examples
+  "listMlReferenceExamples",
   // Etherscan + every blockchain account list
   "listEtherscanAccounts",
   "listExchangeAccounts",

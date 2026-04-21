@@ -365,6 +365,106 @@ describe("buildHistoricalTagExamples", () => {
     const descriptions = result.map((r) => r.description);
     expect(descriptions).not.toContain("Rent payment");
   });
+
+  it("merges in tags from ml_reference_example rows", async () => {
+    const backend = await createTestBackend();
+    await backend.upsertMlReferenceExamples([
+      {
+        id: uuidv7(),
+        description: "NETFLIX",
+        account_path: "Expenses:Streaming",
+        tags: ["streaming", "monthly"],
+        source: "imported",
+        created_at: "2024-06-15T00:00:00Z",
+      },
+    ]);
+
+    const result = await buildHistoricalTagExamples(backend);
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe("NETFLIX");
+    expect(result[0].tags).toEqual(["streaming", "monthly"]);
+  });
+
+  it("does not duplicate when journal and reference share a description", async () => {
+    const backend = await createTestBackend();
+    await setupAndPost(backend); // posts "LIDL groceries" with tags
+
+    await backend.upsertMlReferenceExamples([
+      {
+        id: uuidv7(),
+        description: "LIDL groceries",
+        account_path: "Expenses:Groceries",
+        tags: ["food"],
+        source: "imported",
+        created_at: "2024-06-15T00:00:00Z",
+      },
+    ]);
+
+    const result = await buildHistoricalTagExamples(backend);
+    const matches = result.filter((r) => r.description === "LIDL groceries");
+    expect(matches).toHaveLength(1); // journal wins, reference is skipped
+  });
+});
+
+describe("buildHistoricalExamples + ml_reference_example", () => {
+  it("merges reference rows into output", async () => {
+    const backend = await createTestBackend();
+
+    await backend.upsertMlReferenceExamples([
+      {
+        id: uuidv7(),
+        description: "SUPER U",
+        account_path: "Expenses:Groceries",
+        tags: null,
+        source: "imported",
+        created_at: "2024-06-15T00:00:00Z",
+      },
+      {
+        id: uuidv7(),
+        description: "CARREFOUR",
+        account_path: "Expenses:Groceries",
+        tags: null,
+        source: "imported",
+        created_at: "2024-06-15T00:00:00Z",
+      },
+      {
+        id: uuidv7(),
+        description: "NETFLIX",
+        account_path: "Expenses:Streaming",
+        tags: ["streaming"],
+        source: "user",
+        created_at: "2024-06-15T00:00:00Z",
+      },
+    ]);
+
+    const examples = await buildHistoricalExamples(backend);
+
+    const groceries = examples.find((e) => e.account === "Expenses:Groceries");
+    expect(groceries).toBeDefined();
+    expect(groceries!.descriptions).toEqual(expect.arrayContaining(["SUPER U", "CARREFOUR"]));
+
+    const streaming = examples.find((e) => e.account === "Expenses:Streaming");
+    expect(streaming).toBeDefined();
+    expect(streaming!.descriptions).toEqual(["NETFLIX"]);
+  });
+
+  it("respects maxPerAccount cap across journal + references", async () => {
+    const backend = await createTestBackend();
+
+    const refs = Array.from({ length: 8 }, (_, i) => ({
+      id: uuidv7(),
+      description: `REF_${i}`,
+      account_path: "Expenses:Groceries",
+      tags: null,
+      source: "imported" as const,
+      created_at: "2024-06-15T00:00:00Z",
+    }));
+    await backend.upsertMlReferenceExamples(refs);
+
+    const examples = await buildHistoricalExamples(backend, 500, 3);
+    const groceries = examples.find((e) => e.account === "Expenses:Groceries");
+    expect(groceries?.descriptions.length).toBeLessThanOrEqual(3);
+  });
 });
 
 describe("getAllTagValues", () => {
