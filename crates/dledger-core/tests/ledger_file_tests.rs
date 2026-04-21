@@ -488,6 +488,11 @@ impl Storage for TestStorage {
         Ok(false)
     }
 
+    fn get_entry_version_chain(&self, _id: &Uuid) -> StorageResult<Vec<JournalEntry>> {
+        // Test storage doesn't need chain walking (UI-only feature)
+        Ok(vec![])
+    }
+
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(

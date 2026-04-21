@@ -2817,6 +2817,59 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     return [entry, this.fetchLineItemsForEntry(id)];
   }
 
+  async getEntryVersionChain(id: string): Promise<JournalEntry[]> {
+    const MAX_DEPTH = 100;
+    const seen = new Set<string>();
+    const loadEntry = (entryId: string): JournalEntry | null =>
+      this.queryOne(
+        "SELECT id, date, description, description_data, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+        [entryId],
+        mapJournalEntry,
+      );
+    const getParent = (entryId: string): string | null => {
+      const rows = this.query(
+        "SELECT value FROM journal_entry_metadata WHERE journal_entry_id = ? AND key = 'edit:original_id'",
+        [entryId],
+        (row) => row.value as string,
+      );
+      return rows[0] ?? null;
+    };
+    const getChild = (entryId: string): string | null => {
+      const rows = this.query(
+        "SELECT journal_entry_id FROM journal_entry_metadata WHERE key = 'edit:original_id' AND value = ?",
+        [entryId],
+        (row) => row.journal_entry_id as string,
+      );
+      return rows[0] ?? null;
+    };
+
+    const ancestors: JournalEntry[] = [];
+    let cur: string | null = id;
+    let depth = 0;
+    while (cur && !seen.has(cur) && depth++ < MAX_DEPTH) {
+      seen.add(cur);
+      const e = loadEntry(cur);
+      if (!e) break;
+      ancestors.unshift(e);
+      cur = getParent(cur);
+    }
+
+    const descendants: JournalEntry[] = [];
+    cur = id;
+    depth = 0;
+    while (cur && depth++ < MAX_DEPTH) {
+      const next = getChild(cur);
+      if (!next || seen.has(next)) break;
+      seen.add(next);
+      const e = loadEntry(next);
+      if (!e) break;
+      descendants.push(e);
+      cur = next;
+    }
+
+    return [...ancestors, ...descendants];
+  }
+
   async queryJournalEntries(
     filter: TransactionFilter,
   ): Promise<[JournalEntry, LineItem[]][]> {

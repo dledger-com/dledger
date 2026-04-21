@@ -44,6 +44,18 @@
   const note = $derived(metadata[NOTE_META_KEY] ?? "");
   let entryLinks = $state<string[]>([]);
   let linkSuggestions = $state<string[]>([]);
+  let versionChain = $state<JournalEntry[]>([]);
+  const currentVersionIndex = $derived.by(() => {
+    if (!entry || versionChain.length === 0) return -1;
+    return versionChain.findIndex((v) => v.id === entry!.id);
+  });
+  const latestVersion = $derived<JournalEntry | null>(
+    versionChain.length > 0 ? versionChain[versionChain.length - 1] : null,
+  );
+  const hasHistory = $derived(versionChain.length > 1);
+  const isOlderVersion = $derived(
+    hasHistory && latestVersion !== null && entry !== null && entry.id !== latestVersion.id,
+  );
 
   async function handleLinksChange(newLinks: string[]) {
     const id = entryId;
@@ -130,11 +142,12 @@
     const id = entryId;
     if (!id) { loading = false; return; }
     const backend = getBackend();
-    const [entryResult, metaResult, linksResult, linkSuggestionsResult] = await Promise.all([
+    const [entryResult, metaResult, linksResult, linkSuggestionsResult, chain] = await Promise.all([
       journalStore.get(id),
       backend.getMetadata(id).catch(() => ({}) as Record<string, string>),
       backend.getEntryLinks(id).catch(() => [] as string[]),
       backend.getAllLinkNames().catch(() => [] as string[]),
+      backend.getEntryVersionChain(id).catch(() => [] as JournalEntry[]),
     ]);
     if (entryResult) {
       entry = entryResult.entry;
@@ -148,6 +161,7 @@
     metadata = metaResult;
     entryLinks = linksResult;
     linkSuggestions = linkSuggestionsResult;
+    versionChain = chain;
     loading = false;
   }
 
@@ -213,6 +227,14 @@
       </Card.Content>
     </Card.Root>
   {:else}
+    {#if isOlderVersion && latestVersion}
+      <div class="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200 flex items-center justify-between gap-3">
+        <span>A newer version of this entry exists.</span>
+        <Button variant="outline" size="sm" onclick={() => goto(`/journal/${latestVersion!.id}`)}>
+          View latest
+        </Button>
+      </div>
+    {/if}
     {#if isHidden}
       <div class="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
         This entry involves hidden currencies. It is excluded from the journal list and reports.
@@ -230,10 +252,15 @@
           </div>
           <div>
             <dt class="text-muted-foreground">Status</dt>
-            <dd>
+            <dd class="flex items-center gap-1.5 flex-wrap">
               <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
                 {entry.status}
               </Badge>
+              {#if hasHistory && currentVersionIndex >= 0}
+                <Badge variant="secondary" class="text-[10px]">
+                  Edited · v{currentVersionIndex + 1} of {versionChain.length}
+                </Badge>
+              {/if}
             </dd>
           </div>
           <div>
@@ -247,12 +274,6 @@
             <dt class="text-muted-foreground">Created</dt>
             <dd class="font-medium">{entry.created_at}</dd>
           </div>
-          {#if metadata["edit:original_id"]}
-            <div>
-              <dt class="text-muted-foreground">Edit of</dt>
-              <dd><a href="/journal/{metadata['edit:original_id']}" class="text-link hover:underline">Original entry</a></dd>
-            </div>
-          {/if}
           {#if entry.voided_by}
             <div>
               <dt class="text-muted-foreground">Voided by</dt>
@@ -262,6 +283,37 @@
         </dl>
       </Card.Content>
     </Card.Root>
+
+    {#if hasHistory}
+      <Card.Root>
+        <Card.Header>
+          <Card.Title>Version history</Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <ol class="space-y-1 text-sm">
+            {#each versionChain as version, i (version.id)}
+              {@const isCurrent = entry && version.id === entry.id}
+              <li>
+                <a
+                  href="/journal/{version.id}"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted transition-colors {isCurrent ? 'bg-muted font-medium pointer-events-none' : ''}"
+                  aria-disabled={Boolean(isCurrent)}
+                >
+                  <span class="text-xs text-muted-foreground w-10 shrink-0">v{i + 1}</span>
+                  <span class="text-xs text-muted-foreground w-24 shrink-0">{version.date}</span>
+                  <span class="truncate flex-1">{version.description}</span>
+                  {#if version.status === "voided"}
+                    <Badge variant="destructive" class="text-[10px] shrink-0">{version.status}</Badge>
+                  {:else if i === versionChain.length - 1}
+                    <Badge variant="default" class="text-[10px] shrink-0">Edited</Badge>
+                  {/if}
+                </a>
+              </li>
+            {/each}
+          </ol>
+        </Card.Content>
+      </Card.Root>
+    {/if}
 
     {@const displayMeta = Object.entries(metadata).filter(([k]) => k !== TAGS_META_KEY && k !== NOTE_META_KEY && k !== "links")}
     <Card.Root>

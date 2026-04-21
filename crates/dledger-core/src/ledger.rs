@@ -375,6 +375,13 @@ impl LedgerEngine {
         Ok(self.storage.get_journal_entry(id)?)
     }
 
+    pub fn get_entry_version_chain(
+        &self,
+        id: &Uuid,
+    ) -> LedgerResult<Vec<JournalEntry>> {
+        Ok(self.storage.get_entry_version_chain(id)?)
+    }
+
     pub fn query_journal_entries(
         &self,
         filter: &TransactionFilter,

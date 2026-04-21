@@ -69,6 +69,11 @@ pub trait Storage: Send + Sync {
     /// Check if any line items for an entry are reconciled.
     fn has_reconciled_items(&self, entry_id: &Uuid) -> StorageResult<bool>;
 
+    /// Returns the full edit-version chain (oldest → newest) for an entry,
+    /// walking `edit:original_id` metadata in both directions. Includes voided
+    /// ancestors (bypasses the usual voided-filter).
+    fn get_entry_version_chain(&self, id: &Uuid) -> StorageResult<Vec<JournalEntry>>;
+
     // -- Lots --
 
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()>;

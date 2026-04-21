@@ -114,6 +114,10 @@ export interface Backend {
     newLinks?: string[],
   ): Promise<{ reversalId: string; newEntryId: string }>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
+  /** Returns the full edit-version chain (oldest → newest) for an entry, walking
+   * `edit:original_id` metadata in both directions. Includes voided ancestors
+   * (needed for UI history view; bypasses the usual voided filter). */
+  getEntryVersionChain(id: string): Promise<JournalEntry[]>;
   queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]>;
   queryJournalEntriesOnly?(filter: TransactionFilter, onProgress?: (current: number, total: number) => void, signal?: AbortSignal): Promise<JournalEntry[]>;
   getLineItemsForEntries?(entryIds: string[]): Promise<Map<string, LineItem[]>>;
@@ -375,6 +379,9 @@ class TauriBackend implements Backend {
   }
   async getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null> {
     return this.invoke("get_journal_entry", { id });
+  }
+  async getEntryVersionChain(id: string): Promise<JournalEntry[]> {
+    return this.invoke("get_entry_version_chain", { id });
   }
   async queryJournalEntries(filter: TransactionFilter): Promise<[JournalEntry, LineItem[]][]> {
     return this.invoke("query_journal_entries", { filter });

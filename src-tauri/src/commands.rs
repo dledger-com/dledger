@@ -176,6 +176,17 @@ pub fn get_journal_entry(
 }
 
 #[tauri::command]
+pub fn get_entry_version_chain(
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> Result<Vec<JournalEntry>, String> {
+    state
+        .engine
+        .get_entry_version_chain(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn query_journal_entries(
     state: State<'_, AppState>,
     filter: TransactionFilter,

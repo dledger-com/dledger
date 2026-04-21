@@ -41,6 +41,7 @@ const READ_METHODS: ReadonlySet<string> = new Set([
   "getAccountMetadata",
   // Journal
   "getJournalEntry",
+  "getEntryVersionChain",
   "queryJournalEntries",
   "queryJournalEntriesOnly",
   "getLineItemsForEntries",

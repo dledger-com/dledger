@@ -82,6 +82,18 @@
   let viewLoading = $state(false);
   let viewEntryLinks = $state<string[]>([]);
   let viewLinkSuggestions = $state<string[]>([]);
+  let versionChain = $state<JournalEntry[]>([]);
+  const currentVersionIndex = $derived.by(() => {
+    if (!entry || versionChain.length === 0) return -1;
+    return versionChain.findIndex((v) => v.id === entry!.id);
+  });
+  const latestVersion = $derived<JournalEntry | null>(
+    versionChain.length > 0 ? versionChain[versionChain.length - 1] : null,
+  );
+  const hasHistory = $derived(versionChain.length > 1);
+  const isOlderVersion = $derived(
+    hasHistory && latestVersion !== null && entry !== null && entry.id !== latestVersion.id,
+  );
   const hidden = $derived(settings.showHidden ? new Set<string>() : getHiddenCurrencySet());
   const isHidden = $derived(entryInvolvesHidden(viewItems, hidden));
   const viewTags = $derived(parseTags(viewMetadata[TAGS_META_KEY]));
@@ -128,11 +140,12 @@
   async function loadEntry(id: string) {
     viewLoading = true;
     const backend = getBackend();
-    const [entryResult, metaResult, linksResult, linkSuggestionsResult] = await Promise.all([
+    const [entryResult, metaResult, linksResult, linkSuggestionsResult, chain] = await Promise.all([
       journalStore.get(id),
       backend.getMetadata(id).catch(() => ({}) as Record<string, string>),
       backend.getEntryLinks(id).catch(() => [] as string[]),
       backend.getAllLinkNames().catch(() => [] as string[]),
+      backend.getEntryVersionChain(id).catch(() => [] as JournalEntry[]),
     ]);
     if (entryResult) {
       entry = entryResult.entry;
@@ -144,6 +157,7 @@
     viewMetadata = metaResult;
     viewEntryLinks = linksResult;
     viewLinkSuggestions = linkSuggestionsResult;
+    versionChain = chain;
     viewLoading = false;
   }
 
@@ -246,6 +260,16 @@
       {:else if !entry}
         <p class="text-sm text-muted-foreground text-center py-8">{m.error_entry_not_found()}</p>
       {:else}
+        {#if isOlderVersion && latestVersion}
+          <div class="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200 flex items-center justify-between gap-3">
+            <span>{m.banner_newer_version_exists()}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => { entryId = latestVersion!.id; }}
+            >{m.btn_view_latest()}</Button>
+          </div>
+        {/if}
         {#if isHidden}
           <div class="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
             {m.label_involves_hidden()}
@@ -262,10 +286,15 @@
             </div>
             <div>
               <dt class="text-muted-foreground">{m.label_status()}</dt>
-              <dd>
+              <dd class="flex items-center gap-1.5 flex-wrap">
                 <Badge variant={entry.status === "confirmed" ? "default" : entry.status === "voided" ? "destructive" : "secondary"}>
                   {entry.status}
                 </Badge>
+                {#if hasHistory && currentVersionIndex >= 0}
+                  <Badge variant="secondary" class="text-[10px]">
+                    {m.label_edited()} · {m.label_version_of({ n: String(currentVersionIndex + 1), total: String(versionChain.length) })}
+                  </Badge>
+                {/if}
               </dd>
             </div>
           </dl>
@@ -308,17 +337,6 @@
                 <dt class="text-muted-foreground">{m.label_created()}</dt>
                 <dd class="font-medium">{entry.created_at}</dd>
               </div>
-              {#if viewMetadata["edit:original_id"]}
-                <div>
-                  <dt class="text-muted-foreground">{m.account_edit_of()}</dt>
-                  <dd>
-                    <button
-                      class="text-link hover:underline text-left"
-                      onclick={() => { entryId = viewMetadata['edit:original_id']; }}
-                    >{m.account_original_entry()}</button>
-                  </dd>
-                </div>
-              {/if}
               {#if entry.voided_by}
                 <div>
                   <dt class="text-muted-foreground">{m.account_voided_by()}</dt>
@@ -333,6 +351,33 @@
             </dl>
           </details>
         </section>
+
+        {#if hasHistory}
+          <section>
+            <h3 class="text-sm font-medium text-muted-foreground mb-2">{m.section_version_history()}</h3>
+            <ol class="space-y-1 text-sm">
+              {#each versionChain as version, i (version.id)}
+                {@const isCurrent = entry && version.id === entry.id}
+                <li>
+                  <button
+                    class="w-full text-left flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted transition-colors {isCurrent ? 'bg-muted font-medium' : ''}"
+                    disabled={Boolean(isCurrent)}
+                    onclick={() => { entryId = version.id; }}
+                  >
+                    <span class="text-xs text-muted-foreground w-10 shrink-0">v{i + 1}</span>
+                    <span class="text-xs text-muted-foreground w-24 shrink-0">{version.date}</span>
+                    <span class="truncate flex-1">{version.description}</span>
+                    {#if version.status === "voided"}
+                      <Badge variant="destructive" class="text-[10px] shrink-0">{version.status}</Badge>
+                    {:else if i === versionChain.length - 1}
+                      <Badge variant="default" class="text-[10px] shrink-0">{m.label_edited()}</Badge>
+                    {/if}
+                  </button>
+                </li>
+              {/each}
+            </ol>
+          </section>
+        {/if}
 
         <!-- Metadata -->
         {@const displayMeta = Object.entries(viewMetadata).filter(([k]) => k !== TAGS_META_KEY && k !== NOTE_META_KEY && k !== "links")}

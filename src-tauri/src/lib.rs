@@ -87,6 +87,7 @@ pub fn run() {
             commands::void_journal_entry,
             commands::edit_journal_entry,
             commands::get_journal_entry,
+            commands::get_entry_version_chain,
             commands::query_journal_entries,
             commands::get_account_balance,
             commands::get_account_balance_with_children,

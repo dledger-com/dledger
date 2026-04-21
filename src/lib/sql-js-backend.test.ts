@@ -499,6 +499,57 @@ describe("SqlJsBackend", () => {
           .rejects.toThrow("not found");
       });
     });
+
+    describe("getEntryVersionChain", () => {
+      it("returns single-element chain for never-edited entry", async () => {
+        const entry = makeEntry({ description: "Solo" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "100"),
+          makeLineItem(entry.id, equityId, "USD", "-100"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const chain = await backend.getEntryVersionChain(entry.id);
+        expect(chain).toHaveLength(1);
+        expect(chain[0].id).toBe(entry.id);
+      });
+
+      it("returns empty for unknown id", async () => {
+        const chain = await backend.getEntryVersionChain(uuidv7());
+        expect(chain).toHaveLength(0);
+      });
+
+      it("walks the full chain from any version and returns oldest→newest", async () => {
+        // v1
+        const v1 = makeEntry({ description: "v1" });
+        await backend.postJournalEntry(v1, [
+          makeLineItem(v1.id, bankId, "USD", "10"),
+          makeLineItem(v1.id, equityId, "USD", "-10"),
+        ]);
+
+        // edit v1 → v2 (voids v1, posts v2)
+        const v2 = makeEntry({ description: "v2", source: "system:edit" });
+        await backend.editJournalEntry(v1.id, v2, [
+          makeLineItem(v2.id, bankId, "USD", "20"),
+          makeLineItem(v2.id, equityId, "USD", "-20"),
+        ]);
+
+        // edit v2 → v3 (voids v2, posts v3)
+        const v3 = makeEntry({ description: "v3", source: "system:edit" });
+        await backend.editJournalEntry(v2.id, v3, [
+          makeLineItem(v3.id, bankId, "USD", "30"),
+          makeLineItem(v3.id, equityId, "USD", "-30"),
+        ]);
+
+        for (const startId of [v1.id, v2.id, v3.id]) {
+          const chain = await backend.getEntryVersionChain(startId);
+          expect(chain.map((e) => e.description)).toEqual(["v1", "v2", "v3"]);
+          expect(chain[0].status).toBe("voided");
+          expect(chain[1].status).toBe("voided");
+          expect(chain[2].status).toBe("confirmed");
+        }
+      });
+    });
   });
 
   // ---- Queries ----

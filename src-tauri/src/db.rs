@@ -587,6 +587,106 @@ impl Storage for SqliteStorage {
         Ok(count > 0)
     }
 
+    fn get_entry_version_chain(&self, id: &Uuid) -> StorageResult<Vec<JournalEntry>> {
+        const MAX_DEPTH: usize = 100;
+        let conn = self.conn.borrow();
+
+        let load_entry = |eid: &Uuid| -> StorageResult<Option<JournalEntry>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, date, description, status, source, voided_by, created_at
+                     FROM journal_entry WHERE id = ?1",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let opt = stmt
+                .query_row(params![eid.to_string()], |row| Ok(row_to_journal_entry(row)))
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            match opt {
+                Some(r) => Ok(Some(r?)),
+                None => Ok(None),
+            }
+        };
+        let get_parent = |eid: &Uuid| -> StorageResult<Option<Uuid>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT value FROM journal_entry_metadata
+                     WHERE journal_entry_id = ?1 AND key = 'edit:original_id' LIMIT 1",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let opt: Option<String> = stmt
+                .query_row(params![eid.to_string()], |row| row.get(0))
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            match opt {
+                Some(s) => Ok(Some(parse_uuid(&s)?)),
+                None => Ok(None),
+            }
+        };
+        let get_child = |eid: &Uuid| -> StorageResult<Option<Uuid>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT journal_entry_id FROM journal_entry_metadata
+                     WHERE key = 'edit:original_id' AND value = ?1 LIMIT 1",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let opt: Option<String> = stmt
+                .query_row(params![eid.to_string()], |row| row.get(0))
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            match opt {
+                Some(s) => Ok(Some(parse_uuid(&s)?)),
+                None => Ok(None),
+            }
+        };
+
+        let mut seen: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+        let mut ancestors: Vec<JournalEntry> = Vec::new();
+        let mut cur: Option<Uuid> = Some(*id);
+        let mut depth = 0usize;
+        while let Some(eid) = cur {
+            if !seen.insert(eid) || depth >= MAX_DEPTH {
+                break;
+            }
+            depth += 1;
+            match load_entry(&eid)? {
+                Some(entry) => {
+                    ancestors.push(entry);
+                    cur = get_parent(&eid)?;
+                }
+                None => break,
+            }
+        }
+        ancestors.reverse();
+
+        let mut descendants: Vec<JournalEntry> = Vec::new();
+        let mut cur: Option<Uuid> = Some(*id);
+        let mut depth = 0usize;
+        while let Some(eid) = cur {
+            depth += 1;
+            if depth > MAX_DEPTH {
+                break;
+            }
+            match get_child(&eid)? {
+                Some(next) if !seen.contains(&next) => {
+                    seen.insert(next);
+                    match load_entry(&next)? {
+                        Some(entry) => {
+                            descendants.push(entry);
+                            cur = Some(next);
+                        }
+                        None => break,
+                    }
+                }
+                _ => break,
+            }
+        }
+
+        let mut chain = ancestors;
+        chain.extend(descendants);
+        Ok(chain)
+    }
+
     // -- Lots --
 
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {

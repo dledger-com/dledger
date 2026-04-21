@@ -313,6 +313,12 @@
   "account_reversal_entry": "Écriture d'annulation",
   "account_original_entry": "Écriture originale",
   "account_edit_of": "Modification de",
+  "label_edited": "Modifiée",
+  "label_version_of": "v{n} sur {total}",
+  "label_edited_on": "Modifiée le {date}",
+  "section_version_history": "Historique des versions",
+  "banner_newer_version_exists": "Une version plus récente de cette écriture existe.",
+  "btn_view_latest": "Voir la dernière",
 
   "table_switch_to_table": "Vue tableau",
   "table_switch_to_flow": "Vue flux",
