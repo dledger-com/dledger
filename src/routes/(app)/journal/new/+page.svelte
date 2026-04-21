@@ -43,6 +43,12 @@
   let metaKeySuggestions = $state<string[]>([]);
   let editLoading = $state(false);
 
+  // Original entry snapshot when editing — used to diff for safe-edit detection.
+  let originalEntry = $state<JournalEntry | null>(null);
+  let originalItems = $state<LineItem[]>([]);
+  let originalMetadata = $state<Record<string, string>>({});
+  let originalLinks = $state<string[]>([]);
+
   type EntryMode = "simple" | "exchange";
   let entryMode = $state<EntryMode>("simple");
   let fromCurrency = $state("EUR");
@@ -211,6 +217,11 @@
         return;
       }
 
+      originalEntry = origEntry;
+      originalItems = origItems;
+      originalMetadata = metaResult;
+      originalLinks = linksResult;
+
       date = origEntry.date;
       description = origEntry.description;
 
@@ -287,6 +298,54 @@
     }
   }
 
+  /**
+   * Detect whether the current edit form changes ONLY safe fields (description and/or
+   * line-item account recategorization). Returns a patch if so, null if the edit
+   * changes any accounting-critical field (date, amounts, currencies, item count).
+   * The backend performs the authoritative checks (lot, reconciled, same type, postable).
+   */
+  function computeSafePatch(
+    id: string,
+    newItems: LineItem[],
+  ): {
+    description?: string;
+    lineItems?: Array<{ id: string; account_id: string }>;
+  } | null {
+    if (!originalEntry) return null;
+    if (date !== originalEntry.date) return null;
+    if (newItems.length !== originalItems.length) return null;
+
+    // Match by positional index; the edit form preserves order from prefill.
+    const accountChanges: Array<{ id: string; account_id: string }> = [];
+    for (let i = 0; i < newItems.length; i++) {
+      const newItem = newItems[i];
+      const oldItem = originalItems[i];
+      if (newItem.currency !== oldItem.currency) return null;
+      // Parse amounts as numbers for robust equality across "100" / "100.00".
+      if (parseFloat(newItem.amount) !== parseFloat(oldItem.amount)) return null;
+      if (newItem.account_id !== oldItem.account_id) {
+        accountChanges.push({ id: oldItem.id, account_id: newItem.account_id });
+      }
+    }
+
+    const descriptionChanged = description !== originalEntry.description;
+    if (!descriptionChanged && accountChanges.length === 0) {
+      // Only tags/metadata/links changed — still safe. We return a patch that
+      // explicitly carries the unchanged description so the backend returns the entry.
+      return {};
+    }
+
+    const patch: {
+      description?: string;
+      lineItems?: Array<{ id: string; account_id: string }>;
+    } = {};
+    if (descriptionChanged) patch.description = description;
+    if (accountChanges.length > 0) patch.lineItems = accountChanges;
+    return patch;
+    // Suppress unused warning for id (kept as symmetry with backend signature).
+    void id;
+  }
+
   async function handleSubmit() {
     if (!canSubmit) return;
     submitting = true;
@@ -346,6 +405,41 @@
     if (needsReload) await accountStore.load();
 
     if (editingEntryId) {
+      // Try safe-edit first: description and/or line-item account changes only,
+      // same shape (count, currencies, amounts, date). Backend is authoritative;
+      // on rejection or any accounting change, fall through to void+post.
+      const safePatch = entryMode === "simple"
+        ? computeSafePatch(editingEntryId, items)
+        : null;
+
+      if (safePatch) {
+        try {
+          await journalStore.updateSafe(editingEntryId, safePatch);
+
+          // Apply metadata / links / tags in-place too.
+          const metaToSave = { ...entryMetadata };
+          if (tags.length > 0) metaToSave[TAGS_META_KEY] = serializeTags(tags);
+          else delete metaToSave[TAGS_META_KEY];
+          await getBackend().setMetadata(editingEntryId, metaToSave);
+
+          // Only overwrite links if they actually changed.
+          const linksChanged =
+            entryLinks.length !== originalLinks.length ||
+            entryLinks.some((l, i) => l !== originalLinks[i]);
+          if (linksChanged) {
+            await getBackend().setEntryLinks(editingEntryId, entryLinks);
+          }
+
+          submitting = false;
+          toast.success("Entry updated");
+          goto(`/journal/${editingEntryId}`);
+          return;
+        } catch (e) {
+          // Backend rejected — fall back to void+post silently (accounting-impacting).
+          console.warn("Safe-edit rejected, falling back to void+post:", e);
+        }
+      }
+
       // Edit mode: void original + post replacement atomically
       const entry: JournalEntry = {
         id: entryId,

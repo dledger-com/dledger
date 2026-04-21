@@ -500,6 +500,154 @@ describe("SqlJsBackend", () => {
       });
     });
 
+    describe("updateJournalEntrySafe", () => {
+      async function makeSecondExpense() {
+        const id = uuidv7();
+        await backend.createAccount({
+          id,
+          parent_id: null,
+          account_type: "equity",
+          name: "Other",
+          full_name: "Equity:Other",
+          allowed_currencies: [],
+          is_postable: true,
+          is_archived: false,
+          created_at: "2024-01-01",
+        });
+        return id;
+      }
+
+      it("updates description in place without creating a reversal", async () => {
+        const entry = makeEntry({ description: "Lunch" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const before = await backend.countJournalEntries({});
+        const updated = await backend.updateJournalEntrySafe(entry.id, {
+          description: "Dinner",
+        });
+        const after = await backend.countJournalEntries({});
+
+        expect(updated.id).toBe(entry.id);
+        expect(updated.description).toBe("Dinner");
+        expect(updated.status).toBe("confirmed");
+        expect(after).toBe(before); // no reversal, no new entry
+      });
+
+      it("recategorizes a line item to another account of the same type", async () => {
+        const other = await makeSecondExpense();
+        const entry = makeEntry({ description: "Recat" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const beforeCount = await backend.countJournalEntries({});
+        await backend.updateJournalEntrySafe(entry.id, {
+          lineItems: [{ id: items[1].id, account_id: other }],
+        });
+        const afterCount = await backend.countJournalEntries({});
+
+        expect(afterCount).toBe(beforeCount);
+
+        const refetched = await backend.getJournalEntry(entry.id);
+        const movedItem = refetched![1].find((li) => li.id === items[1].id)!;
+        expect(movedItem.account_id).toBe(other);
+      });
+
+      it("rejects cross-type account moves", async () => {
+        const entry = makeEntry({ description: "Cross-type" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        await expect(
+          backend.updateJournalEntrySafe(entry.id, {
+            lineItems: [{ id: items[0].id, account_id: equityId }],
+          }),
+        ).rejects.toThrow(/account_type mismatch/);
+      });
+
+      it("rejects edits to voided entries", async () => {
+        const entry = makeEntry({ description: "To void" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        await backend.voidJournalEntry(entry.id);
+
+        await expect(
+          backend.updateJournalEntrySafe(entry.id, { description: "Noop" }),
+        ).rejects.toThrow(/voided/);
+      });
+
+      it("rejects edits on reconciled line items", async () => {
+        const entry = makeEntry({ description: "Reconciled" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        (backend as any).run(
+          "UPDATE line_item SET is_reconciled = 1 WHERE id = ?",
+          [items[1].id],
+        );
+
+        const other = await makeSecondExpense();
+        await expect(
+          backend.updateJournalEntrySafe(entry.id, {
+            lineItems: [{ id: items[1].id, account_id: other }],
+          }),
+        ).rejects.toThrow(/reconciled/);
+      });
+
+      it("rejects edits on lot-bearing line items", async () => {
+        const entry = makeEntry({ description: "Lot" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+        const lotId = uuidv7();
+        (backend as any).run(
+          "INSERT INTO lot (id, account_id, currency, acquired_date, original_quantity, remaining_quantity, cost_basis_per_unit, cost_basis_currency, journal_entry_id, is_closed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+          [lotId, bankId, "USD", "2024-01-01", "20", "20", "1", "USD", entry.id],
+        );
+        (backend as any).run(
+          "UPDATE line_item SET lot_id = ? WHERE id = ?",
+          [lotId, items[1].id],
+        );
+
+        const other = await makeSecondExpense();
+        await expect(
+          backend.updateJournalEntrySafe(entry.id, {
+            lineItems: [{ id: items[1].id, account_id: other }],
+          }),
+        ).rejects.toThrow(/lot/);
+      });
+
+      it("returns the entry unchanged when patch is empty or a no-op", async () => {
+        const entry = makeEntry({ description: "Keep" });
+        const items = [
+          makeLineItem(entry.id, bankId, "USD", "-20"),
+          makeLineItem(entry.id, equityId, "USD", "20"),
+        ];
+        await backend.postJournalEntry(entry, items);
+
+        const updated = await backend.updateJournalEntrySafe(entry.id, {
+          description: "Keep", // identical to current
+        });
+        expect(updated.description).toBe("Keep");
+      });
+    });
+
     describe("getEntryVersionChain", () => {
       it("returns single-element chain for never-edited entry", async () => {
         const entry = makeEntry({ description: "Solo" });

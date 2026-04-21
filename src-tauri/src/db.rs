@@ -687,6 +687,162 @@ impl Storage for SqliteStorage {
         Ok(chain)
     }
 
+    fn update_journal_entry_safe(
+        &self,
+        id: &Uuid,
+        patch: &JournalEntrySafePatch,
+    ) -> StorageResult<JournalEntry> {
+        let conn = self.conn.borrow();
+
+        // 1. Validate entry exists and isn't voided.
+        let mut entry_stmt = conn
+            .prepare(
+                "SELECT id, date, description, status, source, voided_by, created_at
+                 FROM journal_entry WHERE id = ?1",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let entry_opt = entry_stmt
+            .query_row(params![id.to_string()], |row| Ok(row_to_journal_entry(row)))
+            .optional()
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let entry = match entry_opt {
+            Some(r) => r?,
+            None => {
+                return Err(StorageError::NotFound(format!("journal entry {id}")));
+            }
+        };
+        if matches!(entry.status, JournalEntryStatus::Voided) {
+            return Err(StorageError::Constraint(format!(
+                "cannot safe-edit voided entry {id}"
+            )));
+        }
+        drop(entry_stmt);
+
+        // 2. Validate each line-item patch.
+        struct Move {
+            line_item_id: Uuid,
+            new_account_id: Uuid,
+        }
+        let mut moves: Vec<Move> = Vec::new();
+
+        for li_patch in &patch.line_items {
+            let mut li_stmt = conn
+                .prepare(
+                    "SELECT account_id, lot_id, is_reconciled
+                     FROM line_item WHERE id = ?1 AND journal_entry_id = ?2",
+                )
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let (old_account_str, lot_id, is_reconciled): (String, Option<String>, i64) = li_stmt
+                .query_row(
+                    params![li_patch.id.to_string(), id.to_string()],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, i64>(2)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?
+                .ok_or_else(|| {
+                    StorageError::NotFound(format!(
+                        "line item {} on entry {id}",
+                        li_patch.id
+                    ))
+                })?;
+            drop(li_stmt);
+
+            let old_account_id = parse_uuid(&old_account_str)?;
+            if old_account_id == li_patch.account_id {
+                continue;
+            }
+            if lot_id.is_some() {
+                return Err(StorageError::Constraint(format!(
+                    "cannot safe-edit line item {}: it belongs to a lot; use void+replace",
+                    li_patch.id
+                )));
+            }
+            if is_reconciled != 0 {
+                return Err(StorageError::Constraint(format!(
+                    "cannot safe-edit line item {}: it is reconciled; use void+replace",
+                    li_patch.id
+                )));
+            }
+
+            let mut acc_stmt = conn
+                .prepare("SELECT account_type, is_postable FROM account WHERE id = ?1")
+                .map_err(|e| StorageError::Internal(e.to_string()))?;
+            let (old_type, _): (String, i64) = acc_stmt
+                .query_row(params![old_account_id.to_string()], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?
+                .ok_or_else(|| {
+                    StorageError::NotFound(format!("current account {old_account_id}"))
+                })?;
+            let (new_type, new_postable): (String, i64) = acc_stmt
+                .query_row(params![li_patch.account_id.to_string()], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .optional()
+                .map_err(|e| StorageError::Internal(e.to_string()))?
+                .ok_or_else(|| {
+                    StorageError::NotFound(format!("target account {}", li_patch.account_id))
+                })?;
+            drop(acc_stmt);
+
+            if old_type != new_type {
+                return Err(StorageError::Constraint(format!(
+                    "cannot safe-edit line item {}: account_type mismatch ({old_type} → {new_type}); use void+replace",
+                    li_patch.id
+                )));
+            }
+            if new_postable == 0 {
+                return Err(StorageError::Constraint(format!(
+                    "cannot safe-edit line item {}: target account {} is not postable",
+                    li_patch.id, li_patch.account_id
+                )));
+            }
+
+            moves.push(Move {
+                line_item_id: li_patch.id,
+                new_account_id: li_patch.account_id,
+            });
+        }
+
+        // 3. Apply.
+        let description_changed =
+            patch.description.as_ref().is_some_and(|d| *d != entry.description);
+        if description_changed {
+            conn.execute(
+                "UPDATE journal_entry SET description = ?1 WHERE id = ?2",
+                params![patch.description.as_ref().unwrap(), id.to_string()],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        }
+        for mv in &moves {
+            conn.execute(
+                "UPDATE line_item SET account_id = ?1 WHERE id = ?2",
+                params![mv.new_account_id.to_string(), mv.line_item_id.to_string()],
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        }
+
+        // 4. Return refreshed entry.
+        let mut refreshed_stmt = conn
+            .prepare(
+                "SELECT id, date, description, status, source, voided_by, created_at
+                 FROM journal_entry WHERE id = ?1",
+            )
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        let refreshed = refreshed_stmt
+            .query_row(params![id.to_string()], |row| Ok(row_to_journal_entry(row)))
+            .map_err(|e| StorageError::Internal(e.to_string()))?;
+        refreshed
+    }
+
     // -- Lots --
 
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {

@@ -147,6 +147,21 @@ export class JournalStore {
     }
   }
 
+  async updateSafe(
+    id: string,
+    patch: {
+      description?: string;
+      description_data?: string | null;
+      lineItems?: Array<{ id: string; account_id: string }>;
+    },
+  ): Promise<JournalEntry> {
+    // Let exceptions propagate so the caller can fall back to void+post.
+    const updated = await getBackend().updateJournalEntrySafe(id, patch);
+    await this.load(this.currentFilter);
+    invalidate("journal", "accounts", "reports");
+    return updated;
+  }
+
   async get(id: string): Promise<{ entry: JournalEntry; items: LineItem[] } | null> {
     try {
       const result = await getBackend().getJournalEntry(id);

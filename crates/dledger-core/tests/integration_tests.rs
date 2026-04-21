@@ -408,6 +408,16 @@ impl Storage for TestStorage {
         Ok(vec![])
     }
 
+    fn update_journal_entry_safe(
+        &self,
+        _id: &Uuid,
+        _patch: &JournalEntrySafePatch,
+    ) -> StorageResult<JournalEntry> {
+        Err(StorageError::Internal(
+            "update_journal_entry_safe not implemented in TestStorage".into(),
+        ))
+    }
+
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()> {
         let conn = self.conn.borrow();
         conn.execute(

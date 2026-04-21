@@ -382,6 +382,50 @@ impl LedgerEngine {
         Ok(self.storage.get_entry_version_chain(id)?)
     }
 
+    pub fn update_journal_entry_safe(
+        &self,
+        id: &Uuid,
+        patch: &JournalEntrySafePatch,
+    ) -> LedgerResult<JournalEntry> {
+        // Snapshot prior state for audit detail (storage impl validates and mutates).
+        let prior = self
+            .storage
+            .get_journal_entry(id)?
+            .ok_or(LedgerError::EntryNotFound { id: *id })?;
+        let prior_entry = prior.0;
+        let prior_items = prior.1;
+
+        let updated = self.storage.update_journal_entry_safe(id, patch)?;
+
+        if let Some(new_desc) = &patch.description {
+            if *new_desc != prior_entry.description {
+                self.audit(
+                    "update",
+                    "journal_entry",
+                    *id,
+                    &format!("description: {} → {}", prior_entry.description, new_desc),
+                )?;
+            }
+        }
+        for li_patch in &patch.line_items {
+            if let Some(prior_item) = prior_items.iter().find(|i| i.id == li_patch.id) {
+                if prior_item.account_id != li_patch.account_id {
+                    self.audit(
+                        "update",
+                        "line_item",
+                        li_patch.id,
+                        &format!(
+                            "account_id: {} → {}",
+                            prior_item.account_id, li_patch.account_id
+                        ),
+                    )?;
+                }
+            }
+        }
+
+        Ok(updated)
+    }
+
     pub fn query_journal_entries(
         &self,
         filter: &TransactionFilter,

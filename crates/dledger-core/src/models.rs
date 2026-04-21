@@ -300,6 +300,24 @@ pub struct CurrencyOrigin {
     pub origin: String,
 }
 
+/// Patch for in-place edits that don't break accounting (same entry id).
+/// Fields not supplied are left unchanged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JournalEntrySafePatch {
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub line_items: Vec<LineItemAccountPatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LineItemAccountPatch {
+    pub id: Uuid,
+    pub account_id: Uuid,
+}
+
 /// Currency rate source configuration (which API/handler to use for exchange rates).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrencyRateSource {

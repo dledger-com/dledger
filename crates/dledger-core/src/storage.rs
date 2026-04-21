@@ -74,6 +74,19 @@ pub trait Storage: Send + Sync {
     /// ancestors (bypasses the usual voided-filter).
     fn get_entry_version_chain(&self, id: &Uuid) -> StorageResult<Vec<JournalEntry>>;
 
+    /// Apply safe (non-accounting) edits in place. Validates and rejects:
+    /// - entry not found or voided
+    /// - line item not on this entry
+    /// - line item has lot_id or is_reconciled
+    /// - target account missing, non-postable, or a different account_type
+    ///
+    /// Returns the updated entry. Does NOT write audit entries — caller does.
+    fn update_journal_entry_safe(
+        &self,
+        id: &Uuid,
+        patch: &JournalEntrySafePatch,
+    ) -> StorageResult<JournalEntry>;
+
     // -- Lots --
 
     fn insert_lot(&self, lot: &Lot) -> StorageResult<()>;

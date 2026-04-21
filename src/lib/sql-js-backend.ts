@@ -2805,6 +2805,158 @@ UPDATE crypto_asset_info SET dprice_asset_id = '' WHERE dprice_asset_id != '';
     }
   }
 
+  async updateJournalEntrySafe(
+    id: string,
+    patch: {
+      description?: string;
+      description_data?: string | null;
+      lineItems?: Array<{ id: string; account_id: string }>;
+    },
+  ): Promise<JournalEntry> {
+    const original = this.queryOne(
+      "SELECT id, date, description, description_data, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+      [id],
+      mapJournalEntry,
+    );
+    if (!original) throw new Error(`journal entry ${id} not found`);
+    if (original.status === "voided")
+      throw new Error(`cannot safe-edit voided entry ${id}`);
+
+    type LineItemRow = {
+      id: string;
+      account_id: string;
+      lot_id: string | null;
+      is_reconciled: number;
+    };
+    const moves: Array<{
+      li: LineItemRow;
+      oldAccountId: string;
+      newAccountId: string;
+    }> = [];
+
+    for (const patchItem of patch.lineItems ?? []) {
+      const li = this.queryOne(
+        "SELECT id, account_id, lot_id, is_reconciled FROM line_item WHERE id = ? AND journal_entry_id = ?",
+        [patchItem.id, id],
+        (row) => ({
+          id: row.id as string,
+          account_id: row.account_id as string,
+          lot_id: row.lot_id as string | null,
+          is_reconciled: row.is_reconciled as number,
+        }),
+      );
+      if (!li) throw new Error(`line item ${patchItem.id} not found on entry ${id}`);
+      if (li.account_id === patchItem.account_id) continue;
+      if (li.lot_id !== null) {
+        throw new Error(
+          `cannot safe-edit line item ${patchItem.id}: it belongs to a lot; use void+replace instead`,
+        );
+      }
+      if (li.is_reconciled) {
+        throw new Error(
+          `cannot safe-edit line item ${patchItem.id}: it is reconciled; use void+replace instead`,
+        );
+      }
+
+      const oldAcct = this.queryOne(
+        "SELECT id, account_type, is_postable FROM account WHERE id = ?",
+        [li.account_id],
+        (row) => ({
+          id: row.id as string,
+          account_type: row.account_type as string,
+          is_postable: row.is_postable as number,
+        }),
+      );
+      const newAcct = this.queryOne(
+        "SELECT id, account_type, is_postable FROM account WHERE id = ?",
+        [patchItem.account_id],
+        (row) => ({
+          id: row.id as string,
+          account_type: row.account_type as string,
+          is_postable: row.is_postable as number,
+        }),
+      );
+      if (!oldAcct) throw new Error(`current account ${li.account_id} not found`);
+      if (!newAcct) throw new Error(`target account ${patchItem.account_id} not found`);
+      if (oldAcct.account_type !== newAcct.account_type) {
+        throw new Error(
+          `cannot safe-edit line item ${patchItem.id}: account_type mismatch (${oldAcct.account_type} → ${newAcct.account_type}); use void+replace`,
+        );
+      }
+      if (!newAcct.is_postable) {
+        throw new Error(
+          `cannot safe-edit line item ${patchItem.id}: target account ${patchItem.account_id} is not postable`,
+        );
+      }
+
+      moves.push({ li, oldAccountId: li.account_id, newAccountId: patchItem.account_id });
+    }
+
+    const descriptionChanged =
+      patch.description !== undefined && patch.description !== original.description;
+    const descriptionDataChanged =
+      patch.description_data !== undefined &&
+      (patch.description_data ?? null) !== (original.description_data ?? null);
+
+    if (!descriptionChanged && !descriptionDataChanged && moves.length === 0) {
+      return original;
+    }
+
+    const wasInTransaction = this.inTransaction;
+    if (!wasInTransaction) this.beginTransaction();
+    try {
+      if (descriptionChanged) {
+        this.run("UPDATE journal_entry SET description = ? WHERE id = ?", [
+          patch.description!,
+          id,
+        ]);
+        this.audit(
+          "update",
+          "journal_entry",
+          id,
+          `description: ${original.description} → ${patch.description}`,
+        );
+      }
+      if (descriptionDataChanged) {
+        this.run("UPDATE journal_entry SET description_data = ? WHERE id = ?", [
+          patch.description_data ?? null,
+          id,
+        ]);
+        this.audit(
+          "update",
+          "journal_entry",
+          id,
+          `description_data changed`,
+        );
+      }
+      for (const move of moves) {
+        this.run("UPDATE line_item SET account_id = ? WHERE id = ?", [
+          move.newAccountId,
+          move.li.id,
+        ]);
+        this.audit(
+          "update",
+          "line_item",
+          move.li.id,
+          `account_id: ${move.oldAccountId} → ${move.newAccountId}`,
+        );
+      }
+      if (!wasInTransaction) this.commitTransaction();
+      this.scheduleSave();
+    } catch (e) {
+      if (!wasInTransaction) this.rollbackTransaction();
+      throw e;
+    }
+
+    const updated = this.queryOne(
+      "SELECT id, date, description, description_data, status, source, voided_by, created_at FROM journal_entry WHERE id = ?",
+      [id],
+      mapJournalEntry,
+    );
+    if (!updated) throw new Error(`journal entry ${id} disappeared after update`);
+    return updated;
+  }
+
   async getJournalEntry(
     id: string,
   ): Promise<[JournalEntry, LineItem[]] | null> {

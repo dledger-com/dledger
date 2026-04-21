@@ -187,6 +187,18 @@ pub fn get_entry_version_chain(
 }
 
 #[tauri::command]
+pub fn update_journal_entry_safe(
+    state: State<'_, AppState>,
+    id: Uuid,
+    patch: JournalEntrySafePatch,
+) -> Result<JournalEntry, String> {
+    state
+        .engine
+        .update_journal_entry_safe(&id, &patch)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn query_journal_entries(
     state: State<'_, AppState>,
     filter: TransactionFilter,

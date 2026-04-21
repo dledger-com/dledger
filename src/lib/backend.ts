@@ -113,6 +113,17 @@ export interface Backend {
     newMetadata?: Record<string, string>,
     newLinks?: string[],
   ): Promise<{ reversalId: string; newEntryId: string }>;
+  /** In-place update for fields that don't affect accounting (description +
+   * line-item account recategorization within the same account_type).
+   * Rejects lot-bearing, reconciled, or cross-type account changes. */
+  updateJournalEntrySafe(
+    id: string,
+    patch: {
+      description?: string;
+      description_data?: string | null;
+      lineItems?: Array<{ id: string; account_id: string }>;
+    },
+  ): Promise<JournalEntry>;
   getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null>;
   /** Returns the full edit-version chain (oldest → newest) for an entry, walking
    * `edit:original_id` metadata in both directions. Includes voided ancestors
@@ -376,6 +387,16 @@ class TauriBackend implements Backend {
       newMetadata: newMetadata ?? {},
       newLinks: newLinks ?? null,
     });
+  }
+  async updateJournalEntrySafe(
+    id: string,
+    patch: {
+      description?: string;
+      description_data?: string | null;
+      lineItems?: Array<{ id: string; account_id: string }>;
+    },
+  ): Promise<JournalEntry> {
+    return this.invoke("update_journal_entry_safe", { id, patch });
   }
   async getJournalEntry(id: string): Promise<[JournalEntry, LineItem[]] | null> {
     return this.invoke("get_journal_entry", { id });
