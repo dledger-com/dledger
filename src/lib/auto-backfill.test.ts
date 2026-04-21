@@ -178,9 +178,10 @@ describe("getCurrencyDateRequirements", () => {
     expect(reqs.find((r) => r.currency === "USD")).toBeUndefined();
   });
 
-  it("voided entries are excluded from requirements query", async () => {
-    // Post and void — the original entry's lines should not be counted
-    // Only the reversal entry's lines will appear
+  it("voided entries and their reversals are excluded from requirements query", async () => {
+    // Post and void — neither the voided original (status='voided') nor the
+    // reversal entry (source='system:void') represents a real transaction
+    // requiring rate data, so EUR should not appear in the requirements.
     const entryId = uuidv7();
     const bankId = await getAccountId("Assets:Bank");
     const tradingId = await getAccountId("Equity:Trading");
@@ -196,12 +197,7 @@ describe("getCurrencyDateRequirements", () => {
     await backend.voidJournalEntry(entryId);
 
     const reqs = await backend.getCurrencyDateRequirements("USD");
-    const eurReq = reqs.find((r) => r.currency === "EUR");
-    // EUR appears due to the reversal entry (which has status='confirmed')
-    // but the voided original (status='voided') is excluded
-    expect(eurReq).toBeDefined();
-    // The reversal date is today, not the original date
-    expect(eurReq!.firstDate).not.toBe("2024-02-01");
+    expect(reqs.find((r) => r.currency === "EUR")).toBeUndefined();
   });
 
   it("hasBalance is false when net balance is zero", async () => {
