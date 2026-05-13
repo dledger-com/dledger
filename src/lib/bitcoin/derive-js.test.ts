@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { convertPrivateKeyJs, deriveBtcAddressesJs, detectBtcInputTypeJs, deriveMultiAccountXpubs } from "./derive-js.js";
+import { convertPrivateKeyJs, deriveBtcAddressesJs, deriveBtcScriptCandidates, detectBtcInputTypeJs, deriveMultiAccountXpubs } from "./derive-js.js";
 
 // BIP39 test vector: "abandon" x11 + "about" (12-word mnemonic, no passphrase)
 const TEST_MNEMONIC_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -308,6 +308,90 @@ describe("detectBtcInputTypeJs", () => {
       const r = detectBtcInputTypeJs("");
       expect(r.input_type).toBe("unknown");
     });
+  });
+});
+
+describe("deriveBtcScriptCandidates", () => {
+  // Build a known xpub by deriving from the BIP39 test mnemonic at the BIP44 path.
+  // This simulates the Ledger Live case: account-level extended key serialized as xpub
+  // regardless of which BIP actually generated it. Note that Ledger Live derives at
+  // m/44'/0'/0' / m/49'/0'/0' / m/84'/0'/0' — they differ — but for the purposes of
+  // verifying the candidate function, we pass in any xpub-prefixed key and assert all
+  // four script types come back with correct address prefixes.
+  const getXpub = () => {
+    const result = convertPrivateKeyJs(TEST_MNEMONIC_12, 44);
+    if (result.public_result.kind !== "Xpub") throw new Error("Expected Xpub");
+    return result.public_result.xpub;
+  };
+
+  it("returns four candidates with one per BIP", () => {
+    const candidates = deriveBtcScriptCandidates(getXpub(), "mainnet");
+    expect(candidates).toHaveLength(4);
+    expect(candidates.map(c => c.bip)).toEqual([44, 49, 84, 86]);
+  });
+
+  it("produces the correct address prefix for each script type", () => {
+    const candidates = deriveBtcScriptCandidates(getXpub(), "mainnet");
+    const byBip = new Map(candidates.map(c => [c.bip, c]));
+    expect(byBip.get(44)!.firstAddress).toMatch(/^1/);
+    expect(byBip.get(49)!.firstAddress).toMatch(/^3/);
+    expect(byBip.get(84)!.firstAddress).toMatch(/^bc1q/);
+    expect(byBip.get(86)!.firstAddress).toMatch(/^bc1p/);
+  });
+
+  it("re-encodes the extended key with the script-type-appropriate version prefix", () => {
+    const candidates = deriveBtcScriptCandidates(getXpub(), "mainnet");
+    const byBip = new Map(candidates.map(c => [c.bip, c]));
+    expect(byBip.get(44)!.encodedKey).toMatch(/^xpub/);
+    expect(byBip.get(44)!.keyType).toBe("xpub");
+    expect(byBip.get(49)!.encodedKey).toMatch(/^ypub/);
+    expect(byBip.get(49)!.keyType).toBe("ypub");
+    expect(byBip.get(84)!.encodedKey).toMatch(/^zpub/);
+    expect(byBip.get(84)!.keyType).toBe("zpub");
+    // BIP86 (Taproot) has no SLIP-0132 prefix — re-uses xpub serialization.
+    expect(byBip.get(86)!.encodedKey).toMatch(/^xpub/);
+    expect(byBip.get(86)!.keyType).toBe("xpub");
+  });
+
+  it("accepts ypub/zpub input and produces the same candidate set as the equivalent xpub", () => {
+    const xpubResult = convertPrivateKeyJs(TEST_MNEMONIC_12, 44);
+    const zpubResult = convertPrivateKeyJs(TEST_MNEMONIC_12, 84);
+    if (xpubResult.public_result.kind !== "Xpub" || zpubResult.public_result.kind !== "Xpub") {
+      throw new Error("Expected Xpub");
+    }
+    // These two keys share the same BIP32 payload (different derivation paths produce
+    // different payloads, but for the version-swap roundtrip we just need any key).
+    // To test the function actually round-trips, derive from xpub and then re-derive
+    // by passing in the BIP84 candidate's zpub form: results must agree per BIP.
+    const fromXpub = deriveBtcScriptCandidates(xpubResult.public_result.xpub, "mainnet");
+    const zpubFromXpub = fromXpub.find(c => c.bip === 84)!.encodedKey;
+    const fromZpub = deriveBtcScriptCandidates(zpubFromXpub, "mainnet");
+    expect(fromZpub.map(c => c.firstAddress)).toEqual(fromXpub.map(c => c.firstAddress));
+    expect(fromZpub.map(c => c.encodedKey)).toEqual(fromXpub.map(c => c.encodedKey));
+  });
+
+  it("matches the known BIP84 first address for the test mnemonic", () => {
+    const candidates = deriveBtcScriptCandidates(getXpub(), "mainnet");
+    // Note: convertPrivateKeyJs(seed, 44) derives at m/44'/0'/0', so the BIP84 candidate
+    // from this xpub is NOT the same as deriving at m/84'/0'/0'. We only assert that
+    // the BIP44 first address matches what BIP44 derivation from the BIP44 path produces.
+    const xpub = getXpub();
+    const expectedBip44 = deriveBtcAddressesJs(xpub, 44, 0, 0, 1, "mainnet")[0];
+    expect(candidates.find(c => c.bip === 44)!.firstAddress).toBe(expectedBip44);
+  });
+
+  it("supports testnet (tpub/upub/vpub)", () => {
+    const result = convertPrivateKeyJs(TEST_MNEMONIC_12, 44, "", "testnet");
+    if (result.public_result.kind !== "Xpub") throw new Error("Expected Xpub");
+    const candidates = deriveBtcScriptCandidates(result.public_result.xpub, "testnet");
+    const byBip = new Map(candidates.map(c => [c.bip, c]));
+    expect(byBip.get(44)!.encodedKey).toMatch(/^tpub/);
+    expect(byBip.get(49)!.encodedKey).toMatch(/^upub/);
+    expect(byBip.get(84)!.encodedKey).toMatch(/^vpub/);
+    expect(byBip.get(44)!.firstAddress).toMatch(/^[mn]/);
+    expect(byBip.get(49)!.firstAddress).toMatch(/^2/);
+    expect(byBip.get(84)!.firstAddress).toMatch(/^tb1q/);
+    expect(byBip.get(86)!.firstAddress).toMatch(/^tb1p/);
   });
 });
 

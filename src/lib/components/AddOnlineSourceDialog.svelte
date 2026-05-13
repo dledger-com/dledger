@@ -23,6 +23,7 @@
     import { detectInputType, type QuickDetection } from "$lib/bitcoin/validate.js";
     import { detectEvmInputType, deriveEvmAddress, validateEvmSeedPhrase, deriveEvmAddressesFromSeed, deriveEvmAddressesFromXpub } from "$lib/evm/derive.js";
     import { detectBtcInputType, convertPrivateKey, deriveMultiXpubsFromSeed, deriveAddresses as deriveBtcAddressesFromXpub } from "$lib/bitcoin/derive.js";
+    import { deriveBtcScriptCandidates } from "$lib/bitcoin/derive-js.js";
     import { checkEvmActivity, checkBtcActivity } from "$lib/blockchain-activity.js";
     import { SettingsStore } from "$lib/data/settings.svelte.js";
     import type { DerivedBtcXpub } from "$lib/bitcoin/derive.js";
@@ -98,6 +99,11 @@
     let btcItemLabels = $state<Map<number, string>>(new Map());
     let btcDerivedXpubs = $state<DerivedBtcXpub[]>([]);
     let btcDeriving = $state(false);
+    // When true, btcDerivedXpubs holds script-type candidates (BIP44/49/84/86)
+    // derived from a single pasted xpub, with `index` carrying the BIP number.
+    // When false, btcDerivedXpubs holds seed-derived accounts and the bip comes
+    // from btcSeedBip uniformly.
+    let btcScriptPickerMode = $state(false);
 
     // -- Activity scanning --
     const settingsStore = new SettingsStore();
@@ -128,7 +134,16 @@
 
     // Existing-address sets for duplicate detection
     const existingEvmAddresses = $derived(new Set(existingEthAccounts.map(a => a.address.toLowerCase())));
+    // String-only set: matches when an extended-key string is already present at any BIP.
+    // Used by the single-paste path (ypub/zpub/address have unique encodings per BIP).
     const existingBtcXpubs = $derived(new Set(existingBtcAccounts.map(a => a.address_or_xpub)));
+    // Tuple set keyed by (address_or_xpub, derivation_bip): needed when the same
+    // encoded key can be added under multiple BIPs — e.g., xpub for BIP44 and BIP86,
+    // which produce identical xpub-prefixed strings but distinct script types.
+    function btcDedupKey(addrOrXpub: string, bip: number | undefined | null): string {
+        return `${addrOrXpub}|${bip ?? ""}`;
+    }
+    const existingBtcKeys = $derived(new Set(existingBtcAccounts.map(a => btcDedupKey(a.address_or_xpub, a.derivation_bip))));
 
     // Reset EVM activity status when derived addresses change
     $effect(() => {
@@ -168,10 +183,15 @@
         if (!input) return false;
         const det = btcDetection;
         if (det.type === "seed" || det.type === "unknown") return false;
+        // The xpub-paste path goes through the script-type picker, not the single-add path.
+        if (det.type === "xpub") return false;
         return existingBtcXpubs.has(input);
     });
 
-    // Async derivation of multi-index xpubs from seed phrase
+    // Derivation: seed phrase → multi-account xpubs (async); xpub paste →
+    // script-type candidates (sync). Both populate btcDerivedXpubs, with
+    // btcScriptPickerMode flagging which mode produced the rows so the rest of
+    // the UI (label badges, BIP per row, "Load more" button) can adapt.
     $effect(() => {
         const input = btcNewAddressOrXpub.trim();
         const det = btcDetection;
@@ -180,9 +200,36 @@
         const pass = btcSeedPassphrase;
         const count = btcDeriveCount;
 
-        // Reset BTC activity status on derivation change (avoid reading btcScanAbort here
-        // as it would create a circular dependency that aborts scans immediately)
         btcActivityStatus = new Map();
+
+        // xpub/tpub paste: derive all four script-type candidates from the same key
+        // material. Pre-select BIP84 (Native SegWit, default Ledger Live BTC).
+        // ypub/zpub/upub/vpub are unambiguous → fall through to the single-paste path.
+        const isXpubLike = input.startsWith("xpub") || input.startsWith("tpub");
+        if (input && det.type === "xpub" && isXpubLike) {
+            const network: "mainnet" | "testnet" = input.startsWith("tpub") ? "testnet" : "mainnet";
+            try {
+                const candidates = deriveBtcScriptCandidates(input, network);
+                btcDerivedXpubs = candidates.map(c => ({
+                    index: c.bip,
+                    xpub: c.encodedKey,
+                    keyType: c.keyType,
+                }));
+                btcScriptPickerMode = true;
+                const bip84Row = candidates.find(c => c.bip === 84);
+                const preselect = bip84Row && !existingBtcKeys.has(btcDedupKey(bip84Row.encodedKey, 84))
+                    ? bip84Row.bip
+                    : candidates.find(c => !existingBtcKeys.has(btcDedupKey(c.encodedKey, c.bip)))?.bip;
+                btcSelectedIndexes = new Set(preselect !== undefined ? [preselect] : []);
+                btcDeriving = false;
+            } catch {
+                btcDerivedXpubs = [];
+                btcScriptPickerMode = false;
+            }
+            return;
+        }
+
+        btcScriptPickerMode = false;
 
         if (!input || det.type !== "seed" || !ack) {
             btcDerivedXpubs = [];
@@ -195,7 +242,7 @@
             .then((result) => {
                 if (!cancelled) {
                     btcDerivedXpubs = result;
-                    const firstUnknown = result.find(x => !existingBtcXpubs.has(x.xpub));
+                    const firstUnknown = result.find(x => !existingBtcKeys.has(btcDedupKey(x.xpub, bip)));
                     btcSelectedIndexes = new Set(firstUnknown ? [firstUnknown.index] : []);
                 }
             })
@@ -249,6 +296,7 @@
         btcSelectedIndexes = new Set([0]);
         btcDerivedXpubs = [];
         btcDeriving = false;
+        btcScriptPickerMode = false;
         evmPrivateKeyAck = false;
         evmSeedPassphrase = "";
         evmDeriveCount = 5;
@@ -427,30 +475,39 @@
 
         btcAddingAccount = true;
         try {
-            // Multi-index path: seed phrase with derived xpubs
+            // Multi-pick path: seed-phrase accounts OR xpub script-type candidates.
+            // In script-picker mode, each row's `index` is the BIP number (44/49/84/86);
+            // in seed mode, it's an account index and the BIP is btcSeedBip uniformly.
             if (btcDerivedXpubs.length > 0) {
                 if (btcSelectedIndexes.size === 0) {
-                    toast.error("Select at least one wallet");
+                    toast.error(btcScriptPickerMode ? "Select at least one script type" : "Select at least one wallet");
                     return;
                 }
+                const bipFor = (row: DerivedBtcXpub) => btcScriptPickerMode ? row.index : btcSeedBip;
                 const selected = btcDerivedXpubs
                     .filter(x => btcSelectedIndexes.has(x.index))
-                    .filter(x => !existingBtcXpubs.has(x.xpub));
+                    .filter(x => !existingBtcKeys.has(btcDedupKey(x.xpub, bipFor(x))));
                 if (selected.length === 0) {
-                    toast.error("All selected wallets are already added");
+                    toast.error(btcScriptPickerMode ? "All selected script types are already added" : "All selected wallets are already added");
                     return;
                 }
-                // Clear private material immediately
+                // Clear private material immediately (seed phrase). Safe for xpub too.
                 btcNewAddressOrXpub = "";
-                for (const { index, xpub, keyType } of selected) {
-                    const label = btcItemLabels.get(index)?.trim() || (baseLabel ? `${baseLabel} #${index}` : ellipseAddress(xpub));
+                for (const row of selected) {
+                    const { index, xpub, keyType } = row;
+                    const rowBip = bipFor(row);
+                    const rowNetwork: "mainnet" | "testnet" = (keyType === "tpub" || keyType === "upub" || keyType === "vpub") ? "testnet" : "mainnet";
+                    const labelFromUser = btcItemLabels.get(index)?.trim();
+                    const fallbackLabel = btcScriptPickerMode
+                        ? (baseLabel ? `${baseLabel} (BIP${rowBip})` : `BIP${rowBip} ${ellipseAddress(xpub)}`)
+                        : (baseLabel ? `${baseLabel} #${index}` : ellipseAddress(xpub));
                     await getBackend().addBitcoinAccount({
                         id: uuidv7(),
                         address_or_xpub: xpub,
                         account_type: keyType as "xpub" | "ypub" | "zpub",
-                        derivation_bip: btcSeedBip,
-                        network: "mainnet",
-                        label,
+                        derivation_bip: rowBip,
+                        network: rowNetwork,
+                        label: labelFromUser || fallbackLabel,
                         last_receive_index: -1,
                         last_change_index: -1,
                         created_at: new Date().toISOString(),
@@ -461,7 +518,9 @@
                 cancelAdd();
                 onAccountAdded();
                 open = false;
-                toast.success(`${selected.length} HD wallet(s) added`);
+                toast.success(btcScriptPickerMode
+                    ? `${selected.length} script type(s) added`
+                    : `${selected.length} HD wallet(s) added`);
                 return;
             }
 
@@ -588,7 +647,9 @@
         if (btcDerivedXpubs.length === 0) return;
         const abort = new AbortController();
         btcScanAbort = abort;
-        const bip = btcSeedBip;
+        // In script-picker mode each row's index IS the BIP; in seed mode the BIP is uniform.
+        const pickerMode = btcScriptPickerMode;
+        const fixedBip = btcSeedBip;
         const xpubs = [...btcDerivedXpubs];
         const newStatus = new Map<number, boolean | null | "checking">();
         for (const xpub of xpubs) newStatus.set(xpub.index, "checking");
@@ -598,7 +659,8 @@
         for (const xpub of xpubs) {
             if (abort.signal.aborted) break;
             try {
-                const addresses = await deriveBtcAddressesFromXpub(xpub.xpub, bip, 0, 0, 1, "mainnet");
+                const rowBip = pickerMode ? xpub.index : fixedBip;
+                const addresses = await deriveBtcAddressesFromXpub(xpub.xpub, rowBip, 0, 0, 1, "mainnet");
                 if (addresses.length > 0) {
                     const result = await checkBtcActivity(addresses[0], abort.signal);
                     newStatus.set(xpub.index, result);
@@ -1029,11 +1091,18 @@
                     {/if}
                 {/if}
 
-                <!-- Multi-index xpub picker -->
+                <!-- Multi-pick picker: seed-derived HD wallets, OR script-type candidates from xpub -->
                 {#if btcDerivedXpubs.length > 0}
+                    {@const scriptLabels = { 44: "Legacy P2PKH", 49: "Wrapped SegWit", 84: "Native SegWit", 86: "Taproot" } as Record<number, string>}
                     <div class="space-y-2">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-medium">{m.sources_derived_hd_wallets()}</span>
+                            <span class="text-xs font-medium">
+                                {#if btcScriptPickerMode}
+                                    Script-type candidates
+                                {:else}
+                                    {m.sources_derived_hd_wallets()}
+                                {/if}
+                            </span>
                             {#if !btcDeriving}
                                 {#if btcScanAbort}
                                     <Button variant="outline" size="sm" onclick={cancelBtcScan}>
@@ -1054,9 +1123,15 @@
                                 {m.sources_deriving()}
                             </div>
                         {/if}
+                        {#if btcScriptPickerMode}
+                            <p class="text-xs text-muted-foreground">
+                                Ledger Live exposes every Bitcoin account as <code class="font-mono">xpub</code> regardless of its script type. We show all four candidates so you can pick the one your wallet actually uses — or scan activity to auto-detect.
+                            </p>
+                        {/if}
                         <div class="max-h-48 overflow-y-auto overflow-x-hidden rounded-md border">
                             {#each btcDerivedXpubs as { index, xpub, keyType }}
-                                {@const exists = existingBtcXpubs.has(xpub)}
+                                {@const rowBip = btcScriptPickerMode ? index : btcSeedBip}
+                                {@const exists = existingBtcKeys.has(btcDedupKey(xpub, rowBip))}
                                 {@const btcStatus = btcActivityStatus.get(index)}
                                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer min-w-0"
                                        class:opacity-50={exists} class:cursor-not-allowed={exists}>
@@ -1088,8 +1163,14 @@
                                     <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(xpub); }} class="shrink-0 text-muted-foreground hover:text-foreground" title={m.sources_copy()}>
                                         <Copy class="h-3 w-3" />
                                     </button>
-                                    <span class="text-xs text-muted-foreground">#{index}</span>
-                                    <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
+                                    {#if btcScriptPickerMode}
+                                        <span class="text-xs text-muted-foreground" title={scriptLabels[index]}>BIP{index}</span>
+                                        <Badge variant="secondary" class="text-[10px] px-1 py-0">{scriptLabels[index]}</Badge>
+                                        <Badge variant="outline" class="text-[10px] px-1 py-0">{keyType}</Badge>
+                                    {:else}
+                                        <span class="text-xs text-muted-foreground">#{index}</span>
+                                        <Badge variant="secondary" class="text-[10px] px-1 py-0">{keyType}</Badge>
+                                    {/if}
                                     {#if exists}
                                         <span class="ml-auto text-xs text-muted-foreground italic">{m.sources_already_added()}</span>
                                     {:else}
@@ -1111,9 +1192,11 @@
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-xs text-muted-foreground">{m.sources_wallets_selected({ count: btcSelectedIndexes.size })}</span>
-                            <Button variant="outline" size="sm" onclick={() => { btcDeriveCount += 5; }}>
-                                {m.sources_load_more()}
-                            </Button>
+                            {#if !btcScriptPickerMode}
+                                <Button variant="outline" size="sm" onclick={() => { btcDeriveCount += 5; }}>
+                                    {m.sources_load_more()}
+                                </Button>
+                            {/if}
                         </div>
                     </div>
                 {/if}

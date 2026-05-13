@@ -185,6 +185,67 @@ export function deriveMultiAccountXpubs(
   return results;
 }
 
+// ---- Script-type candidates from a single extended public key ----
+
+export type BtcScriptType = "Legacy" | "Wrapped SegWit" | "Native SegWit" | "Taproot";
+
+export interface BtcScriptCandidate {
+  bip: 44 | 49 | 84 | 86;
+  keyType: "xpub" | "ypub" | "zpub" | "tpub" | "upub" | "vpub";
+  scriptLabel: BtcScriptType;
+  encodedKey: string;
+  firstAddress: string;
+}
+
+const SCRIPT_LABEL: Record<44 | 49 | 84 | 86, BtcScriptType> = {
+  44: "Legacy",
+  49: "Wrapped SegWit",
+  84: "Native SegWit",
+  86: "Taproot",
+};
+
+/**
+ * Given any extended public key (xpub/ypub/zpub or testnet equivalent), derive the
+ * four script-type candidates (BIP44/49/84/86). Each candidate exposes the
+ * version-swapped extended key string and the first receive address (m/0/0) that
+ * the corresponding script type produces.
+ *
+ * The 78-byte BIP32 payload is identical across xpub/ypub/zpub — only the 4-byte
+ * SLIP-0132 version prefix changes. This lets us present an xpub-from-Ledger-Live
+ * (which is always serialized with the xpub prefix regardless of the actual
+ * account's script type) as all four script-type interpretations side by side.
+ */
+export function deriveBtcScriptCandidates(
+  extKey: string,
+  network: "mainnet" | "testnet",
+): BtcScriptCandidate[] {
+  const testnet = network === "testnet";
+
+  // Normalize the input to xpub/tpub so we have a stable base for re-encoding.
+  const inputVersion = getVersionFromKey(extKey);
+  const baseXpubVersion = testnet ? VERSION.tpub : VERSION.xpub;
+  const xpubNormalized = inputVersion === baseXpubVersion
+    ? extKey
+    : swapVersionBytes(extKey, baseXpubVersion);
+
+  const candidates: BtcScriptCandidate[] = [];
+  for (const bip of [44, 49, 84, 86] as const) {
+    const pubVersion = pubVersionForBip(bip, testnet);
+    const encodedKey = pubVersion === baseXpubVersion
+      ? xpubNormalized
+      : swapVersionBytes(xpubNormalized, pubVersion);
+    const firstAddress = deriveBtcAddressesJs(xpubNormalized, bip, 0, 0, 1, network)[0];
+    candidates.push({
+      bip,
+      keyType: VERSION_NAME[pubVersion] as BtcScriptCandidate["keyType"],
+      scriptLabel: SCRIPT_LABEL[bip],
+      encodedKey,
+      firstAddress,
+    });
+  }
+  return candidates;
+}
+
 // ---- Public API ----
 
 /**
