@@ -6,6 +6,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import Decimal from "decimal.js-light";
   import { SettingsStore } from "$lib/data/settings.svelte.js";
@@ -69,6 +70,8 @@
   let savedReport = $state<PersistedFrenchTaxReport | null>(null);
   let checklist = $state<Record<string, boolean>>({});
   let initialAcquisitionCost = $state(settings.settings.frenchTax?.initialAcquisitionCost ?? "0");
+  // Same-day sales grouping — default true (matches the engine default).
+  let groupSameDaySales = $state(settings.settings.frenchTax?.groupSameDaySales ?? true);
   let overridePriorCost = $state(false);
   let overrideValue = $state("");
   let staleWarning = $state<string | null>(null);
@@ -289,6 +292,23 @@
     await loadChainData();
   }
 
+  async function onGroupSameDayChanged(next: boolean) {
+    if (next === groupSameDaySales) return;
+    groupSameDaySales = next;
+    settings.update({
+      frenchTax: {
+        ...settings.settings.frenchTax,
+        groupSameDaySales: next,
+      },
+    });
+    // Persisted reports were computed with the prior grouping mode — invalidate
+    // all of them so the chain rebuilds with the new setting. The "missing
+    // years" banner then prompts the user to regenerate.
+    await invalidateFrenchTaxChainFromYear(getBackend(), "1900-01-01");
+    await loadChainData();
+    await loadSavedReport();
+  }
+
   async function generate() {
     loading = true;
     error = null;
@@ -311,6 +331,7 @@
     const capturedPriorSource = overridePriorCost ? 'initial' as const : resolved.source;
     const capturedFiatCurrencies = settings.settings.frenchTax?.fiatCurrencies;
     const capturedInitialCost = initialAcquisitionCost;
+    const capturedGroupSameDay = groupSameDaySales;
 
     return new Promise<void>((resolve) => {
       const id = taskQueue.enqueue({
@@ -324,6 +345,7 @@
               priorAcquisitionCost: capturedPriorCost,
               priorCostSource: capturedPriorSource,
               fiatCurrencies: capturedFiatCurrencies,
+              groupSameDaySales: capturedGroupSameDay,
             });
 
             // Auto-save to DB (preserve existing checklist on regenerate)
@@ -688,6 +710,17 @@
             </div>
           {/if}
         {/if}
+      </div>
+
+      <!-- Same-day cession grouping toggle -->
+      <div class="flex items-start gap-3 pt-2 border-t">
+        <Switch id="group-same-day" checked={groupSameDaySales} onCheckedChange={onGroupSameDayChanged} />
+        <div class="flex-1 space-y-0.5">
+          <label for="group-same-day" class="text-sm font-medium cursor-pointer">Grouper les cessions du même jour</label>
+          <p class="text-xs text-muted-foreground">
+            Toutes les ventes d'une même journée comptent comme une seule cession sur le formulaire 2086 (recommandé). Réduit fortement le nombre de cessions à déclarer.
+          </p>
+        </div>
       </div>
 
       {#if savedReport}

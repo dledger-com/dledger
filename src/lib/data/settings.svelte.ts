@@ -30,6 +30,9 @@ export interface AppSettings {
   frenchTax?: {
     initialAcquisitionCost?: string;  // EUR, default "0"
     fiatCurrencies?: string[];        // override defaults
+    /** Aggregate every same-day sale into a single cession on form 2086.
+     *  Defaults to true when undefined. */
+    groupSameDaySales?: boolean;
   };
   csvCategorizationRules?: CsvCategorizationRule[];
   mlClassificationEnabled?: boolean;

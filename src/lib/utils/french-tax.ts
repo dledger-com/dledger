@@ -32,6 +32,10 @@ export interface FrenchTaxOptions {
   priorCostSource?: 'chained' | 'initial' | 'none'; // how priorAcquisitionCost was resolved
   fiatCurrencies?: string[];     // override DEFAULT_FIAT_CURRENCIES
   baseCurrency?: string;         // for non-EUR fiat conversions, default "EUR"
+  /** When true (default), every sale on the same calendar date is rolled into
+   *  a single aggregate cession before the formula is applied. Cuts the number
+   *  of rows the user has to copy onto form 2086 dramatically. */
+  groupSameDaySales?: boolean;
 }
 
 export interface Disposition {
@@ -79,6 +83,9 @@ export interface FrenchTaxReport {
    *  current setting has drifted from the value used at generation time.
    *  Optional for backward compat with reports persisted before this field existed. */
   priorAcquisitionCost?: string;
+  /** Whether same-day sales were aggregated into a single cession for this report.
+   *  Optional for backward compat (undefined on reports persisted before this option). */
+  groupSameDaySales?: boolean;
   /** EUR value of crypto portfolio at Dec 31. */
   yearEndPortfolioValue: string;
   /** Box 3AN (if positive) or 3BN (if negative). */
@@ -407,6 +414,85 @@ export async function computeFrenchTaxReport(
   let pendingItems: LineItem[] = [];
   let entryIndex = 0;
 
+  // Same-day cession aggregation. When `groupSameDaySales` is on (default),
+  // every disposition on the same calendar date contributes to a single
+  // aggregate cession declared on form 2086. V and A are captured at the
+  // moment of the FIRST disposition of the day; the formula is applied once
+  // to the summed C. Reduces the cession count dramatically for users with
+  // many small same-day fills.
+  const groupSameDay = opts.groupSameDaySales ?? true;
+  interface PendingDayBucket {
+    date: string;
+    V: Decimal;
+    Aatfirst: Decimal;
+    cryptoCurrencies: Set<string>;
+    totalC: Decimal;
+    firstEntry: JournalEntry;
+    count: number;
+  }
+  let pendingDay: PendingDayBucket | null = null;
+
+  function flushPendingDay() {
+    if (!pendingDay) return;
+    const bucket = pendingDay;
+    pendingDay = null;
+    const cryptoArr = [...bucket.cryptoCurrencies];
+    const description = bucket.count === 1
+      ? bucket.firstEntry.description
+      : `${bucket.count} cessions du ${bucket.date}`;
+
+    if (bucket.date >= yearStart) {
+      if (bucket.V.isZero()) {
+        skippedDispositionCount++;
+        warnings.push(
+          bucket.count === 1
+            ? `Portfolio value is 0 on ${bucket.date} — cannot compute plus-value for entry "${bucket.firstEntry.description}". You may need to add opening balance entries for your crypto holdings.`
+            : `Portfolio value is 0 on ${bucket.date} — cannot compute plus-value for ${bucket.count} grouped cessions. You may need to add opening balance entries for your crypto holdings.`
+        );
+      } else {
+        // Apply formula using A captured at first sale (form-consistent) and aggregate C.
+        const costFraction = bucket.Aatfirst.times(bucket.totalC).div(bucket.V);
+        const cappedFraction = costFraction.gt(bucket.Aatfirst) ? bucket.Aatfirst : costFraction;
+        const plusValue = bucket.totalC.minus(cappedFraction);
+        // Running A subtracts the capped cost fraction from CURRENT A (which may
+        // include same-day acquisitions that arrived after the first sale).
+        const newA = A.minus(cappedFraction);
+        const clampedNewA = newA.lt(0) ? new Decimal(0) : newA;
+
+        dispositions.push({
+          entryId: bucket.firstEntry.id,
+          date: bucket.date,
+          description,
+          cryptoCurrencies: cryptoArr,
+          fiatReceived: bucket.totalC.toFixed(2),
+          portfolioValue: bucket.V.toFixed(2),
+          acquisitionCostBefore: bucket.Aatfirst.toFixed(2),
+          costFraction: cappedFraction.toFixed(2),
+          plusValue: plusValue.toFixed(2),
+          acquisitionCostAfter: clampedNewA.toFixed(2),
+        });
+        A = clampedNewA;
+      }
+    } else {
+      preYearDispCount += bucket.count;
+      preYearDispTotal = preYearDispTotal.plus(bucket.totalC);
+      if (preYearDispSamples.length < 20) {
+        preYearDispSamples.push({
+          date: bucket.date,
+          description,
+          fiatReceived: bucket.totalC.toFixed(2),
+          cryptoCurrencies: cryptoArr,
+        });
+      }
+      if (!skipPreYearA && !bucket.V.isZero()) {
+        const costFraction = bucket.Aatfirst.times(bucket.totalC).div(bucket.V);
+        const cappedFraction = costFraction.gt(bucket.Aatfirst) ? bucket.Aatfirst : costFraction;
+        const Aafter = A.minus(cappedFraction);
+        A = Aafter.lt(0) ? new Decimal(0) : Aafter;
+      }
+    }
+  }
+
   for (const [entry, items] of allEntries) {
     // Yield periodically for UI responsiveness
     if (++entryIndex % 200 === 0) {
@@ -420,6 +506,12 @@ export async function computeFrenchTaxReport(
     if (pendingItems.length > 0) {
       incrementalBalance.addItems(pendingItems);
       pendingItems = [];
+    }
+
+    // Date rollover: flush any pending day's aggregate cession before starting
+    // a new date's processing.
+    if (groupSameDay && pendingDay && pendingDay.date !== entry.date) {
+      flushPendingDay();
     }
 
     const event = classifyEntryEvent(entry, items, accountMap, fiatSet);
@@ -470,9 +562,39 @@ export async function computeFrenchTaxReport(
         }
       }
 
-      // Snapshot immediately before this disposition. Same-day prior entries
-      // (deposits, acquisitions, earlier sales) are already folded into the
-      // running balance by the flush above.
+      // Route through the same-day bucket when grouping is enabled. Each
+      // bucket captures V and A at the FIRST disposition of the day; later
+      // same-day sales just add to totalC. The flush (on date rollover or
+      // end-of-loop) computes the formula once per day.
+      if (groupSameDay) {
+        if (pendingDay && pendingDay.date === entry.date) {
+          pendingDay.totalC = pendingDay.totalC.plus(C);
+          pendingDay.count++;
+          for (const c of event.cryptoCurrencies) pendingDay.cryptoCurrencies.add(c);
+        } else {
+          // First disposition of this date — snapshot V and capture A now.
+          const tb = incrementalBalance.snapshot(accountMap);
+          const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
+            tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
+          );
+          for (const mr of missingRates) warnings.push(`Missing rate: ${mr}`);
+          missingCurrencyDates.push(...pvMissing);
+          pendingDay = {
+            date: entry.date,
+            V,
+            Aatfirst: A,
+            cryptoCurrencies: new Set(event.cryptoCurrencies),
+            totalC: C,
+            firstEntry: entry,
+            count: 1,
+          };
+        }
+        // Accumulate items and skip the inline formula path below.
+        pendingItems.push(...items);
+        continue;
+      }
+
+      // Non-grouped path: snapshot V immediately before this disposition.
       const tb = incrementalBalance.snapshot(accountMap);
       const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
         tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
@@ -538,6 +660,12 @@ export async function computeFrenchTaxReport(
 
     // Accumulate current entry's items for the next date boundary
     pendingItems.push(...items);
+  }
+
+  // Flush the trailing same-day bucket (the last date in the loop never crosses
+  // a date boundary so no in-loop flush fires for it).
+  if (groupSameDay && pendingDay) {
+    flushPendingDay();
   }
 
   // 5. Compute totals
@@ -611,6 +739,7 @@ export async function computeFrenchTaxReport(
     totalFiatReceived: totalFiatReceived.toFixed(2),
     finalAcquisitionCost: A.toFixed(2),
     priorAcquisitionCost: new Decimal(initialPriorCost).toFixed(2),
+    groupSameDaySales: groupSameDay,
     yearEndPortfolioValue: yearEndV.toFixed(2),
     box3AN: isPositive ? totalPlusValue.toFixed(2) : "0.00",
     box3BN: isPositive ? "0.00" : totalPlusValue.abs().toFixed(2),

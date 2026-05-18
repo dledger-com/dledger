@@ -238,6 +238,196 @@ describe("classifyEntryEvent", () => {
   });
 });
 
+describe("computeFrenchTaxReport — groupSameDaySales", () => {
+  it("default ON: three same-day sales become one aggregate disposition", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Buy 3 BTC for €30,000 (€10,000/BTC) on 2024-01-15
+    const buy = makeEntry({ date: "2024-01-15", description: "Buy 3 BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-3"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "3"),
+    ]);
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-07-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    // Three sales on the same day 2024-07-01: 0.5, 0.3, 0.2 BTC for 25k, 15k, 10k EUR.
+    for (const [hour, qty, eur] of [["10", "0.5", "25000"], ["11", "0.3", "15000"], ["12", "0.2", "10000"]]) {
+      const sell = makeEntry({ date: "2024-07-01", description: `Sell ${qty} BTC at ${hour}h`, created_at: `2024-07-01T${hour}:00:00` });
+      await backend.postJournalEntry(sell, [
+        makeLineItem(sell.id, accounts.crypto.id, "BTC", `-${qty}`),
+        makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", qty),
+        makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", `-${eur}`),
+        makeLineItem(sell.id, accounts.bank.id, "EUR", eur),
+      ]);
+    }
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+      // groupSameDaySales defaults to true
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    const d = report.dispositions[0];
+    // C = 25000 + 15000 + 10000 = 50000
+    expect(d.fiatReceived).toBe("50000.00");
+    // V = 3 BTC * 50000 = 150000 (snapshotted at the moment of the first sale)
+    expect(d.portfolioValue).toBe("150000.00");
+    // A = 30000 (the buy)
+    expect(d.acquisitionCostBefore).toBe("30000.00");
+    // costFraction = 30000 * 50000 / 150000 = 10000
+    expect(d.costFraction).toBe("10000.00");
+    expect(d.plusValue).toBe("40000.00");
+    // Description tags the group
+    expect(d.description).toBe("3 cessions du 2024-07-01");
+    expect(report.groupSameDaySales).toBe(true);
+  });
+
+  it("turned OFF: three same-day sales remain three dispositions", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    const buy = makeEntry({ date: "2024-01-15", description: "Buy 3 BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-3"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "3"),
+    ]);
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-07-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+
+    for (const [hour, qty, eur] of [["10", "0.5", "25000"], ["11", "0.3", "15000"], ["12", "0.2", "10000"]]) {
+      const sell = makeEntry({ date: "2024-07-01", description: `Sell ${qty} BTC at ${hour}h`, created_at: `2024-07-01T${hour}:00:00` });
+      await backend.postJournalEntry(sell, [
+        makeLineItem(sell.id, accounts.crypto.id, "BTC", `-${qty}`),
+        makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", qty),
+        makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", `-${eur}`),
+        makeLineItem(sell.id, accounts.bank.id, "EUR", eur),
+      ]);
+    }
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+      groupSameDaySales: false,
+    });
+
+    expect(report.dispositions).toHaveLength(3);
+    expect(report.groupSameDaySales).toBe(false);
+    // PV total should remain reasonable (mathematically slightly different from the
+    // grouped case because A and V are sampled at each individual sale).
+    const totalPV = report.dispositions.reduce((s, d) => s + parseFloat(d.plusValue), 0);
+    expect(totalPV).toBeGreaterThan(0);
+  });
+
+  it("multi-currency same-day group: cryptoCurrencies contains all", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Buy 1 BTC + 10 ETH pre-tax-year
+    const buy = makeEntry({ date: "2023-12-01", description: "Buy BTC + ETH" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+    const buyEth = makeEntry({ date: "2023-12-02", description: "Buy 10 ETH" });
+    await backend.postJournalEntry(buyEth, [
+      makeLineItem(buyEth.id, accounts.bank.id, "EUR", "-20000"),
+      makeLineItem(buyEth.id, accounts.tradingEUR.id, "EUR", "20000"),
+      makeLineItem(buyEth.id, accounts.tradingETH.id, "ETH", "-10"),
+      makeLineItem(buyEth.id, accounts.crypto.id, "ETH", "10"),
+    ]);
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "60000", source: "manual",
+    });
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "ETH", to_currency: "EUR",
+      rate: "3000", source: "manual",
+    });
+
+    // Same-day sales: BTC at 10am, ETH at 11am
+    const sellBtc = makeEntry({ date: "2024-06-01", description: "Sell 0.1 BTC", created_at: "2024-06-01T10:00:00" });
+    await backend.postJournalEntry(sellBtc, [
+      makeLineItem(sellBtc.id, accounts.crypto.id, "BTC", "-0.1"),
+      makeLineItem(sellBtc.id, accounts.tradingBTC.id, "BTC", "0.1"),
+      makeLineItem(sellBtc.id, accounts.tradingEUR.id, "EUR", "-6000"),
+      makeLineItem(sellBtc.id, accounts.bank.id, "EUR", "6000"),
+    ]);
+    const sellEth = makeEntry({ date: "2024-06-01", description: "Sell 1 ETH", created_at: "2024-06-01T11:00:00" });
+    await backend.postJournalEntry(sellEth, [
+      makeLineItem(sellEth.id, accounts.crypto.id, "ETH", "-1"),
+      makeLineItem(sellEth.id, accounts.tradingETH.id, "ETH", "1"),
+      makeLineItem(sellEth.id, accounts.tradingEUR.id, "EUR", "-3000"),
+      makeLineItem(sellEth.id, accounts.bank.id, "EUR", "3000"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    expect(report.dispositions[0].cryptoCurrencies.sort()).toEqual(["BTC", "ETH"]);
+    // C = 6000 + 3000 = 9000
+    expect(report.dispositions[0].fiatReceived).toBe("9000.00");
+  });
+
+  it("pre-year same-day grouping consumes A once per day", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // 2018 opening-balance acquisition of 30 BTC at €30,000 cost
+    const opening = makeEntry({
+      date: "2018-12-31",
+      description: "Opening",
+      description_data: JSON.stringify({ type: "opening-balance", costEUR: "30000" }),
+    });
+    await backend.postJournalEntry(opening, [
+      makeLineItem(opening.id, accounts.crypto.id, "BTC", "30"),
+      makeLineItem(opening.id, accounts.tradingBTC.id, "BTC", "-30"),
+    ]);
+
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2019-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "10000", source: "manual",
+    });
+
+    // Two pre-year (2019) sales same day
+    for (const [hour, qty, eur] of [["10", "1", "10000"], ["11", "1", "10000"]]) {
+      const sell = makeEntry({ date: "2019-06-01", description: `pre-year sale ${hour}`, created_at: `2019-06-01T${hour}:00:00` });
+      await backend.postJournalEntry(sell, [
+        makeLineItem(sell.id, accounts.crypto.id, "BTC", `-${qty}`),
+        makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", qty),
+        makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", `-${eur}`),
+        makeLineItem(sell.id, accounts.bank.id, "EUR", eur),
+      ]);
+    }
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    // No in-year activity in 2024 → no dispositions in the report.
+    expect(report.dispositions).toHaveLength(0);
+    // Pre-year disposition count reflects the underlying source entries (2 sales)
+    expect(report.preYearDispositionCount).toBe(2);
+    // A after pre-year: 30 BTC at 30000 EUR cost → A_at_first=30000, V_at_first=30*10000=300000,
+    // C_agg=20000 → cost fraction = 30000 * 20000 / 300000 = 2000 → A=28000.
+    // (If we incorrectly applied the formula PER sale, A would be 30000 - 1000 - 1000 = 28000 too — same
+    // numerically here, but the engine path is grouped.)
+    expect(report.finalAcquisitionCost).toBe("28000.00");
+  });
+});
+
 describe("computeFrenchTaxReport — priorAcquisitionCost persistence", () => {
   it("stores priorAcquisitionCost on the report as the engine's starting A", async () => {
     const { backend } = await createCryptoTaxBackend();
@@ -500,7 +690,7 @@ describe("computeFrenchTaxReport", () => {
     expect(d.plusValue).toBe("35000.00");
   });
 
-  it("multiple sales same day: V reflects portfolio at the moment of each sale", async () => {
+  it("multiple sales same day (groupSameDaySales=false): V reflects portfolio at the moment of each sale", async () => {
     const { backend, accounts } = await createCryptoTaxBackend();
 
     // Buy 2 BTC for 20,000 EUR each
@@ -538,6 +728,9 @@ describe("computeFrenchTaxReport", () => {
     const report = await computeFrenchTaxReport(backend, {
       taxYear: 2024,
       priorAcquisitionCost: "0",
+      // Disable same-day grouping so each sale produces its own disposition
+      // (this test exercises the per-sale V snapshot logic).
+      groupSameDaySales: false,
     });
 
     expect(report.dispositions).toHaveLength(2);
