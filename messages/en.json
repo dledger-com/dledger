@@ -1373,8 +1373,8 @@
   "label_note_column": "Note",
   "label_quantity_column": "Quantity",
 
-  "label_group_same_day_sales": "Group same-day sales",
-  "label_group_same_day_sales_hint": "All sales on a given day count as a single cession on form 2086 (recommended). Significantly reduces the number of cessions to declare.",
+  "label_group_same_day_sales": "Smart-group same-day sales",
+  "label_group_same_day_sales_hint": "Sales on the same day are merged into a single cession on form 2086 unless the portfolio value drifts by more than 5% or an acquisition lands between them (recommended). Significantly reduces the number of cessions to declare.",
 
   "label_cost_basis_optional": "Cost basis (EUR, optional)",
   "label_cost_basis_optional_hint": "If this asset was acquired with EUR before dledger tracked it, declare the cost basis here. It will be recognized as a pre-dledger acquisition on French tax form 2086.",

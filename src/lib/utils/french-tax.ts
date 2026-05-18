@@ -421,6 +421,11 @@ export async function computeFrenchTaxReport(
   // to the summed C. Reduces the cession count dramatically for users with
   // many small same-day fills.
   const groupSameDay = opts.groupSameDaySales ?? true;
+  /** Maximum |V_candidate − V_first| / V_first tolerated before the smart-grouping
+   *  algorithm breaks the bucket. 5% catches notable intraday moves (price swings
+   *  or large sales depleting the portfolio) without splitting on benign noise.
+   *  Hardcoded for now — exposed as a setting if/when users ask. */
+  const SMART_GROUPING_V_DRIFT_THRESHOLD = 0.05;
   interface PendingDayBucket {
     date: string;
     V: Decimal;
@@ -429,6 +434,9 @@ export async function computeFrenchTaxReport(
     totalC: Decimal;
     firstEntry: JournalEntry;
     count: number;
+    /** Set to true when an acquisition is processed after this bucket started.
+     *  Forces a flush before the next disposition since A has drifted. */
+    acquisitionSinceStart: boolean;
   }
   let pendingDay: PendingDayBucket | null = null;
 
@@ -548,6 +556,12 @@ export async function computeFrenchTaxReport(
           cryptoCurrencies: event.cryptoCurrencies,
         });
       }
+
+      // Mark the in-flight bucket dirty so the next same-day disposition triggers
+      // a flush — A has shifted, the bucket's A_at_first is no longer accurate.
+      if (groupSameDay && pendingDay && pendingDay.date === entry.date) {
+        pendingDay.acquisitionSinceStart = true;
+      }
     } else if (event.type === "disposition") {
       // Convert fiat to EUR if not already
       let C = event.fiatAmountEUR;
@@ -562,23 +576,40 @@ export async function computeFrenchTaxReport(
         }
       }
 
-      // Route through the same-day bucket when grouping is enabled. Each
-      // bucket captures V and A at the FIRST disposition of the day; later
-      // same-day sales just add to totalC. The flush (on date rollover or
-      // end-of-loop) computes the formula once per day.
+      // Route through the same-day bucket when grouping is enabled. Smart
+      // bucketing: snapshot V *every* same-day sale and break the bucket if
+      // either V drifts past SMART_GROUPING_V_DRIFT_THRESHOLD from the bucket's
+      // baseline OR an intraday acquisition mutated A. Otherwise just add to C
+      // and let the flush (date rollover or end-of-loop) compute the formula.
       if (groupSameDay) {
-        if (pendingDay && pendingDay.date === entry.date) {
-          pendingDay.totalC = pendingDay.totalC.plus(C);
-          pendingDay.count++;
-          for (const c of event.cryptoCurrencies) pendingDay.cryptoCurrencies.add(c);
+        // Snapshot V at the moment of this candidate disposition — needed both
+        // for the drift check and as the baseline if we start a fresh bucket.
+        const tb = incrementalBalance.snapshot(accountMap);
+        const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
+          tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
+        );
+        for (const mr of missingRates) warnings.push(`Missing rate: ${mr}`);
+        missingCurrencyDates.push(...pvMissing);
+
+        const sameDay = pendingDay !== null && pendingDay.date === entry.date;
+        let breakBucket = false;
+        if (sameDay) {
+          if (pendingDay!.acquisitionSinceStart) {
+            breakBucket = true;
+          } else if (!pendingDay!.V.isZero()) {
+            const drift = V.minus(pendingDay!.V).abs().div(pendingDay!.V).toNumber();
+            if (drift > SMART_GROUPING_V_DRIFT_THRESHOLD) breakBucket = true;
+          }
+        }
+
+        if (sameDay && !breakBucket) {
+          pendingDay!.totalC = pendingDay!.totalC.plus(C);
+          pendingDay!.count++;
+          for (const c of event.cryptoCurrencies) pendingDay!.cryptoCurrencies.add(c);
         } else {
-          // First disposition of this date — snapshot V and capture A now.
-          const tb = incrementalBalance.snapshot(accountMap);
-          const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
-            tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
-          );
-          for (const mr of missingRates) warnings.push(`Missing rate: ${mr}`);
-          missingCurrencyDates.push(...pvMissing);
+          // No bucket, different date, or smart-break triggered — flush the old
+          // one (if any) and start a fresh bucket anchored at THIS sale's V/A.
+          if (sameDay && breakBucket) flushPendingDay();
           pendingDay = {
             date: entry.date,
             V,
@@ -587,6 +618,7 @@ export async function computeFrenchTaxReport(
             totalC: C,
             firstEntry: entry,
             count: 1,
+            acquisitionSinceStart: false,
           };
         }
         // Accumulate items and skip the inline formula path below.

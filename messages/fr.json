@@ -1373,8 +1373,8 @@
   "label_note_column": "Note",
   "label_quantity_column": "Quantité",
 
-  "label_group_same_day_sales": "Grouper les cessions du même jour",
-  "label_group_same_day_sales_hint": "Toutes les ventes d'une même journée comptent comme une seule cession sur le formulaire 2086 (recommandé). Réduit fortement le nombre de cessions à déclarer.",
+  "label_group_same_day_sales": "Regrouper intelligemment les cessions du même jour",
+  "label_group_same_day_sales_hint": "Les ventes d'une même journée sont fusionnées en une seule cession sur le formulaire 2086, sauf si la valeur du portefeuille varie de plus de 5 % ou qu'une acquisition s'intercale entre elles (recommandé). Réduit fortement le nombre de cessions à déclarer.",
 
   "label_cost_basis_optional": "Coût d'acquisition (EUR, optionnel)",
   "label_cost_basis_optional_hint": "Si cet actif a été acquis avec des EUR avant son suivi par dledger, déclarez ici son coût d'acquisition. Il sera reconnu comme une acquisition antérieure à dledger sur le formulaire 2086.",

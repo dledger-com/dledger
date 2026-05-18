@@ -238,25 +238,26 @@ describe("classifyEntryEvent", () => {
   });
 });
 
-describe("computeFrenchTaxReport — groupSameDaySales", () => {
-  it("default ON: three same-day sales become one aggregate disposition", async () => {
+describe("computeFrenchTaxReport — groupSameDaySales (smart)", () => {
+  it("smart ON, stable V: three same-day sales aggregate into one cession", async () => {
     const { backend, accounts } = await createCryptoTaxBackend();
 
-    // Buy 3 BTC for €30,000 (€10,000/BTC) on 2024-01-15
-    const buy = makeEntry({ date: "2024-01-15", description: "Buy 3 BTC" });
+    // Large portfolio so the three small sales don't drift V past the 5% threshold:
+    // 100 BTC bought at 1000 EUR each. A = 100,000.
+    const buy = makeEntry({ date: "2024-01-15", description: "Buy 100 BTC" });
     await backend.postJournalEntry(buy, [
-      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
-      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
-      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-3"),
-      makeLineItem(buy.id, accounts.crypto.id, "BTC", "3"),
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-100000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "100000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-100"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "100"),
     ]);
     await backend.recordExchangeRate({
       id: uuidv7(), date: "2024-07-01", from_currency: "BTC", to_currency: "EUR",
-      rate: "50000", source: "manual",
+      rate: "2000", source: "manual",
     });
 
-    // Three sales on the same day 2024-07-01: 0.5, 0.3, 0.2 BTC for 25k, 15k, 10k EUR.
-    for (const [hour, qty, eur] of [["10", "0.5", "25000"], ["11", "0.3", "15000"], ["12", "0.2", "10000"]]) {
+    // Three sales totalling 1 BTC = 1% of portfolio. Drift stays well under 5%.
+    for (const [hour, qty, eur] of [["10", "0.5", "1000"], ["11", "0.3", "600"], ["12", "0.2", "400"]]) {
       const sell = makeEntry({ date: "2024-07-01", description: `Sell ${qty} BTC at ${hour}h`, created_at: `2024-07-01T${hour}:00:00` });
       await backend.postJournalEntry(sell, [
         makeLineItem(sell.id, accounts.crypto.id, "BTC", `-${qty}`),
@@ -269,23 +270,155 @@ describe("computeFrenchTaxReport — groupSameDaySales", () => {
     const report = await computeFrenchTaxReport(backend, {
       taxYear: 2024,
       priorAcquisitionCost: "0",
-      // groupSameDaySales defaults to true
     });
 
     expect(report.dispositions).toHaveLength(1);
     const d = report.dispositions[0];
-    // C = 25000 + 15000 + 10000 = 50000
-    expect(d.fiatReceived).toBe("50000.00");
-    // V = 3 BTC * 50000 = 150000 (snapshotted at the moment of the first sale)
-    expect(d.portfolioValue).toBe("150000.00");
-    // A = 30000 (the buy)
-    expect(d.acquisitionCostBefore).toBe("30000.00");
-    // costFraction = 30000 * 50000 / 150000 = 10000
-    expect(d.costFraction).toBe("10000.00");
-    expect(d.plusValue).toBe("40000.00");
-    // Description tags the group
+    expect(d.fiatReceived).toBe("2000.00");
+    // V at first sale: 100 BTC * 2000 = 200,000.
+    expect(d.portfolioValue).toBe("200000.00");
+    expect(d.acquisitionCostBefore).toBe("100000.00");
+    // costFraction = 100000 * 2000 / 200000 = 1000 → PV = 1000.
+    expect(d.costFraction).toBe("1000.00");
+    expect(d.plusValue).toBe("1000.00");
     expect(d.description).toBe("3 cessions du 2024-07-01");
     expect(report.groupSameDaySales).toBe(true);
+  });
+
+  it("smart ON, V drift over 5% breaks the bucket", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // 3 BTC bought at 10k. Same-day sales of 0.5 then 0.3 BTC at the same price
+    // deplete the portfolio fast enough that V_2 / V_1 drift exceeds 5%.
+    const buy = makeEntry({ date: "2024-01-15", description: "Buy 3 BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-3"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "3"),
+    ]);
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-07-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "50000", source: "manual",
+    });
+    // Sale 1: 0.5 BTC for 25k. V before = 150k. After: 2.5 BTC.
+    // Sale 2: 0.3 BTC for 15k. V before = 125k → drift = 25k/150k = 16.7% > 5% → bucket breaks.
+    for (const [hour, qty, eur] of [["10", "0.5", "25000"], ["11", "0.3", "15000"]]) {
+      const sell = makeEntry({ date: "2024-07-01", description: `Sell ${qty} BTC at ${hour}h`, created_at: `2024-07-01T${hour}:00:00` });
+      await backend.postJournalEntry(sell, [
+        makeLineItem(sell.id, accounts.crypto.id, "BTC", `-${qty}`),
+        makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", qty),
+        makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", `-${eur}`),
+        makeLineItem(sell.id, accounts.bank.id, "EUR", eur),
+      ]);
+    }
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    expect(report.dispositions).toHaveLength(2);
+    // First cession captures sale 1 alone (singleton, retains its original description).
+    expect(report.dispositions[0].fiatReceived).toBe("25000.00");
+    expect(report.dispositions[0].portfolioValue).toBe("150000.00");
+    // Second cession captures sale 2 with the post-sale-1 V.
+    expect(report.dispositions[1].fiatReceived).toBe("15000.00");
+    expect(report.dispositions[1].portfolioValue).toBe("125000.00");
+  });
+
+  it("smart ON, same-day acquisition between two sales breaks the bucket", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Large stable portfolio so V drift never triggers — isolate the acquisition trigger.
+    const buy = makeEntry({ date: "2024-01-15", description: "Buy 100 BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-100000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "100000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-100"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "100"),
+    ]);
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-07-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "2000", source: "manual",
+    });
+
+    // Sale 1 at 10am.
+    const sell1 = makeEntry({ date: "2024-07-01", description: "Sell 0.5 BTC", created_at: "2024-07-01T10:00:00" });
+    await backend.postJournalEntry(sell1, [
+      makeLineItem(sell1.id, accounts.crypto.id, "BTC", "-0.5"),
+      makeLineItem(sell1.id, accounts.tradingBTC.id, "BTC", "0.5"),
+      makeLineItem(sell1.id, accounts.tradingEUR.id, "EUR", "-1000"),
+      makeLineItem(sell1.id, accounts.bank.id, "EUR", "1000"),
+    ]);
+    // EUR→BTC acquisition at 11am — bumps A, so bucket must break.
+    const buyMid = makeEntry({ date: "2024-07-01", description: "Buy 0.1 BTC", created_at: "2024-07-01T11:00:00" });
+    await backend.postJournalEntry(buyMid, [
+      makeLineItem(buyMid.id, accounts.bank.id, "EUR", "-200"),
+      makeLineItem(buyMid.id, accounts.tradingEUR.id, "EUR", "200"),
+      makeLineItem(buyMid.id, accounts.tradingBTC.id, "BTC", "-0.1"),
+      makeLineItem(buyMid.id, accounts.crypto.id, "BTC", "0.1"),
+    ]);
+    // Sale 2 at noon.
+    const sell2 = makeEntry({ date: "2024-07-01", description: "Sell 0.3 BTC", created_at: "2024-07-01T12:00:00" });
+    await backend.postJournalEntry(sell2, [
+      makeLineItem(sell2.id, accounts.crypto.id, "BTC", "-0.3"),
+      makeLineItem(sell2.id, accounts.tradingBTC.id, "BTC", "0.3"),
+      makeLineItem(sell2.id, accounts.tradingEUR.id, "EUR", "-600"),
+      makeLineItem(sell2.id, accounts.bank.id, "EUR", "600"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    expect(report.dispositions).toHaveLength(2);
+    // Two in-year acquisitions: the initial 100k buy and the mid-day 200 EUR buy.
+    expect(report.acquisitions).toHaveLength(2);
+    // Sale 1's A = 100,000 (pre-mid-buy), V = 100 BTC * 2000 = 200,000.
+    expect(report.dispositions[0].acquisitionCostBefore).toBe("100000.00");
+    expect(report.dispositions[0].portfolioValue).toBe("200000.00");
+    // Sale 2's V is post-acquisition: (100 - 0.5) BTC sold + 0.1 BTC bought = 99.6 BTC.
+    // 99.6 * 2000 = 199,200.
+    expect(report.dispositions[1].portfolioValue).toBe("199200.00");
+    // Sale 2's description is its original (singleton bucket after the break).
+    expect(report.dispositions[1].description).toBe("Sell 0.3 BTC");
+  });
+
+  it("smart ON, V drift just under 5% keeps the bucket together", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // 100 BTC at 1000 → A=100k. Rate=2000. V=200k. Sell 4 BTC = 8000 EUR.
+    // Drift after sale 1: 4 BTC * 2000 = 8000 EUR out of 200k = 4%, below threshold.
+    const buy = makeEntry({ date: "2024-01-15", description: "Buy 100 BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-100000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "100000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-100"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "100"),
+    ]);
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-07-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "2000", source: "manual",
+    });
+    for (const [hour, qty, eur] of [["10", "4", "8000"], ["11", "0.1", "200"]]) {
+      const sell = makeEntry({ date: "2024-07-01", description: `Sell ${qty} BTC at ${hour}h`, created_at: `2024-07-01T${hour}:00:00` });
+      await backend.postJournalEntry(sell, [
+        makeLineItem(sell.id, accounts.crypto.id, "BTC", `-${qty}`),
+        makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", qty),
+        makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", `-${eur}`),
+        makeLineItem(sell.id, accounts.bank.id, "EUR", eur),
+      ]);
+    }
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    expect(report.dispositions[0].fiatReceived).toBe("8200.00");
   });
 
   it("turned OFF: three same-day sales remain three dispositions", async () => {
@@ -330,20 +463,21 @@ describe("computeFrenchTaxReport — groupSameDaySales", () => {
   it("multi-currency same-day group: cryptoCurrencies contains all", async () => {
     const { backend, accounts } = await createCryptoTaxBackend();
 
-    // Buy 1 BTC + 10 ETH pre-tax-year
+    // Large pre-tax-year holdings so the same-day sales stay below drift threshold.
+    // 10 BTC + 100 ETH, V at sale ≈ 10*60k + 100*3k = 900k. Sales total ~9k = 1%.
     const buy = makeEntry({ date: "2023-12-01", description: "Buy BTC + ETH" });
     await backend.postJournalEntry(buy, [
-      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
-      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
-      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
-      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-300000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "300000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-10"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "10"),
     ]);
-    const buyEth = makeEntry({ date: "2023-12-02", description: "Buy 10 ETH" });
+    const buyEth = makeEntry({ date: "2023-12-02", description: "Buy 100 ETH" });
     await backend.postJournalEntry(buyEth, [
-      makeLineItem(buyEth.id, accounts.bank.id, "EUR", "-20000"),
-      makeLineItem(buyEth.id, accounts.tradingEUR.id, "EUR", "20000"),
-      makeLineItem(buyEth.id, accounts.tradingETH.id, "ETH", "-10"),
-      makeLineItem(buyEth.id, accounts.crypto.id, "ETH", "10"),
+      makeLineItem(buyEth.id, accounts.bank.id, "EUR", "-200000"),
+      makeLineItem(buyEth.id, accounts.tradingEUR.id, "EUR", "200000"),
+      makeLineItem(buyEth.id, accounts.tradingETH.id, "ETH", "-100"),
+      makeLineItem(buyEth.id, accounts.crypto.id, "ETH", "100"),
     ]);
     await backend.recordExchangeRate({
       id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
@@ -354,7 +488,7 @@ describe("computeFrenchTaxReport — groupSameDaySales", () => {
       rate: "3000", source: "manual",
     });
 
-    // Same-day sales: BTC at 10am, ETH at 11am
+    // Same-day sales: BTC at 10am, ETH at 11am — both small relative to portfolio.
     const sellBtc = makeEntry({ date: "2024-06-01", description: "Sell 0.1 BTC", created_at: "2024-06-01T10:00:00" });
     await backend.postJournalEntry(sellBtc, [
       makeLineItem(sellBtc.id, accounts.crypto.id, "BTC", "-0.1"),
