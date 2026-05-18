@@ -236,7 +236,7 @@
   function openEditOpeningDialog(pair: [JournalEntry, LineItem[]]) {
     const payload = entryEditPayload(pair);
     if (!payload) {
-      toast.error("Could not load this entry for editing.");
+      toast.error(m.toast_opening_balance_load_failed());
       return;
     }
     openingDialogPrefillCost = undefined;
@@ -246,7 +246,7 @@
 
   async function deleteOpeningEntry(pair: [JournalEntry, LineItem[]]) {
     const [entry] = pair;
-    if (!confirm(`Delete opening balance from ${entry.date}?`)) return;
+    if (!confirm(m.confirm_delete_opening_balance({ date: entry.date }))) return;
     try {
       await getBackend().voidJournalEntry(entry.id);
       const hadCost = entryCostEUR(entry) !== "0";
@@ -254,9 +254,9 @@
       invalidate("journal", "accounts", "reports");
       await loadOpeningEntries();
       await loadChainData();
-      toast.success("Opening balance deleted");
+      toast.success(m.toast_opening_balance_deleted());
     } catch (e) {
-      toast.error(`Failed to delete: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(m.toast_opening_balance_delete_failed({ message: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -543,15 +543,13 @@
     <div class="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100">
       <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" />
       <div class="flex-1 space-y-2">
-        <p class="font-medium">Pre-dledger cost is now an opening-balance journal entry.</p>
+        <p class="font-medium">{m.report_migration_banner_title()}</p>
         <p>
-          You have {formatCurrency(initialAcquisitionCost, "EUR")} declared in legacy settings. Convert it to a proper
-          opening-balance entry so it appears in your journal, carries the crypto position (so column V is accurate), and
-          stays consistent across years.
+          {m.report_migration_banner_body({ amount: formatCurrency(initialAcquisitionCost, "EUR") })}
         </p>
         <div class="flex gap-2">
-          <Button size="sm" onclick={openMigrationConvert}>Convert to opening balance</Button>
-          <Button size="sm" variant="ghost" onclick={() => { migrationDismissed = true; }}>Dismiss</Button>
+          <Button size="sm" onclick={openMigrationConvert}>{m.btn_convert_to_opening_balance()}</Button>
+          <Button size="sm" variant="ghost" onclick={() => { migrationDismissed = true; }}>{m.btn_dismiss()}</Button>
         </div>
       </div>
     </div>
@@ -561,31 +559,31 @@
   <Card.Root>
     <Card.Header class="pb-3 flex flex-row items-center justify-between space-y-0">
       <div>
-        <Card.Title class="text-base">Pre-dledger acquisitions</Card.Title>
+        <Card.Title class="text-base">{m.report_predledger_acquisitions_title()}</Card.Title>
         <Card.Description class="text-xs">
-          Crypto positions you held before dledger started tracking, with their declared EUR cost basis. Each entry contributes to column A on form 2086.
+          {m.report_predledger_acquisitions_desc()}
         </Card.Description>
       </div>
       <Button size="sm" onclick={openAddOpeningDialog}>
         <Plus class="h-4 w-4 mr-1" />
-        Add
+        {m.btn_add()}
       </Button>
     </Card.Header>
     <Card.Content>
       {#if openingEntriesWithCost.length === 0}
         <p class="text-sm text-muted-foreground">
-          No pre-dledger acquisitions recorded. If you bought crypto before importing data into dledger, click "Add" to declare it so column A is correct.
+          {m.report_predledger_acquisitions_empty()}
         </p>
       {:else}
         <div class="rounded-md border">
           <table class="w-full text-sm">
             <thead class="border-b text-xs text-muted-foreground">
               <tr>
-                <th class="text-left font-medium px-3 py-2">Date</th>
-                <th class="text-left font-medium px-3 py-2">Currency</th>
-                <th class="text-right font-medium px-3 py-2">Quantity</th>
-                <th class="text-right font-medium px-3 py-2">Cost (EUR)</th>
-                <th class="text-left font-medium px-3 py-2">Note</th>
+                <th class="text-left font-medium px-3 py-2">{m.label_date()}</th>
+                <th class="text-left font-medium px-3 py-2">{m.label_currency()}</th>
+                <th class="text-right font-medium px-3 py-2">{m.label_quantity_column()}</th>
+                <th class="text-right font-medium px-3 py-2">{m.label_cost_eur_column()}</th>
+                <th class="text-left font-medium px-3 py-2">{m.label_note_column()}</th>
                 <th class="px-3 py-2 w-20"></th>
               </tr>
             </thead>
@@ -614,7 +612,7 @@
             </tbody>
             <tfoot class="border-t text-xs">
               <tr>
-                <td colspan="3" class="px-3 py-2 text-right font-medium text-muted-foreground">Total declared cost</td>
+                <td colspan="3" class="px-3 py-2 text-right font-medium text-muted-foreground">{m.report_predledger_total_declared_cost()}</td>
                 <td class="px-3 py-2 text-right font-mono font-medium">{formatCurrency(totalDeclaredCost.toFixed(2), "EUR")}</td>
                 <td colspan="2"></td>
               </tr>
@@ -622,8 +620,7 @@
           </table>
         </div>
         <p class="mt-2 text-xs text-muted-foreground">
-          Counter entries land in <code class="font-mono">{OPENING_BALANCE_EQUITY_PATH}</code>. Edits and deletions
-          regenerate the per-year chain automatically.
+          {m.report_predledger_counter_entries_hint({ path: OPENING_BALANCE_EQUITY_PATH })}
         </p>
       {/if}
     </Card.Content>
@@ -716,9 +713,9 @@
       <div class="flex items-start gap-3 pt-2 border-t">
         <Switch id="group-same-day" checked={groupSameDaySales} onCheckedChange={onGroupSameDayChanged} />
         <div class="flex-1 space-y-0.5">
-          <label for="group-same-day" class="text-sm font-medium cursor-pointer">Grouper les cessions du même jour</label>
+          <label for="group-same-day" class="text-sm font-medium cursor-pointer">{m.label_group_same_day_sales()}</label>
           <p class="text-xs text-muted-foreground">
-            Toutes les ventes d'une même journée comptent comme une seule cession sur le formulaire 2086 (recommandé). Réduit fortement le nombre de cessions à déclarer.
+            {m.label_group_same_day_sales_hint()}
           </p>
         </div>
       </div>

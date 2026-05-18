@@ -9,6 +9,7 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { toast } from "svelte-sonner";
+  import * as m from "$paraglide/messages.js";
 
   interface Props {
     requests: HistoricalRateRequest[];
@@ -42,9 +43,9 @@
       onFetched();
 
       if (result.failedCurrencies.length > 0) {
-        toast.warning(`Fetched ${result.fetched} rate(s), could not find rates for: ${result.failedCurrencies.join(", ")}`);
+        toast.warning(m.toast_missing_rates_partial({ count: String(result.fetched), currencies: result.failedCurrencies.join(", ") }));
       } else {
-        toast.success("Missing rates fetched");
+        toast.success(m.toast_missing_rates_fetched());
       }
     } catch (err) {
       toast.error(String(err));
@@ -58,10 +59,10 @@
   <Card.Root class="border-amber-200 dark:border-amber-800">
     <Card.Content class="flex items-center justify-between py-3">
       <span class="text-sm">
-        Missing rates for {requests.map((r) => r.currency).join(", ")}.
+        {m.banner_missing_rates_for({ currencies: requests.map((r) => r.currency).join(", ") })}
       </span>
       <Button size="sm" onclick={handleFetch} disabled={fetchingRates}>
-        {fetchingRates ? "Fetching..." : "Fetch Missing Rates"}
+        {fetchingRates ? m.state_fetching() : m.btn_fetch_missing_rates()}
       </Button>
     </Card.Content>
   </Card.Root>

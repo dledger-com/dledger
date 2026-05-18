@@ -480,7 +480,7 @@
             // in seed mode, it's an account index and the BIP is btcSeedBip uniformly.
             if (btcDerivedXpubs.length > 0) {
                 if (btcSelectedIndexes.size === 0) {
-                    toast.error(btcScriptPickerMode ? "Select at least one script type" : "Select at least one wallet");
+                    toast.error(btcScriptPickerMode ? m.sources_btc_script_select_at_least_one() : "Select at least one wallet");
                     return;
                 }
                 const bipFor = (row: DerivedBtcXpub) => btcScriptPickerMode ? row.index : btcSeedBip;
@@ -488,7 +488,7 @@
                     .filter(x => btcSelectedIndexes.has(x.index))
                     .filter(x => !existingBtcKeys.has(btcDedupKey(x.xpub, bipFor(x))));
                 if (selected.length === 0) {
-                    toast.error(btcScriptPickerMode ? "All selected script types are already added" : "All selected wallets are already added");
+                    toast.error(btcScriptPickerMode ? m.sources_btc_script_all_added() : "All selected wallets are already added");
                     return;
                 }
                 // Clear private material immediately (seed phrase). Safe for xpub too.
@@ -519,7 +519,7 @@
                 onAccountAdded();
                 open = false;
                 toast.success(btcScriptPickerMode
-                    ? `${selected.length} script type(s) added`
+                    ? m.sources_btc_script_count_added({ count: String(selected.length) })
                     : `${selected.length} HD wallet(s) added`);
                 return;
             }
@@ -1098,7 +1098,7 @@
                         <div class="flex items-center justify-between">
                             <span class="text-xs font-medium">
                                 {#if btcScriptPickerMode}
-                                    Script-type candidates
+                                    {m.sources_btc_script_candidates()}
                                 {:else}
                                     {m.sources_derived_hd_wallets()}
                                 {/if}
@@ -1125,7 +1125,7 @@
                         {/if}
                         {#if btcScriptPickerMode}
                             <p class="text-xs text-muted-foreground">
-                                Ledger Live exposes every Bitcoin account as <code class="font-mono">xpub</code> regardless of its script type. We show all four candidates so you can pick the one your wallet actually uses — or scan activity to auto-detect.
+                                {m.sources_btc_script_candidates_hint()}
                             </p>
                         {/if}
                         <div class="max-h-48 overflow-y-auto overflow-x-hidden rounded-md border">

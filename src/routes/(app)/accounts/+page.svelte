@@ -572,7 +572,7 @@
             </div>
             {#if formType === "asset" && formOpeningBalance.trim() && parseFloat(formOpeningBalance) !== 0}
               <div class="space-y-2">
-                <label for="openingCost" class="text-sm font-medium">Cost basis (EUR, optional)</label>
+                <label for="openingCost" class="text-sm font-medium">{m.label_cost_basis_optional()}</label>
                 <Input
                   id="openingCost"
                   type="number"
@@ -581,8 +581,7 @@
                   placeholder="e.g., 10000"
                 />
                 <p class="text-xs text-muted-foreground">
-                  If this asset was acquired with EUR before dledger tracked it, declare the cost basis here.
-                  It will be recognized as a pre-dledger acquisition on French tax form 2086.
+                  {m.label_cost_basis_optional_hint()}
                 </p>
               </div>
             {/if}

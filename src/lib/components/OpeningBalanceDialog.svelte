@@ -16,6 +16,7 @@
     invalidateFrenchTaxChainFromYear,
   } from "$lib/utils/opening-balance.js";
   import { invalidate } from "$lib/data/invalidation.js";
+  import * as m from "$paraglide/messages.js";
 
   type Props = {
     open: boolean;
@@ -71,7 +72,7 @@
   });
 
   const selectedAccountName = $derived(
-    assetAccounts.find(a => a.id === formAccountId)?.full_name ?? "Select an asset account…"
+    assetAccounts.find(a => a.id === formAccountId)?.full_name ?? m.placeholder_select_asset_account()
   );
 
   // When account is picked and currency is blank, try to infer from the account name
@@ -122,11 +123,11 @@
       });
 
       invalidate("journal", "accounts", "reports");
-      toast.success(editingEntry ? "Opening balance updated" : "Opening balance added");
+      toast.success(editingEntry ? m.toast_opening_balance_updated() : m.toast_opening_balance_added());
       onSaved();
       open = false;
     } catch (e) {
-      toast.error(`Failed to save opening balance: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(m.toast_opening_balance_save_failed({ message: e instanceof Error ? e.message : String(e) }));
     } finally {
       saving = false;
     }
@@ -137,22 +138,21 @@
 <Dialog.Root bind:open onOpenChange={(v) => { if (!v) onClose(); }}>
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
-      <Dialog.Title>{editingEntry ? "Edit opening balance" : "Add pre-dledger acquisition"}</Dialog.Title>
+      <Dialog.Title>{editingEntry ? m.dialog_opening_balance_edit_title() : m.dialog_opening_balance_add_title()}</Dialog.Title>
       <Dialog.Description>
-        Record a crypto position you held before dledger started tracking, with the EUR cost you paid for it.
-        This entry appears in your journal and contributes to column A on form 2086.
+        {m.dialog_opening_balance_desc()}
       </Dialog.Description>
     </Dialog.Header>
 
     <div class="space-y-3 py-2">
       <div class="space-y-1">
-        <label for="ob-date" class="text-xs font-medium">Acquisition date</label>
+        <label for="ob-date" class="text-xs font-medium">{m.label_acquisition_date()}</label>
         <Input id="ob-date" type="date" bind:value={formDate} class="w-44" />
-        <p class="text-xs text-muted-foreground">Use a date before your first tracked transaction (e.g., Dec 31 of the year before).</p>
+        <p class="text-xs text-muted-foreground">{m.label_acquisition_date_hint()}</p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-xs font-medium" for="ob-account-trigger">Asset account</label>
+        <label class="text-xs font-medium" for="ob-account-trigger">{m.label_asset_account()}</label>
         <Popover.Root bind:open={accountPopoverOpen}>
           <Popover.Trigger>
             <Button id="ob-account-trigger" variant="outline" class="w-full justify-between font-normal">
@@ -162,9 +162,9 @@
           </Popover.Trigger>
           <Popover.Content class="w-[400px] p-0">
             <Command.Root>
-              <Command.Input placeholder="Search asset accounts…" />
+              <Command.Input placeholder={m.placeholder_search_asset_accounts()} />
               <Command.List>
-                <Command.Empty>No asset accounts found.</Command.Empty>
+                <Command.Empty>{m.empty_no_asset_accounts()}</Command.Empty>
                 <Command.Group>
                   {#each assetAccounts as acc (acc.id)}
                     <Command.Item
@@ -184,33 +184,33 @@
 
       <div class="grid grid-cols-2 gap-3">
         <div class="space-y-1">
-          <label for="ob-currency" class="text-xs font-medium">Currency</label>
+          <label for="ob-currency" class="text-xs font-medium">{m.label_currency()}</label>
           <Input id="ob-currency" type="text" bind:value={formCurrency} placeholder="BTC" autocomplete="off" />
         </div>
         <div class="space-y-1">
-          <label for="ob-quantity" class="text-xs font-medium">Quantity</label>
+          <label for="ob-quantity" class="text-xs font-medium">{m.label_quantity()}</label>
           <Input id="ob-quantity" type="text" bind:value={formQuantity} placeholder="0.5" autocomplete="off" />
         </div>
       </div>
 
       <div class="space-y-1">
-        <label for="ob-cost" class="text-xs font-medium">Cost basis (EUR)</label>
+        <label for="ob-cost" class="text-xs font-medium">{m.label_cost_basis_eur()}</label>
         <Input id="ob-cost" type="text" bind:value={formCostEUR} placeholder="10000" autocomplete="off" />
         <p class="text-xs text-muted-foreground">
-          Total EUR you spent acquiring this position. Leave empty for a pure pad (no tax cost basis declared).
+          {m.label_cost_basis_eur_hint()}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label for="ob-note" class="text-xs font-medium">Note (optional)</label>
-        <Input id="ob-note" type="text" bind:value={formNote} placeholder="Bought on Coinbase in 2017" autocomplete="off" />
+        <label for="ob-note" class="text-xs font-medium">{m.label_note_optional()}</label>
+        <Input id="ob-note" type="text" bind:value={formNote} placeholder={m.placeholder_opening_balance_note()} autocomplete="off" />
       </div>
     </div>
 
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => { open = false; onClose(); }}>Cancel</Button>
+      <Button variant="outline" onclick={() => { open = false; onClose(); }}>{m.btn_cancel()}</Button>
       <Button disabled={!canSubmit || saving} onclick={handleSubmit}>
-        {saving ? "Saving…" : (editingEntry ? "Save changes" : "Add opening balance")}
+        {saving ? m.state_saving() : (editingEntry ? m.btn_save_changes() : m.btn_add_opening_balance())}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>
