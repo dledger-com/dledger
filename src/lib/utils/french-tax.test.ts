@@ -179,6 +179,125 @@ describe("classifyEntryEvent", () => {
     expect(event.type).toBe("disposition");
     expect(event.fiatAmountEUR.toNumber()).toBe(49950);
   });
+
+  it("opening-balance with costEUR is classified as acquisition", async () => {
+    const { accounts } = await createCryptoTaxBackend();
+    const accountMap = buildAccountMap(accounts);
+    const entry = makeEntry({
+      date: "2018-12-31",
+      description: "Opening balance (cost €2500)",
+      description_data: JSON.stringify({ type: "opening-balance", costEUR: "2500" }),
+    });
+    const items = [
+      makeLineItem(entry.id, accounts.crypto.id, "BTC", "0.5"),
+      makeLineItem(entry.id, accounts.tradingBTC.id, "BTC", "-0.5"),
+    ];
+
+    const event = classifyEntryEvent(entry, items, accountMap, DEFAULT_FIAT_CURRENCIES);
+    expect(event.type).toBe("acquisition");
+    expect(event.fiatAmountEUR.toNumber()).toBe(2500);
+    expect(event.cryptoCurrencies).toEqual(["BTC"]);
+  });
+
+  it("opening-balance without costEUR is pure pad ('none')", async () => {
+    const { accounts } = await createCryptoTaxBackend();
+    const accountMap = buildAccountMap(accounts);
+    const entry = makeEntry({
+      date: "2018-12-31",
+      description: "Opening balance",
+      description_data: JSON.stringify({ type: "opening-balance" }),
+    });
+    const items = [
+      makeLineItem(entry.id, accounts.crypto.id, "BTC", "0.5"),
+      makeLineItem(entry.id, accounts.tradingBTC.id, "BTC", "-0.5"),
+    ];
+
+    const event = classifyEntryEvent(entry, items, accountMap, DEFAULT_FIAT_CURRENCIES);
+    expect(event.type).toBe("none");
+  });
+
+  it("opening-balance with multiple crypto positions: cryptoCurrencies contains all", async () => {
+    const { accounts } = await createCryptoTaxBackend();
+    const accountMap = buildAccountMap(accounts);
+    const entry = makeEntry({
+      date: "2018-12-31",
+      description: "Opening balance (cost €3500)",
+      description_data: JSON.stringify({ type: "opening-balance", costEUR: "3500" }),
+    });
+    const items = [
+      makeLineItem(entry.id, accounts.crypto.id, "BTC", "0.5"),
+      makeLineItem(entry.id, accounts.tradingBTC.id, "BTC", "-0.5"),
+      makeLineItem(entry.id, accounts.crypto.id, "ETH", "5"),
+      makeLineItem(entry.id, accounts.tradingETH.id, "ETH", "-5"),
+    ];
+
+    const event = classifyEntryEvent(entry, items, accountMap, DEFAULT_FIAT_CURRENCIES);
+    expect(event.type).toBe("acquisition");
+    expect(event.fiatAmountEUR.toNumber()).toBe(3500);
+    expect(event.cryptoCurrencies.sort()).toEqual(["BTC", "ETH"]);
+  });
+});
+
+describe("computeFrenchTaxReport — priorAcquisitionCost persistence", () => {
+  it("stores priorAcquisitionCost on the report as the engine's starting A", async () => {
+    const { backend } = await createCryptoTaxBackend();
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "5000",
+    });
+    expect(report.priorAcquisitionCost).toBe("5000.00");
+  });
+
+  it("stores priorAcquisitionCost as '0.00' when caller passes empty string", async () => {
+    const { backend } = await createCryptoTaxBackend();
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "",
+    });
+    expect(report.priorAcquisitionCost).toBe("0.00");
+  });
+
+  it("priorAcquisitionCost survives pre-year activity that mutates A", async () => {
+    // Regression: the old staleInitialCostBanner reconstructed startingA from
+    // finalA - inYearAcq, which breaks when pre-year dispositions reduce A.
+    // The persisted field must be the LITERAL input, not the post-processing A.
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // 2016 opening-balance acquisition (€30,000).
+    const opening = makeEntry({
+      date: "2016-12-31",
+      description: "Opening balance (cost €30000)",
+      description_data: JSON.stringify({ type: "opening-balance", costEUR: "30000" }),
+    });
+    await backend.postJournalEntry(opening, [
+      makeLineItem(opening.id, accounts.crypto.id, "BTC", "30"),
+      makeLineItem(opening.id, accounts.tradingBTC.id, "BTC", "-30"),
+    ]);
+
+    // 2017 pre-year disposition that consumes some of A.
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2017-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "2500", source: "manual",
+    });
+    const sale2017 = makeEntry({ date: "2017-06-01", description: "Sell 1 BTC in 2017" });
+    await backend.postJournalEntry(sale2017, [
+      makeLineItem(sale2017.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sale2017.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sale2017.id, accounts.tradingEUR.id, "EUR", "-2500"),
+      makeLineItem(sale2017.id, accounts.bank.id, "EUR", "2500"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2019,
+      priorAcquisitionCost: "0",
+    });
+
+    // The literal input is what's persisted — NOT the residual A after pre-year processing.
+    expect(report.priorAcquisitionCost).toBe("0.00");
+    // Sanity: pre-year activity is reflected in the counts/totals.
+    expect(report.preYearAcquisitionCount).toBeGreaterThanOrEqual(1);
+    expect(report.preYearDispositionCount).toBe(1);
+  });
 });
 
 describe("computeFrenchTaxReport", () => {
@@ -381,7 +500,7 @@ describe("computeFrenchTaxReport", () => {
     expect(d.plusValue).toBe("35000.00");
   });
 
-  it("multiple sales same day: A updates between them, V cached", async () => {
+  it("multiple sales same day: V reflects portfolio at the moment of each sale", async () => {
     const { backend, accounts } = await createCryptoTaxBackend();
 
     // Buy 2 BTC for 20,000 EUR each
@@ -423,7 +542,7 @@ describe("computeFrenchTaxReport", () => {
 
     expect(report.dispositions).toHaveLength(2);
 
-    // First sale: A = 40000, C = 50000, V = 100000 (2 BTC * 50000)
+    // First sale: A = 40000, C = 50000, V = 100000 (2 BTC * 50000 — full holdings)
     const d1 = report.dispositions[0];
     expect(d1.acquisitionCostBefore).toBe("40000.00");
     expect(d1.portfolioValue).toBe("100000.00");
@@ -432,16 +551,175 @@ describe("computeFrenchTaxReport", () => {
     // plusValue = 50000 - 20000 = 30000
     expect(d1.plusValue).toBe("30000.00");
 
-    // Second sale: A = 40000 - 20000 = 20000 (updated!), V still 100000 (cached)
+    // Second sale: A = 40000 - 20000 = 20000, V = 50000 (1 BTC * 50000 — sell1 has reduced
+    // the portfolio). Per Art. 150 VH bis V is the portfolio value at the moment of THIS
+    // cession, not start-of-day.
     const d2 = report.dispositions[1];
     expect(d2.acquisitionCostBefore).toBe("20000.00");
-    // costFraction = 20000 * 50000 / 100000 = 10000
-    expect(d2.costFraction).toBe("10000.00");
-    // plusValue = 50000 - 10000 = 40000
-    expect(d2.plusValue).toBe("40000.00");
+    expect(d2.portfolioValue).toBe("50000.00");
+    // costFraction = 20000 * 50000 / 50000 = 20000 (capped at A)
+    expect(d2.costFraction).toBe("20000.00");
+    // plusValue = 50000 - 20000 = 30000
+    expect(d2.plusValue).toBe("30000.00");
+    // A after = 0 — entire cost basis recovered across the two equal sales.
+    expect(d2.acquisitionCostAfter).toBe("0.00");
 
-    // Total = 30000 + 40000 = 70000
-    expect(report.totalPlusValue).toBe("70000.00");
+    // Total = 30000 + 30000 = 60000 — equals (total sale 100k) - (total cost 40k).
+    expect(report.totalPlusValue).toBe("60000.00");
+  });
+
+  it("same-day deposit then sell: V includes the just-deposited crypto", async () => {
+    // Reproduces the Ledger-Live-deposit-then-sell pattern that was producing
+    // implausibly low V values before V was computed at the moment of each cession.
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // Pre-year: user bought 1 BTC for 30,000 EUR (sets A) and immediately
+    // withdrew it to an external wallet (crypto leaves the tracked accounts).
+    const buy = makeEntry({ date: "2023-06-01", description: "Buy 1 BTC" });
+    await backend.postJournalEntry(buy, [
+      makeLineItem(buy.id, accounts.bank.id, "EUR", "-30000"),
+      makeLineItem(buy.id, accounts.tradingEUR.id, "EUR", "30000"),
+      makeLineItem(buy.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(buy.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+    const withdraw = makeEntry({ date: "2023-06-02", description: "Withdraw BTC off-platform" });
+    await backend.postJournalEntry(withdraw, [
+      makeLineItem(withdraw.id, accounts.crypto.id, "BTC", "-1"),
+      // Counterparty is a non-asset equity account so classifyEntryEvent treats it as
+      // a pure transfer (no fiat side) and leaves A untouched.
+      makeLineItem(withdraw.id, accounts.tradingBTC.id, "BTC", "1"),
+    ]);
+
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-04-15", from_currency: "BTC", to_currency: "EUR",
+      rate: "60000", source: "manual",
+    });
+
+    // Same-day pattern in 2024: BTC arrives, then BTC sold for EUR. Both entries
+    // share the same date but are ordered by created_at.
+    const deposit = makeEntry({ date: "2024-04-15", description: "Deposit BTC to Kraken", created_at: "2024-04-15T09:00:00" });
+    await backend.postJournalEntry(deposit, [
+      makeLineItem(deposit.id, accounts.tradingBTC.id, "BTC", "-1"),
+      makeLineItem(deposit.id, accounts.crypto.id, "BTC", "1"),
+    ]);
+    const sell = makeEntry({ date: "2024-04-15", description: "Sell BTC", created_at: "2024-04-15T10:00:00" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-60000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "60000"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    const d = report.dispositions[0];
+    // V must include the BTC deposited earlier the same day (60,000 EUR).
+    // Old behavior snapshotted at start-of-day and missed the deposit.
+    expect(d.portfolioValue).toBe("60000.00");
+    expect(d.fiatReceived).toBe("60000.00");
+    // A = 30000 (pre-year buy), costFraction = 30000 * 60000 / 60000 = 30000
+    expect(d.acquisitionCostBefore).toBe("30000.00");
+    expect(d.costFraction).toBe("30000.00");
+    expect(d.plusValue).toBe("30000.00");
+  });
+
+  it("pre-dledger opening-balance entry contributes to A across multiple years", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // 2018-12-31: opening balance — 0.5 BTC pre-dledger, declared €10,000 cost.
+    const opening = makeEntry({
+      date: "2018-12-31",
+      description: "Opening balance (cost €10000)",
+      description_data: JSON.stringify({ type: "opening-balance", costEUR: "10000" }),
+    });
+    await backend.postJournalEntry(opening, [
+      makeLineItem(opening.id, accounts.crypto.id, "BTC", "0.5"),
+      makeLineItem(opening.id, accounts.tradingBTC.id, "BTC", "-0.5"),
+    ]);
+
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "60000", source: "manual",
+    });
+
+    // 2024: sell 0.1 BTC for 6,000 EUR
+    const sell = makeEntry({ date: "2024-06-01", description: "Sell 0.1 BTC" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-0.1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "0.1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-6000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "6000"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    expect(report.dispositions).toHaveLength(1);
+    const d = report.dispositions[0];
+    // A = 10000 (from opening-balance), C = 6000, V = 0.5 BTC * 60000 = 30000
+    expect(d.acquisitionCostBefore).toBe("10000.00");
+    expect(d.portfolioValue).toBe("30000.00");
+    // costFraction = 10000 * 6000 / 30000 = 2000
+    expect(d.costFraction).toBe("2000.00");
+    // plusValue = 6000 - 2000 = 4000
+    expect(d.plusValue).toBe("4000.00");
+    // A after = 10000 - 2000 = 8000
+    expect(d.acquisitionCostAfter).toBe("8000.00");
+  });
+
+  it("multi-currency opening-balance: A and V both correct", async () => {
+    const { backend, accounts } = await createCryptoTaxBackend();
+
+    // 2018-12-31: opening balance — 0.5 BTC + 5 ETH, total declared cost €15,000.
+    const opening = makeEntry({
+      date: "2018-12-31",
+      description: "Opening balance (cost €15000)",
+      description_data: JSON.stringify({ type: "opening-balance", costEUR: "15000" }),
+    });
+    await backend.postJournalEntry(opening, [
+      makeLineItem(opening.id, accounts.crypto.id, "BTC", "0.5"),
+      makeLineItem(opening.id, accounts.tradingBTC.id, "BTC", "-0.5"),
+      makeLineItem(opening.id, accounts.crypto.id, "ETH", "5"),
+      makeLineItem(opening.id, accounts.tradingETH.id, "ETH", "-5"),
+    ]);
+
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "BTC", to_currency: "EUR",
+      rate: "60000", source: "manual",
+    });
+    await backend.recordExchangeRate({
+      id: uuidv7(), date: "2024-06-01", from_currency: "ETH", to_currency: "EUR",
+      rate: "2000", source: "manual",
+    });
+
+    // Sell 0.1 BTC
+    const sell = makeEntry({ date: "2024-06-01", description: "Sell 0.1 BTC" });
+    await backend.postJournalEntry(sell, [
+      makeLineItem(sell.id, accounts.crypto.id, "BTC", "-0.1"),
+      makeLineItem(sell.id, accounts.tradingBTC.id, "BTC", "0.1"),
+      makeLineItem(sell.id, accounts.tradingEUR.id, "EUR", "-6000"),
+      makeLineItem(sell.id, accounts.bank.id, "EUR", "6000"),
+    ]);
+
+    const report = await computeFrenchTaxReport(backend, {
+      taxYear: 2024,
+      priorAcquisitionCost: "0",
+    });
+
+    const d = report.dispositions[0];
+    // A = 15000, C = 6000
+    // V at sale = 0.5 BTC * 60000 + 5 ETH * 2000 = 30000 + 10000 = 40000
+    expect(d.acquisitionCostBefore).toBe("15000.00");
+    expect(d.portfolioValue).toBe("40000.00");
+    // costFraction = 15000 * 6000 / 40000 = 2250
+    expect(d.costFraction).toBe("2250.00");
+    expect(d.plusValue).toBe("3750.00");
   });
 
   it("non-EUR fiat sale (USD→EUR conversion)", async () => {

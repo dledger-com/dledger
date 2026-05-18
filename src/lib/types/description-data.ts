@@ -1,5 +1,5 @@
 /** Bump this when renderDescription() output format changes — triggers auto-regeneration of all descriptions on next startup. */
-export const DESCRIPTION_FORMAT_VERSION = 2;
+export const DESCRIPTION_FORMAT_VERSION = 3;
 
 export type DescriptionData =
   | { type: "cex-trade"; exchange: string; spent: string; received: string }
@@ -19,7 +19,8 @@ export type DescriptionData =
   | { type: "hl-fill"; coin: string; side: "long" | "short"; closedPnl?: string; spent?: string; received?: string }
   | { type: "hl-funding"; coin: string; usdc: string }
   | { type: "hl-ledger"; action: "deposit" | "withdrawal" | "liquidation" | "transfer"; usdc?: string }
-  | { type: "system"; action: "reversal" | "pad"; ref?: string };
+  | { type: "system"; action: "reversal" | "pad"; ref?: string }
+  | { type: "opening-balance"; costEUR?: string; note?: string };
 
 // ── Centralized builders (use these instead of constructing DescriptionData inline) ──
 
@@ -96,6 +97,11 @@ export function feeDescription(chain: string, currency: string, txHash: string):
   return { type: "fee", chain, currency, txHash };
 }
 
+/** Opening balance: pre-dledger holding, optionally with declared EUR cost basis (for French tax). */
+export function openingBalanceDescription(costEUR?: string, note?: string): DescriptionData {
+  return { type: "opening-balance", costEUR, note };
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -162,5 +168,9 @@ export function renderDescription(data: DescriptionData): string {
         case "reversal": return `Reversal${data.ref ? ` of: ${data.ref}` : ""}`;
         case "pad": return `Pad${data.ref ? `: ${data.ref}` : ""}`;
       }
+    case "opening-balance":
+      return data.costEUR && data.costEUR !== "0"
+        ? `Opening balance (cost €${data.costEUR})`
+        : "Opening balance";
   }
 }

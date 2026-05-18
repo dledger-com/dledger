@@ -74,6 +74,11 @@ export interface FrenchTaxReport {
   totalFiatReceived: string;
   /** Final A at year-end. */
   finalAcquisitionCost: string;
+  /** The value of A the engine started with for this report — captures
+   *  opts.priorAcquisitionCost verbatim so downstream UI can detect when the
+   *  current setting has drifted from the value used at generation time.
+   *  Optional for backward compat with reports persisted before this field existed. */
+  priorAcquisitionCost?: string;
   /** EUR value of crypto portfolio at Dec 31. */
   yearEndPortfolioValue: string;
   /** Box 3AN (if positive) or 3BN (if negative). */
@@ -152,6 +157,32 @@ export function classifyEntryEvent(
 ): EntryEvent {
   if (entry.status !== "confirmed") {
     return { type: "none", fiatAmountEUR: new Decimal(0), cryptoCurrencies: [], entry };
+  }
+
+  // Opening-balance entries with a declared EUR cost are pre-dledger acquisitions
+  // (Art. 150 VH bis): the user owned the crypto before any tracked event and we trust
+  // the costEUR they declared. Line items still post normally for trial-balance
+  // correctness, but the cost basis comes from description_data — not inferred from
+  // line items, since there's no real fiat side (the EUR was spent years ago).
+  if (entry.description_data) {
+    try {
+      const data = JSON.parse(entry.description_data);
+      if (data.type === "opening-balance" && data.costEUR && new Decimal(data.costEUR).gt(0)) {
+        const cryptoCurrencies = new Set<string>();
+        for (const item of items) {
+          const acc = accountMap.get(item.account_id);
+          if (!acc || acc.account_type !== "asset") continue;
+          if (fiatSet.has(item.currency)) continue;
+          if (new Decimal(item.amount).gt(0)) cryptoCurrencies.add(item.currency);
+        }
+        return {
+          type: "acquisition",
+          fiatAmountEUR: new Decimal(data.costEUR),
+          cryptoCurrencies: [...cryptoCurrencies],
+          entry,
+        };
+      }
+    } catch { /* malformed description_data — fall through to line-item classification */ }
   }
 
   let fiatIn = new Decimal(0);   // fiat coming into asset accounts (= crypto sold for fiat)
@@ -359,7 +390,8 @@ export async function computeFrenchTaxReport(
 
   // 4. Process entries: build running A, collect dispositions/acquisitions
   //    Use incremental trial balance instead of per-disposition DB queries
-  let A = new Decimal(opts.priorAcquisitionCost || "0");
+  const initialPriorCost = opts.priorAcquisitionCost || "0";
+  let A = new Decimal(initialPriorCost);
   const skipPreYearA = opts.priorCostSource === 'chained';
   const dispositions: Disposition[] = [];
   const acquisitions: Acquisition[] = [];
@@ -372,8 +404,6 @@ export async function computeFrenchTaxReport(
   const preYearDispSamples: { date: string; description: string; fiatReceived: string; cryptoCurrencies: string[] }[] = [];
 
   const incrementalBalance = new IncrementalBalance();
-  let currentDate = "";
-  let currentDateTB: TrialBalance | null = null;
   let pendingItems: LineItem[] = [];
   let entryIndex = 0;
 
@@ -383,15 +413,13 @@ export async function computeFrenchTaxReport(
       await yieldToEventLoop();
     }
 
-    // When the date changes, flush pending items and snapshot
-    if (entry.date !== currentDate) {
-      if (pendingItems.length > 0) {
-        incrementalBalance.addItems(pendingItems);
-        pendingItems = [];
-      }
-      // Snapshot BEFORE adding current date's entries (matches "WHERE date < ?" semantics)
-      currentDateTB = incrementalBalance.snapshot(accountMap);
-      currentDate = entry.date;
+    // Flush the previous entry's items so the running balance reflects the
+    // state immediately BEFORE this entry. V (portfolio value at the moment
+    // of cession, Art. 150 VH bis) must include same-day prior entries —
+    // e.g. a deposit-then-sell pattern on the same date.
+    if (pendingItems.length > 0) {
+      incrementalBalance.addItems(pendingItems);
+      pendingItems = [];
     }
 
     const event = classifyEntryEvent(entry, items, accountMap, fiatSet);
@@ -442,8 +470,10 @@ export async function computeFrenchTaxReport(
         }
       }
 
-      // Use incremental trial balance snapshot (already computed for this date)
-      const tb = currentDateTB!;
+      // Snapshot immediately before this disposition. Same-day prior entries
+      // (deposits, acquisitions, earlier sales) are already folded into the
+      // running balance by the flush above.
+      const tb = incrementalBalance.snapshot(accountMap);
       const { value: V, missingRates, missingCurrencyDates: pvMissing } = await computePortfolioValueEUR(
         tb, fiatSet, rateCache, entry.date, baseCurrency, skipCurrencies,
       );
@@ -580,6 +610,7 @@ export async function computeFrenchTaxReport(
     totalPlusValue: totalPlusValue.toFixed(2),
     totalFiatReceived: totalFiatReceived.toFixed(2),
     finalAcquisitionCost: A.toFixed(2),
+    priorAcquisitionCost: new Decimal(initialPriorCost).toFixed(2),
     yearEndPortfolioValue: yearEndV.toFixed(2),
     box3AN: isPositive ? totalPlusValue.toFixed(2) : "0.00",
     box3BN: isPositive ? "0.00" : totalPlusValue.abs().toFixed(2),

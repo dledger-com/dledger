@@ -64,6 +64,11 @@
   let formOpenedAt = $state("1970-01-01");
   let formOpeningBalance = $state("");
   let formOpeningCurrency = $state("");
+  /** Optional EUR cost basis for the opening balance. When set, the entry is posted
+   *  via the opening-balance helper (source: system:opening-balance) and contributes
+   *  to column A on French tax form 2086. When empty, the legacy pad path is used
+   *  (source: system:pad), which is treated as no cost basis declared. */
+  let formOpeningCostEUR = $state("");
 
   const accountTypes: AccountType[] = ["asset", "liability", "equity", "revenue", "expense"];
 
@@ -333,6 +338,7 @@
     formOpenedAt = "1970-01-01";
     formOpeningBalance = "";
     formOpeningCurrency = settingsStore.currency || "";
+    formOpeningCostEUR = "";
   }
 
   function startSubAccount(parent: Account) {
@@ -343,6 +349,7 @@
     formOpenedAt = "1970-01-01";
     formOpeningBalance = "";
     formOpeningCurrency = settingsStore.currency || "";
+    formOpeningCostEUR = "";
     dialogOpen = true;
   }
 
@@ -379,46 +386,58 @@
     // Create opening balance entry if specified
     const balanceNum = parseFloat(formOpeningBalance);
     const balStr = String(formOpeningBalance);
+    const costStr = formOpeningCostEUR.trim();
+    const costNum = costStr === "" ? 0 : parseFloat(costStr);
+    const hasCostBasis = isAssetOrLiability && costStr !== "" && !isNaN(costNum) && costNum > 0;
+
     if (isAssetOrLiability && balStr.trim() && !isNaN(balanceNum) && balanceNum !== 0 && formOpeningCurrency.trim()) {
       try {
         const backend = getBackend();
-        const allAccounts = await backend.listAccounts();
-        const equityPath = "Equity:Opening-Balances";
+        const currency = formOpeningCurrency.trim().toUpperCase();
 
-        // Ensure Equity:Opening-Balances account exists
-        let counterpartyId = allAccounts.find(ac => ac.full_name === equityPath)?.id;
-        if (!counterpartyId) {
-          const parts = equityPath.split(":");
-          let parentId: string | null = null;
-          for (let depth = 1; depth <= parts.length; depth++) {
-            const path = parts.slice(0, depth).join(":");
-            const existing = allAccounts.find(ac => ac.full_name === path);
-            if (existing) {
-              parentId = existing.id;
-              continue;
+        if (hasCostBasis) {
+          // Cost-basis path: route through the shared opening-balance helper so the
+          // entry is recognized by the French tax engine as a pre-dledger acquisition.
+          const { postOpeningBalanceEntry } = await import("$lib/utils/opening-balance.js");
+          await postOpeningBalanceEntry(backend, {
+            date: formOpenedAt,
+            positions: [{ accountId: account.id, currency, quantity: balanceNum.toString() }],
+            costEUR: costStr,
+          });
+        } else {
+          // No cost basis declared — use the legacy pad path. The Beancount exporter
+          // emits these as pad+balance directives (browser-ledger-file.ts:1456).
+          const allAccounts = await backend.listAccounts();
+          const equityPath = "Equity:Opening-Balances";
+          let counterpartyId = allAccounts.find(ac => ac.full_name === equityPath)?.id;
+          if (!counterpartyId) {
+            const parts = equityPath.split(":");
+            let parentId: string | null = null;
+            for (let depth = 1; depth <= parts.length; depth++) {
+              const path = parts.slice(0, depth).join(":");
+              const existing = allAccounts.find(ac => ac.full_name === path);
+              if (existing) { parentId = existing.id; continue; }
+              const type = path.startsWith("Equity") ? "equity" as const : path.startsWith("Assets") ? "asset" as const : "liability" as const;
+              const newId = uuidv7();
+              await backend.createAccount({
+                id: newId, parent_id: parentId, account_type: type,
+                name: parts[depth - 1], full_name: path, allowed_currencies: [],
+                is_postable: depth === parts.length, is_archived: false, created_at: today,
+              });
+              parentId = newId;
+              if (depth === parts.length) counterpartyId = newId;
             }
-            const type = path.startsWith("Equity") ? "equity" as const : path.startsWith("Assets") ? "asset" as const : "liability" as const;
-            const newId = uuidv7();
-            await backend.createAccount({
-              id: newId, parent_id: parentId, account_type: type,
-              name: parts[depth - 1], full_name: path, allowed_currencies: [],
-              is_postable: depth === parts.length, is_archived: false, created_at: today,
-            });
-            parentId = newId;
-            if (depth === parts.length) counterpartyId = newId;
           }
+          const entryId = uuidv7();
+          const amountStr = balanceNum.toString();
+          await backend.postJournalEntry(
+            { id: entryId, date: formOpenedAt, description: `Opening balance for ${fullName}`, status: "confirmed", source: "system:pad", voided_by: null, created_at: today },
+            [
+              { id: uuidv7(), journal_entry_id: entryId, account_id: account.id, currency, amount: amountStr, lot_id: null },
+              { id: uuidv7(), journal_entry_id: entryId, account_id: counterpartyId!, currency, amount: (-balanceNum).toString(), lot_id: null },
+            ],
+          );
         }
-
-        // Create system:pad journal entry
-        const entryId = uuidv7();
-        const amountStr = balanceNum.toString();
-        await backend.postJournalEntry(
-          { id: entryId, date: formOpenedAt, description: `Opening balance for ${fullName}`, status: "confirmed", source: "system:pad", voided_by: null, created_at: today },
-          [
-            { id: uuidv7(), journal_entry_id: entryId, account_id: account.id, currency: formOpeningCurrency.trim().toUpperCase(), amount: amountStr, lot_id: null },
-            { id: uuidv7(), journal_entry_id: entryId, account_id: counterpartyId!, currency: formOpeningCurrency.trim().toUpperCase(), amount: (-balanceNum).toString(), lot_id: null },
-          ],
-        );
 
         const { invalidate } = await import("$lib/data/invalidation.js");
         invalidate("journal", "accounts", "reports");
@@ -551,6 +570,22 @@
                 <Input bind:value={formOpeningCurrency} placeholder="USD" class="w-24 uppercase" />
               </div>
             </div>
+            {#if formType === "asset" && formOpeningBalance.trim() && parseFloat(formOpeningBalance) !== 0}
+              <div class="space-y-2">
+                <label for="openingCost" class="text-sm font-medium">Cost basis (EUR, optional)</label>
+                <Input
+                  id="openingCost"
+                  type="number"
+                  step="any"
+                  bind:value={formOpeningCostEUR}
+                  placeholder="e.g., 10000"
+                />
+                <p class="text-xs text-muted-foreground">
+                  If this asset was acquired with EUR before dledger tracked it, declare the cost basis here.
+                  It will be recognized as a pre-dledger acquisition on French tax form 2086.
+                </p>
+              </div>
+            {/if}
           {/if}
           <Dialog.Footer>
             <Button type="submit" disabled={!formName.trim()}>{m.btn_create()}</Button>

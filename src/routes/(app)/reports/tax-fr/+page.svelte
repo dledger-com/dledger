@@ -24,10 +24,23 @@
     type HistoricalRateRequest,
   } from "$lib/exchange-rate-historical.js";
   import { setTopBarActions, clearTopBarActions } from "$lib/data/page-actions.svelte.js";
+  import { toast } from "svelte-sonner";
   import { DEMO_MODE } from "$lib/demo.js";
   import { taskQueue } from "$lib/task-queue.svelte.js";
   import MissingRateBanner from "$lib/components/MissingRateBanner.svelte";
   import AlertTriangle from "lucide-svelte/icons/triangle-alert";
+  import Plus from "lucide-svelte/icons/plus";
+  import Pencil from "lucide-svelte/icons/pencil";
+  import Trash2 from "lucide-svelte/icons/trash-2";
+  import OpeningBalanceDialog from "$lib/components/OpeningBalanceDialog.svelte";
+  import {
+    listOpeningBalanceEntries,
+    entryCostEUR,
+    invalidateFrenchTaxChainFromYear,
+    OPENING_BALANCE_EQUITY_PATH,
+  } from "$lib/utils/opening-balance.js";
+  import { onInvalidate, invalidate } from "$lib/data/invalidation.js";
+  import type { JournalEntry, LineItem } from "$lib/types/index.js";
   import TaxSummaryBanner from "./TaxSummaryBanner.svelte";
   import OverviewTab from "./OverviewTab.svelte";
   import Form2086Tab from "./Form2086Tab.svelte";
@@ -63,6 +76,13 @@
   // Exchange accounts for 3916-bis
   let allExchangeAccounts = $state<ExchangeAccount[]>([]);
 
+  // Opening-balance entries (pre-dledger acquisitions with declared cost basis)
+  let openingEntries = $state<[JournalEntry, LineItem[]][]>([]);
+  let openingDialogOpen = $state(false);
+  let openingDialogPrefillCost = $state<string | undefined>(undefined);
+  let openingDialogEditing = $state<{ entry: JournalEntry; quantity: string; currency: string; accountId: string } | null>(null);
+  let migrationDismissed = $state(false);
+
   /** Filter to accounts active during the tax year (open/close range overlaps) */
   const exchangeAccounts = $derived(
     allExchangeAccounts.filter((a) => {
@@ -85,8 +105,9 @@
   const hasSavedReport = $derived(chainData.has(taxYear));
 
   // Detect stale earliest report when initialAcquisitionCost changes.
-  // When the earliest persisted year uses 'initial' source (no prior year in chain),
-  // compare what the report was generated with vs the current setting.
+  // Reads the actual value the engine started with (saved on the report) and
+  // compares against the current setting. Immune to pre/in-year dispositions
+  // and rounding errors that broke the old reconstruction-based formula.
   const staleInitialCostBanner = $derived.by(() => {
     if (!savedReport || !chainData.size) return null;
     const years = [...chainData.keys()].sort((a, b) => a - b);
@@ -94,25 +115,13 @@
     // Only relevant when viewing the earliest year and it uses initial source
     if (taxYear !== earliestYear) return null;
     if (chainData.has(earliestYear - 1)) return null; // chained, not initial
-    // Compare: expected A before first event = initialAcquisitionCost + pre-year acquisitions
+    // Reports persisted before the priorAcquisitionCost field was added can't
+    // be checked reliably — skip rather than fire spuriously.
+    const savedPrior = savedReport.report.priorAcquisitionCost;
+    if (savedPrior === undefined) return null;
     const currentInitial = initialAcquisitionCost || '0';
-    const rpt = savedReport.report;
-    const expectedStartingA = new Decimal(currentInitial).plus(new Decimal(rpt.preYearAcquisitionTotal));
-    // Recover actual starting A from report data
-    let actualStartingA: Decimal;
-    if (rpt.dispositions.length > 0) {
-      actualStartingA = new Decimal(rpt.dispositions[0].acquisitionCostBefore);
-    } else {
-      // No dispositions recorded — finalA = startingA + in-year acquisitions
-      const inYearAcqTotal = rpt.acquisitions.reduce(
-        (sum, a) => sum.plus(new Decimal(a.fiatSpent)), new Decimal(0),
-      );
-      actualStartingA = new Decimal(rpt.finalAcquisitionCost).minus(inYearAcqTotal);
-    }
-    if (!expectedStartingA.eq(actualStartingA)) {
-      return m.report_french_tax_stale_upstream({ year: String(earliestYear) });
-    }
-    return null;
+    if (new Decimal(currentInitial).eq(new Decimal(savedPrior))) return null;
+    return m.report_french_tax_stale_upstream({ year: String(earliestYear) });
   });
 
   // Chain visualization
@@ -177,6 +186,107 @@
     } catch {
       allExchangeAccounts = [];
     }
+  }
+
+  async function loadOpeningEntries() {
+    try {
+      openingEntries = await listOpeningBalanceEntries(getBackend());
+    } catch {
+      openingEntries = [];
+    }
+  }
+
+  // Derived: only entries with a declared cost basis appear on the tax page.
+  const openingEntriesWithCost = $derived(
+    openingEntries.filter(([e]) => {
+      const c = entryCostEUR(e);
+      return c !== "0" && c !== "";
+    })
+  );
+
+  const totalDeclaredCost = $derived(
+    openingEntriesWithCost.reduce((sum, [e]) => sum.plus(new Decimal(entryCostEUR(e) || "0")), new Decimal(0))
+  );
+
+  // Convert an entry+line-items into the shape OpeningBalanceDialog expects for editing.
+  function entryEditPayload([entry, items]: [JournalEntry, LineItem[]]): { entry: JournalEntry; quantity: string; currency: string; accountId: string } | null {
+    // The "asset side" line item is the positive crypto amount NOT going into the equity counter.
+    // We identify it by being the positive-amount line item whose account is not the Equity:Opening-Balances account.
+    const positiveItem = items.find(it => {
+      try { return parseFloat(it.amount) > 0; } catch { return false; }
+    });
+    if (!positiveItem) return null;
+    return {
+      entry,
+      currency: positiveItem.currency,
+      quantity: positiveItem.amount,
+      accountId: positiveItem.account_id,
+    };
+  }
+
+  function openAddOpeningDialog() {
+    openingDialogPrefillCost = undefined;
+    openingDialogEditing = null;
+    openingDialogOpen = true;
+  }
+
+  function openEditOpeningDialog(pair: [JournalEntry, LineItem[]]) {
+    const payload = entryEditPayload(pair);
+    if (!payload) {
+      toast.error("Could not load this entry for editing.");
+      return;
+    }
+    openingDialogPrefillCost = undefined;
+    openingDialogEditing = payload;
+    openingDialogOpen = true;
+  }
+
+  async function deleteOpeningEntry(pair: [JournalEntry, LineItem[]]) {
+    const [entry] = pair;
+    if (!confirm(`Delete opening balance from ${entry.date}?`)) return;
+    try {
+      await getBackend().voidJournalEntry(entry.id);
+      const hadCost = entryCostEUR(entry) !== "0";
+      if (hadCost) await invalidateFrenchTaxChainFromYear(getBackend(), entry.date);
+      invalidate("journal", "accounts", "reports");
+      await loadOpeningEntries();
+      await loadChainData();
+      toast.success("Opening balance deleted");
+    } catch (e) {
+      toast.error(`Failed to delete: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  function openMigrationConvert() {
+    openingDialogPrefillCost = initialAcquisitionCost;
+    openingDialogEditing = null;
+    openingDialogOpen = true;
+  }
+
+  // Migration banner condition: legacy initial cost is set AND user hasn't dismissed.
+  const showMigrationBanner = $derived(
+    !migrationDismissed &&
+    initialAcquisitionCost !== "" &&
+    initialAcquisitionCost !== "0" &&
+    !isNaN(parseFloat(initialAcquisitionCost)) &&
+    parseFloat(initialAcquisitionCost) > 0
+  );
+
+  async function onOpeningSaved() {
+    // If the save was a migration (prefillCostEUR was set), clear the legacy setting.
+    if (openingDialogPrefillCost !== undefined) {
+      initialAcquisitionCost = "0";
+      settings.update({
+        frenchTax: {
+          ...settings.settings.frenchTax,
+          initialAcquisitionCost: "0",
+        },
+      });
+    }
+    openingDialogPrefillCost = undefined;
+    openingDialogEditing = null;
+    await loadOpeningEntries();
+    await loadChainData();
   }
 
   async function generate() {
@@ -324,11 +434,15 @@
     loadChainData();
     loadSavedReport();
     loadExchangeAccounts();
+    loadOpeningEntries();
     mounted = true;
   });
 
+  const unsubJournal = onInvalidate("journal", () => { loadOpeningEntries(); });
+
   onDestroy(() => {
     clearTopBarActions();
+    unsubJournal();
   });
 
   // React to year changes after initial mount
@@ -401,6 +515,97 @@
       <span>{staleInitialCostBanner}</span>
     </div>
   {/if}
+
+  <!-- Migration banner: legacy initialAcquisitionCost → opening-balance entry -->
+  {#if showMigrationBanner}
+    <div class="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100">
+      <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" />
+      <div class="flex-1 space-y-2">
+        <p class="font-medium">Pre-dledger cost is now an opening-balance journal entry.</p>
+        <p>
+          You have {formatCurrency(initialAcquisitionCost, "EUR")} declared in legacy settings. Convert it to a proper
+          opening-balance entry so it appears in your journal, carries the crypto position (so column V is accurate), and
+          stays consistent across years.
+        </p>
+        <div class="flex gap-2">
+          <Button size="sm" onclick={openMigrationConvert}>Convert to opening balance</Button>
+          <Button size="sm" variant="ghost" onclick={() => { migrationDismissed = true; }}>Dismiss</Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Pre-dledger acquisitions panel -->
+  <Card.Root>
+    <Card.Header class="pb-3 flex flex-row items-center justify-between space-y-0">
+      <div>
+        <Card.Title class="text-base">Pre-dledger acquisitions</Card.Title>
+        <Card.Description class="text-xs">
+          Crypto positions you held before dledger started tracking, with their declared EUR cost basis. Each entry contributes to column A on form 2086.
+        </Card.Description>
+      </div>
+      <Button size="sm" onclick={openAddOpeningDialog}>
+        <Plus class="h-4 w-4 mr-1" />
+        Add
+      </Button>
+    </Card.Header>
+    <Card.Content>
+      {#if openingEntriesWithCost.length === 0}
+        <p class="text-sm text-muted-foreground">
+          No pre-dledger acquisitions recorded. If you bought crypto before importing data into dledger, click "Add" to declare it so column A is correct.
+        </p>
+      {:else}
+        <div class="rounded-md border">
+          <table class="w-full text-sm">
+            <thead class="border-b text-xs text-muted-foreground">
+              <tr>
+                <th class="text-left font-medium px-3 py-2">Date</th>
+                <th class="text-left font-medium px-3 py-2">Currency</th>
+                <th class="text-right font-medium px-3 py-2">Quantity</th>
+                <th class="text-right font-medium px-3 py-2">Cost (EUR)</th>
+                <th class="text-left font-medium px-3 py-2">Note</th>
+                <th class="px-3 py-2 w-20"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each openingEntriesWithCost as pair (pair[0].id)}
+                {@const entry = pair[0]}
+                {@const items = pair[1]}
+                {@const positive = items.find(it => parseFloat(it.amount) > 0)}
+                {@const note = (() => { try { return JSON.parse(entry.description_data || "{}").note ?? ""; } catch { return ""; } })()}
+                <tr class="border-b last:border-0">
+                  <td class="px-3 py-2 font-mono text-xs">{entry.date}</td>
+                  <td class="px-3 py-2 font-mono text-xs">{positive?.currency ?? "—"}</td>
+                  <td class="px-3 py-2 text-right font-mono text-xs">{positive?.amount ?? "—"}</td>
+                  <td class="px-3 py-2 text-right font-mono">{formatCurrency(entryCostEUR(entry), "EUR")}</td>
+                  <td class="px-3 py-2 text-xs text-muted-foreground truncate max-w-xs">{note}</td>
+                  <td class="px-3 py-2 text-right space-x-1">
+                    <Button size="sm" variant="ghost" class="h-7 w-7 p-0" onclick={() => openEditOpeningDialog(pair)} title="Edit">
+                      <Pencil class="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" class="h-7 w-7 p-0" onclick={() => deleteOpeningEntry(pair)} title="Delete">
+                      <Trash2 class="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot class="border-t text-xs">
+              <tr>
+                <td colspan="3" class="px-3 py-2 text-right font-medium text-muted-foreground">Total declared cost</td>
+                <td class="px-3 py-2 text-right font-mono font-medium">{formatCurrency(totalDeclaredCost.toFixed(2), "EUR")}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p class="mt-2 text-xs text-muted-foreground">
+          Counter entries land in <code class="font-mono">{OPENING_BALANCE_EQUITY_PATH}</code>. Edits and deletions
+          regenerate the per-year chain automatically.
+        </p>
+      {/if}
+    </Card.Content>
+  </Card.Root>
 
   <!-- Multi-year gap warning -->
   {#if missingYears.length > 0 && !DEMO_MODE}
@@ -584,3 +789,11 @@
     </Card.Root>
   {/if}
 </div>
+
+<OpeningBalanceDialog
+  bind:open={openingDialogOpen}
+  prefillCostEUR={openingDialogPrefillCost}
+  editingEntry={openingDialogEditing}
+  onClose={() => { openingDialogOpen = false; }}
+  onSaved={onOpeningSaved}
+/>
