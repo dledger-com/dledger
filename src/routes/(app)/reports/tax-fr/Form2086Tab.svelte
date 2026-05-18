@@ -10,9 +10,24 @@
   import { createSortState, sortItems } from "$lib/utils/sort.svelte.js";
   import Info from "lucide-svelte/icons/info";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import Form2086FormLayout from "./Form2086FormLayout.svelte";
   import * as m from "$paraglide/messages.js";
 
   let { report }: { report: FrenchTaxReport } = $props();
+
+  // View toggle: 'form' (default — matches the official 2086 layout) vs 'table'
+  // (the analytical flat table). Persisted in localStorage so the choice sticks.
+  const VIEW_KEY = "tax-fr:2086:view";
+  let view = $state<"form" | "table">("form");
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(VIEW_KEY);
+    if (stored === "form" || stored === "table") view = stored;
+  });
+  function setView(v: "form" | "table") {
+    view = v;
+    try { window.localStorage.setItem(VIEW_KEY, v); } catch { /* private mode etc. */ }
+  }
 
   const totalPV = $derived(parseFloat(report.totalPlusValue));
   const totalFiat = $derived(parseFloat(report.totalFiatReceived));
@@ -41,7 +56,29 @@
 </script>
 
 <div class="space-y-6">
-  {#if report.dispositions.length > 0}
+  <!-- View toggle: form layout (default) vs analytical table -->
+  <div class="flex items-center justify-end">
+    <div class="inline-flex items-center rounded-md border bg-muted/40 p-0.5 text-xs">
+      <button
+        type="button"
+        class="px-3 py-1 rounded transition-colors {view === 'form' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => setView('form')}
+      >
+        Saisie
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1 rounded transition-colors {view === 'table' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => setView('table')}
+      >
+        Tableau
+      </button>
+    </div>
+  </div>
+
+  {#if view === 'form'}
+    <Form2086FormLayout {report} />
+  {:else if report.dispositions.length > 0}
     <Card.Root>
       <Card.Header>
         <Card.Title>{m.report_french_tax_2086_section_title()}</Card.Title>
