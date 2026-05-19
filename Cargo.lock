@@ -1648,7 +1648,7 @@ dependencies = [
 
 [[package]]
 name = "dledger"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "bitcoin",
  "chrono",
@@ -1673,7 +1673,7 @@ dependencies = [
 
 [[package]]
 name = "dledger-core"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "bip39",
  "bitcoin",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "dsample"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "chrono",
  "clap",
