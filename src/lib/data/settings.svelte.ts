@@ -179,8 +179,27 @@ export function saveToStorage(settings: AppSettings) {
   }
 }
 
+// Module-level shared reactive state. Every SettingsStore instance points at
+// the same proxy, so an update in one component is observed by every other.
+const _sharedSettings = $state<AppSettings>(loadFromStorage());
+
+/** Replace all entries of `_sharedSettings` with those of `next`, preserving
+ *  the proxy identity (so reactive consumers stay subscribed). */
+function replaceSharedSettings(next: AppSettings) {
+  const target = _sharedSettings as unknown as Record<string, unknown>;
+  const source = next as unknown as Record<string, unknown>;
+  const keys = new Set<string>([...Object.keys(target), ...Object.keys(source)]);
+  for (const k of keys) {
+    if (k in source) {
+      target[k] = source[k];
+    } else {
+      delete target[k];
+    }
+  }
+}
+
 export class SettingsStore {
-  settings = $state<AppSettings>(loadFromStorage());
+  settings = _sharedSettings;
   loading = $state(false);
 
   constructor() {
@@ -271,21 +290,22 @@ export class SettingsStore {
     };
   }
 
-  /** Re-read settings from localStorage (picks up writes from other SettingsStore instances). */
+  /** Re-read settings from localStorage. Rarely needed now that all instances
+   *  share the same reactive proxy — exposed for tests and edge cases. */
   reload() {
-    this.settings = loadFromStorage();
+    replaceSharedSettings(loadFromStorage());
   }
 
   update(partial: Partial<AppSettings>) {
-    Object.assign(this.settings, partial);
-    saveToStorage(this.settings);
+    Object.assign(_sharedSettings, partial);
+    saveToStorage(_sharedSettings);
     if (partial.accountPaths !== undefined) {
-      configureAccountPaths(this.settings.accountPaths ?? {});
+      configureAccountPaths(_sharedSettings.accountPaths ?? {});
     }
   }
 
   reset() {
-    this.settings = { ...DEFAULT_SETTINGS };
-    saveToStorage(this.settings);
+    replaceSharedSettings({ ...DEFAULT_SETTINGS });
+    saveToStorage(_sharedSettings);
   }
 }
