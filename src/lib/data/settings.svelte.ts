@@ -33,6 +33,13 @@ export interface AppSettings {
     /** Aggregate every same-day sale into a single cession on form 2086.
      *  Defaults to true when undefined. */
     groupSameDaySales?: boolean;
+    /** Per-income-year manual override of "revenu net imposable hors crypto"
+     *  (EUR string). Keys are 4-digit year strings, e.g. "2024".
+     *  Used by the PFU/barème recommender on Form 2042-C. */
+    taxableIncomeByYear?: Record<string, string>;
+    /** Quotient familial: number of fiscal parts in the household.
+     *  Default 1 (single, no kids). */
+    householdParts?: number;
   };
   csvCategorizationRules?: CsvCategorizationRule[];
   mlClassificationEnabled?: boolean;

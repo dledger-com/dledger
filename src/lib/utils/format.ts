@@ -2,14 +2,53 @@ import * as m from "$paraglide/messages.js";
 
 let _locale: string = typeof navigator !== "undefined" ? navigator.language : "en-US";
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
+let _groupSep = ",";
+let _decimalSep = ".";
+
+function refreshSeparators() {
+  try {
+    const parts = new Intl.NumberFormat(_locale).formatToParts(12345.6);
+    _groupSep = parts.find((p) => p.type === "group")?.value ?? "";
+    _decimalSep = parts.find((p) => p.type === "decimal")?.value ?? ".";
+  } catch {
+    _groupSep = ",";
+    _decimalSep = ".";
+  }
+}
+refreshSeparators();
 
 export function setFormatLocale(locale: string) {
   _locale = locale;
   currencyFormatters.clear();
+  refreshSeparators();
 }
 
 export function getFormatLocale(): string {
   return _locale;
+}
+
+/** Format a number using current locale conventions (no currency symbol). */
+export function formatNumber(value: number | string, opts?: Intl.NumberFormatOptions): string {
+  const n = typeof value === "string" ? parseFloat(value) : value;
+  if (!isFinite(n)) return "";
+  return new Intl.NumberFormat(_locale, opts).format(n);
+}
+
+/**
+ * Parse a locale-formatted number string. Returns null if the input is
+ * empty or cannot be parsed. Strips the locale's group separator (including
+ * narrow no-break spaces used by fr-FR) and normalizes the decimal mark to ".".
+ * Regular spaces are also stripped so users typing "45 000" still parse correctly.
+ */
+export function parseLocaleNumber(str: string): number | null {
+  if (!str) return null;
+  let s = str.trim();
+  if (!s) return null;
+  if (_groupSep) s = s.split(_groupSep).join("");
+  s = s.replace(/\s/g, "");
+  if (_decimalSep && _decimalSep !== ".") s = s.split(_decimalSep).join(".");
+  const n = parseFloat(s);
+  return isFinite(n) ? n : null;
 }
 
 export function formatCurrency(amount: string | number, currency = "USD"): string {

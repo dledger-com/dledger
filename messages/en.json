@@ -1383,5 +1383,26 @@
   "sources_btc_script_candidates_hint": "Ledger Live exposes every Bitcoin account as `xpub` regardless of its script type. We show all four candidates so you can pick the one your wallet actually uses — or scan activity to auto-detect.",
   "sources_btc_script_select_at_least_one": "Select at least one script type",
   "sources_btc_script_all_added": "All selected script types are already added",
-  "sources_btc_script_count_added": "{count} script type(s) added"
+  "sources_btc_script_count_added": "{count} script type(s) added",
+
+  "report_french_tax_2042c_regime_card_title": "Which tax regime to choose?",
+  "report_french_tax_2042c_regime_card_desc": "Comparison of PFU (flat rate, default) versus barème progressif (income-tax brackets, option 2OP). Only the income-tax portion is shown — social contributions (17.2% / 18.6%) apply identically to both.",
+  "label_other_taxable_income": "Net taxable income excluding crypto",
+  "label_other_taxable_income_hint": "Salaries (after the 10% deduction), pensions, rental income, etc. Exclude PFU-eligible income (crypto gains, dividends, interest) handled separately.",
+  "label_household_parts": "Number of fiscal parts",
+  "label_household_parts_hint": "1 = single, 2 = married/PACS no kids, etc. Used for the quotient familial in the progressive scale calculation.",
+  "label_estimated_from_journal": "Estimated from your journal: {value}",
+  "report_french_tax_2042c_panel_pfu_title": "PFU (default)",
+  "report_french_tax_2042c_panel_pfu_subtitle": "12.8% IR",
+  "report_french_tax_2042c_panel_bareme_title": "Barème progressif",
+  "report_french_tax_2042c_panel_bareme_subtitle": "TMI {rate}%",
+  "report_french_tax_2042c_panel_ir_line": "{amount} IR on crypto gain",
+  "report_french_tax_2042c_recommend_pfu": "✓ Keep the PFU: estimated savings of {amount}",
+  "report_french_tax_2042c_recommend_bareme": "✓ Tick box 2OP: estimated savings of {amount}",
+  "report_french_tax_2042c_recommend_tie": "Both regimes cost the same on your crypto gain.",
+  "report_french_tax_2042c_recommend_missing_input": "Enter your taxable income to get a recommendation.",
+  "report_french_tax_2042c_caveat_global_pfu_income": "The 2OP option applies to ALL of your PFU-eligible income for the year (dividends, interest, etc.). Check the global impact before ticking.",
+  "report_french_tax_2042c_caveat_simplified": "Simplified estimate: does not account for the plafonnement du quotient familial or specific schemes (tax niches, carry-forward losses, etc.).",
+  "report_french_tax_2042c_caveat_bracket_fallback": "Brackets not yet published for {year} — estimation uses the {fallbackYear} table.",
+  "report_french_tax_2042c_recommended_badge": "Recommended"
 }

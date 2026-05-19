@@ -1,5 +1,6 @@
 import type { Backend } from "$lib/backend.js";
-import type { GainLossLine } from "$lib/types/index.js";
+import type { GainLossLine, IncomeStatement } from "$lib/types/index.js";
+import Decimal from "decimal.js-light";
 
 export interface TaxSummaryOptions {
   fromDate: string;
@@ -20,6 +21,54 @@ export interface TaxSummary {
   total_unrealized: string;
   income_by_account: { account_name: string; currency: string; amount: string }[];
   gain_loss_lines: (GainLossLine & { is_long_term: boolean })[];
+}
+
+/**
+ * Best-effort estimate of "other taxable income" (i.e., income that would feed
+ * the French progressive scale: salary, pensions, rental, etc.) by summing
+ * non-crypto revenue accounts from an `IncomeStatement` over a year.
+ *
+ * Coverage is partial by design — users who only import crypto data won't have
+ * salary in the journal. Returned alongside a heuristic coverage hint so the
+ * UI can suggest manual override.
+ */
+export function estimateOtherTaxableIncome(
+  stmt: IncomeStatement,
+  baseCurrency: string,
+): { value: string; coverage: "high" | "partial" | "low" } {
+  let totalCrypto = new Decimal(0);
+  let totalOther = new Decimal(0);
+  let hasOther = false;
+
+  for (const line of stmt.revenue.lines) {
+    const isCrypto = line.account_name.startsWith("Income:Crypto");
+    for (const bal of line.balances) {
+      if (bal.currency !== baseCurrency) continue;
+      // Revenue accounts carry negative balances (credits); absolute value is income earned.
+      const amount = new Decimal(bal.amount).abs();
+      if (isCrypto) {
+        totalCrypto = totalCrypto.plus(amount);
+      } else {
+        totalOther = totalOther.plus(amount);
+        if (amount.gt(0)) hasOther = true;
+      }
+    }
+  }
+
+  // Coverage heuristic: did we find any non-crypto income at all? Is it
+  // plausibly the full picture? We can't know precisely without bank context,
+  // so be conservative.
+  let coverage: "high" | "partial" | "low";
+  if (!hasOther) {
+    coverage = "low";
+  } else if (totalCrypto.gt(0) && totalOther.lt(totalCrypto.times(2))) {
+    // Crypto-dominated journal — non-crypto income is probably incomplete.
+    coverage = "partial";
+  } else {
+    coverage = "high";
+  }
+
+  return { value: totalOther.toFixed(2), coverage };
 }
 
 export function computeTaxYearDates(fiscalYearStart: string, year?: number): { from: string; to: string } {

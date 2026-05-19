@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { formatCurrency, formatCurrencyFull, formatDate, formatDateRelative, setFormatLocale } from "./format.js";
+import { formatCurrency, formatCurrencyFull, formatDate, formatDateRelative, formatNumber, parseLocaleNumber, setFormatLocale } from "./format.js";
 
 describe("formatCurrency", () => {
   beforeEach(() => {
@@ -164,5 +164,51 @@ describe("formatDate", () => {
 describe("formatDateRelative", () => {
   it("returns original for invalid date", () => {
     expect(formatDateRelative("nope")).toBe("nope");
+  });
+});
+
+describe("formatNumber / parseLocaleNumber", () => {
+  it("formats with en-US conventions", () => {
+    setFormatLocale("en-US");
+    expect(formatNumber(45000.5, { maximumFractionDigits: 2 })).toBe("45,000.5");
+  });
+
+  it("formats with fr-FR conventions", () => {
+    setFormatLocale("fr-FR");
+    const out = formatNumber(45000.5, { maximumFractionDigits: 2 });
+    expect(out).toMatch(/45[\s  ]000,5/);
+  });
+
+  it("parses en-US grouped number", () => {
+    setFormatLocale("en-US");
+    expect(parseLocaleNumber("45,000.50")).toBe(45000.5);
+  });
+
+  it("parses fr-FR grouped number with narrow nbsp", () => {
+    setFormatLocale("fr-FR");
+    expect(parseLocaleNumber("45 000,50")).toBe(45000.5);
+  });
+
+  it("parses fr-FR grouped number with regular spaces", () => {
+    setFormatLocale("fr-FR");
+    expect(parseLocaleNumber("45 000,50")).toBe(45000.5);
+  });
+
+  it("round-trips through format → parse", () => {
+    setFormatLocale("fr-FR");
+    const formatted = formatNumber(123456.78, { maximumFractionDigits: 2 });
+    expect(parseLocaleNumber(formatted)).toBe(123456.78);
+  });
+
+  it("returns null for empty or invalid input", () => {
+    setFormatLocale("en-US");
+    expect(parseLocaleNumber("")).toBeNull();
+    expect(parseLocaleNumber("   ")).toBeNull();
+    expect(parseLocaleNumber("abc")).toBeNull();
+  });
+
+  it("parses bare integer", () => {
+    setFormatLocale("fr-FR");
+    expect(parseLocaleNumber("42")).toBe(42);
   });
 });

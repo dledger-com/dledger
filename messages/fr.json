@@ -1383,5 +1383,26 @@
   "sources_btc_script_candidates_hint": "Ledger Live expose chaque compte Bitcoin en tant que `xpub` quel que soit son type de script. Nous affichons les quatre candidats afin que vous puissiez choisir celui que votre portefeuille utilise réellement — ou scanner l'activité pour le détecter automatiquement.",
   "sources_btc_script_select_at_least_one": "Sélectionnez au moins un type de script",
   "sources_btc_script_all_added": "Tous les types de script sélectionnés sont déjà ajoutés",
-  "sources_btc_script_count_added": "{count} type(s) de script ajouté(s)"
+  "sources_btc_script_count_added": "{count} type(s) de script ajouté(s)",
+
+  "report_french_tax_2042c_regime_card_title": "Quel régime fiscal choisir ?",
+  "report_french_tax_2042c_regime_card_desc": "Comparaison entre le PFU (taux forfaitaire, par défaut) et le barème progressif (option case 2OP). Seule la part d'impôt sur le revenu est comparée — les prélèvements sociaux (17,2 % / 18,6 %) s'appliquent à l'identique dans les deux cas.",
+  "label_other_taxable_income": "Revenu net imposable hors crypto",
+  "label_other_taxable_income_hint": "Salaires (après abattement 10 %), pensions, revenus fonciers, etc. Hors revenus PFU (plus-values crypto, dividendes, intérêts) traités séparément.",
+  "label_household_parts": "Nombre de parts fiscales",
+  "label_household_parts_hint": "1 = célibataire, 2 = marié/PACS sans enfants, etc. Sert au calcul du quotient familial sur le barème progressif.",
+  "label_estimated_from_journal": "Estimé depuis votre journal : {value}",
+  "report_french_tax_2042c_panel_pfu_title": "PFU (par défaut)",
+  "report_french_tax_2042c_panel_pfu_subtitle": "12,8 % IR",
+  "report_french_tax_2042c_panel_bareme_title": "Barème progressif",
+  "report_french_tax_2042c_panel_bareme_subtitle": "TMI {rate} %",
+  "report_french_tax_2042c_panel_ir_line": "{amount} d'IR sur la plus-value",
+  "report_french_tax_2042c_recommend_pfu": "✓ Conserver le PFU : économie estimée de {amount}",
+  "report_french_tax_2042c_recommend_bareme": "✓ Cocher la case 2OP : économie estimée de {amount}",
+  "report_french_tax_2042c_recommend_tie": "Les deux régimes coûtent autant sur votre plus-value crypto.",
+  "report_french_tax_2042c_recommend_missing_input": "Renseignez votre revenu imposable pour obtenir une recommandation.",
+  "report_french_tax_2042c_caveat_global_pfu_income": "L'option 2OP s'applique à TOUS vos revenus soumis au PFU pour l'année (dividendes, intérêts, etc.). Vérifiez l'impact global avant de cocher.",
+  "report_french_tax_2042c_caveat_simplified": "Estimation simplifiée : ne tient pas compte du plafonnement du quotient familial, ni des dispositifs spécifiques (niches fiscales, déficits reportables, etc.).",
+  "report_french_tax_2042c_caveat_bracket_fallback": "Barème non encore publié pour {year} — estimation basée sur le barème {fallbackYear}.",
+  "report_french_tax_2042c_recommended_badge": "Recommandé"
 }
